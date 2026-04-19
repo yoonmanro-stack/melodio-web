@@ -64,11 +64,15 @@ export default function AudioForge() {
 
                   {/* Batch Count */}
                   <div>
-                    <label className="text-xs text-zinc-400 block mb-2">Batch Count</label>
-                    <div className="flex gap-2">
-                      {[5, 10, 25, 50].map((n) => (
-                        <button key={n} className={`flex-1 py-2 rounded-lg text-sm border transition-colors ${n === 10 ? 'border-cyan-500/50 bg-cyan-500/10 text-cyan-400' : 'border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10'}`}>{n}</button>
-                      ))}
+                    <label className="text-xs text-zinc-400 block mb-2">Track Output & B2B Stitching</label>
+                    <div className="flex flex-col gap-2">
+                      <div className="flex gap-2">
+                        <button className="flex-1 py-2 rounded-lg text-sm border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 transition-colors">1 (Single)</button>
+                        <button className="flex-1 py-2 rounded-lg text-sm border border-white/10 bg-white/5 text-zinc-400 hover:bg-white/10 transition-colors">10 (EP)</button>
+                      </div>
+                      <button className="w-full py-3 rounded-xl text-sm border-2 border-cyan-500/50 bg-cyan-500/10 text-cyan-400 font-bold hover:bg-cyan-500/20 shadow-[0_0_20px_rgba(8,145,178,0.2)] transition-colors">
+                        🏆 20 Tracks (1-Hour B2B Loop Mix + Video Render)
+                      </button>
                     </div>
                   </div>
 
