@@ -1,4 +1,4 @@
-import { User, Bell, Shield, Download, UploadCloud } from "lucide-react";
+import { User, Bell, Shield, Download, UploadCloud, Code, Copy } from "lucide-react";
 
 export default function SettingsPage() {
   return (
@@ -60,6 +60,43 @@ export default function SettingsPage() {
             <button className="px-6 py-3 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 font-bold text-white text-sm shadow-[0_0_15px_rgba(8,145,178,0.3)]">
               Save Changes
             </button>
+          </div>
+
+          {/* Developer API & Integrations */}
+          <div className="glass-panel p-8 border border-blue-500/30 bg-blue-950/10">
+            <h2 className="text-xl font-bold text-white mb-2 flex items-center gap-2">
+              <Code className="w-5 h-5 text-blue-400" /> Developer API & Integrations
+            </h2>
+            <p className="text-sm text-blue-200/70 mb-6">Connect your Antigravity or Luna Agent directly to the Melodio Dual-Engine Backend.</p>
+            
+            <div className="mb-6">
+              <label className="block text-xs font-medium text-zinc-400 mb-2">Your Secret API Key</label>
+              <div className="flex gap-2">
+                <input type="password" defaultValue="mk_live_94f8b2...a8c9" readOnly className="flex-1 bg-black/50 border border-white/10 rounded-xl py-3 px-4 text-white outline-none font-mono" />
+                <button className="px-6 py-3 rounded-xl bg-white/5 hover:bg-blue-500/20 border border-white/10 hover:border-blue-500/50 text-blue-400 font-semibold transition-all">Copy Key</button>
+              </div>
+            </div>
+
+            <div className="bg-[#0d1117] border border-white/10 rounded-xl overflow-hidden relative">
+              <div className="flex justify-between items-center px-4 py-2 bg-black/60 border-b border-white/5">
+                <span className="text-xs text-zinc-400 font-mono">Python (Antigravity Agent Snippet)</span>
+                <button className="text-xs text-blue-400 flex items-center gap-1 hover:text-white transition-colors"><Copy className="w-3 h-3"/> Copy</button>
+              </div>
+              <pre className="p-4 text-xs text-green-400 overflow-x-auto whitespace-pre-wrap">
+{`import requests
+
+url = "https://api.melodio.ai/v1/audio/generate"
+headers = {"Authorization": "Bearer YOUR_API_KEY"}
+payload = {
+    "prompt": "Lofi hip hop beats for studying, rain sounds",
+    "durationMode": "FULL", # Lyria 3 Pro (3min, ~108 KRW)
+    "engine": "LYRIA_3_PRO"
+}
+
+response = requests.post(url, json=payload, headers=headers)
+print("Generated Audio URL:", response.json().get('audioUrl'))`}
+              </pre>
+            </div>
           </div>
 
           {/* Export Data */}
