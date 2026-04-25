@@ -14,7 +14,9 @@ import {
   Settings,
   HelpCircle,
   Fingerprint,
-  ShieldCheck
+  ShieldCheck,
+  Library,
+  BarChart3,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -22,10 +24,12 @@ const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Artist Incubator", href: "/incubator", icon: Fingerprint },
   { name: "Persona Lab", href: "/persona", icon: Sparkles },
+  { name: "Style Library", href: "/style-library", icon: Library, badge: "NEW" },
   { name: "Audio Forge", href: "/audio", icon: Music4 },
   { name: "Longform Studio", href: "/studio", icon: Film },
   { name: "IP & License Vault", href: "/vault", icon: ShieldCheck },
   { name: "Distribution", href: "/publishing", icon: Rocket },
+  { name: "YT Analytics", href: "/analytics", icon: BarChart3, badge: "LIVE" },
 ];
 
 export function Sidebar() {
@@ -55,8 +59,13 @@ export function Sidebar() {
                     : "text-zinc-400 hover:bg-[rgba(255,255,255,0.05)] hover:text-zinc-200"
                 )}
               >
-                <item.icon className="w-5 h-5" />
-                <span className="font-medium text-sm">{item.name}</span>
+                <item.icon className="w-5 h-5 flex-shrink-0" />
+                <span className="font-medium text-sm flex-1">{item.name}</span>
+                {"badge" in item && item.badge && (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/30">
+                    {item.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
