@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
 // TEMPORARY: Use Service Role Key to bypass RLS for demonstration purposes
 const supabaseAnonKey = 'REDACTED_JWT';
 
