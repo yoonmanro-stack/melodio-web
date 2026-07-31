@@ -1,0 +1,11 @@
+- [x] Rename Sidebar menu name to VoiceDNA Studio (`src/components/Sidebar.tsx`)
+- [x] Create `public.voice_dnas` database schema migration (`migrations/20260720_create_voice_dnas.sql`)
+- [x] Create `voice-dna-scrubber.ts` prompt compositor utility (`src/lib/voice-dna-scrubber.ts`)
+- [x] Update music generation API route to apply Voice DNA scrubber (`src/app/api/generate/route.ts`)
+- [x] Create VoiceDNA Studio page with wheel, sliders, collections, and record/upload features (`src/app/(app)/voice-lab/page.tsx`)
+- [ ] Add Beginner Guide / Interactive Tour UI step panels in `src/app/(app)/voice-lab/page.tsx`
+- [ ] Add 1-click Quick Start Template Cards in `src/app/(app)/voice-lab/page.tsx`
+- [ ] Integrate Sound Demo Player & animated CSS Equalizer bars in `src/app/(app)/voice-lab/page.tsx`
+- [ ] Run build to verify TypeScript compiler
+- [ ] Deploy to Mac Mini & PM2 restart
+- [ ] Deploy to Vercel production

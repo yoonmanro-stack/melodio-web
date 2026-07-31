@@ -1,9 +1,72 @@
-import { Film, Image as ImageIcon, PlayCircle, Clock, Volume2, Save, Sparkles, Scissors } from "lucide-react";
+"use client";
+
+import { useState, useEffect } from "react";
+import { Film, Image as ImageIcon, PlayCircle, Clock, Volume2, Save, Sparkles, Scissors, Loader2 } from "lucide-react";
 
 export default function LongformStudio() {
+  const [visualPrompt, setVisualPrompt] = useState("");
+  const [videoAsset, setVideoAsset] = useState<any | null>(null);
+  const [videoStatus, setVideoStatus] = useState<"idle" | "pending" | "processing" | "completed" | "failed">("idle");
+  const [isGenerating, setIsGenerating] = useState(false);
+
+  // Polling helper
+  useEffect(() => {
+    if (!videoAsset || (videoStatus !== "pending" && videoStatus !== "processing")) return;
+
+    let intervalId = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/studio/veo?id=${videoAsset.id}`);
+        const data = await res.json();
+        if (data.success && data.asset) {
+          setVideoAsset(data.asset);
+          setVideoStatus(data.asset.status);
+          if (data.asset.status === "completed" || data.asset.status === "failed") {
+            setIsGenerating(false);
+            clearInterval(intervalId);
+          }
+        }
+      } catch (err) {
+        console.error("Error polling video asset:", err);
+      }
+    }, 5000);
+
+    return () => clearInterval(intervalId);
+  }, [videoAsset, videoStatus]);
+
+  const handleGenerateVideo = async () => {
+    if (!visualPrompt.trim()) return;
+    setIsGenerating(true);
+    setVideoStatus("pending");
+    setVideoAsset(null);
+
+    try {
+      const res = await fetch("/api/studio/veo", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ prompt: visualPrompt.trim() }),
+      });
+      const data = await res.json();
+      if (data.success && data.asset) {
+        setVideoAsset(data.asset);
+        setVideoStatus(data.asset.status);
+      } else {
+        alert(data.error || "비디오 생성 요청에 실패했습니다.");
+        setIsGenerating(false);
+        setVideoStatus("failed");
+      }
+    } catch (err: any) {
+      alert("비디오 생성 중 오류가 발생했습니다: " + err.message);
+      setIsGenerating(false);
+      setVideoStatus("failed");
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto pt-4 h-full flex flex-col">
-      <header className="mb-6 flex justify-between items-end">
+      {/* 헤더 — 통일된 표준 브랜드 헤더 */}
+      <header className="mb-8 border-b border-white/10 pb-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-4xl font-bold text-white mb-2">Longform Studio</h1>
           <p className="text-zinc-400">Synthesize audio tracks with HeyGen Lip-Sync and Veo 3.1 B-Rolls.</p>
@@ -47,10 +110,26 @@ export default function LongformStudio() {
               <p className="text-xs text-zinc-400">Create high-fidelity dynamic action shots holding character consistency.</p>
               <textarea 
                 placeholder="Visual Prompt: e.g. Neon city tracking shot, slow-mo running..." 
+                value={visualPrompt}
+                onChange={(e) => setVisualPrompt(e.target.value)}
+                disabled={isGenerating}
                 className="w-full h-16 mt-3 bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-zinc-300 outline-none focus:border-cyan-500/50 resize-none"
               ></textarea>
-              <button className="w-full mt-2 py-2 rounded-lg bg-cyan-900/30 border border-cyan-500/30 text-xs font-medium text-cyan-200 hover:bg-cyan-900/50 transition-colors flex items-center justify-center gap-2">
-                <ImageIcon className="w-3.5 h-3.5" /> Generate Veo 3.1 Clip
+              <button 
+                onClick={handleGenerateVideo}
+                disabled={isGenerating || !visualPrompt.trim()}
+                className="w-full mt-2 py-2 rounded-lg bg-cyan-900/30 border border-cyan-500/30 text-xs font-medium text-cyan-200 hover:bg-cyan-900/50 disabled:bg-zinc-900/40 disabled:border-white/5 disabled:text-zinc-600 transition-colors flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    Generating... ({videoStatus.toUpperCase()})
+                  </>
+                ) : (
+                  <>
+                    <ImageIcon className="w-3.5 h-3.5" /> Generate Veo 3.1 Clip
+                  </>
+                )}
               </button>
             </div>
           </div>
@@ -59,10 +138,23 @@ export default function LongformStudio() {
         {/* Timeline Synthesizer */}
         <div className="lg:col-span-2 glass-panel flex flex-col p-0 overflow-hidden">
           {/* Main Video Player Mock */}
-          <div className="h-[300px] w-full bg-black relative flex items-center justify-center border-b border-white/10">
-             {/* Fake abstract background */}
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/30 via-black to-fuchsia-900/30"></div>
-            <div className="absolute inset-0 opacity-20 Mix-blend-color-dodge bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-400 via-transparent to-transparent"></div>
+          <div className="h-[300px] w-full bg-black relative flex items-center justify-center border-b border-white/10 overflow-hidden">
+             {/* Render real video if completed */}
+             {videoStatus === 'completed' && videoAsset?.video_url ? (
+               <video 
+                 src={videoAsset.video_url} 
+                 autoPlay 
+                 loop 
+                 muted 
+                 className="absolute inset-0 w-full h-full object-cover z-0" 
+               />
+             ) : (
+               <>
+                 {/* Fake abstract background */}
+                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-900/30 via-black to-fuchsia-900/30"></div>
+                 <div className="absolute inset-0 opacity-20 Mix-blend-color-dodge bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-purple-400 via-transparent to-transparent"></div>
+               </>
+             )}
             
             <PlayCircle className="w-16 h-16 text-white/50 hover:text-white/80 cursor-pointer transition-colors z-10" />
             
@@ -102,10 +194,18 @@ export default function LongformStudio() {
                     <span className="text-[10px] text-fuchsia-300/80">HeyGen Master Lip-Sync Track (Underlay)</span>
                  </div>
                  
-                 {/* Veo B-Roll 1 */}
-                 <div className="w-[15%] h-full bg-cyan-900 border border-cyan-500 rounded relative z-10 ml-[20%] flex items-center justify-center cursor-pointer hover:bg-cyan-800 transition-colors shadow-lg">
-                    <span className="text-[10px] text-cyan-100 font-medium">Veo B-Roll</span>
-                 </div>
+                  {/* Veo B-Roll 1 */}
+                  <div className={`w-[20%] h-full border rounded relative z-10 ml-[20%] flex items-center justify-center cursor-pointer transition-colors shadow-lg ${
+                    videoStatus === 'completed'
+                      ? 'bg-cyan-900 border-cyan-500 hover:bg-cyan-800'
+                      : videoStatus === 'processing' || videoStatus === 'pending'
+                      ? 'bg-cyan-950/40 border-cyan-500/30 animate-pulse'
+                      : 'bg-zinc-900/30 border-white/10'
+                  }`}>
+                     <span className="text-[10px] text-cyan-100 font-medium">
+                       {videoStatus === 'completed' ? 'Veo B-Roll (Ready)' : videoStatus === 'processing' ? 'Generating...' : 'Veo B-Roll Slot'}
+                     </span>
+                  </div>
 
                  {/* Veo B-Roll 2 */}
                  <div className="w-[20%] h-full bg-cyan-900 border border-cyan-500 rounded relative z-10 ml-[30%] flex items-center justify-center cursor-pointer hover:bg-cyan-800 transition-colors shadow-lg">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   MonitorPlay, Calendar, Globe, Share2, Type, Hash,
   Sparkles, Copy, Check, RefreshCw, Languages, Clock,
@@ -92,6 +92,32 @@ export default function Publishing() {
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  // 다중 채널 로딩 상태
+  const [channels, setChannels] = useState<any[]>([]);
+  const [selectedChannel, setSelectedChannel] = useState<any | null>(null);
+  const [isLoadingChannels, setIsLoadingChannels] = useState(true);
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+
+  useEffect(() => {
+    const fetchChannels = async () => {
+      setIsLoadingChannels(true);
+      try {
+        const res = await fetch("/api/autopilot/settings");
+        const data = await res.json();
+        if (data.success && data.allChannels) {
+          setChannels(data.allChannels);
+          const active = data.channel || data.allChannels[0] || null;
+          setSelectedChannel(active);
+        }
+      } catch (err) {
+        console.error("Failed to fetch channels", err);
+      } finally {
+        setIsLoadingChannels(false);
+      }
+    };
+    fetchChannels();
+  }, []);
+
   const currentTitles = TITLE_PRESETS[activeLang] || TITLE_PRESETS["en"];
   const currentTags = TAG_SETS[activeLang] || TAG_SETS["en"];
 
@@ -108,9 +134,10 @@ export default function Publishing() {
 
   return (
     <div className="max-w-6xl mx-auto pt-4 h-full flex flex-col">
-      <header className="mb-6">
-        <h1 className="text-4xl font-bold text-white mb-2">Publishing & SEO</h1>
-        <p className="text-zinc-400">YouTube SEO 자동생성 · 다국어 번역 · 예약 업로드 원클릭 파이프라인</p>
+      {/* 헤더 — 통일된 표준 브랜드 헤더 */}
+      <header className="mb-8 border-b border-white/10 pb-6">
+        <h1 className="text-4xl font-bold text-white mb-2">Distribution</h1>
+        <p className="text-zinc-400">YouTube SEO 자동생성 · 다국어 번역 · 예약 업로드 원클릭 파이프라인.</p>
       </header>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 gap-6 pb-10">
@@ -256,18 +283,71 @@ export default function Publishing() {
             </div>
 
             {/* 채널 선택 */}
-            <div>
+            <div className="relative">
               <label className="block text-xs font-medium text-zinc-400 mb-2">Target YouTube Channel</label>
-              <div className="flex items-center gap-3 bg-black/50 border border-white/10 rounded-xl p-3 hover:border-white/20 transition-colors cursor-pointer">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-red-600 to-pink-600 flex items-center justify-center flex-shrink-0">
-                  <Video className="w-4 h-4 text-white" />
+              {isLoadingChannels ? (
+                <div className="flex items-center gap-3 bg-black/50 border border-white/10 rounded-xl p-3 text-xs text-zinc-500 animate-pulse">
+                  채널 목록 불러오는 중...
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-bold text-white">Neon Records (Official)</p>
-                  <p className="text-[10px] text-zinc-500">125K Subscribers · Connected ✅</p>
+              ) : channels.length === 0 ? (
+                <div className="flex flex-col items-center justify-center gap-2 bg-black/50 border border-dashed border-zinc-800 rounded-xl p-4 text-center">
+                  <p className="text-xs text-zinc-500">연동된 유튜브 채널이 없습니다.</p>
+                  <a 
+                    href="/autopilot"
+                    className="text-[11px] text-fuchsia-400 hover:text-fuchsia-300 underline font-semibold transition-all"
+                  >
+                    Autopilot 대시보드에서 채널 연동하기
+                  </a>
                 </div>
-                <ChevronDown className="w-4 h-4 text-zinc-600" />
-              </div>
+              ) : (
+                <>
+                  <div 
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="flex items-center gap-3 bg-black/50 border border-white/10 rounded-xl p-3 hover:border-white/20 transition-colors cursor-pointer"
+                  >
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-red-600 to-pink-600 flex items-center justify-center flex-shrink-0">
+                      <Video className="w-4 h-4 text-white" />
+                    </div>
+                    <div className="flex-1">
+                      <p className="text-sm font-bold text-white">
+                        {selectedChannel ? selectedChannel.channel_title : "채널을 선택해 주십시오."}
+                      </p>
+                      <p className="text-[10px] text-zinc-500">
+                        {selectedChannel ? `ID: ${selectedChannel.channel_id} · Connected ✅` : "연동 가능"}
+                      </p>
+                    </div>
+                    <ChevronDown className={`w-4 h-4 text-zinc-600 transition-transform ${isDropdownOpen ? "rotate-180" : ""}`} />
+                  </div>
+
+                  {isDropdownOpen && (
+                    <div className="absolute left-0 right-0 mt-2 bg-zinc-950 border border-white/10 rounded-xl shadow-2xl z-55 overflow-hidden max-h-48 overflow-y-auto">
+                      {channels.map((ch) => (
+                        <div
+                          key={ch.channel_id}
+                          onClick={() => {
+                            setSelectedChannel(ch);
+                            setIsDropdownOpen(false);
+                          }}
+                          className={`flex items-center gap-3 p-3 cursor-pointer transition-all hover:bg-white/5 ${
+                            selectedChannel?.channel_id === ch.channel_id ? "bg-fuchsia-900/10" : ""
+                          }`}
+                        >
+                          <div className="w-7 h-7 rounded-full bg-red-600/10 border border-red-500/20 flex items-center justify-center">
+                            <Video className="w-3.5 h-3.5 text-red-500" />
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-xs font-bold text-white">{ch.channel_title}</p>
+                            <p className="text-[9px] text-zinc-500 font-mono">ID: {ch.channel_id}</p>
+                          </div>
+                          {selectedChannel?.channel_id === ch.channel_id && (
+                            <span className="text-[10px] text-fuchsia-400 font-bold">선택됨</span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
 
             {/* 공개 범위 */}

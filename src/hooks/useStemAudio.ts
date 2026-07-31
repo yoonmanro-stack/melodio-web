@@ -52,6 +52,13 @@ export interface UseStemAudioReturn {
 const STEM_IDS: StemId[] = ['vocals', 'drums', 'bass', 'other'];
 const LOOP_DURATION = 12; // 12초 루프 (더미 모드)
 
+// ─── 무음 오디오 버퍼 생성 (스템 분리 전 다른 채널 음소거용) ───────────────────
+function makeSilentBuffer(ctx: AudioContext): AudioBuffer {
+  const sr = ctx.sampleRate;
+  const n = Math.floor(sr * 1); // 1초 무음
+  return ctx.createBuffer(2, n, sr);
+}
+
 // ─── 더미 오디오 버퍼 생성 (Web Audio API) ──────────────────────────────────
 function makeDummyBuffer(ctx: AudioContext, id: StemId): AudioBuffer {
   const sr = ctx.sampleRate;
@@ -122,6 +129,7 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
   const [stemStates, setStemStates] = useState<Record<StemId, StemAudioState>>(makeInitialStates);
   const [isPlaying, setIsPlaying]   = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(LOOP_DURATION); // 동적 곡 길이 상태 (기본 12초)
   const [originalWavUrls, setOriginalWavUrls] = useState<Record<StemId, string | null>>({
     vocals: null, drums: null, bass: null, other: null
   });
@@ -139,9 +147,12 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
   useEffect(() => {
     if (typeof window === 'undefined') return;
 
-    // Reset URL maps
+    // Reset URL maps 및 시간 초기화
     setOriginalWavUrls({ vocals: null, drums: null, bass: null, other: null });
     setStemStates(makeInitialStates());
+    setDuration(LOOP_DURATION);
+    setCurrentTime(0);
+    offsetRef.current = 0;
 
     const ctx = new AudioContext();
     ctxRef.current = ctx;
@@ -156,29 +167,48 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
     const loadData = async () => {
       let previewUrlsToFetch: Partial<Record<StemId, string>> = {};
       let originalUrlsMapped: Record<StemId, string | null> = { vocals: null, drums: null, bass: null, other: null };
+      let isStemSplit = false;
 
       if (generationId) {
-        // 백엔드 세션 DB 조회
-        const { data, error } = await supabase.from('generations').select('*').eq('id', generationId).single();
-        if (data && !error && data.status === 'completed') {
-          previewUrlsToFetch = {
-            vocals: data.preview_vocals_url,
-            drums: data.preview_drums_url,
-            bass: data.preview_bass_url,
-            other: data.preview_other_url,
-          };
-          originalUrlsMapped = {
-            vocals: data.stem_vocals_url,
-            drums: data.stem_drums_url,
-            bass: data.stem_bass_url,
-            other: data.stem_other_url,
-          };
-          setOriginalWavUrls(originalUrlsMapped);
-        } else {
-          console.warn('DB 조회가 실패했거나 아직 완료되지 않았습니다.', error);
+        try {
+          // 백엔드 세션 DB 조회 (타임아웃 5초)
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 5000);
+          const { data, error } = await supabase.from('generations').select('*').eq('id', generationId).abortSignal(controller.signal).single();
+          clearTimeout(timeout);
+          if (data && !error && data.status === 'completed') {
+            isStemSplit = !!data.is_stem_extracted;
+
+            if (isStemSplit) {
+              // 스템 분리가 완료된 상태
+              previewUrlsToFetch = {
+                vocals: data.preview_vocals_url,
+                drums: data.preview_drums_url,
+                bass: data.preview_bass_url,
+                other: data.preview_other_url,
+              };
+              originalUrlsMapped = {
+                vocals: data.stem_vocals_url,
+                drums: data.stem_drums_url,
+                bass: data.stem_bass_url,
+                other: data.stem_other_url,
+              };
+              setOriginalWavUrls(originalUrlsMapped);
+            } else {
+              // 스템 분리 전: 완곡을 other(멜로디)에 배정하여 즉시 감상 가능케 함
+              previewUrlsToFetch = {
+                other: data.audio_url || data.source_audio_url || null,
+              };
+            }
+          } else {
+            console.warn('[useStemAudio] DB 조회 실패/미완료 → 더미 톤 사용', error);
+          }
+        } catch (e) {
+          console.warn('[useStemAudio] Supabase 연결 실패 → 더미 톤 폴백', e);
         }
       } else if (stemUrls) {
         previewUrlsToFetch = stemUrls;
+        isStemSplit = true;
       }
 
       const tasks = STEM_IDS.map(async (id) => {
@@ -190,7 +220,12 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
             const raw = await resp.arrayBuffer();
             buffersRef.current[id] = await ctx.decodeAudioData(raw);
           } else {
-            buffersRef.current[id] = makeDummyBuffer(ctx, id);
+            // 스템 분리 전인 경우, other 외의 vocals, drums, bass는 비프음 대신 무음(silent)으로 채움
+            if (generationId && !isStemSplit && id !== 'other') {
+              buffersRef.current[id] = makeSilentBuffer(ctx);
+            } else {
+              buffersRef.current[id] = makeDummyBuffer(ctx, id);
+            }
           }
         } catch {
           buffersRef.current[id] = makeDummyBuffer(ctx, id);
@@ -202,6 +237,17 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
       });
 
       await Promise.all(tasks);
+
+      // 로드된 실제 오디오 버퍼의 최대 길이를 구해서 재생 시간(duration)으로 바인딩
+      let maxDuration = LOOP_DURATION;
+      for (const id of STEM_IDS) {
+        const buf = buffersRef.current[id];
+        if (buf && buf.duration > maxDuration) {
+          maxDuration = buf.duration;
+        }
+      }
+      setDuration(maxDuration);
+      console.log(`[useStemAudio] Audio buffers loaded. Duration: ${maxDuration} seconds.`);
     };
 
     loadData();
@@ -224,9 +270,23 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
     const ctx = ctxRef.current;
     if (!ctx || !isPlayingRef.current) return;
     const t = ctx.currentTime - playStartRef.current;
-    setCurrentTime(Math.max(0, t % LOOP_DURATION));
-    rafRef.current = requestAnimationFrame(tick);
-  }, []);
+    const current = Math.max(0, t);
+
+    // 재생 완료 시 정지 처리
+    if (current >= duration) {
+      setIsPlaying(false);
+      isPlayingRef.current = false;
+      setCurrentTime(0);
+      offsetRef.current = 0;
+      for (const id of STEM_IDS) {
+        try { sourcesRef.current[id]?.stop(); } catch { /* 무시 */ }
+      }
+      cancelAnimationFrame(rafRef.current);
+    } else {
+      setCurrentTime(current);
+      rafRef.current = requestAnimationFrame(tick);
+    }
+  }, [duration]);
 
   // ─── 전 스템 동시 스케줄 (하드싱크 핵심) ──────────────────────────────────
   const scheduleAll = useCallback((fromOffset: number) => {
@@ -238,9 +298,10 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
       try { sourcesRef.current[id]?.stop(); } catch { /* 무시 */ }
     }
 
-    // 50ms 후 미래 시각 — 모든 노드를 동일 시각에 예약
     const startAt = ctx.currentTime + 0.05;
     playStartRef.current = startAt - fromOffset;
+
+    const isDummy = duration === LOOP_DURATION;
 
     for (const id of STEM_IDS) {
       const buf  = buffersRef.current[id];
@@ -249,14 +310,23 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
 
       const src = ctx.createBufferSource();
       src.buffer   = buf;
-      src.loop     = true;
-      src.loopEnd  = LOOP_DURATION;
-      src.connect(gain);
-      // ★ 모든 스템을 startAt 동일 시각에 start (하드싱크)
-      src.start(startAt, fromOffset % LOOP_DURATION);
+      
+      if (isDummy) {
+        src.loop     = true;
+        src.loopEnd  = LOOP_DURATION;
+        src.connect(gain);
+        src.start(startAt, fromOffset % LOOP_DURATION);
+      } else {
+        src.loop     = false;
+        src.connect(gain);
+        // 개별 버퍼의 실제 길이(buf.duration) 범위 안의 오프셋일 때만 start를 호출하여 DOMException(range error) 방지
+        if (fromOffset < buf.duration) {
+          src.start(startAt, fromOffset);
+        }
+      }
       sourcesRef.current[id] = src;
     }
-  }, []);
+  }, [duration]);
 
   // ─── 재생 ─────────────────────────────────────────────────────────────────
   const play = useCallback(async () => {
@@ -309,7 +379,6 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
       if (!gain) continue;
       const s = stemStates[id];
       const silent = hasSolo ? !s.solo : s.muted;
-      // gain.value 직접 조절 — 끊김 없는 즉시 반영
       gain.gain.value = silent ? 0 : s.volume;
     }
   }, [stemStates]);
@@ -336,7 +405,7 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
 
   return {
     stemStates, allLoaded,
-    isPlaying, currentTime, duration: LOOP_DURATION,
+    isPlaying, currentTime, duration,
     originalWavUrls,
     play, pause, reset, seek,
     toggleMute, toggleSolo, setVolume,

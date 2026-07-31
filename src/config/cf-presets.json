@@ -1,0 +1,139 @@
+{
+  "version": "1.0.0",
+  "engine": "Veo 3.1 & Suno 302.AI",
+  "benchmarked_against": "Melodio Style Library (STYLE_DATA)",
+  "presets": [
+    {
+      "id": "coin-indicator",
+      "name": "코인/주식 고점 인간 지표 송",
+      "duration": 30,
+      "audio": {
+        "styleName": "Dark Synthwave",
+        "genre": "Electronic",
+        "mood": "Dark",
+        "bpm": "95–110",
+        "vocal": "Female Whisper",
+        "tags": "Dark synthwave, 100 BPM, retrofuturistic analog hardware synthesizers, heavy driving Roland Juno-106 bassline, neon-noir cyberpunk atmosphere, Lexicon digital reverb, punchy stereo mix, no autotune, female whisper vocal style",
+        "defaultLyrics": "[Chorus]\n내가 사면 리플(XRP)도 멈추고,\n내가 팔면 비트코인 1억 가네!\n인간 지표 나가신다 길을 비켜라!\n[Outro]\n내 지갑은 파란색, 니 지갑은 빨간색, 아하하!"
+      },
+      "videoClips": [
+        {
+          "sceneId": 1,
+          "duration": 10,
+          "prompt": "A humorous 3D cartoon character looking at a glowing holographic crypto chart on a laptop, pulling hair out in frustration, neon red ambient lighting, high contrast, cinematic render",
+          "style": "3D Cartoon Animation",
+          "transition": "Cut"
+        },
+        {
+          "sceneId": 2,
+          "duration": 10,
+          "prompt": "Close-up of the character's face, eyes turning into blue down-arrows, screen reflection of crashing market charts on his glasses, dramatic camera zoom-in",
+          "style": "3D Cartoon Animation",
+          "transition": "Zoom In"
+        },
+        {
+          "sceneId": 3,
+          "duration": 10,
+          "prompt": "The character facepalming as a physical green rocket shoots up in the background, out of focus, fireworks exploding, comical expression",
+          "style": "3D Cartoon Animation",
+          "transition": "Fade Out"
+        }
+      ],
+      "overlays": {
+        "fontStyle": "Neon Yellow Bold",
+        "stroke": "Black 4px",
+        "alignment": "Center Bottom",
+        "textAnimations": "Pop-up Sync with Beats"
+      },
+      "tags": ["#비트코인", "#코인풍자", "#인간지표", "#주식밈", "#도파민"]
+    },
+    {
+      "id": "backseat-manager",
+      "name": "월드컵 '방구석 명감독' 비판 송",
+      "duration": 30,
+      "audio": {
+        "styleName": "Cyberpunk Bass",
+        "genre": "Electronic",
+        "mood": "Aggressive",
+        "bpm": "135–145",
+        "vocal": "Male Distorted",
+        "tags": "Dystopian cyberpunk bass, 140 BPM, heavy industrial MS-20 bass, glitchy metallic percussion, dark sci-fi synth leads, gritty analog tape distortion, aggressive warehouse mix, no polish, male distorted vocal style",
+        "defaultLyrics": "[Verse]\n키보드 잡으면 펩 과르디올라,\n방구석에선 전술의 천재.\n전술이 왜 저래? 내가 뛰어도 그것보단 잘하겠다!\n[Shout]\n어이구, 그렇게 잘하면 니가 뛰든가!"
+      },
+      "videoClips": [
+        {
+          "sceneId": 1,
+          "duration": 10,
+          "prompt": "An arrogant gorilla sitting on a giant soccer ball wearing headphones, typing furiously on a glowing keyboard, dark room with green neon lights",
+          "style": "Stylized 3D Render",
+          "transition": "Cut"
+        },
+        {
+          "sceneId": 2,
+          "duration": 10,
+          "prompt": "A television screen showing a soccer match in the background, a bucket of fried chicken flying in the air in slow motion, pixel art details",
+          "style": "Stylized 3D Render",
+          "transition": "Glitch"
+        },
+        {
+          "sceneId": 3,
+          "duration": 10,
+          "prompt": "The gorilla facepalming and throwing a yellow penalty card at the camera lens, camera shake effect",
+          "style": "Stylized 3D Render",
+          "transition": "Wipe"
+        }
+      ],
+      "overlays": {
+        "fontStyle": "Impact Red Outline",
+        "stroke": "White 3px",
+        "alignment": "Center Bottom",
+        "textAnimations": "Shake on Beat"
+      },
+      "tags": ["#월드컵", "#국대축구", "#방구석명감독", "#디스곡", "#축구밈"]
+    },
+    {
+      "id": "salary-slave",
+      "name": "\"돈 많은 백수가 꿈\" - 노예 송",
+      "duration": 30,
+      "audio": {
+        "styleName": "Chillwave Drift",
+        "genre": "Electronic",
+        "mood": "Chill",
+        "bpm": "80–95",
+        "vocal": "Soft Male",
+        "tags": "Nostalgic chillwave drift, 88 BPM, vintage synth chords, warm Oberheim pads, slow drum machine groove, sun-drenched tape flutter, dreamy summer reverb, warm low-pass filter, soft male vocal style",
+        "defaultLyrics": "[Intro]\n알람 소리는 내 장례식 종소리...\n[Chorus]\n하지만 가야지, 난 자본주의의 노예!\n로또 1등 되면 사장실 문 걷어찬다!\n[Laughing]\n(네, 10분만 더 자겠습니다)"
+      },
+      "videoClips": [
+        {
+          "sceneId": 1,
+          "duration": 10,
+          "prompt": "A tired office worker character in a grey suit hanging onto a subway handle like a zombie, eyes half-closed, neon fluorescent lights overhead",
+          "style": "Claymation 3D",
+          "transition": "Cut"
+        },
+        {
+          "sceneId": 2,
+          "duration": 10,
+          "prompt": "The worker sitting at a desk surrounded by giant, towering stacks of paper, a coffee cup vibrating, comical exaggerated cartoon style",
+          "style": "Claymation 3D",
+          "transition": "Slide Left"
+        },
+        {
+          "sceneId": 3,
+          "duration": 10,
+          "prompt": "The worker suddenly dreaming of a rain of gold coins, eyes turning to stars, floating in a clouds of bills",
+          "style": "Claymation 3D",
+          "transition": "Fade Out"
+        }
+      ],
+      "overlays": {
+        "fontStyle": "Neon Pink Glow",
+        "stroke": "Black 3px",
+        "alignment": "Center Bottom",
+        "textAnimations": "Slide In"
+      },
+      "tags": ["#퇴사짤", "#직장인애환", "#직장인밈", "#돈많은백수", "#직장인공감"]
+    }
+  ]
+}

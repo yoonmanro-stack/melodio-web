@@ -5,6 +5,36 @@
   --color-purple-600: #9333ea;
   --color-fuchsia-600: #c026d3;
   --color-cyan-400: #22d3ee;
+
+  /* Melodio 디자인 토큰 */
+  --color-melodio-bg: #0a0a0f;
+  --color-melodio-surface: #12121a;
+  --color-melodio-card: #1a1a28;
+  --color-melodio-border: #2a2a3a;
+  --color-melodio-accent: #7c3aed;
+  --color-melodio-accent-light: #a78bfa;
+  --color-melodio-accent-glow: rgba(124, 58, 237, 0.4);
+  --color-melodio-text: #e8e8f0;
+  --color-melodio-muted: #6b7280;
+
+  --background-image-gradient-melodio: linear-gradient(135deg, #7c3aed 0%, #db2777 50%, #f59e0b 100%);
+  --background-image-gradient-card: linear-gradient(145deg, #1a1a28, #12121a);
+
+  --shadow-melodio-glow: 0 0 30px rgba(124, 58, 237, 0.3);
+  --shadow-melodio-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+
+  --animate-fade-in: fadeIn 0.3s ease-out;
+  --animate-slide-up: slideUp 0.3s ease-out;
+  --animate-pulse-slow: pulse 3s ease-in-out infinite;
+
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+  @keyframes slideUp {
+    0% { opacity: 0; transform: translateY(16px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
 }
 
 @layer base {
@@ -44,6 +74,15 @@
   }
 }
 
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none; /* Safari and Chrome */
+}
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 5px;
@@ -61,4 +100,78 @@
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* Melodio 컴포넌트 유틸리티 */
+@utility glass {
+  background-color: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+@utility tag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.875rem;
+  border: 1px solid var(--color-melodio-border);
+  background-color: var(--color-melodio-card);
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s;
+
+  &:hover {
+    border-color: var(--color-melodio-accent-light);
+    color: var(--color-melodio-accent-light);
+  }
+
+  &.active {
+    border-color: var(--color-melodio-accent);
+    background-color: rgba(124, 58, 237, 0.2);
+    color: var(--color-melodio-accent-light);
+    box-shadow: 0 0 12px rgba(124, 58, 237, 0.3);
+  }
+}
+
+@utility btn-primary {
+  padding: 0.75rem 1.5rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  color: #ffffff;
+  background-image: linear-gradient(to right, #7c3aed, #db2777);
+  transition: all 0.2s;
+  box-shadow: 0 0 30px rgba(124, 58, 237, 0.3);
+  cursor: pointer;
+
+  &:hover {
+    background-image: linear-gradient(to right, #6d28d9, #be185d);
+  }
+
+  &:active {
+    transform: scale(0.95);
+  }
+}
+
+@utility section-card {
+  border-radius: 1rem;
+  border: 1px solid var(--color-melodio-border);
+  background-color: var(--color-melodio-card);
+  padding: 1.25rem;
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* 사이드바 접힘 시 컨텐츠 영역 확장 및 부드러운 전환 효과 */
+.max-w-5xl,
+.max-w-6xl,
+.max-w-7xl {
+  transition: max-width 0.3s ease-in-out;
+}
+
+.sidebar-collapsed-content .max-w-5xl,
+.sidebar-collapsed-content .max-w-6xl,
+.sidebar-collapsed-content .max-w-7xl {
+  max-width: 1600px !important;
 }

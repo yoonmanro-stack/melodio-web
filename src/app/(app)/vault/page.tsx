@@ -3,14 +3,11 @@ import { ShieldCheck, FileText, Download, Building2, Calendar } from "lucide-rea
 export default function VaultPage() {
   return (
     <div className="flex flex-col gap-8 h-full overflow-y-auto pb-10">
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-500 flex items-center gap-3">
-            <ShieldCheck className="w-10 h-10 text-cyan-400" /> IP & License Vault
-          </h1>
-          <p className="text-zinc-400 mt-2">Manage your commercial B2B licenses and download legal certificates.</p>
-        </div>
-      </div>
+      {/* 헤더 — 통일된 표준 브랜드 헤더 */}
+      <header className="mb-8 border-b border-white/10 pb-6">
+        <h1 className="text-4xl font-bold text-white mb-2">IP & License Vault</h1>
+        <p className="text-zinc-400">Manage your commercial B2B licenses and download legal certificates.</p>
+      </header>
 
       <div className="grid gap-4 mt-4">
         {/* Mock License 1 */}

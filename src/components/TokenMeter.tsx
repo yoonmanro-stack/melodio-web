@@ -32,7 +32,7 @@ export function TokenMeter() {
     // Realtime 구독 (DB 밸런스 변경 시 즉시 반영)
     const channel = supabase
       .channel('profiles-updates')
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload) => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, (payload: any) => {
         setTokens(payload.new.tokens_balance);
         setIsGenerating(true); // 토큰이 차감될 때 깜빡거림 효과 트리거
         setTimeout(() => setIsGenerating(false), 2500); 
@@ -48,7 +48,7 @@ export function TokenMeter() {
   if (tokens === null) return null; // 로그인 안 되어 있으면 안 보임
 
   return (
-    <div className="fixed top-6 right-8 z-50 flex items-center gap-4">
+    <div className="flex items-center gap-2 md:gap-4">
       {/* Cyberpunk Status Text */}
       {isGenerating && (
         <motion.div

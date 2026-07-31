@@ -2,8 +2,9 @@ import { User, Bell, Shield, Download, UploadCloud, Code, Copy } from "lucide-re
 
 export default function SettingsPage() {
   return (
-    <div className="max-w-4xl mx-auto pt-4 h-full flex flex-col pb-20">
-      <header className="mb-10">
+    <div className="max-w-6xl mx-auto pt-4 h-full flex flex-col pb-20">
+      {/* 헤더 — 통일된 표준 브랜드 헤더 */}
+      <header className="mb-8 border-b border-white/10 pb-6">
         <h1 className="text-4xl font-bold text-white mb-2">Settings</h1>
         <p className="text-zinc-400">Manage your profile, team access, and platform preferences.</p>
       </header>

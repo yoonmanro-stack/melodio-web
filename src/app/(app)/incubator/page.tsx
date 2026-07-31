@@ -5,6 +5,10 @@ import { useState } from "react";
 
 export default function ArtistIncubator() {
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9">("9:16");
+  const [voiceType, setVoiceType] = useState<"default" | "reference" | "upload" | "blend">("default");
+  const [refTrackId, setRefTrackId] = useState("");
+  const [blendRatio, setBlendRatio] = useState(50);
+  const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
 
   return (
     <div className="max-w-6xl mx-auto pt-4 h-full flex flex-col">
@@ -52,6 +56,132 @@ export default function ArtistIncubator() {
                 <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-2">Genre & Style Focus</label>
                   <input type="text" placeholder="e.g. Synthwave / Cyberpunk Lofi" className="w-full bg-black/50 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-fuchsia-500 outline-none transition-colors" />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Vocal DNA / AI Voice Panel */}
+          <div className="glass-panel p-6 flex flex-col gap-4">
+            <div className="flex items-center gap-2 mb-2 border-b border-white/10 pb-3">
+              <Sparkles className="w-5 h-5 text-fuchsia-400" />
+              <h2 className="text-xl font-semibold text-white">Vocal DNA / AI Voice</h2>
+            </div>
+            
+            <div className="space-y-4">
+              {/* Voice Generation Type Selector */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-2">Voice Type</label>
+                <div className="grid grid-cols-2 gap-1.5 p-1 bg-black/50 border border-white/5 rounded-lg text-[10px] font-semibold">
+                  {(
+                    [
+                      { id: 'default', label: 'Default AI' },
+                      { id: 'reference', label: 'Ref Track' },
+                      { id: 'upload', label: 'Private Upload' },
+                      { id: 'blend', label: 'Voice Blend' }
+                    ] as const
+                  ).map((t) => (
+                    <button
+                      key={t.id}
+                      type="button"
+                      onClick={() => setVoiceType(t.id)}
+                      className={`py-1.5 px-2 rounded-md transition-all ${
+                        voiceType === t.id
+                          ? 'bg-fuchsia-600/30 text-fuchsia-300 border border-fuchsia-500/20 font-bold'
+                          : 'text-zinc-500 hover:text-zinc-300'
+                      }`}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Dynamic Inputs based on Selection */}
+              {voiceType === 'reference' && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-zinc-400">Reference Track ID / URL</label>
+                  <input 
+                    type="text" 
+                    value={refTrackId}
+                    onChange={(e) => setRefTrackId(e.target.value)}
+                    placeholder="e.g. CBD38BE7" 
+                    className="w-full bg-black/50 border border-white/10 rounded-xl py-3 px-4 text-xs text-white focus:border-fuchsia-500 outline-none transition-colors" 
+                  />
+                  <p className="text-[9px] text-zinc-500 leading-tight">Suno 공개 곡 URL 또는 트랙 ID를 입력하여 음색 지문을 추출합니다.</p>
+                </div>
+              )}
+
+              {voiceType === 'upload' && (
+                <div className="space-y-2">
+                  <label className="block text-xs font-medium text-zinc-400">Private Voice File (.wav, .mp3)</label>
+                  <div className="border border-dashed border-zinc-700 bg-black/30 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500 transition-colors">
+                    <span className="text-[10px] text-zinc-500 block">Drag & drop or Click to upload (Max 10MB)</span>
+                  </div>
+                  <p className="text-[9px] text-zinc-500 leading-tight">타인이 접근할 수 없는 대표님 계정만의 독점 음성 데이터를 업로드합니다.</p>
+                </div>
+              )}
+
+              {voiceType === 'blend' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">Voice A ID (e.g. CBD38BE7)</label>
+                    <input 
+                      type="text" 
+                      placeholder="Track ID A" 
+                      className="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-4 text-xs text-white focus:border-fuchsia-500 outline-none transition-colors" 
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">Voice B ID</label>
+                    <input 
+                      type="text" 
+                      placeholder="Track ID B" 
+                      className="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-4 text-xs text-white focus:border-fuchsia-500 outline-none transition-colors" 
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-[10px] text-zinc-400 mb-1">
+                      <span>Ratio (A : B)</span>
+                      <span>{blendRatio}% : {100 - blendRatio}%</span>
+                    </div>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="100" 
+                      value={blendRatio} 
+                      onChange={(e) => setBlendRatio(Number(e.target.value))}
+                      className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-fuchsia-500" 
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Vocal Traits Tag Selection */}
+              <div>
+                <label className="block text-xs font-medium text-zinc-400 mb-2">Vocal Traits</label>
+                <div className="flex flex-wrap gap-1">
+                  {['Whispered', 'Airy', 'Heavy Vibrato', 'Falsetto', 'Dry Mix', 'Warm tone'].map((tag) => {
+                    const isSelected = selectedTraits.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          setSelectedTraits(prev => 
+                            prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+                          );
+                        }}
+                        className={`px-2 py-1 rounded text-[9px] font-medium transition-all ${
+                          isSelected 
+                            ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30' 
+                            : 'bg-zinc-800/40 text-zinc-400 hover:text-zinc-300 border border-transparent'
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </div>

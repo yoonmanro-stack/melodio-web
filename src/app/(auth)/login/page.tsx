@@ -2,16 +2,35 @@
 
 import Link from "next/link";
 import { Hexagon, LogIn, Mail } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import AuthSlider from "@/components/AuthSlider";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function LoginPage() {
+  const { user, loading: authLoading } = useAuth();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextRoute = searchParams.get("next") || "/dashboard";
+
+  useEffect(() => {
+    if (!authLoading && user) {
+      router.push(nextRoute);
+    }
+  }, [user, authLoading, router, nextRoute]);
+
+  if (authLoading || (user && !authLoading)) {
+    return (
+      <div className="min-h-screen bg-[#07070a] text-white flex items-center justify-center font-sans">
+        <div className="w-10 h-10 border-4 border-fuchsia-500 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -32,16 +51,17 @@ export default function LoginPage() {
         setErrorMsg(error.message);
       }
     } else {
-      router.push("/dashboard");
+      router.push(nextRoute);
     }
   };
 
   const handleOAuthLogin = async (provider: 'google' | 'github') => {
     setErrorMsg("");
+    const callbackUrl = `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextRoute)}`;
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/dashboard`
+        redirectTo: callbackUrl
       }
     });
     
@@ -54,22 +74,8 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 rounded-3xl overflow-hidden glass-panel shadow-[0_0_50px_rgba(192,38,211,0.15)] h-[600px]">
         
-        {/* Left Side: Branding / Media Loop */}
-        <div className="bg-gradient-to-br from-[#0f0c29] via-[#302b63] to-[#24243e] p-10 flex flex-col justify-between relative overflow-hidden">
-          <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-30 mix-blend-overlay"></div>
-          
-          <Link href="/" className="z-10 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-fuchsia-600 to-cyan-400 flex items-center justify-center shadow-[0_0_15px_rgba(192,38,211,0.5)]">
-              <Hexagon className="w-6 h-6 text-white" />
-            </div>
-            <span className="text-2xl font-bold tracking-wider text-white">MELODIO</span>
-          </Link>
-          
-          <div className="z-10 mt-auto">
-            <h2 className="text-3xl font-bold text-white mb-4">Welcome back,<br/>Maestro.</h2>
-            <p className="text-zinc-300 text-sm">Sign in to orchestrate your virtual artists and automate your music empire.</p>
-          </div>
-        </div>
+        {/* Left Side: Branding / Media Slider */}
+        <AuthSlider />
 
         {/* Right Side: Login Form */}
         <div className="p-10 flex flex-col justify-center bg-black/40">

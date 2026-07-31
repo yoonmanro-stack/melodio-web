@@ -1,8 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from './supabase/client';
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co';
-// TEMPORARY: Use Service Role Key to bypass RLS for demonstration purposes
-const supabaseAnonKey = 'REDACTED_JWT';
-
-// 클라이언트 사이드와 서버 컴포넌트 모두에서 동작하는 싱글톤 인스턴스
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// 기존 @supabase/supabase-js 대신 @supabase/ssr 브라우저 클라이언트 싱글톤 재내보내기
+// 이를 통해 모든 클라이언트 컴포넌트가 하나의 인증 세션 및 쿠키 싱크를 완벽히 공유합니다.
+export const supabase = createClient();
