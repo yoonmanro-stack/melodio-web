@@ -303,31 +303,27 @@ export async function POST(req: Request) {
     // 국토부 지표면 고도(zTerrain)에서의 기온/기압 물리 모델 적용
     const pGroundExpected = pSeaLevel * Math.pow(1.0 - zTerrain / 44330.0, 5.2558);
 
-    let zDevice = Number(altitude || 0);
+    const userFloor = (body.floor !== undefined && body.floor !== null) ? Number(body.floor) : null;
     const numPressure = pressure ? Number(pressure) : null;
+    let zDevice = zTerrain;
     let hasValidSensor = false;
     let isBarometerApplied = false;
 
-    if (numPressure && numPressure > 800 && numPressure < 1100) {
-      // 1) 스마트폰 기압계 실측치가 전송된 경우:
-      // 지표면 기대 기압 pGroundExpected 대비 기압 차이(hPa)로 지표면 위 높이 dzBaro(m) 정밀 연산 (1 hPa ≈ 8.53m)
+    if (userFloor !== null && !isNaN(userFloor)) {
+      // 1) 층수가 전송된 경우 (테스트 모드/수동 입력): 층수 최우선 확정
+      const estimatedDz = userFloor > 0 ? (userFloor - 1) * 3.0 : userFloor * 3.5;
+      zDevice = zTerrain + estimatedDz;
+      hasValidSensor = true;
+    } else if (numPressure && numPressure > 800 && numPressure < 1100) {
+      // 2) 스마트폰 기압계 실측치가 전송된 경우: P_ground_expected 대비 기압 차이(hPa)로 지표면 위 높이 dzBaro 연산 (1 hPa ≈ 8.53m)
       const dzBaro = (pGroundExpected - numPressure) * 8.53;
       zDevice = zTerrain + dzBaro;
       hasValidSensor = true;
       isBarometerApplied = true;
-    } else if (altitude !== undefined && altitude !== null && Number(altitude) !== 0) {
-      // 2) 실시간 스마트폰 센서/GPS 해발 고도 수신
-      const rawAlt = Number(altitude);
-      zDevice = rawAlt;
-      hasValidSensor = true;
-    }
-
-    const userFloor = (body.floor !== undefined && body.floor !== null) ? Number(body.floor) : null;
-    if (userFloor !== null && !isNaN(userFloor)) {
-      // 층수가 전송된 경우 (테스트 모드/사용자 입력) 층수 기반 해발고도를 최우선 적용
-      const estimatedDz = userFloor > 0 ? (userFloor - 1) * 3.0 : userFloor * 3.5;
-      zDevice = zTerrain + estimatedDz;
-      hasValidSensor = true;
+    } else {
+      // 3) 기압계 센서 미지원 Web PWA 환경: HTML5 GPS 해발고도(±50m 노이즈)로 인한 23층 환각 연산을 원천 차단하고 지상 1층 안정화
+      zDevice = zTerrain;
+      hasValidSensor = false;
     }
 
     // 🎯 순수 지면 기준 건물 수직 높이: dzRaw = Z_device - Z_terrain
