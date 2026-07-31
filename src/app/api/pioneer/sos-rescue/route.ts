@@ -215,10 +215,27 @@ async function fetchRealtimeAtmosphericData(lat: number, lng: number) {
   let elevationMsl: number | null = null;
   let seaLevelPressureHpa: number = 1013.25; // Standard atmospheric pressure fallback
   let surfacePressureHpa: number | null = null;
-  let dataSource = "OPEN_METEO_REALTIME";
+  let dataSource = "MAPZEN_HIGH_PRECISION_DEM";
 
+  // 1차: Mapzen High-Precision DEM API (Open-Meteo 85m 글리치 원천 차단 - 한국 고덕동 정밀 33.0m)
   try {
-    // 1차: Open-Meteo Realtime Atmospheric API (실시간 해수면 기압 + 지표면 기압 + DEM 해발 고도)
+    const url = `https://api.opentopodata.org/v1/mapzen?locations=${lat},${lng}`;
+    const res = await fetch(url, {
+      next: { revalidate: 86400 },
+      signal: AbortSignal.timeout(2500)
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.results && data.results.length > 0 && data.results[0].elevation !== null) {
+        elevationMsl = Number(data.results[0].elevation);
+      }
+    }
+  } catch (e) {
+    console.warn("[API/sos-rescue] Mapzen DEM fetch fallback:", e);
+  }
+
+  // 2차: Open-Meteo Realtime Atmospheric API (실시간 해수면 기압 & DEM 보충)
+  try {
     const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=surface_pressure,pressure_msl&elevation=nan`;
     const res = await fetch(url, {
       next: { revalidate: 600 },
@@ -226,8 +243,9 @@ async function fetchRealtimeAtmosphericData(lat: number, lng: number) {
     });
     if (res.ok) {
       const data = await res.json();
-      if (data.elevation !== undefined && data.elevation !== null) {
+      if (elevationMsl === null && data.elevation !== undefined && data.elevation !== null) {
         elevationMsl = Number(data.elevation);
+        dataSource = "OPEN_METEO_REALTIME";
       }
       if (data.current?.pressure_msl) {
         seaLevelPressureHpa = Number(data.current.pressure_msl);
@@ -240,7 +258,7 @@ async function fetchRealtimeAtmosphericData(lat: number, lng: number) {
     console.warn("[API/sos-rescue] Open-Meteo fetch note:", e);
   }
 
-  // 2차 백업: Open-Elevation DEM (고도 보충)
+  // 3차 백업: Open-Elevation DEM (고도 보충)
   if (elevationMsl === null) {
     try {
       const res = await fetch(`https://api.open-elevation.com/api/v1/lookup?locations=${lat},${lng}`, {
@@ -258,7 +276,7 @@ async function fetchRealtimeAtmosphericData(lat: number, lng: number) {
   }
 
   return {
-    elevationMsl: elevationMsl ?? 38.0,
+    elevationMsl: elevationMsl ?? 30.0,
     seaLevelPressureHpa,
     surfacePressureHpa,
     dataSource
