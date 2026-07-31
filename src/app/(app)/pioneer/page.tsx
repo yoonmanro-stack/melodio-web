@@ -425,19 +425,23 @@ export default function PioneerRescuePage() {
                 <>
                   <span className="text-[95px] sm:text-[110px] font-black drop-shadow-2xl tracking-tighter text-white leading-none">SOS</span>
                   <span className="text-xl sm:text-2xl font-black text-amber-300 tracking-tight drop-shadow-lg">터치 시 즉시 위치 전송</span>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      window.location.href = "/pioneer?v=" + Date.now();
-                    }}
-                    className="text-[11px] sm:text-xs font-mono font-bold text-amber-200/90 bg-black/70 hover:bg-amber-900/60 px-3 py-1 rounded-full border border-amber-400/50 mt-1 shadow-md transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>⚡ v3.5.6 (안드로이드 기압계+산악엔진)</span>
-                    <RefreshCw className="w-3 h-3 text-amber-300" />
-                  </button>
                 </>
               )}
+            </button>
+          </div>
+
+          {/* ⚡ SOS 버튼 하단 - 버전 및 엔진 최신 새로고침 독립 버튼 */}
+          <div className="mt-3 flex items-center justify-center">
+            <button
+              type="button"
+              onClick={() => {
+                window.location.href = "/pioneer?v=" + Date.now();
+              }}
+              className="text-xs font-mono font-bold text-amber-200 bg-zinc-900/90 hover:bg-amber-950/80 px-4 py-1.5 rounded-full border border-amber-500/50 shadow-lg transition-all active:scale-95 flex items-center gap-2 cursor-pointer"
+            >
+              <span>⚡ v3.5.6 (안드로이드 기압계 + 산악엔진)</span>
+              <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
+              <span className="text-[10px] text-amber-400/80 bg-black/60 px-1.5 py-0.5 rounded border border-amber-500/30">캐시 새로고침</span>
             </button>
           </div>
 
