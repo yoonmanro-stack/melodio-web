@@ -112,6 +112,58 @@ export default function PioneerRescuePage() {
     }
   };
 
+  // 🏔️ Android Chrome & iOS Barometer Hardware Reader (Promise-based Async Reader)
+  const readHardwareBarometer = async (): Promise<number | null> => {
+    if (typeof window === "undefined") return null;
+
+    // 1. Capacitor / Android Native Plugin
+    try {
+      if ((window as any).Capacitor?.Plugins?.Barometer) {
+        const res = await (window as any).Capacitor.Plugins.Barometer.getPressure();
+        if (res && res.pressure) return Number(res.pressure);
+      }
+    } catch {}
+
+    // 2. iOS Native WebKit Bridge
+    try {
+      if ((window as any).webkit?.messageHandlers?.getBarometerPressure) {
+        const pVal = await (window as any).webkit.messageHandlers.getBarometerPressure.postMessage({});
+        if (pVal) return Number(pVal);
+      }
+    } catch {}
+
+    // 3. Android Chrome W3C Generic Sensor API (Promise-based for async reading event)
+    if ("Barometer" in window) {
+      return new Promise((resolve) => {
+        try {
+          const bSensor = new (window as any).Barometer({ frequency: 10 });
+          const timer = setTimeout(() => {
+            try { bSensor.stop(); } catch {}
+            resolve(null);
+          }, 600);
+
+          bSensor.addEventListener("reading", () => {
+            clearTimeout(timer);
+            const pVal = bSensor.pressure ? Number(bSensor.pressure) : null;
+            try { bSensor.stop(); } catch {}
+            resolve(pVal);
+          });
+
+          bSensor.addEventListener("error", () => {
+            clearTimeout(timer);
+            resolve(null);
+          });
+
+          bSensor.start();
+        } catch (e) {
+          resolve(null);
+        }
+      });
+    }
+
+    return null;
+  };
+
   // 🚨 1-Tap Rescue SOS Execution (100% Automatic Physics & Geospatial Engine)
   const triggerRescueSOS = async () => {
     if (typeof window !== "undefined" && navigator.vibrate) {
@@ -154,26 +206,8 @@ export default function PioneerRescuePage() {
         } catch {}
       }
 
-      // Read Barometer Sensor if hardware supported (Native Bridge, Capacitor & W3C Barometer)
-      let devicePressure: number | null = null;
-      if (typeof window !== "undefined") {
-        try {
-          if ((window as any).Capacitor?.Plugins?.Barometer) {
-            const res = await (window as any).Capacitor.Plugins.Barometer.getPressure();
-            if (res && res.pressure) devicePressure = Number(res.pressure);
-          } else if ((window as any).webkit?.messageHandlers?.getBarometerPressure) {
-            // iOS Native WebKit Bridge
-            const pVal = await (window as any).webkit.messageHandlers.getBarometerPressure.postMessage({});
-            if (pVal) devicePressure = Number(pVal);
-          } else if ("Barometer" in window) {
-            const bSensor = new (window as any).Barometer({ frequency: 5 });
-            bSensor.addEventListener("reading", () => {
-              if (bSensor.pressure) devicePressure = Number(bSensor.pressure);
-            });
-            bSensor.start();
-          }
-        } catch {}
-      }
+      // Read Hardware Barometer Sensor (Android Chrome W3C Sensor, Capacitor & Native Bridge)
+      const devicePressure = await readHardwareBarometer();
 
       try {
         const res = await fetch("/api/pioneer/sos-rescue", {
@@ -392,7 +426,7 @@ export default function PioneerRescuePage() {
                   <span className="text-[95px] sm:text-[110px] font-black drop-shadow-2xl tracking-tighter text-white leading-none">SOS</span>
                   <span className="text-xl sm:text-2xl font-black text-amber-300 tracking-tight drop-shadow-lg">터치 시 즉시 위치 전송</span>
                   <span className="text-[11px] sm:text-xs font-mono font-bold text-amber-200/90 bg-black/50 px-3 py-0.5 rounded-full border border-amber-400/50 mt-1 shadow-md">
-                    ⚡ v3.5.4 Mapzen DEM 33m 정밀 보정
+                    ⚡ v3.5.5 안드로이드 기압계 가동
                   </span>
                 </>
               )}
