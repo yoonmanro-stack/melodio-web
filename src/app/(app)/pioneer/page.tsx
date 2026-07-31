@@ -392,7 +392,7 @@ export default function PioneerRescuePage() {
                   <span className="text-[95px] sm:text-[110px] font-black drop-shadow-2xl tracking-tighter text-white leading-none">SOS</span>
                   <span className="text-xl sm:text-2xl font-black text-amber-300 tracking-tight drop-shadow-lg">터치 시 즉시 위치 전송</span>
                   <span className="text-[11px] sm:text-xs font-mono font-bold text-amber-200/90 bg-black/50 px-3 py-0.5 rounded-full border border-amber-400/50 mt-1 shadow-md">
-                    ⚡ v3.5.1 GPS 환각 보정
+                    ⚡ v3.5.2 H3 DEM 앵커 보정
                   </span>
                 </>
               )}
