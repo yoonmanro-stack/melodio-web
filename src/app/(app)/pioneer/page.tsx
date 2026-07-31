@@ -115,9 +115,17 @@ export default function PioneerRescuePage() {
   const [sensorTestResult, setSensorTestResult] = useState<string | null>(null);
   const [isTestingSensor, setIsTestingSensor] = useState<boolean>(false);
 
-  // 🏔️ Android Chrome & iOS Barometer Hardware Reader (Promise-based Async Reader)
+  // 🏔️ Android Native, Capacitor & iOS Barometer Hardware Reader
   const readHardwareBarometer = async (): Promise<number | null> => {
     if (typeof window === "undefined") return null;
+
+    // 0. Android Native Java Bridge (SensorManager TYPE_PRESSURE - 100% Hardware Direct)
+    try {
+      if ((window as any).AndroidBarometer && (window as any).AndroidBarometer.isSupported()) {
+        const pVal = (window as any).AndroidBarometer.getPressure();
+        if (pVal && pVal > 0) return Number(pVal);
+      }
+    } catch {}
 
     // 1. Capacitor / Android Native Plugin
     try {

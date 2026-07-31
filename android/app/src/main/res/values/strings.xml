@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Pioneer 119 Rescue</string>
+    <string name="title_activity_main">Pioneer 119 Rescue</string>
+    <string name="package_name">app.melodio.pioneer</string>
+    <string name="custom_url_scheme">app.melodio.pioneer</string>
+</resources>
