@@ -112,6 +112,9 @@ export default function PioneerRescuePage() {
     }
   };
 
+  const [sensorTestResult, setSensorTestResult] = useState<string | null>(null);
+  const [isTestingSensor, setIsTestingSensor] = useState<boolean>(false);
+
   // 🏔️ Android Chrome & iOS Barometer Hardware Reader (Promise-based Async Reader)
   const readHardwareBarometer = async (): Promise<number | null> => {
     if (typeof window === "undefined") return null;
@@ -140,7 +143,7 @@ export default function PioneerRescuePage() {
           const timer = setTimeout(() => {
             try { bSensor.stop(); } catch {}
             resolve(null);
-          }, 600);
+          }, 800);
 
           bSensor.addEventListener("reading", () => {
             clearTimeout(timer);
@@ -162,6 +165,31 @@ export default function PioneerRescuePage() {
     }
 
     return null;
+  };
+
+  const testLiveBarometerSensor = async () => {
+    setIsTestingSensor(true);
+    setSensorTestResult("하드웨어 기압 센서 탐지 중...");
+
+    if (typeof window === "undefined") {
+      setSensorTestResult("웹 브라우저 환경이 아닙니다.");
+      setIsTestingSensor(false);
+      return;
+    }
+
+    const val = await readHardwareBarometer();
+    if (val !== null) {
+      setSensorTestResult(`✅ 기압계 감지 성공! 실측 수치: ${val.toFixed(2)} hPa`);
+    } else {
+      let reason = "⚠️ 웹 PWA 기압계 차단 상태";
+      if (!("Barometer" in window)) {
+        reason += " (크롬 웹브라우저 'Barometer' 표준 API 미개방)";
+      } else {
+        reason += " (API는 존재하나 센서 응답 미도달/권한 미허용)";
+      }
+      setSensorTestResult(reason);
+    }
+    setIsTestingSensor(false);
   };
 
   // 🚨 1-Tap Rescue SOS Execution (100% Automatic Physics & Geospatial Engine)
@@ -443,6 +471,29 @@ export default function PioneerRescuePage() {
               <RefreshCw className="w-3.5 h-3.5 text-amber-400" />
               <span className="text-[10px] text-amber-400/80 bg-black/60 px-1.5 py-0.5 rounded border border-amber-500/30">캐시 새로고침</span>
             </button>
+          </div>
+
+          {/* 📡 내 폰 하드웨어 기압계 실시간 진단 카드 */}
+          <div className="mt-3 w-full p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex flex-col items-center gap-2 text-center shadow-lg">
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                <Radio className="w-4 h-4 text-amber-400 animate-pulse" />
+                내 폰 기압계 센서 실시간 검사
+              </span>
+              <button
+                type="button"
+                onClick={testLiveBarometerSensor}
+                disabled={isTestingSensor}
+                className="text-xs font-bold text-black bg-amber-400 hover:bg-amber-300 px-3 py-1 rounded-lg transition-all active:scale-95 disabled:opacity-50 cursor-pointer"
+              >
+                {isTestingSensor ? "진단 중..." : "센서 검사 시작"}
+              </button>
+            </div>
+            {sensorTestResult && (
+              <div className="mt-1 w-full text-left text-xs font-mono p-2.5 rounded-xl bg-black/70 border border-amber-500/30 text-amber-200 leading-relaxed">
+                {sensorTestResult}
+              </div>
+            )}
           </div>
 
           {/* 🚨 3D 센서 및 위치 정보 사전 동의 (체크박스 체크 상태) */}
