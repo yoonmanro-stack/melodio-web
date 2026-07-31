@@ -481,6 +481,26 @@ export default function PioneerRescuePage() {
             </button>
           </div>
 
+          {/* 📲 안드로이드 전용 네이티브 앱 (.APK) 원클릭 다운로드 바 */}
+          <div className="mt-3 w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/90 via-teal-950/80 to-zinc-900 border border-emerald-500/50 flex items-center justify-between shadow-xl">
+            <div className="flex flex-col text-left gap-0.5">
+              <span className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
+                <Zap className="w-4 h-4 text-emerald-400 fill-emerald-400" />
+                안드로이드 전용 네이티브 앱 (APK)
+              </span>
+              <span className="text-[10px] text-emerald-200/80 font-medium">
+                하드웨어 기압계(Sensor.TYPE_PRESSURE) 100% 탑재
+              </span>
+            </div>
+            <a
+              href="/Pioneer119Rescue.apk"
+              download="Pioneer119Rescue.apk"
+              className="text-xs font-extrabold text-black bg-emerald-400 hover:bg-emerald-300 px-3.5 py-1.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
+            >
+              <span>APK 다운로드</span>
+            </a>
+          </div>
+
           {/* 📡 내 폰 하드웨어 기압계 실시간 진단 카드 */}
           <div className="mt-3 w-full p-3.5 rounded-2xl bg-zinc-900/90 border border-zinc-800 flex flex-col items-center gap-2 text-center shadow-lg">
             <div className="flex items-center justify-between w-full">
