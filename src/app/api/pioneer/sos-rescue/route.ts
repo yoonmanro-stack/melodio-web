@@ -299,17 +299,20 @@ export async function POST(req: Request) {
 
     const numAccuracy = Number(accuracy || 19.0); // 수색 반경 ±19.0m
 
-    // 🎯 3D 물리 기압-고도 변환공식 (Standard Barometric Formula):
-    // Z_device_msl = 44330.0 * (1.0 - (P_device / P_sea_level) ^ (1 / 5.255))
+    // 🎯 지표면 기대 기압 (P_ground_expected) 역산:
+    // 국토부 지표면 고도(zTerrain)에서의 기온/기압 물리 모델 적용
+    const pGroundExpected = pSeaLevel * Math.pow(1.0 - zTerrain / 44330.0, 5.2558);
+
     let zDevice = Number(altitude || 0);
     const numPressure = pressure ? Number(pressure) : null;
     let hasValidSensor = false;
     let isBarometerApplied = false;
 
     if (numPressure && numPressure > 800 && numPressure < 1100) {
-      // 1) 스마트폰 기압계 실측치(hPa)가 전달된 경우 해수면 정밀 기압(P_sea_level) 기반 100% 물리 공식 적용
-      // Z_device_msl = 44330.0 * (1.0 - (P_device / P_sea_level) ^ 0.190295)
-      zDevice = 44330.0 * (1.0 - Math.pow(numPressure / pSeaLevel, 0.190295));
+      // 1) 스마트폰 기압계 실측치가 전송된 경우:
+      // 지표면 기대 기압 pGroundExpected 대비 기압 차이(hPa)로 지표면 위 높이 dzBaro(m) 정밀 연산 (1 hPa ≈ 8.53m)
+      const dzBaro = (pGroundExpected - numPressure) * 8.53;
+      zDevice = zTerrain + dzBaro;
       hasValidSensor = true;
       isBarometerApplied = true;
     } else if (altitude !== undefined && altitude !== null && Number(altitude) !== 0) {
@@ -361,8 +364,8 @@ export async function POST(req: Request) {
         locationText = `${exactRescuerLocation} (수직고도 +${Math.round(dz)}m ±3m)`;
         envTitle = `건물 지상 ${userFloor}층`;
       }
-    } else if (hasValidSensor && dzRaw < -2.0) {
-      // 🎯 지하 공간 / 절벽 아래 실족 (지표면 땅보다 2m 이상 낮은 기압/고도)
+    } else if (hasValidSensor && dzRaw < -4.0) {
+      // 🎯 지하 공간 / 절벽 아래 실족 (지표면 땅보다 4m 이상 낮은 기압/고도 - 기상 노이즈 방어)
       envType = "UNDERGROUND_SUBTERRANEAN";
       const depth = Math.abs(dzRaw);
       if (zDevice >= 120.0) {
@@ -388,7 +391,7 @@ export async function POST(req: Request) {
       locationText = `${exactRescuerLocation} (수직고도 +${Math.round(dz)}m ±3m)`;
       envTitle = `건물 지상 ${approxFloor}층`;
     } else if (hasValidSensor && Math.abs(dzRaw) <= 4.0) {
-      // 🎯 지상 1층 / 단지 야외 (지표면 야외 구역 확정)
+      // 🎯 지상 1층 / 단지 야외 (지표면 ±4m 노이즈 데드존 방어 확정)
       envType = "URBAN_OUTDOOR_GROUND";
       exactRescuerLocation = "건물 지상 1층 / 단지 야외";
       locationText = `${exactRescuerLocation} (수직고도 0m ±3m)`;
