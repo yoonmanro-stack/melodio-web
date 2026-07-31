@@ -445,7 +445,13 @@ export async function POST(req: Request) {
 
     const telemetryLine = `\n[물리 센서 실측 진단]\n- 기압: 실측 ${baroText} | 지표기대 ${pGroundText} | 해수면 ${pMslText}\n- 고도: 지표면 ${terrainText} | 측정해발 ${zDeviceText} | 수직차이 ${dzText}\n- 연산기준: ${floorSourceText} (v3.5.3)`;
 
-    const smsPayload = `[SOS 긴급 구조 요청]\n구조자 위치 -> ${exactRescuerLocation}${buildingLine}${addressLine}\n위치 오차 범위: 수평 ${horizontalAccText}, 수직 ±3m\nH3-R14:${centerH3IndexR14}\nH3-R13:${centerH3Index}\nGPS:${numLat.toFixed(5)},${numLng.toFixed(5)}${telemetryLine}`;
+    const { bloodType, medicalConditions, medications, ageGender } = body;
+    let medicalLine = "";
+    if (bloodType || medicalConditions || medications || ageGender) {
+      medicalLine = `\n[🏥 조난자 긴급 의료 프로필]\n- 인적사항: ${ageGender || "미지정"} | ${bloodType || "혈액형 미지정"}\n- 기저질환: ${medicalConditions || "없음"}\n- 복용약물: ${medications || "없음"}`;
+    }
+
+    const smsPayload = `[SOS 긴급 구조 요청]\n구조자 위치 -> ${exactRescuerLocation}${buildingLine}${addressLine}\n위치 오차 범위: 수평 ${horizontalAccText}, 수직 ±3m\nH3-R14:${centerH3IndexR14}\nH3-R13:${centerH3Index}\nGPS:${numLat.toFixed(5)},${numLng.toFixed(5)}${medicalLine}${telemetryLine}`;
 
     // DB 및 로컬 저장
     if (supabaseKey) {

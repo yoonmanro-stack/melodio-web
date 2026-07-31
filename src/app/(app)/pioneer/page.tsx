@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ShieldCheck, RefreshCw, Phone, Zap, MapPin, Radio, AlertTriangle, ExternalLink, CheckCircle
+  ShieldCheck, RefreshCw, Phone, Zap, MapPin, Radio, AlertTriangle, ExternalLink, CheckCircle, Activity
 } from "lucide-react";
 import * as h3 from "h3-js";
 
@@ -39,7 +39,13 @@ export default function PioneerRescuePage() {
   const [sosDispatchLogs, setSosDispatchLogs] = useState<any[]>([]);
   const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
 
-  // Load saved phone numbers & silently snap GPS location on mount
+  // 🏥 응급 의료 골든타임 프로필 데이터
+  const [bloodType, setBloodType] = useState<string>("RH+ O형");
+  const [medicalConditions, setMedicalConditions] = useState<string>("");
+  const [medications, setMedications] = useState<string>("");
+  const [ageGender, setAgeGender] = useState<string>("");
+
+  // Load saved phone numbers & medical profile on mount
   useEffect(() => {
     if (typeof window !== "undefined") {
       const savedGuardian = localStorage.getItem("melodio_guardian_phone");
@@ -47,6 +53,18 @@ export default function PioneerRescuePage() {
 
       const savedMy = localStorage.getItem("melodio_my_phone");
       if (savedMy) setMyPhone(savedMy);
+
+      const savedBlood = localStorage.getItem("melodio_medical_blood_type");
+      if (savedBlood) setBloodType(savedBlood);
+
+      const savedCond = localStorage.getItem("melodio_medical_conditions");
+      if (savedCond) setMedicalConditions(savedCond);
+
+      const savedMeds = localStorage.getItem("melodio_medical_medications");
+      if (savedMeds) setMedications(savedMeds);
+
+      const savedAgeGen = localStorage.getItem("melodio_medical_age_gender");
+      if (savedAgeGen) setAgeGender(savedAgeGen);
 
       // Silent GPS snap for map preview
       if ("geolocation" in navigator) {
@@ -87,6 +105,26 @@ export default function PioneerRescuePage() {
   const updateMyPhone = (val: string) => {
     setMyPhone(val);
     if (typeof window !== "undefined") localStorage.setItem("melodio_my_phone", val);
+  };
+
+  const updateBloodType = (val: string) => {
+    setBloodType(val);
+    if (typeof window !== "undefined") localStorage.setItem("melodio_medical_blood_type", val);
+  };
+
+  const updateMedicalConditions = (val: string) => {
+    setMedicalConditions(val);
+    if (typeof window !== "undefined") localStorage.setItem("melodio_medical_conditions", val);
+  };
+
+  const updateMedications = (val: string) => {
+    setMedications(val);
+    if (typeof window !== "undefined") localStorage.setItem("melodio_medical_medications", val);
+  };
+
+  const updateAgeGender = (val: string) => {
+    setAgeGender(val);
+    if (typeof window !== "undefined") localStorage.setItem("melodio_medical_age_gender", val);
   };
 
   // SMS Recipients Calculation (테스트 중 실시간 오발송 100% 차단)
@@ -257,7 +295,11 @@ export default function PioneerRescuePage() {
             pressure: devicePressure,
             floor: testModeEnabled && testFloor ? Number(testFloor) : null,
             spotCategory: "INDOOR_REAL",
-            channel: "HTTP/5G"
+            channel: "HTTP/5G",
+            bloodType,
+            medicalConditions,
+            medications,
+            ageGender
           })
         });
 
@@ -439,6 +481,62 @@ export default function PioneerRescuePage() {
                   onChange={(e) => updateGuardianPhone(e.target.value)}
                   className="w-full bg-black/60 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500 placeholder:text-zinc-600"
                 />
+              </div>
+
+              {/* 🏥 응급 의료 골든타임 프로필 카드 */}
+              <div className="pt-3 border-t border-zinc-800/80 mt-2">
+                <span className="text-amber-300 font-extrabold flex items-center gap-1 mb-2 text-xs">
+                  <Activity className="w-4 h-4 text-red-400 animate-pulse" /> 119 응급 의료 골든타임 프로필
+                </span>
+                
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[10px] text-zinc-400 block mb-0.5 font-bold">혈액형</label>
+                    <select
+                      value={bloodType}
+                      onChange={(e) => updateBloodType(e.target.value)}
+                      className="w-full bg-black/60 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-amber-200 font-mono font-bold focus:outline-none focus:border-amber-500"
+                    >
+                      <option value="RH+ O형">RH+ O형</option>
+                      <option value="RH+ A형">RH+ A형</option>
+                      <option value="RH+ B형">RH+ B형</option>
+                      <option value="RH+ AB형">RH+ AB형</option>
+                      <option value="RH- O형">RH- O형 (희귀)</option>
+                      <option value="RH- A형">RH- A형 (희귀)</option>
+                      <option value="RH- B형">RH- B형 (희귀)</option>
+                      <option value="RH- AB형">RH- AB형 (희귀)</option>
+                      <option value="미지정">미지정</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-zinc-400 block mb-0.5 font-bold">나이 / 성별</label>
+                    <input
+                      type="text"
+                      placeholder="예: 58세 남성"
+                      value={ageGender}
+                      onChange={(e) => updateAgeGender(e.target.value)}
+                      className="w-full bg-black/60 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-amber-500 placeholder:text-zinc-600"
+                    />
+                  </div>
+                </div>
+
+                <div className="mt-2 space-y-1.5">
+                  <input
+                    type="text"
+                    placeholder="지병/기저질환 (예: 심장질환, 당뇨, 고혈압)"
+                    value={medicalConditions}
+                    onChange={(e) => updateMedicalConditions(e.target.value)}
+                    className="w-full bg-black/60 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-red-500 placeholder:text-zinc-600"
+                  />
+                  <input
+                    type="text"
+                    placeholder="복용 약물 (예: 아스피린 혈전용해제, 인슐린)"
+                    value={medications}
+                    onChange={(e) => updateMedications(e.target.value)}
+                    className="w-full bg-black/60 border border-zinc-800 rounded-xl px-2.5 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-red-500 placeholder:text-zinc-600"
+                  />
+                </div>
               </div>
             </div>
           </div>
