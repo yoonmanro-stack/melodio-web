@@ -366,6 +366,8 @@ export async function POST(req: Request) {
     let envTitle = "지상 1층/야외";
     let exactRescuerLocation = "건물 지상 1층 / 단지 야외";
 
+    const isMountain = zTerrain >= 100 || roadAddress.includes("산") || buildingName.includes("산");
+
     if (userFloor !== null && !isNaN(userFloor)) {
       // 수동 지정 수치가 있을 경우 연산
       if (userFloor < 0) {
@@ -386,17 +388,23 @@ export async function POST(req: Request) {
         locationText = `${exactRescuerLocation} (수직고도 +${Math.round(dz)}m ±3m)`;
         envTitle = `건물 지상 ${userFloor}층`;
       }
+    } else if (isMountain && Math.abs(dzRaw) <= 4.0) {
+      // ⛰️ 산악 지대 / 등산로 지표면 정밀 감지
+      envType = "MOUNTAIN_TERRAIN";
+      exactRescuerLocation = `산악 지대 / 등산로 구역`;
+      locationText = `${exactRescuerLocation} (해발고도 ${Math.round(zDevice)}m ±3m)`;
+      envTitle = "산악 등산로";
     } else if (hasValidSensor && dzRaw < -4.0) {
       // 🎯 지하 공간 / 절벽 아래 실족 (지표면 땅보다 4m 이상 낮은 기압/고도 - 기상 노이즈 방어)
-      envType = "UNDERGROUND_SUBTERRANEAN";
       const depth = Math.abs(dzRaw);
-      if (zDevice >= 120.0) {
+      if (isMountain || zDevice >= 100.0) {
         // 산악/절벽 실족 구역
         envType = "MOUNTAIN_TERRAIN";
-        exactRescuerLocation = `절벽 아래 / 계곡 실족 구역 (지표면 대비 -${depth.toFixed(1)}m 추정)`;
+        exactRescuerLocation = `절벽 아래 / 계곡 실족 구역 (등산로 대비 -${depth.toFixed(1)}m 추정)`;
         locationText = `${exactRescuerLocation} (해발고도 ${Math.round(zDevice)}m ±3m)`;
         envTitle = "절벽/계곡 실족";
       } else {
+        envType = "UNDERGROUND_SUBTERRANEAN";
         const undergroundFloor = Math.max(1, Math.round((depth + 1.0) / 3.5));
         exactRescuerLocation = `건물 지하 ${undergroundFloor}층 추정`;
         locationText = `${exactRescuerLocation} (수직고도 -${depth.toFixed(1)}m ±3m)`;
