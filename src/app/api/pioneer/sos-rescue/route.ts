@@ -285,17 +285,25 @@ export async function POST(req: Request) {
     const buildingName = vworldMeta?.buildingName || "";
     const roadAddress = vworldMeta?.roadAddress || "";
 
-    // 🏔️ 실시간 기상 관측 데이터 (지표면 DEM 고도 & 실시간 해수면 기압 P_msl)
-    const atmosData = await fetchRealtimeAtmosphericData(numLat, numLng);
-    const zTerrain = atmosData.elevationMsl;
-    const pSeaLevel = atmosData.seaLevelPressureHpa;
-
     // 🎯 Uber H3 정밀도 규격:
     // - Res 13 (19-Hexagon k=2 링 확장, 수색 지름 38.0m / 반경 19.0m / 252평)
     // - 아파트 중정 GPS 오차(10m) 시에도 117동과 118동을 100% 동시에 감싸 안는 최적 번들
     const centerH3IndexR14 = h3.latLngToCell(numLat, numLng, 14);
     const centerH3Index = h3.latLngToCell(numLat, numLng, 13);
     const bundledH3Modules = h3.gridDisk(centerH3Index, 2); // k=2 링 확장 (19개 벌집 모듈)
+
+    // 🏔️ 실시간 기상 관측 데이터 (지표면 DEM 고도 & 실시간 해수면 기압 P_msl)
+    const atmosData = await fetchRealtimeAtmosphericData(numLat, numLng);
+
+    // 🏔️ H3 공간 셀 단위 지표면 고도 앵커링 (6m = 2개층 흔들림 원천 차단)
+    let zTerrain = atmosData.elevationMsl;
+    if (zTerrain !== null && !isNaN(zTerrain)) {
+      // H3 셀 지형 고도를 5m 단위로 앵커링하여 DEM 그리드 보간 흔들림 박멸
+      zTerrain = Math.round(zTerrain / 5.0) * 5.0;
+    } else {
+      zTerrain = 30.0;
+    }
+    const pSeaLevel = atmosData.seaLevelPressureHpa;
 
     const numAccuracy = Number(accuracy || 19.0); // 수색 반경 ±19.0m
 
