@@ -1036,7 +1036,7 @@ export default function PioneerRescuePage() {
                     </span>
                   </div>
 
-                  {/* hidden file inputs for immediate mobile camera launch */}
+                  {/* hidden file inputs strictly enforcing real-time hardware camera capture (gallery picking blocked) */}
                   {photoFiles.map((_, idx) => (
                     <input
                       key={idx}
@@ -1046,12 +1046,13 @@ export default function PioneerRescuePage() {
                       }}
                       type="file"
                       accept="image/*"
+                      capture="environment"
                       onChange={(e) => handlePhotoChange(idx, e)}
                       className="hidden"
                     />
                   ))}
 
-                  {/* 촬영된 썸네일 미리보기 갤러리 */}
+                  {/* 촬영된 썸네일 미리보기 */}
                   {photoFiles.filter(Boolean).length > 0 && (
                     <div className="bg-[#121620] border border-amber-500/30 p-3 rounded-2xl space-y-2">
                       <div className="flex items-center justify-between text-xs">
@@ -1085,29 +1086,28 @@ export default function PioneerRescuePage() {
                     </div>
                   )}
 
-                  {/* 네이티브 인앱 라이브 카메라 & 갤러리 듀얼 버튼 */}
+                  {/* 100% 보안 강화: 지문 인증 후 실시간 인앱 라이브 카메라 전용 버튼 (갤러리 앨범 접근 원천 차단) */}
                   {photoFiles.filter(Boolean).length < 3 ? (
-                    <div className="flex gap-2">
+                    <div className="space-y-2">
                       <button
                         type="button"
                         onClick={triggerUnifiedCaptureFlow}
-                        className="flex-1 py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-black font-black text-xs sm:text-sm rounded-2xl shadow-xl border border-amber-300 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer shadow-amber-500/20"
+                        className="w-full py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-black font-black text-xs sm:text-sm rounded-2xl shadow-xl border border-amber-300 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer shadow-amber-500/20"
                       >
                         <Camera className="w-5 h-5 text-black animate-bounce" />
                         <span>
                           {photoFiles.filter(Boolean).length === 0
-                            ? "📷 1/3번째 인앱 라이브 카메라"
-                            : `📷 ${photoFiles.filter(Boolean).length + 1}/3번째 인앱 라이브 카메라`}
+                            ? "📷 1/3번째 실시간 인앱 라이브 카메라 촬영"
+                            : `📷 ${photoFiles.filter(Boolean).length + 1}/3번째 실시간 인앱 라이브 카메라 촬영`}
                         </span>
                       </button>
-
-                      <label
-                        htmlFor={`pioneer-photo-input-${photoFiles.findIndex((p) => !p || !p.trim()) !== -1 ? photoFiles.findIndex((p) => !p || !p.trim()) : 0}`}
-                        className="py-4 px-3 bg-[#161b26] hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-bold text-xs rounded-2xl transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow"
-                      >
-                        <span className="text-sm">🖼️</span>
-                        <span>갤러리</span>
-                      </label>
+                      
+                      <div className="p-2 rounded-xl bg-red-950/40 border border-red-500/30 text-center">
+                        <span className="text-[10px] text-red-300 font-bold flex items-center justify-center gap-1">
+                          <ShieldCheck className="w-3.5 h-3.5 text-red-400" />
+                          보안 락인: 지문 인증 후 실시간 현장 카메라만 허용 (갤러리/앨범 사진 등록 불가)
+                        </span>
+                      </div>
                     </div>
                   ) : (
                     <div className="space-y-2.5">
