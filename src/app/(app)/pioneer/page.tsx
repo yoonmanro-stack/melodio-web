@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import * as h3 from "h3-js";
 
-const PIONEER_CURRENT_VERSION = "v7.5.0-PURE";
-const PIONEER_BUILD_TIMESTAMP = "(08.01 17:40)";
+const PIONEER_CURRENT_VERSION = "v7.6.0-BARO";
+const PIONEER_BUILD_TIMESTAMP = "(08.01 19:35)";
 
 export default function PioneerRescuePage() {
   // Main Sub-Tab: "victim" (조난자 1-Tap SOS) vs "flag" (깃발 개척하기) vs "center" (관제 센터 모니터링)
