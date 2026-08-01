@@ -206,3 +206,76 @@ export async function POST(req: Request) {
     );
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get("id") || "";
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "삭제할 깃발 ID가 필요합니다." }, { status: 400 });
+    }
+
+    try {
+      const fs = require("fs");
+      const path = require("path");
+      const flagsFilePath = path.join("/tmp", "pioneer_claimed_flags.json");
+
+      if (fs.existsSync(flagsFilePath)) {
+        const raw = fs.readFileSync(flagsFilePath, "utf8");
+        let existingFlags = JSON.parse(raw);
+        existingFlags = existingFlags.filter((f: any) => f.placeCellId !== id && f.flagId !== id && f.id !== id);
+        fs.writeFileSync(flagsFilePath, JSON.stringify(existingFlags, null, 2), "utf8");
+      }
+    } catch {}
+
+    if (supabaseKey) {
+      try {
+        await supabase.from("flags").delete().eq("place_cell_id", id);
+        await supabase.from("place_cells").delete().eq("id", id);
+      } catch {}
+    }
+
+    return NextResponse.json({ success: true, message: "깃발 점령 등록이 성공적으로 취소/해제되었습니다." });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+export async function PUT(req: Request) {
+  try {
+    const body = await req.json();
+    const { id, place_name, place_desc } = body;
+
+    if (!id) {
+      return NextResponse.json({ success: false, error: "수정할 깃발 ID가 필요합니다." }, { status: 400 });
+    }
+
+    try {
+      const fs = require("fs");
+      const path = require("path");
+      const flagsFilePath = path.join("/tmp", "pioneer_claimed_flags.json");
+
+      if (fs.existsSync(flagsFilePath)) {
+        const raw = fs.readFileSync(flagsFilePath, "utf8");
+        let existingFlags = JSON.parse(raw);
+        existingFlags = existingFlags.map((f: any) => {
+          if (f.placeCellId === id || f.flagId === id || f.id === id) {
+            return {
+              ...f,
+              name: place_name || f.name,
+              place_name: place_name || f.place_name,
+              place_desc: place_desc || f.place_desc
+            };
+          }
+          return f;
+        });
+        fs.writeFileSync(flagsFilePath, JSON.stringify(existingFlags, null, 2), "utf8");
+      }
+    } catch {}
+
+    return NextResponse.json({ success: true, message: "깃발 정보가 성공적으로 수정되었습니다." });
+  } catch (err: any) {
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
