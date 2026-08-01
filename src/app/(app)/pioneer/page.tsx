@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import * as h3 from "h3-js";
 
-const PIONEER_CURRENT_VERSION = "v7.1.0-RESCUE";
-const PIONEER_BUILD_TIMESTAMP = "(08.01 17:15)";
+const PIONEER_CURRENT_VERSION = "v7.3.0-ZERO";
+const PIONEER_BUILD_TIMESTAMP = "(08.01 17:30)";
 
 export default function PioneerRescuePage() {
   // Main Sub-Tab: "victim" (조난자 1-Tap SOS) vs "flag" (깃발 개척하기) vs "center" (관제 센터 모니터링)
@@ -442,7 +442,7 @@ export default function PioneerRescuePage() {
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number; accuracy: number } | null>(null);
   const [isSosSending, setIsSosSending] = useState<boolean>(false);
   const [sosStatusText, setSosStatusText] = useState<string>("위성/GPS 센서 가동 중");
-  const [sosH3Cell, setSosH3Cell] = useState<string>("8d30e1ce04c07bf");
+  const [sosH3Cell, setSosH3Cell] = useState<string>("");
   const [sosGpsDisplay, setSosGpsDisplay] = useState<string>("-");
 
   // Result Dispatch Record Modal
@@ -689,7 +689,7 @@ export default function PioneerRescuePage() {
       const accuracy = pos.coords.accuracy || 19.0;
       const alt = pos.coords.altitude != null ? pos.coords.altitude : null;
 
-      let computedH3 = "8d30e1ce04c07bf";
+      let computedH3 = "";
       try {
         computedH3 = h3.latLngToCell(lat, lng, 13);
       } catch {}
@@ -771,13 +771,20 @@ export default function PioneerRescuePage() {
       }
     };
 
+    const sosStartTime = Date.now();
+
     watchIdNum = navigator.geolocation.watchPosition(
       (pos) => {
+        // Reject stale cached zombie position from OS location manager (older than sosStartTime - 2000ms)
+        if (pos.timestamp && pos.timestamp < sosStartTime - 2000) {
+          setSosStatusText("⚠️ 폰 OS 묵은 위치 수신 거부 ➔ 실시간 위성 핀포인트 재수신 중...");
+          return;
+        }
         if (!bestPosition || pos.coords.accuracy < bestPosition.coords.accuracy) {
           bestPosition = pos;
         }
         setSosStatusText(`GPS 위성 핀포인트 고정 중 (수평오차 ±${pos.coords.accuracy.toFixed(1)}m)`);
-        if (pos.coords.accuracy <= 8.0 && !isDispatched) {
+        if (pos.coords.accuracy <= 15.0 && !isDispatched) {
           isDispatched = true;
           if (watchIdNum !== null) navigator.geolocation.clearWatch(watchIdNum);
           executeSosDispatch(pos);
@@ -796,15 +803,9 @@ export default function PioneerRescuePage() {
         if (bestPosition) {
           executeSosDispatch(bestPosition);
         } else {
-          navigator.geolocation.getCurrentPosition(
-            (fallbackPos) => executeSosDispatch(fallbackPos),
-            (err) => {
-              setSosStatusText("GPS 수신 실패");
-              alert("GPS 위치 수신 실패: " + err.message);
-              setIsSosSending(false);
-            },
-            options
-          );
+          setSosStatusText("GPS 위성 신호 미도달");
+          alert("GPS 위성 신호가 미도달했습니다. 위성 수신이 원활한 위치에서 다시 시도해주세요.");
+          setIsSosSending(false);
         }
       }
     }, 4000);
@@ -1645,7 +1646,7 @@ export default function PioneerRescuePage() {
                 <div className="bg-black/60 p-2 rounded-xl border border-zinc-800/80">
                   <span className="text-zinc-500 block text-[9px] font-mono">H3 RES-13 INDEX</span>
                   <span className="text-amber-200 font-mono font-bold truncate block">
-                    {selectedFlagDetail.h3Index || selectedFlagDetail.h3_index || "8d30e1ce04c003f"}
+                    {selectedFlagDetail.h3Index || selectedFlagDetail.h3_index || "-"}
                   </span>
                 </div>
                 <div className="bg-black/60 p-2 rounded-xl border border-zinc-800/80">
