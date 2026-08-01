@@ -1592,8 +1592,8 @@ export default function PioneerRescuePage() {
             <div className="py-3 flex flex-col items-center justify-center space-y-4">
               <button
                 type="button"
-                onClick={executeHardwareBiometricScan}
-                onTouchStart={executeHardwareBiometricScan}
+                onClick={() => executeHardwareBiometricScan("fingerprint")}
+                onTouchStart={() => executeHardwareBiometricScan("fingerprint")}
                 disabled={biometricScanProgress === "scanning" || biometricScanProgress === "success"}
                 className={`relative w-24 h-24 rounded-full border-4 flex flex-col items-center justify-center transition-all cursor-pointer shadow-xl active:scale-95 ${
                   biometricScanProgress === "success"
@@ -1617,7 +1617,7 @@ export default function PioneerRescuePage() {
                   <div className="grid grid-cols-2 gap-2">
                     <button
                       type="button"
-                      onClick={executeHardwareBiometricScan}
+                      onClick={() => executeHardwareBiometricScan("fingerprint")}
                       className="py-2.5 px-3 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl shadow border border-amber-400 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                     >
                       <Fingerprint className="w-4 h-4 text-amber-200" />
@@ -1625,7 +1625,7 @@ export default function PioneerRescuePage() {
                     </button>
                     <button
                       type="button"
-                      onClick={executeHardwareBiometricScan}
+                      onClick={() => executeHardwareBiometricScan("face")}
                       className="py-2.5 px-3 bg-cyan-600 hover:bg-cyan-500 text-white font-bold text-xs rounded-xl shadow border border-cyan-400 flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                     >
                       <Camera className="w-4 h-4 text-cyan-200" />

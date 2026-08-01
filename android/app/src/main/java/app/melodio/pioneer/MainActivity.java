@@ -48,6 +48,10 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
             WebView webView = this.bridge.getWebView();
             webView.addJavascriptInterface(new BarometerBridge(), "AndroidBarometer");
             
+            // Bypass WebView cache to load fresh Vercel updates on app start
+            webView.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_NO_CACHE);
+            webView.clearCache(true);
+            
             // Auto grant WebView Geolocation Permission
             webView.setWebChromeClient(new WebChromeClient() {
                 @Override
