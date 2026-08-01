@@ -165,8 +165,12 @@ function SosMapContent() {
         mapRef.current.innerHTML = "";
       }
 
-      const mapLat = sosData.lat && !isNaN(sosData.lat) && sosData.lat !== 0 ? sosData.lat : 37.55727;
-      const mapLng = sosData.lng && !isNaN(sosData.lng) && sosData.lng !== 0 ? sosData.lng : 127.16609;
+      if (!sosData.lat || isNaN(sosData.lat) || sosData.lat === 0) {
+        return; // lat/lng 미수신 시 엉뚱한 과거 위치로 튀는 현상 100% 원천 차단
+      }
+
+      const mapLat = sosData.lat;
+      const mapLng = sosData.lng;
 
       const map = L.map(mapRef.current, {
         center: [mapLat, mapLng],
