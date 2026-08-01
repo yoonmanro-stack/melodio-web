@@ -385,20 +385,24 @@ function SosMapContent() {
             * 조난자를 가장 신속하게 수색/구조할 수 있는 최우선 권장 수색 구역입니다.
           </p>
 
-          {/* 🏢 백엔드 자동 매핑 건물명 및 도로명 주소 카드 */}
+          {/* 🏢 건물명 및 지번/도로명 주소 카드 (산악/공원 등 무도로존 지번 자동 대응) */}
           <div className="mt-2 pt-2 border-t border-zinc-800 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
             <div className="bg-zinc-900/80 p-2 rounded border border-zinc-800 flex items-center justify-between">
-              <span className="text-zinc-400">🏢 매칭 건물/시설:</span>
+              <span className="text-zinc-400">🏢 매칭 건물/행정구역:</span>
               <span className="font-bold text-zinc-100">{sosData.buildingName || "지상 건물/단지 구역"}</span>
             </div>
             <div className="bg-zinc-900/80 p-2 rounded border border-zinc-800 flex items-center justify-between">
-              <span className="text-zinc-400">📮 도로명 주소:</span>
-              <span className="font-bold text-emerald-400 truncate max-w-[200px]">{sosData.roadAddress || `${sosData.lat.toFixed(5)}, ${sosData.lng.toFixed(5)}`}</span>
+              <span className="text-zinc-400">📮 지번/도로명 주소:</span>
+              <span className="font-bold text-emerald-400 truncate max-w-[200px]">
+                {sosData.roadAddress && !sosData.roadAddress.includes("0, 0") 
+                  ? sosData.roadAddress 
+                  : `${sosData.buildingName || '위치 추정 구역'} (지번/행정동)`}
+              </span>
             </div>
           </div>
         </div>
 
-        {/* GPS 좌표 및 ID 정보 */}
+        {/* GPS 좌표 및 기압계 고도 진단 */}
         <div className="grid grid-cols-3 gap-2 text-center text-xs font-mono">
           <div className="bg-black/50 p-2 rounded-xl border border-white/10">
             <span className="text-[9px] text-zinc-500 block">위도 (Lat)</span>
@@ -422,21 +426,28 @@ function SosMapContent() {
         style={{ minHeight: "450px", height: "55vh", width: "100%", background: "#0a0b10" }} 
       />
 
-      {/* 하단 범례 패널 */}
-      <div className="bg-[#0a0b10] border-t border-white/10 p-3 flex items-center justify-around text-[10.5px]">
-        <div className="flex items-center gap-1.5">
-          <div className="w-3.5 h-3.5 bg-red-600/70 border border-red-400 rounded-sm" />
-          <span className="text-zinc-300 font-bold">조난자 H3 셀 (7m)</span>
+      {/* 하단 CELL 3단계 확률 범례 패널 (3개 박스 구조) */}
+      <div className="bg-[#0a0b10] border-t border-white/10 p-3 grid grid-cols-3 gap-2 text-center text-[10px]">
+        <div className="bg-red-950/60 border border-red-500/40 p-2 rounded-xl flex flex-col items-center justify-center">
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 bg-red-600 rounded-full animate-ping" />
+            <span className="text-red-400 font-extrabold">🔴 1차 핵심 (50%)</span>
+          </div>
+          <span className="text-zinc-300 font-mono text-[9px] mt-0.5">k=1 링 (7m/93평)</span>
         </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3.5 h-3.5 bg-amber-400/40 border border-amber-400 rounded-sm" />
-          <span className="text-zinc-400">인접 6개 수색 셀</span>
+        <div className="bg-amber-950/60 border border-amber-500/40 p-2 rounded-xl flex flex-col items-center justify-center">
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 bg-amber-500 rounded-full" />
+            <span className="text-amber-300 font-extrabold">🟠 2차 중간 (30%)</span>
+          </div>
+          <span className="text-zinc-300 font-mono text-[9px] mt-0.5">k=2 링 (38m/252평)</span>
         </div>
-        <div className="flex items-center gap-1">
-          <span className="text-cyan-400 font-bold">타일:</span>
-          <span className="text-zinc-300 font-mono">
-            {envType === "URBAN_INDOOR_HIGH" || envType === "BUILDING_HIGH" ? "건물/도로 지적도" : envType === "UNDERGROUND_SUBTERRANEAN" ? "다크 지하 지도" : "위성 지형도"}
-          </span>
+        <div className="bg-yellow-950/60 border border-yellow-500/40 p-2 rounded-xl flex flex-col items-center justify-center">
+          <div className="flex items-center gap-1">
+            <div className="w-2.5 h-2.5 bg-yellow-400 rounded-full" />
+            <span className="text-yellow-300 font-extrabold">🟡 3차 외곽 (20%)</span>
+          </div>
+          <span className="text-zinc-300 font-mono text-[9px] mt-0.5">k=3 링 (56m/650평)</span>
         </div>
       </div>
     </div>
