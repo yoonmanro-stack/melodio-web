@@ -110,6 +110,27 @@ export default function PioneerRescuePage() {
     }
   };
 
+  // 🚀 자동 라이브 핫-업데이트 엔진 (Auto Live Hot-Update & Cache Bypass)
+  useEffect(() => {
+    const checkLatestServerVersion = async () => {
+      try {
+        const res = await fetch("/api/pioneer/version-check", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          const currentLocalVer = "v6.9.0-PHYSICS";
+          if (data.version && data.version !== currentLocalVer) {
+            const lastAutoReload = localStorage.getItem("pioneer_auto_hot_reload_v");
+            if (lastAutoReload !== data.version) {
+              localStorage.setItem("pioneer_auto_hot_reload_v", data.version);
+              window.location.href = window.location.pathname + "?hot_v=" + encodeURIComponent(data.version) + "&t=" + Date.now();
+            }
+          }
+        }
+      } catch (e) {}
+    };
+    checkLatestServerVersion();
+  }, []);
+
   const [showBiometricModal, setShowBiometricModal] = useState<boolean>(false);
   const [biometricScanProgress, setBiometricScanProgress] = useState<"idle" | "scanning" | "success">("idle");
   const biometricResolverRef = useRef<((value: boolean) => void) | null>(null);
@@ -789,14 +810,28 @@ export default function PioneerRescuePage() {
   return (
     <div className="min-h-screen bg-[#07090e] text-zinc-100 font-sans flex flex-col items-center justify-between p-4 sm:p-6 select-none">
       
-      {/* 🏷️ 라이브 앱 버전 태그 */}
+      {/* 🏷️ 라이브 앱 버전 태그 & 핫 업데이트 강제 새로고침 버튼 */}
       <div className="w-full max-w-md flex items-center justify-between px-1 mb-2.5">
         <span className="text-[11px] font-bold text-amber-400 flex items-center gap-1 font-mono">
           <span>Melodio Pioneer 3D</span>
         </span>
-        <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/40 font-bold tracking-tight">
-          v6.8.0-UNIFIED (08.01 16:25)
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/40 font-bold tracking-tight">
+            v6.9.0-PHYSICS (08.01 16:45)
+          </span>
+          <button
+            onClick={() => {
+              try {
+                localStorage.clear();
+                sessionStorage.clear();
+              } catch (e) {}
+              window.location.href = "/pioneer?force_hot_update=" + Date.now();
+            }}
+            className="text-[10px] font-bold text-amber-300 bg-amber-950/90 hover:bg-amber-900 px-2 py-0.5 rounded-full border border-amber-500/50 transition-all active:scale-95 cursor-pointer shadow"
+          >
+            🔄 핫 새로고침
+          </button>
+        </div>
       </div>
 
       {/* 🟢 최상단 헤더 스위처 (조난자 SOS vs 🚩 깃발 개척하기 vs 관제 센터 모니터링) */}
@@ -1293,10 +1328,10 @@ export default function PioneerRescuePage() {
             <div className="flex flex-col text-left gap-0.5">
               <span className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-emerald-400 fill-emerald-400" />
-                <span>APK 앱 최신 버전 (v6.8.0)</span>
+                <span>APK 앱 최신 버전 (v6.9.0)</span>
               </span>
               <span className="text-[10px] text-emerald-200/80 font-medium font-mono">
-                통합 물리 기압 엔진 & 인앱 카메라 (08.01 16:25)
+                ICAO 국제표준 대기공식 & 핫 라이브 업데이트 (08.01 16:45)
               </span>
             </div>
             <a
@@ -1306,7 +1341,7 @@ export default function PioneerRescuePage() {
               rel="noopener noreferrer"
               className="text-xs font-extrabold text-black bg-emerald-400 hover:bg-emerald-300 px-3.5 py-1.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
             >
-              <span>v6.8.0 APK 다운로드</span>
+              <span>v6.9.0 APK 다운로드</span>
             </a>
           </div>
 

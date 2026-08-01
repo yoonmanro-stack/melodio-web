@@ -315,32 +315,31 @@ export async function POST(req: Request) {
 
     const numAccuracy = accuracy !== undefined && accuracy !== null ? Number(accuracy) : 19.0;
 
-    // 🎯 실시간 지표면 기대 기압 (P_ground_expected):
-    // Open-Meteo 실시간 지표기압(surfacePressureHpa)이 존재하는 경우 최우선 1:1 동기화
-    const pGroundExpected = atmosData.surfacePressureHpa !== null
-      ? atmosData.surfacePressureHpa
-      : (zTerrain !== null ? pSeaLevel * Math.pow(1.0 - zTerrain / 44330.0, 5.2558) : pSeaLevel);
+    // 🎯 ICAO 국제표준 대기 기압 공식 (Standard Atmosphere Hypsometric Equation)
+    // z_sensor = 44330 * (1 - (P_sensor / P_msl)^0.190263)
+    // P_ground_expected = P_msl * (1 - zTerrain / 44330)^5.2558
+    const effectiveTerrain = zTerrain !== null ? zTerrain : 0;
+    const pGroundExpected = pSeaLevel * Math.pow(1.0 - effectiveTerrain / 44330.0, 5.2558);
 
     const userFloor = (body.floor !== undefined && body.floor !== null) ? Number(body.floor) : null;
     const numPressure = pressure ? Number(pressure) : null;
-    let zDevice = zTerrain !== null ? zTerrain : 0;
+    let zDevice = effectiveTerrain;
     let hasValidSensor = false;
     let isBarometerApplied = false;
 
     if (userFloor !== null && !isNaN(userFloor)) {
       // 1) 수동 층수 전송된 경우
       const estimatedDz = userFloor > 0 ? (userFloor - 1) * 3.3 : userFloor * 3.5;
-      zDevice = (zTerrain !== null ? zTerrain : 0) + estimatedDz;
+      zDevice = effectiveTerrain + estimatedDz;
       hasValidSensor = true;
     } else if (numPressure && numPressure > 800 && numPressure < 1100) {
-      // 2) 기압계 실측치 전송된 경우 (P_ground_expected 대비 차이로 수직 고도 연산: 1 hPa ≈ 8.53m)
-      const dzBaro = (pGroundExpected - numPressure) * 8.53;
-      zDevice = (zTerrain !== null ? zTerrain : 0) + dzBaro;
+      // 2) 기압계 실측치 전송된 경우 (ICAO 국제표준 대기공식 적용)
+      zDevice = 44330.0 * (1.0 - Math.pow(numPressure / pSeaLevel, 0.190263));
       hasValidSensor = true;
       isBarometerApplied = true;
     } else {
       // 3) 기압계 센서 미지원 환경
-      zDevice = zTerrain !== null ? zTerrain : 0;
+      zDevice = effectiveTerrain;
       hasValidSensor = false;
     }
 
@@ -419,7 +418,7 @@ export async function POST(req: Request) {
     const dzText = `${dzRaw >= 0 ? "+" : ""}${dzRaw.toFixed(1)}m`;
     const floorSourceText = userFloor !== null ? `수동지정(${userFloor}층)` : (isBarometerApplied ? "기압계실측연산" : "지표면기본수렴");
 
-    const telemetryLine = `\n[물리 센서 실측 진단]\n- 기압: 실측 ${baroText} | 지표기대 ${pGroundText} | 해수면 ${pMslText}\n- 고도: 지표면 ${terrainText} | 측정해발 ${zDeviceText} | 수직차이 ${dzText}\n- 연산기준: ${floorSourceText} (v6.8.0-UNIFIED)`;
+    const telemetryLine = `\n[물리 센서 실측 진단]\n- 기압: 실측 ${baroText} | 지표기대 ${pGroundText} | 해수면 ${pMslText}\n- 고도: 지표면 ${terrainText} | 측정해발 ${zDeviceText} | 수직차이 ${dzText}\n- 연산기준: ${floorSourceText} (v6.9.0-PHYSICS)`;
 
     const { bloodType, medicalConditions, medications, ageGender } = body;
     let medicalLine = "";
