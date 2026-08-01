@@ -33,6 +33,8 @@ function SosMapContent() {
     envType: string;
     envTitle: string;
     locationText: string;
+    exactRescuerLocation?: string;
+    searchRangeText?: string;
     buildingName?: string;
     roadAddress?: string;
   }>({
@@ -43,6 +45,8 @@ function SosMapContent() {
     envType: paramEnv,
     envTitle: "3D 수색 위치",
     locationText: paramLoc,
+    exactRescuerLocation: paramLoc || "건물 지상 1층 / 단지 야외",
+    searchRangeText: "건물 저층부 (지상 1~3층 수색 구역)",
     buildingName: "지상 시설/단지 구역",
     roadAddress: `${paramLat.toFixed(5)}, ${paramLng.toFixed(5)}`
   });
@@ -76,6 +80,8 @@ function SosMapContent() {
             envType: d.envType || d.env_type || "URBAN_OUTDOOR_GROUND",
             envTitle: d.envTitle || d.env_title || "건물 구조",
             locationText: d.locationText || d.location_text || `고도 ${d.altitude}m (±3m)`,
+            exactRescuerLocation: d.exactRescuerLocation || d.exact_rescuer_location || d.locationText || "건물 지상 1층 / 단지 야외",
+            searchRangeText: d.searchRangeText || d.search_range_text || "건물 저층부 (지상 1~3층 수색 구역)",
             buildingName: cleanBuilding,
             roadAddress: cleanRoad
           });
@@ -338,17 +344,17 @@ function SosMapContent() {
           </div>
         </div>
 
-        {/* 🏢/🏔️/🏚️ 백엔드 자동 산출 3D 고도 & 층수 전용 빅 배너 */}
-        <div className="bg-gradient-to-r from-red-950/70 via-black to-black p-3.5 rounded-2xl border border-red-500/40 flex items-center justify-between shadow-lg">
+        {/* 📍 1번 카드: 요구조자 정밀 위치 팩트 배너 */}
+        <div className="bg-gradient-to-r from-red-950/80 via-black to-black p-3.5 rounded-2xl border border-red-500/50 flex items-center justify-between shadow-lg">
           <div className="space-y-0.5">
             <span className="text-[10px] font-bold text-red-400 tracking-wider flex items-center gap-1">
-              <span>{envBadge.icon}</span> 3D 수색 환경 & 위치 분석
+              <span>📍</span> 요구조자 정밀 위치
             </span>
             <div className="text-base font-black text-amber-300 tracking-tight">
-              {envBadge.text}
+              {sosData.exactRescuerLocation || envBadge.text}
             </div>
             <p className="text-[9.5px] text-zinc-400">
-              * 기압계 실측 고도 수치와 ±3m 수직 오차범위를 구조대에 제공합니다.
+              * 조난자(구조 요청자)가 현재 위치해 있는 정밀 층수 및 고도 팩트입니다.
             </p>
           </div>
           <div className="text-right">
@@ -359,12 +365,12 @@ function SosMapContent() {
           </div>
         </div>
 
-        {/* 🗺️ H3 정밀 매칭 3D 공간 데이터 리포트 */}
-        <div className="bg-[#181a26]/90 p-3 rounded-xl border border-red-500/20 space-y-2">
+        {/* 🔍 2번 카드: 추정 수색 범위 및 권장 구조 구역 */}
+        <div className="bg-[#181a26]/90 p-3.5 rounded-2xl border border-amber-500/30 space-y-2 shadow-lg">
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
-              <span>{envBadge.icon}</span>
-              <span>{envBadge.title}</span>
+              <span>🔍</span>
+              <span>추정 수색 범위 및 권장 구역</span>
             </span>
             <span className="text-[10px] bg-red-950/80 border border-red-500/30 text-red-300 font-mono px-2 py-0.5 rounded">
               H3 Res13: {sosData.h3Index}
@@ -372,8 +378,11 @@ function SosMapContent() {
           </div>
 
           <div className="text-sm font-black text-amber-200">
-            {envBadge.text}
+            {sosData.searchRangeText || "건물 저층부 (지상 1~3층 수색 구역)"}
           </div>
+          <p className="text-[9.5px] text-zinc-400">
+            * 조난자를 가장 신속하게 수색/구조할 수 있는 최우선 권장 수색 구역입니다.
+          </p>
 
           {/* 🏢 백엔드 자동 매핑 건물명 및 도로명 주소 카드 */}
           <div className="mt-2 pt-2 border-t border-zinc-800 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
