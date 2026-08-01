@@ -1449,8 +1449,8 @@ export default function PioneerRescuePage() {
                   </div>
 
                   <div className="grid grid-cols-2 gap-2 text-xs font-mono text-zinc-300 bg-black/40 p-2.5 rounded-xl border border-zinc-800/80">
-                    <div>🏢 매칭 건물: <span className="text-amber-200 font-bold">{log.building_name || "고덕그라시움"}</span></div>
-                    <div>📮 주소: <span className="text-emerald-300 font-bold">{log.road_address || "고덕로 353"}</span></div>
+                    <div>🏢 매칭 건물: <span className="text-amber-200 font-bold">{log.building_name || log.buildingName || "-"}</span></div>
+                    <div>📮 주소: <span className="text-emerald-300 font-bold">{log.road_address || log.roadAddress || "-"}</span></div>
                     <div>🎯 H3 Res13: <span className="text-cyan-300">{log.h3_index || log.centerH3Index}</span></div>
                     <div>📍 GPS: <span className="text-zinc-400">{Number(log.lat).toFixed(5)}, {Number(log.lng).toFixed(5)}</span></div>
                   </div>
