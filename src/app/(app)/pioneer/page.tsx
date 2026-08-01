@@ -727,7 +727,7 @@ export default function PioneerRescuePage() {
           <span>Melodio Pioneer 3D</span>
         </span>
         <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/40 font-bold tracking-tight">
-          v6.4.0-LIVE (08.01 14:41)
+          v6.5.0-LIVE (08.01 15:30)
         </span>
       </div>
 
