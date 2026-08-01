@@ -177,12 +177,12 @@ function SosMapContent() {
         attributionControl: false
       });
 
-      // 🗺️ 대한민국 국토교통부 VWorld 고화질 위성 지도 타일 + Esri World Imagery 위성 백업
-      const vworldKey = process.env.NEXT_PUBLIC_VWORLD_API_KEY || "A1930DE4-FC47-3067-BD94-8107E15D59E9";
+      // 🗺️ 100% 다크모드 무결정 전용 3D 레이다 지도 타일 (CartoDB Dark Matter + VWorld Satellite)
       try {
-        L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${vworldKey}/Satellite/{z}/{y}/{x}.jpeg`, {
+        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
           maxZoom: 19,
-          attribution: "VWorld Satellite"
+          subdomains: "abcd",
+          attribution: "CartoDB Dark Matter"
         }).addTo(map);
       } catch {
         L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
@@ -415,11 +415,11 @@ function SosMapContent() {
         </div>
       </div>
 
-      {/* 🗺️ H3 지도 (밝은 배경 백업 및 100% 렌더링 보장) */}
+      {/* 🗺️ H3 3D 레이다 지도 (100% 다크모드 무결정 전용 렌더링) */}
       <div 
         ref={mapRef} 
         className="flex-1 w-full min-h-[450px] h-[55vh] relative z-0 border-y border-red-500/20"
-        style={{ minHeight: "450px", height: "55vh", width: "100%", background: "#e2e8f0" }} 
+        style={{ minHeight: "450px", height: "55vh", width: "100%", background: "#0a0b10" }} 
       />
 
       {/* 하단 범례 패널 */}
