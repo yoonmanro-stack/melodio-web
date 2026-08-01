@@ -736,10 +736,9 @@ export default function PioneerRescuePage() {
         setIsSosSending(false);
 
         if (data.success) {
-          const realH3 = data.centerH3IndexR14 || data.centerH3Index || computedH3;
-          const encLoc = encodeURIComponent(data.locationText || "");
-          const relativeAlt = data.altitudeMetrics?.relativeHeightM ?? (alt ?? 0);
-          const h3MapUrl = `https://melodio.app/pioneer/sos-map?id=${data.sosDispatchId}&lat=${lat}&lng=${lng}&h3=${realH3}&alt=${relativeAlt}&env=${data.envType || ''}&loc=${encLoc}`;
+          const encExactLoc = encodeURIComponent(data.exactRescuerLocation || data.locationText || "");
+          const encSearchRange = encodeURIComponent(data.searchRangeText || "");
+          const h3MapUrl = `https://melodio.app/pioneer/sos-map?id=${data.sosDispatchId}&lat=${lat}&lng=${lng}&h3=${realH3}&alt=${relativeAlt}&env=${data.envType || ''}&loc=${encExactLoc}&range=${encSearchRange}`;
           const fullMsg = `${data.smsPayload}\n${h3MapUrl}`;
           const recipients = getSmsRecipients();
 

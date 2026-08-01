@@ -15,6 +15,7 @@ function SosMapContent() {
   const paramAlt = parseFloat(searchParams.get("alt") || "0");
   const paramEnv = searchParams.get("env") || "";
   const paramLoc = searchParams.get("loc") || "";
+  const paramRange = searchParams.get("range") || "";
 
   // H3 Index 비어있을 경우 lat, lng 기반 100% 즉시 복구 연산
   let computedH3 = paramH3;
@@ -46,7 +47,7 @@ function SosMapContent() {
     envTitle: "3D 수색 위치",
     locationText: paramLoc,
     exactRescuerLocation: paramLoc || "건물 지상 1층 / 단지 야외",
-    searchRangeText: "건물 저층부 (지상 1~3층 수색 구역)",
+    searchRangeText: paramRange || "건물 저층부 (지상 1~3층 수색 구역)",
     buildingName: "지상 시설/단지 구역",
     roadAddress: `${paramLat.toFixed(5)}, ${paramLng.toFixed(5)}`
   });

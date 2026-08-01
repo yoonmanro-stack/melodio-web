@@ -537,6 +537,8 @@ export async function POST(req: Request) {
       envType,
       envTitle,
       locationText,
+      exactRescuerLocation,
+      searchRangeText,
       buildingName,
       roadAddress,
       smsPayload,
