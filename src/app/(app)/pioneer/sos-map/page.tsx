@@ -10,8 +10,8 @@ function SosMapContent() {
 
   const dispatchId = searchParams.get("id") || "";
   const paramH3 = searchParams.get("h3") || "";
-  const paramLat = parseFloat(searchParams.get("lat") || "37.5585");
-  const paramLng = parseFloat(searchParams.get("lng") || "127.1620");
+  const paramLat = parseFloat(searchParams.get("lat") || "0");
+  const paramLng = parseFloat(searchParams.get("lng") || "0");
   const paramAlt = parseFloat(searchParams.get("alt") || "0");
   const paramEnv = searchParams.get("env") || "";
   const paramLoc = searchParams.get("loc") || "";

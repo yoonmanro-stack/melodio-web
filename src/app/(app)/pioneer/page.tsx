@@ -1652,7 +1652,7 @@ export default function PioneerRescuePage() {
                 <div className="bg-black/60 p-2 rounded-xl border border-zinc-800/80">
                   <span className="text-zinc-500 block text-[9px] font-mono">GPS COORDINATES</span>
                   <span className="text-zinc-200 font-mono font-bold block">
-                    {selectedFlagDetail.lat ? Number(selectedFlagDetail.lat).toFixed(5) : "37.5665"}, {selectedFlagDetail.lng ? Number(selectedFlagDetail.lng).toFixed(5) : "126.9780"}
+                    {selectedFlagDetail.lat ? `${Number(selectedFlagDetail.lat).toFixed(5)}, ${Number(selectedFlagDetail.lng).toFixed(5)}` : "위치 정보 없음"}
                   </span>
                 </div>
               </div>
@@ -1660,7 +1660,7 @@ export default function PioneerRescuePage() {
 
             {/* 🗺️ 3D 공간 지도 연결 버튼 */}
             <a
-              href={`/pioneer/sos-map?lat=${selectedFlagDetail.lat || 37.5665}&lng=${selectedFlagDetail.lng || 126.9780}&h3=${selectedFlagDetail.h3Index || selectedFlagDetail.h3_index || ""}&loc=${encodeURIComponent(selectedFlagDetail.place_name || selectedFlagDetail.name || "")}`}
+              href={`/pioneer/sos-map?lat=${selectedFlagDetail.lat || 0}&lng=${selectedFlagDetail.lng || 0}&h3=${selectedFlagDetail.h3Index || selectedFlagDetail.h3_index || ""}&loc=${encodeURIComponent(selectedFlagDetail.place_name || selectedFlagDetail.name || "")}`}
               target="_blank"
               rel="noreferrer"
               className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg transition-all active:scale-[0.98] cursor-pointer"
