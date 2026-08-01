@@ -346,11 +346,12 @@ export async function POST(req: Request) {
     // 🎯 순수 지면 기준 수직 고도차 dzRaw (미터 단위)
     const dzRaw = hasValidSensor && zTerrain !== null ? zDevice - zTerrain : 0;
 
-    // 🏢 3D 물리 수직 구역 자동 판정 (연속 표준 수학 공식 적용: F = round(dz / 3.3) + 1)
+    // 🏢 3D 물리 수직 구역 자동 판정 (물리적 지상 1층 안심 임계값: -5.0m ~ +3.3m)
     let envType: "URBAN_INDOOR_HIGH" | "MOUNTAIN_TERRAIN" | "UNDERGROUND_SUBTERRANEAN" | "URBAN_OUTDOOR_GROUND" | "MARITIME_WATER" | "SENSOR_UNCERTAIN" = "URBAN_OUTDOOR_GROUND";
     let locationText = `건물 지상 1층 위치 (수직고도 0m ±3m)`;
     let envTitle = "지상 1층/야외";
     let exactRescuerLocation = "건물 지상 1층 / 단지 야외";
+    let searchRangeText = "건물 저층부 (지상 1~3층 수색 구역)";
 
     const isMountain = zTerrain !== null && (zTerrain >= 100 || roadAddress.includes("산") || buildingName.includes("산"));
 
@@ -359,45 +360,52 @@ export async function POST(req: Request) {
         envType = "UNDERGROUND_SUBTERRANEAN";
         const depth = Math.abs(userFloor) * 3.5;
         exactRescuerLocation = `건물 지하 ${Math.abs(userFloor)}층 확정`;
+        searchRangeText = `건물 지하 ${Math.abs(userFloor)}층 확정 수색 구역`;
         locationText = `${exactRescuerLocation} (수직고도 -${depth.toFixed(1)}m ±3m)`;
         envTitle = `건물 지하 ${Math.abs(userFloor)}층`;
       } else if (userFloor === 1) {
         envType = "URBAN_OUTDOOR_GROUND";
         exactRescuerLocation = "건물 지상 1층 / 단지 야외";
+        searchRangeText = "건물 지상 1층 및 단지 야외 수색 구역";
         locationText = `${exactRescuerLocation} (수직고도 0m ±3m)`;
         envTitle = "건물 지상 1층";
       } else {
         envType = "URBAN_INDOOR_HIGH";
         const dz = (userFloor - 1) * 3.3;
-        exactRescuerLocation = `건물 지상 ${userFloor}층 추정 (${Math.max(1, userFloor - 1)}~${userFloor + 1}층 구간)`;
+        exactRescuerLocation = `건물 지상 ${userFloor}층 추정`;
+        searchRangeText = `지상 ${userFloor}층 및 상하 인접 ${Math.max(1, userFloor - 1)}~${userFloor + 1}층 수색 구역`;
         locationText = `${exactRescuerLocation} (수직고도 +${Math.round(dz)}m ±3m)`;
         envTitle = `건물 지상 ${userFloor}층`;
       }
     } else if (isMountain && Math.abs(dzRaw) <= 4.0) {
       envType = "MOUNTAIN_TERRAIN";
       exactRescuerLocation = `산악 지대 / 등산로 구역`;
+      searchRangeText = `등산로 및 반경 38m 3D 실족 수색 구역`;
       locationText = `${exactRescuerLocation} (해발고도 ${Math.round(zDevice)}m ±3m)`;
       envTitle = "산악 등산로";
     } else if (hasValidSensor) {
-      // 🎯 연속 수학 공식 기반 층수 정량 판정 (F = round(dz / 3.3) + 1)
-      const approxFloor = Math.round(dzRaw / 3.3) + 1;
-
-      if (approxFloor < 1) {
-        const undergroundFloor = Math.abs(approxFloor - 1);
-        envType = "UNDERGROUND_SUBTERRANEAN";
-        exactRescuerLocation = `건물 지하 ${undergroundFloor}층 추정`;
-        locationText = `${exactRescuerLocation} (수직고도 ${dzRaw.toFixed(1)}m ±3m)`;
-        envTitle = `건물 지하 ${undergroundFloor}층`;
-      } else if (approxFloor === 1) {
+      // 🎯 물리적 지상 1층 안심 임계값 적용 (-5.0m <= dzRaw <= 3.3m)
+      if (dzRaw >= -5.0 && dzRaw <= 3.3) {
         envType = "URBAN_OUTDOOR_GROUND";
         exactRescuerLocation = "건물 지상 1층 / 단지 야외";
+        searchRangeText = "건물 저층부 (지상 1~3층 수색 구역)";
         locationText = `${exactRescuerLocation} (수직고도 ${dzRaw.toFixed(1)}m ±3m)`;
         envTitle = "건물 지상 1층";
+      } else if (dzRaw < -5.0) {
+        const depth = Math.abs(dzRaw);
+        const undergroundFloor = Math.floor((depth - 5.0) / 3.5) + 1;
+        envType = "UNDERGROUND_SUBTERRANEAN";
+        exactRescuerLocation = `건물 지하 ${undergroundFloor}층 추정`;
+        searchRangeText = `지하 ${undergroundFloor}층 및 상하 인접 ${Math.max(1, undergroundFloor - 1)}~${undergroundFloor + 1}층 수색 구역`;
+        locationText = `${exactRescuerLocation} (수직고도 -${depth.toFixed(1)}m ±3m)`;
+        envTitle = `건물 지하 ${undergroundFloor}층`;
       } else {
+        const approxFloor = Math.floor((dzRaw - 3.3) / 3.3) + 2;
         const minF = Math.max(1, approxFloor - 1);
         const maxF = approxFloor + 1;
         envType = "URBAN_INDOOR_HIGH";
-        exactRescuerLocation = `건물 지상 ${approxFloor}층 추정 (${minF}~${maxF}층 구간)`;
+        exactRescuerLocation = `건물 지상 ${approxFloor}층 추정`;
+        searchRangeText = `지상 ${approxFloor}층 및 상하 인접 ${minF}~${maxF}층 수색 구역`;
         locationText = `${exactRescuerLocation} (수직고도 +${Math.round(dzRaw)}m ±3m)`;
         envTitle = `건물 지상 ${approxFloor}층`;
       }
@@ -418,7 +426,7 @@ export async function POST(req: Request) {
     const dzText = `${dzRaw >= 0 ? "+" : ""}${dzRaw.toFixed(1)}m`;
     const floorSourceText = userFloor !== null ? `수동지정(${userFloor}층)` : (isBarometerApplied ? "기압계실측연산" : "지표면기본수렴");
 
-    const telemetryLine = `\n[물리 센서 실측 진단]\n- 기압: 실측 ${baroText} | 지표기대 ${pGroundText} | 해수면 ${pMslText}\n- 고도: 지표면 ${terrainText} | 측정해발 ${zDeviceText} | 수직차이 ${dzText}\n- 연산기준: ${floorSourceText} (v6.9.0-PHYSICS)`;
+    const telemetryLine = `\n[물리 센서 실측 진단]\n- 기압: 실측 ${baroText} | 지표기대 ${pGroundText} | 해수면 ${pMslText}\n- 고도: 지표면 ${terrainText} | 측정해발 ${zDeviceText} | 수직차이 ${dzText}\n- 연산기준: ${floorSourceText} (v7.1.0-RESCUE)`;
 
     const { bloodType, medicalConditions, medications, ageGender } = body;
     let medicalLine = "";
@@ -426,7 +434,7 @@ export async function POST(req: Request) {
       medicalLine = `\n[🏥 조난자 긴급 의료 프로필]\n- 인적사항: ${ageGender || "미지정"} | ${bloodType || "혈액형 미지정"}\n- 기저질환: ${medicalConditions || "없음"}\n- 복용약물: ${medications || "없음"}`;
     }
 
-    const smsPayload = `[SOS 긴급 구조 요청]\n구조자 위치 -> ${exactRescuerLocation}${buildingLine}${addressLine}\n위치 오차 범위: 수평 ${horizontalAccText}, 수직 ±3m\nH3-R14:${centerH3IndexR14}\nH3-R13:${centerH3Index}\nGPS:${numLat.toFixed(5)},${numLng.toFixed(5)}${medicalLine}${telemetryLine}`;
+    const smsPayload = `[SOS 긴급 구조 요청]\n구조자 위치 -> ${exactRescuerLocation}\n추정 수색범위 -> ${searchRangeText}${buildingLine}${addressLine}\n위치 오차 범위: 수평 ${horizontalAccText}, 수직 ±3m\nH3-R14:${centerH3IndexR14}\nH3-R13:${centerH3Index}\nGPS:${numLat.toFixed(5)},${numLng.toFixed(5)}${medicalLine}${telemetryLine}`;
 
     // DB 및 로컬 저장
     if (supabaseKey) {

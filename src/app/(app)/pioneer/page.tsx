@@ -817,7 +817,7 @@ export default function PioneerRescuePage() {
         </span>
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/40 font-bold tracking-tight">
-            v7.0.0-FLAG (08.01 16:55)
+            v7.1.0-RESCUE (08.01 17:10)
           </span>
           <button
             onClick={() => {
