@@ -1228,7 +1228,7 @@ export default function PioneerRescuePage() {
               </span>
             </div>
             <a
-              href="/Pioneer119Rescue.apk"
+              href="/api/pioneer/download-apk"
               download="Pioneer119Rescue.apk"
               target="_blank"
               rel="noopener noreferrer"
