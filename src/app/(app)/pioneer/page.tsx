@@ -50,9 +50,12 @@ export default function PioneerRescuePage() {
   };
 
   const triggerCameraNextSlot = (slotIdx: number) => {
-    const el = fileInputsRef.current[slotIdx];
+    const el = document.getElementById(`pioneer-photo-input-${slotIdx}`) as HTMLInputElement;
     if (el) {
       el.click();
+    } else {
+      const fallbackEl = fileInputsRef.current[slotIdx];
+      if (fallbackEl) fallbackEl.click();
     }
   };
 
@@ -120,11 +123,6 @@ export default function PioneerRescuePage() {
   };
 
   const triggerUnifiedCaptureFlow = () => {
-    if (!placeName.trim()) {
-      alert("⚠️ 먼저 개척할 장소명을 입력해 주세요!");
-      return;
-    }
-
     const firstEmptyIndex = photoFiles.findIndex((p) => !p || !p.trim());
     const targetIdx = firstEmptyIndex !== -1 ? firstEmptyIndex : (photoFiles.length < 10 ? photoFiles.length : 0);
     triggerCameraNextSlot(targetIdx);
@@ -727,7 +725,7 @@ export default function PioneerRescuePage() {
           <span>Melodio Pioneer 3D</span>
         </span>
         <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/40 font-bold tracking-tight">
-          v6.5.0-LIVE (08.01 15:30)
+          v6.6.0-LIVE (08.01 15:45)
         </span>
       </div>
 
@@ -919,6 +917,7 @@ export default function PioneerRescuePage() {
                   {photoFiles.map((_, idx) => (
                     <input
                       key={idx}
+                      id={`pioneer-photo-input-${idx}`}
                       ref={(el) => {
                         fileInputsRef.current[idx] = el;
                       }}
@@ -963,20 +962,19 @@ export default function PioneerRescuePage() {
                     </div>
                   )}
 
-                  {/* 단일 대표 버튼: 인증 사진 촬영하기 */}
+                  {/* 네이티브 HTML5 대표 카메라 촬영 래벨 버튼 */}
                   {photoFiles.filter(Boolean).length < 3 ? (
-                    <button
-                      type="button"
-                      onClick={triggerUnifiedCaptureFlow}
+                    <label
+                      htmlFor={`pioneer-photo-input-${photoFiles.findIndex((p) => !p || !p.trim()) !== -1 ? photoFiles.findIndex((p) => !p || !p.trim()) : 0}`}
                       className="w-full py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-black font-black text-sm rounded-2xl shadow-xl border border-amber-300 transition-all active:scale-[0.98] flex items-center justify-center gap-2.5 cursor-pointer shadow-amber-500/20"
                     >
                       <Camera className="w-5 h-5 text-black animate-bounce" />
                       <span>
-                        {!isBiometricVerified
-                          ? "인증 사진 촬영하기 (생체 인증 후 3장 순차 촬영)"
-                          : `${photoFiles.filter(Boolean).length + 1}/3번째 사진 촬영하기 (터치하여 카메라 켜기)`}
+                        {photoFiles.filter(Boolean).length === 0
+                          ? "📷 1/3번째 사진 촬영하기 (터치하여 카메라 켜기)"
+                          : `📷 ${photoFiles.filter(Boolean).length + 1}/3번째 사진 촬영하기 (터치하여 카메라 켜기)`}
                       </span>
-                    </button>
+                    </label>
                   ) : (
                     <div className="space-y-2.5">
                       <button
