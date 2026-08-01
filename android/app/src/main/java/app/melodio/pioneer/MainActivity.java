@@ -36,7 +36,7 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
         if (sensorManager != null) {
             barometerSensor = sensorManager.getDefaultSensor(Sensor.TYPE_PRESSURE);
             if (barometerSensor != null) {
-                sensorManager.registerListener(this, barometerSensor, SensorManager.SENSOR_DELAY_NORMAL);
+                sensorManager.registerListener(this, barometerSensor, SensorManager.SENSOR_DELAY_UI);
             }
         }
     }
@@ -50,7 +50,6 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
             
             // Bypass WebView cache to load fresh Vercel updates on app start
             webView.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_NO_CACHE);
-            webView.clearCache(true);
             
             // Auto grant WebView Geolocation Permission
             webView.setWebChromeClient(new WebChromeClient() {
@@ -59,6 +58,18 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
                     callback.invoke(origin, true, false);
                 }
             });
+        }
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (this.bridge != null && this.bridge.getWebView() != null) {
+            WebView webView = this.bridge.getWebView();
+            webView.addJavascriptInterface(new BarometerBridge(), "AndroidBarometer");
+        }
+        if (sensorManager != null && barometerSensor != null) {
+            sensorManager.registerListener(this, barometerSensor, SensorManager.SENSOR_DELAY_UI);
         }
     }
 

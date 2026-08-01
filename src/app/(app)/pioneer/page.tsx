@@ -583,12 +583,24 @@ export default function PioneerRescuePage() {
     if (typeof window === "undefined") return null;
 
     // 0. Android Native Java Bridge (SensorManager TYPE_PRESSURE - 100% Hardware Direct)
-    try {
-      if ((window as any).AndroidBarometer && (window as any).AndroidBarometer.isSupported()) {
-        const pVal = (window as any).AndroidBarometer.getPressure();
-        if (pVal && pVal > 0) return Number(pVal);
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        if ((window as any).AndroidBarometer) {
+          const isSup = typeof (window as any).AndroidBarometer.isSupported === "function" 
+            ? (window as any).AndroidBarometer.isSupported() 
+            : true;
+          if (isSup) {
+            const pVal = (window as any).AndroidBarometer.getPressure();
+            if (pVal && Number(pVal) > 500) {
+              return Number(pVal);
+            }
+          }
+        }
+      } catch {}
+      if (attempt < 2) {
+        await new Promise((r) => setTimeout(r, 100));
       }
-    } catch {}
+    }
 
     // 1. Capacitor / Android Native Plugin
     try {
