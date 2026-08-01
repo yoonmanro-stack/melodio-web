@@ -154,7 +154,6 @@ function SosMapContent() {
 
   useEffect(() => {
     if (!mapRef.current) return;
-
     const renderMap = () => {
       const L = (window as any).L;
       if (!L || !mapRef.current) return;
@@ -165,9 +164,7 @@ function SosMapContent() {
         mapRef.current.innerHTML = "";
       }
 
-      if (!sosData.lat || isNaN(sosData.lat) || sosData.lat === 0) {
-        return; // lat/lng 미수신 시 엉뚱한 과거 위치로 튀는 현상 100% 원천 차단
-      }
+      if (!sosData.lat || isNaN(sosData.lat) || sosData.lat === 0) return;
 
       const mapLat = sosData.lat;
       const mapLng = sosData.lng;
@@ -179,42 +176,56 @@ function SosMapContent() {
         attributionControl: false
       });
 
-      // 🗺️ 100% 고화질 초정밀 3D 항공/위성 사진 지도 (Esri World Imagery Satellite Photo Map)
-      try {
-        L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
-          maxZoom: 19,
-          attribution: "Esri World Imagery"
-        }).addTo(map);
+      // 🗺️ 100% 고화질 초정밀 3D 항공/위성 사진 지도 (Esri World Imagery Satellite Photo Map with Mobile Auto-Failover)
+      const primaryTile = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 19,
+        crossOrigin: true,
+        attribution: "Esri World Imagery"
+      });
 
-        // 🏷️ 산악/도심 지명 및 도로명 투명 오버레이
+      let hasTileError = false;
+      primaryTile.on("tileerror", () => {
+        if (!hasTileError) {
+          hasTileError = true;
+          console.warn("[SOS Map] Esri tile error on mobile network, loading OpenStreetMap fallback");
+          try {
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{y}/{x}.png", {
+              maxZoom: 19,
+              attribution: "OpenStreetMap"
+            }).addTo(map);
+          } catch {}
+        }
+      });
+      primaryTile.addTo(map);
+
+      // 🏷️ 산악/도심 지명 및 도로명 투명 오버레이
+      try {
         L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}", {
           maxZoom: 19,
+          crossOrigin: true,
           attribution: "Esri Reference"
         }).addTo(map);
 
         L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
           maxZoom: 19,
+          crossOrigin: true,
           attribution: "Esri Places"
         }).addTo(map);
-      } catch {
-        const vworldKey = process.env.NEXT_PUBLIC_VWORLD_API_KEY || "A1930DE4-FC47-3067-BD94-8107E15D59E9";
-        L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${vworldKey}/Satellite/{z}/{y}/{x}.jpeg`, {
-          maxZoom: 19,
-          attribution: "VWorld Satellite"
-        }).addTo(map);
-      }
+      } catch {}
 
-      // 타일 렌더링 깨짐 방지 0.1초 invalidateSize 락인
-      setTimeout(() => {
-        try { map.invalidateSize(); } catch {}
-      }, 100);
+      // 모바일 스마트폰 렌더링 락인: 50ms, 200ms, 600ms, 1200ms 다중 invalidateSize
+      [50, 200, 600, 1200].forEach((delay) => {
+        setTimeout(() => {
+          try { map.invalidateSize(); } catch {}
+        }, delay);
+      });
 
       // 🎯 B2G 특허: f1(50% 핵심 93평), f2(30% 중간 252평), f3(20% 외곽 650평) 3단계 확률 등고선 멀티 히트맵
       const targetH3 = sosData.h3Index || ((mapLat && mapLng) ? h3.latLngToCell(mapLat, mapLng, 13) : "");
 
       if (targetH3) {
         try {
-          // 🟡 3차 외곽 수색 구역 (f3: 20% 확률 / k=3 링 37개 벌집 셀 / 지름 56m / 650평)
+          // 🟡 3차 외곽 수색 구역 (f3: 20% 확률 / k=3 링 37개 벌집 셀)
           const diskK3 = h3.gridDisk(targetH3, 3);
           const diskK2Set = new Set(h3.gridDisk(targetH3, 2));
           diskK3.forEach(cell => {
@@ -230,8 +241,8 @@ function SosMapContent() {
             }
           });
 
-          // 🟠 2차 중간 수색 구역 (f2: 30% 확률 / k=2 링 19개 벌집 셀 / 지름 38m / 252평)
-          const diskK2 = Array.from(diskK2Set);
+          // 🟠 2차 중간 수색 구역 (f2: 30% 확률 / k=2 링 19개 벌집 셀)
+          const diskK2 = h3.gridDisk(targetH3, 2);
           const diskK1Set = new Set(h3.gridDisk(targetH3, 1));
           diskK2.forEach(cell => {
             if (diskK1Set.has(cell)) return;
@@ -239,24 +250,24 @@ function SosMapContent() {
             if (Array.isArray(bCoords) && bCoords.length > 0) {
               L.polygon(bCoords, {
                 color: "#fb923c",
-                weight: 2.8,
+                weight: 2.5,
                 fillColor: "#fbbf24",
                 fillOpacity: 0.25
               }).addTo(map);
             }
           });
 
-          // 🔴 1차 핵심 수색 구역 (f1: 50% 확률 / k=1 링 7개 벌집 셀 / 지름 21.3m / 93평)
-          const diskK1 = Array.from(diskK1Set);
+          // 🔴 1차 핵심 수색 구역 (f1: 50% 최고확률 / k=1 링 7개 벌집 셀)
+          const diskK1 = h3.gridDisk(targetH3, 1);
           diskK1.forEach(cell => {
-            const isCenter = cell === targetH3;
             const bCoords = h3.cellToBoundary(cell);
             if (Array.isArray(bCoords) && bCoords.length > 0) {
+              const isCenter = cell === targetH3;
               const poly = L.polygon(bCoords, {
-                color: isCenter ? "#f87171" : "#ef4444",
-                weight: isCenter ? 4.5 : 3.5,
-                fillColor: "#dc2626",
-                fillOpacity: isCenter ? 0.55 : 0.40
+                color: isCenter ? "#ef4444" : "#f87171",
+                weight: isCenter ? 3.5 : 2.5,
+                fillColor: isCenter ? "#dc2626" : "#ef4444",
+                fillOpacity: isCenter ? 0.50 : 0.35
               }).addTo(map);
 
               if (isCenter) {
@@ -264,7 +275,7 @@ function SosMapContent() {
                   `<div style="font-family:sans-serif;padding:6px;min-width:200px;">
                     <div style="font-weight:bold;color:#d97706;font-size:13px;">${envBadge.icon} ${envBadge.title}</div>
                     <div style="font-weight:extrabold;color:#ef4444;font-size:14px;margin:4px 0;">위치: ${envBadge.text}</div>
-                    <div style="font-size:11px;color:#059669;font-weight:bold;margin:2px 0;">🎯 f1 핵심 구역 (50% 확률 / 93평)</div>
+                    <div style="font-size:11px;color:#059669;font-weight:bold;margin:2px 0;">🎯 f1 핵심 구역 (50% 확률 / 13.3평)</div>
                     <div style="font-size:11px;color:#4b5563;">H3 Cell: <code style="background:#f3f4f6;padding:2px 4px;border-radius:4px;">${targetH3}</code></div>
                     <div style="font-size:11px;color:#4b5563;margin-top:2px;">GPS: ${sosData.lat.toFixed(6)}, ${sosData.lng.toFixed(6)}</div>
                   </div>`
@@ -277,7 +288,7 @@ function SosMapContent() {
         }
       }
 
-      // 🚨 4. 중심 비상 경광등 마커 (위치 1:1 락인)
+      // 🚨 중심 비상 경광등 마커
       const icon = L.divIcon({
         html: `<div style="font-size:36px;text-align:center;filter:drop-shadow(0 0 12px red);animation:bounce 1s infinite alternate;">🚨</div>`,
         className: "",
@@ -285,50 +296,40 @@ function SosMapContent() {
         iconAnchor: [22, 22]
       });
       L.marker([sosData.lat, sosData.lng], { icon }).addTo(map);
-
-      // 🔴 f1 동심원 (50% 확률 / 반경 10.6m / 93평)
-      L.circle([sosData.lat, sosData.lng], {
-        radius: 10.6,
-        color: "#f87171",
-        weight: 3.0,
-        fillColor: "#ef4444",
-        fillOpacity: 0.15
-      }).addTo(map);
-
-      // 🟠 f2 동심원 (30% 확률 / 반경 19.0m / 252평) - 117동 감싸안음!
-      L.circle([sosData.lat, sosData.lng], {
-        radius: 19.0,
-        color: "#fb923c",
-        weight: 2.2,
-        dashArray: "6, 6",
-        fillColor: "#fbbf24",
-        fillOpacity: 0.10
-      }).addTo(map);
-
-      // 🟡 f3 동심원 (20% 확률 / 반경 28.0m / 650평)
-      L.circle([sosData.lat, sosData.lng], {
-        radius: 28.0,
-        color: "#facc15",
-        weight: 1.8,
-        dashArray: "4, 4",
-        fillColor: "#fde047",
-        fillOpacity: 0.05
-      }).addTo(map);
     };
 
-    if ((window as any).L) {
-      renderMap();
-    } else {
-      const linkEl = document.createElement("link");
-      linkEl.rel = "stylesheet";
-      linkEl.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      document.head.appendChild(linkEl);
+    const loadLeaflet = () => {
+      if ((window as any).L) {
+        renderMap();
+        return;
+      }
 
-      const script = document.createElement("script");
-      script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      script.onload = renderMap;
-      document.head.appendChild(script);
-    }
+      if (!document.getElementById("leaflet-css")) {
+        const linkEl = document.createElement("link");
+        linkEl.id = "leaflet-css";
+        linkEl.rel = "stylesheet";
+        linkEl.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css";
+        document.head.appendChild(linkEl);
+      }
+
+      if (!document.getElementById("leaflet-js")) {
+        const script = document.createElement("script");
+        script.id = "leaflet-js";
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js";
+        script.onload = () => renderMap();
+        script.onerror = () => {
+          const script2 = document.createElement("script");
+          script2.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
+          script2.onload = () => renderMap();
+          document.head.appendChild(script2);
+        };
+        document.head.appendChild(script);
+      } else {
+        setTimeout(renderMap, 200);
+      }
+    };
+
+    loadLeaflet();
   }, [sosData.lat, sosData.lng, sosData.h3Index]);
 
   if (isLoading) {
