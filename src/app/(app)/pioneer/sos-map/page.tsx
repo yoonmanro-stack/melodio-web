@@ -175,17 +175,28 @@ function SosMapContent() {
         attributionControl: false
       });
 
-      // 🗺️ 100% 다크모드 무결정 전용 3D 레이다 지도 타일 (CartoDB Dark Matter + VWorld Satellite)
+      // 🗺️ 100% 고화질 초정밀 3D 항공/위성 사진 지도 (Esri World Imagery Satellite Photo Map)
       try {
-        L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
-          maxZoom: 19,
-          subdomains: "abcd",
-          attribution: "CartoDB Dark Matter"
-        }).addTo(map);
-      } catch {
         L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
           maxZoom: 19,
           attribution: "Esri World Imagery"
+        }).addTo(map);
+
+        // 🏷️ 산악/도심 지명 및 도로명 투명 오버레이
+        L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}", {
+          maxZoom: 19,
+          attribution: "Esri Reference"
+        }).addTo(map);
+
+        L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
+          maxZoom: 19,
+          attribution: "Esri Places"
+        }).addTo(map);
+      } catch {
+        const vworldKey = process.env.NEXT_PUBLIC_VWORLD_API_KEY || "A1930DE4-FC47-3067-BD94-8107E15D59E9";
+        L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${vworldKey}/Satellite/{z}/{y}/{x}.jpeg`, {
+          maxZoom: 19,
+          attribution: "VWorld Satellite"
         }).addTo(map);
       }
 
