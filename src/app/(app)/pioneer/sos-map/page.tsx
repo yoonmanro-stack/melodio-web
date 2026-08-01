@@ -444,31 +444,34 @@ function SosMapContent() {
         style={{ minHeight: "450px", height: "55vh", width: "100%", background: "#0a0b10" }} 
       />
 
-      {/* 하단 CELL 3단계 확률 범례 패널 (특허 B2G 정밀 규격) */}
+      {/* 하단 CELL 3단계 확률 범례 패널 (B2G 7-Hexagon 번들 특허 규격) */}
       <div className="bg-[#0a0b10] border-t border-white/10 p-3 grid grid-cols-3 gap-2 text-center text-[10px]">
-        <div className="bg-red-950/70 border border-red-500/50 p-2 rounded-xl flex flex-col items-center justify-center space-y-0.5">
+        <div className="bg-red-950/70 border border-red-500/50 p-2.5 rounded-xl flex flex-col items-center justify-center space-y-0.5">
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5 bg-red-600 rounded-full animate-ping" />
             <span className="text-red-400 font-extrabold">🔴 1차 핵심 (50%)</span>
           </div>
-          <span className="text-zinc-200 font-bold text-[9.5px]">7개 셀 (k=1 / 지름 21m)</span>
-          <span className="text-zinc-400 text-[8.5px]">면적 307㎡ (93평)</span>
+          <span className="text-zinc-100 font-extrabold text-[10px]">표준 7-Hexagon 번들</span>
+          <span className="text-amber-300 font-bold text-[9px]">중심 1개 + 이웃 6개 (k=1)</span>
+          <span className="text-zinc-400 text-[8.5px]">지름 21m / 면적 43.9㎡ (13.3평)</span>
         </div>
-        <div className="bg-amber-950/70 border border-amber-500/50 p-2 rounded-xl flex flex-col items-center justify-center space-y-0.5">
+        <div className="bg-amber-950/70 border border-amber-500/50 p-2.5 rounded-xl flex flex-col items-center justify-center space-y-0.5">
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5 bg-amber-500 rounded-full" />
             <span className="text-amber-300 font-extrabold">🟠 2차 중간 (30%)</span>
           </div>
-          <span className="text-zinc-200 font-bold text-[9.5px]">19개 셀 (k=2 / 지름 35m)</span>
-          <span className="text-zinc-400 text-[8.5px]">면적 834㎡ (252평)</span>
+          <span className="text-zinc-100 font-extrabold text-[10px]">19-Hexagon 번들</span>
+          <span className="text-amber-300 font-bold text-[9px]">2-Ring 18개 병합 (k=2)</span>
+          <span className="text-zinc-400 text-[8.5px]">지름 35m / 면적 834㎡ (252평)</span>
         </div>
-        <div className="bg-yellow-950/70 border border-yellow-500/50 p-2 rounded-xl flex flex-col items-center justify-center space-y-0.5">
+        <div className="bg-yellow-950/70 border border-yellow-500/50 p-2.5 rounded-xl flex flex-col items-center justify-center space-y-0.5">
           <div className="flex items-center gap-1">
             <div className="w-2.5 h-2.5 bg-yellow-400 rounded-full" />
             <span className="text-yellow-300 font-extrabold">🟡 3차 외곽 (20%)</span>
           </div>
-          <span className="text-zinc-200 font-bold text-[9.5px]">37개 셀 (k=3 / 지름 49m)</span>
-          <span className="text-zinc-400 text-[8.5px]">면적 1,624㎡ (491평)</span>
+          <span className="text-zinc-100 font-extrabold text-[10px]">37-Hexagon 번들</span>
+          <span className="text-amber-300 font-bold text-[9px]">3-Ring 36개 병합 (k=3)</span>
+          <span className="text-zinc-400 text-[8.5px]">지름 49m / 면적 1,624㎡ (491평)</span>
         </div>
       </div>
     </div>
