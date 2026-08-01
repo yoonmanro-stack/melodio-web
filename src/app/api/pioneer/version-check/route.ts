@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export async function GET() {
   return NextResponse.json(
     {
-      version: "v7.6.0-BARO",
+      version: "v7.7.0-CAM",
       timestamp: new Date().toISOString(),
       status: "LIVE"
     },

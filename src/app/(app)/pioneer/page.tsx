@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import * as h3 from "h3-js";
 
-const PIONEER_CURRENT_VERSION = "v7.6.0-BARO";
-const PIONEER_BUILD_TIMESTAMP = "(08.01 19:35)";
+const PIONEER_CURRENT_VERSION = "v7.7.0-CAM";
+const PIONEER_BUILD_TIMESTAMP = "(08.01 22:05)";
 
 export default function PioneerRescuePage() {
   // Main Sub-Tab: "victim" (조난자 1-Tap SOS) vs "flag" (깃발 개척하기) vs "center" (관제 센터 모니터링)
@@ -156,6 +156,8 @@ export default function PioneerRescuePage() {
         inAppStreamRef.current = stream;
         if (inAppVideoRef.current) {
           inAppVideoRef.current.srcObject = stream;
+          inAppVideoRef.current.muted = true;
+          try { await inAppVideoRef.current.play(); } catch {}
         }
       } else {
         triggerCameraNextSlot(slotIdx);
@@ -1839,10 +1841,18 @@ export default function PioneerRescuePage() {
                 inAppVideoRef.current = el;
                 if (el && inAppStreamRef.current && el.srcObject !== inAppStreamRef.current) {
                   el.srcObject = inAppStreamRef.current;
+                  el.muted = true;
+                  el.play().catch(() => {});
                 }
               }}
               autoPlay
               playsInline
+              muted
+              onLoadedMetadata={(e) => {
+                const vid = e.target as HTMLVideoElement;
+                vid.muted = true;
+                vid.play().catch(() => {});
+              }}
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-4 border-2 border-dashed border-amber-400/50 rounded-2xl pointer-events-none flex items-center justify-center">

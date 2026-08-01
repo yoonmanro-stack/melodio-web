@@ -15,6 +15,8 @@ import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
 
+import android.webkit.PermissionRequest;
+
 public class MainActivity extends BridgeActivity implements SensorEventListener {
     private SensorManager sensorManager;
     private Sensor barometerSensor;
@@ -24,12 +26,21 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         
-        // Request GPS Location Runtime Permission
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            ActivityCompat.requestPermissions(this, new String[]{
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
-            }, 1001);
+        // Request GPS Location & Camera Runtime Permissions
+        String[] requiredPermissions = new String[]{
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.CAMERA
+        };
+        boolean needsPermission = false;
+        for (String perm : requiredPermissions) {
+            if (ContextCompat.checkSelfPermission(this, perm) != PackageManager.PERMISSION_GRANTED) {
+                needsPermission = true;
+                break;
+            }
+        }
+        if (needsPermission) {
+            ActivityCompat.requestPermissions(this, requiredPermissions, 1001);
         }
 
         sensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
@@ -51,11 +62,25 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
             // Bypass WebView cache to load fresh Vercel updates on app start
             webView.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_NO_CACHE);
             
-            // Auto grant WebView Geolocation Permission
+            // Auto grant WebView Geolocation & Camera Permissions
             webView.setWebChromeClient(new WebChromeClient() {
                 @Override
                 public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
                     callback.invoke(origin, true, false);
+                }
+
+                @Override
+                public void onPermissionRequest(final PermissionRequest request) {
+                    runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            try {
+                                request.grant(request.getResources());
+                            } catch (Exception e) {
+                                e.printStackTrace();
+                            }
+                        }
+                    });
                 }
             });
         }
