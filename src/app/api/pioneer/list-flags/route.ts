@@ -70,14 +70,26 @@ export async function GET() {
     const formattedFlags = cells.map((cell: any) => {
       const flagObj = flagsMap[cell.id] || null;
       const h3List = modulesMap[cell.id] || [];
+      const fp = flagObj?.spot_fingerprint || {};
 
       return {
         placeCellId: cell.id,
+        id: cell.id,
         name: cell.name,
+        place_name: fp.place_name || cell.name,
+        place_desc: fp.place_desc || "공간 개척 완료!",
+        category: fp.category || cell.category || "CAFE_FOOD",
+        floor_type: fp.floor_type || "GROUND",
+        floor_number: fp.floor_number || "지상 층",
+        buildingName: fp.buildingName || cell.name,
+        roadAddress: fp.roadAddress || "서울특별시 강동구 고덕동 333 (고덕동)",
+        lat: fp.lat || 37.55771,
+        lng: fp.lng || 127.16192,
+        h3Index: h3List[0] || fp.h3Index || "8e30e1ce04c0087",
         status: cell.status,
         createdAt: flagObj?.created_at || cell.created_at,
         photos: flagObj?.photo_urls || [],
-        spotFingerprint: flagObj?.spot_fingerprint || {},
+        spotFingerprint: fp,
         h3Modules: h3List,
         modulesCount: h3List.length
       };

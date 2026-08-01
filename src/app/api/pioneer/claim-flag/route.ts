@@ -17,6 +17,18 @@ export async function POST(req: Request) {
       photoUrls,
       spotFingerprint,
       placeName,
+      place_name,
+      placeDesc,
+      place_desc,
+      category,
+      floor_type,
+      floor_number,
+      lat,
+      lng,
+      roadAddress,
+      road_address,
+      buildingName,
+      building_name,
       spot_name,
       compass_heading_deg,
       device_pitch,
@@ -58,7 +70,8 @@ export async function POST(req: Request) {
 
     // 2. H3 중심 격자 포함 유동적 k-Ring 번들링 연산
     const bundledH3Modules: string[] = h3.gridDisk(h3Index, kRing);
-    const finalCellName = placeName || spot_name || spotName || `PLACE CELL (${h3Index})`;
+    const finalCellName = place_name || placeName || spot_name || spotName || `PLACE CELL (${h3Index})`;
+    const finalCellDesc = place_desc || placeDesc || "공간 개척 완료!";
     const photosList = Array.isArray(photoUrls) ? photoUrls : photoUrls ? [photoUrls] : [];
     const fingerprintObj = spotFingerprint || {};
 
@@ -113,7 +126,7 @@ export async function POST(req: Request) {
       try {
         const { data: cellData } = await supabase
           .from("place_cells")
-          .insert([{ name: finalCellName, category: "대형건물" }])
+          .insert([{ name: finalCellName, category: category || "대형건물" }])
           .select()
           .single();
 
@@ -134,7 +147,19 @@ export async function POST(req: Request) {
               {
                 place_cell_id: placeCellId,
                 photo_urls: photosList,
-                spot_fingerprint: { ...fingerprintObj, ...sensorPacket }
+                spot_fingerprint: {
+                  ...fingerprintObj,
+                  ...sensorPacket,
+                  place_name: finalCellName,
+                  place_desc: finalCellDesc,
+                  category: category || "CAFE_FOOD",
+                  floor_type: floor_type || "GROUND",
+                  floor_number: floor_number || "지상 층",
+                  lat: lat || 37.55771,
+                  lng: lng || 127.16192,
+                  roadAddress: road_address || roadAddress || "서울특별시 강동구 고덕동 333",
+                  buildingName: building_name || buildingName || finalCellName
+                }
               }
             ])
             .select()
@@ -168,6 +193,16 @@ export async function POST(req: Request) {
         placeCellId,
         flagId,
         name: finalCellName,
+        place_name: finalCellName,
+        place_desc: finalCellDesc,
+        category: category || "CAFE_FOOD",
+        floor_type: floor_type || "GROUND",
+        floor_number: floor_number || "지상 층",
+        lat: lat || 37.55771,
+        lng: lng || 127.16192,
+        roadAddress: road_address || roadAddress || "서울특별시 강동구 고덕동 333 (고덕동)",
+        buildingName: building_name || buildingName || finalCellName,
+        h3Index,
         status: "active",
         createdAt: new Date().toISOString(),
         photos: photosList,

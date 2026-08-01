@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export async function GET() {
   return NextResponse.json(
     {
-      version: "v8.0.0-NFC-PIONEER",
+      version: "v8.1.0-ROADVIEW-STREETMAP",
       timestamp: new Date().toISOString(),
       status: "LIVE"
     },

@@ -1994,16 +1994,28 @@ export default function PioneerRescuePage() {
               </div>
             </div>
 
-            {/* 🗺️ 3D 공간 지도 연결 버튼 */}
-            <a
-              href={`/pioneer/sos-map?lat=${selectedFlagDetail.lat || userLocation?.lat || 37.55771}&lng=${selectedFlagDetail.lng || userLocation?.lng || 127.16192}&h3=${selectedFlagDetail.h3Index || selectedFlagDetail.h3_index || sosH3Cell || "8e30e1ce04c0087"}&alt=${selectedFlagDetail.altitude || 35}&loc=${encodeURIComponent(selectedFlagDetail.place_name || selectedFlagDetail.name || "개척된 깃발 스팟")}&range=${encodeURIComponent("1차 핵심 수색 구역 (표준 7-Hexagon 번들)")}`}
-              target="_blank"
-              rel="noreferrer"
-              className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98] cursor-pointer"
-            >
-              <Compass className="w-4.5 h-4.5" />
-              <span>🗺️ 3D 공간 지도에서 이 깃발 위치 보기</span>
-            </a>
+            {/* 🗺️ 3D 공간 지도 & 📷 360° 현장 로드뷰 연결 버튼 */}
+            <div className="space-y-2 pt-1">
+              <a
+                href={`/pioneer/sos-map?lat=${selectedFlagDetail.lat || userLocation?.lat || 37.55771}&lng=${selectedFlagDetail.lng || userLocation?.lng || 127.16192}&h3=${selectedFlagDetail.h3Index || selectedFlagDetail.h3_index || sosH3Cell || "8e30e1ce04c0087"}&alt=${selectedFlagDetail.altitude || 35}&loc=${encodeURIComponent(selectedFlagDetail.place_name || selectedFlagDetail.name || "개척된 깃발 스팟")}&range=${encodeURIComponent("1차 핵심 수색 구역 (표준 7-Hexagon 번들)")}`}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-3 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-black rounded-2xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-amber-500/20 transition-all active:scale-[0.98] cursor-pointer"
+              >
+                <Compass className="w-4.5 h-4.5" />
+                <span>🗺️ 3D 공간 지도에서 이 깃발 위치 보기</span>
+              </a>
+
+              <a
+                href={`https://map.kakao.com/link/roadview/${selectedFlagDetail.lat || userLocation?.lat || 37.55771},${selectedFlagDetail.lng || userLocation?.lng || 127.16192}`}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full py-3 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-black font-black rounded-2xl text-xs flex items-center justify-center gap-2 shadow-md transition-all active:scale-[0.98] cursor-pointer"
+              >
+                <Camera className="w-4 h-4 text-black" />
+                <span>📷 360° 현장 실사 로드뷰 / 스트리트뷰 보기</span>
+              </a>
+            </div>
           </div>
         </div>
       )}
