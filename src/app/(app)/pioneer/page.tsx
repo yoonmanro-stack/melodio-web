@@ -7,6 +7,9 @@ import {
 } from "lucide-react";
 import * as h3 from "h3-js";
 
+const PIONEER_CURRENT_VERSION = "v7.1.0-RESCUE";
+const PIONEER_BUILD_TIMESTAMP = "(08.01 17:15)";
+
 export default function PioneerRescuePage() {
   // Main Sub-Tab: "victim" (조난자 1-Tap SOS) vs "flag" (깃발 개척하기) vs "center" (관제 센터 모니터링)
   const [activeTab, setActiveTab] = useState<"victim" | "center" | "flag">("victim");
@@ -117,7 +120,7 @@ export default function PioneerRescuePage() {
         const res = await fetch("/api/pioneer/version-check", { cache: "no-store" });
         if (res.ok) {
           const data = await res.json();
-          const currentLocalVer = "v6.9.0-PHYSICS";
+          const currentLocalVer = PIONEER_CURRENT_VERSION;
           if (data.version && data.version !== currentLocalVer) {
             const lastAutoReload = localStorage.getItem("pioneer_auto_hot_reload_v");
             if (lastAutoReload !== data.version) {
@@ -817,7 +820,7 @@ export default function PioneerRescuePage() {
         </span>
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/40 font-bold tracking-tight">
-            v7.1.0-RESCUE (08.01 17:10)
+            {PIONEER_CURRENT_VERSION} {PIONEER_BUILD_TIMESTAMP}
           </span>
           <button
             onClick={() => {
@@ -1343,10 +1346,10 @@ export default function PioneerRescuePage() {
             <div className="flex flex-col text-left gap-0.5">
               <span className="text-xs font-black text-emerald-300 flex items-center gap-1.5">
                 <Zap className="w-4 h-4 text-emerald-400 fill-emerald-400" />
-                <span>APK 앱 최신 버전 (v6.9.0)</span>
+                <span>APK 앱 최신 버전 ({PIONEER_CURRENT_VERSION})</span>
               </span>
               <span className="text-[10px] text-emerald-200/80 font-medium font-mono">
-                ICAO 국제표준 대기공식 & 핫 라이브 업데이트 (08.01 16:45)
+                3D 수직고도 락인 & 핫 라이브 업데이트 {PIONEER_BUILD_TIMESTAMP}
               </span>
             </div>
             <a
@@ -1356,7 +1359,7 @@ export default function PioneerRescuePage() {
               rel="noopener noreferrer"
               className="text-xs font-extrabold text-black bg-emerald-400 hover:bg-emerald-300 px-3.5 py-1.5 rounded-xl shadow-lg transition-all active:scale-95 flex items-center gap-1 cursor-pointer"
             >
-              <span>v6.9.0 APK 다운로드</span>
+              <span>{PIONEER_CURRENT_VERSION} APK 다운로드</span>
             </a>
           </div>
 
