@@ -119,26 +119,15 @@ export default function PioneerRescuePage() {
     });
   };
 
-  const triggerUnifiedCaptureFlow = async () => {
+  const triggerUnifiedCaptureFlow = () => {
     if (!placeName.trim()) {
       alert("⚠️ 먼저 개척할 장소명을 입력해 주세요!");
       return;
     }
 
-    let verified = isBiometricVerified;
-    if (!verified) {
-      verified = await triggerBiometricAuth();
-    }
-
-    if (verified) {
-      const firstEmptyIndex = photoFiles.findIndex((p) => !p || !p.trim());
-      const targetIdx = firstEmptyIndex !== -1 ? firstEmptyIndex : (photoFiles.length < 10 ? photoFiles.length : 0);
-      
-      // Delay camera trigger slightly so modal close animation completes seamlessly
-      setTimeout(() => {
-        triggerCameraNextSlot(targetIdx);
-      }, 150);
-    }
+    const firstEmptyIndex = photoFiles.findIndex((p) => !p || !p.trim());
+    const targetIdx = firstEmptyIndex !== -1 ? firstEmptyIndex : (photoFiles.length < 10 ? photoFiles.length : 0);
+    triggerCameraNextSlot(targetIdx);
   };
 
   const executeHardwareBiometricScan = async (type: "fingerprint" | "face" = "fingerprint") => {
@@ -926,7 +915,7 @@ export default function PioneerRescuePage() {
                     </span>
                   </div>
 
-                  {/* hidden file inputs with capture="environment" for immediate mobile camera launch */}
+                  {/* hidden file inputs for immediate mobile camera launch */}
                   {photoFiles.map((_, idx) => (
                     <input
                       key={idx}
@@ -935,7 +924,6 @@ export default function PioneerRescuePage() {
                       }}
                       type="file"
                       accept="image/*"
-                      capture="environment"
                       onChange={(e) => handlePhotoChange(idx, e)}
                       className="hidden"
                     />
