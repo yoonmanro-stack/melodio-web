@@ -274,7 +274,7 @@ async function fetchRealtimeAtmosphericData(lat: number, lng: number) {
   }
 
   return {
-    elevationMsl: elevationMsl ?? 30.0,
+    elevationMsl,
     seaLevelPressureHpa,
     surfacePressureHpa,
     dataSource
@@ -301,73 +301,61 @@ export async function POST(req: Request) {
     const buildingName = vworldMeta?.buildingName || "";
     const roadAddress = vworldMeta?.roadAddress || "";
 
-    // 🎯 Uber H3 정밀도 규격:
-    // - Res 13 (19-Hexagon k=2 링 확장, 수색 지름 38.0m / 반경 19.0m / 252평)
-    // - 아파트 중정 GPS 오차(10m) 시에도 117동과 118동을 100% 동시에 감싸 안는 최적 번들
+    // 🎯 Uber H3 정밀도 규격 (Res 13 / 14 3D 모듈)
     const centerH3IndexR14 = h3.latLngToCell(numLat, numLng, 14);
     const centerH3Index = h3.latLngToCell(numLat, numLng, 13);
-    const bundledH3Modules = h3.gridDisk(centerH3Index, 2); // k=2 링 확장 (19개 벌집 모듈)
+    const bundledH3Modules = h3.gridDisk(centerH3Index, 2);
 
-    // 🏔️ 실시간 기상 관측 데이터 (지표면 DEM 고도 & 실시간 해수면 기압 P_msl)
+    // 🏔️ 실시간 기상 관측 데이터 (지표면 DEM 고도 & 실시간 해수면/지표 기압)
     const atmosData = await fetchRealtimeAtmosphericData(numLat, numLng);
 
-    // 🏔️ H3 공간 셀 단위 지표면 고도 앵커링 (6m = 2개층 흔들림 원천 차단)
-    let zTerrain = atmosData.elevationMsl;
-    if (zTerrain !== null && !isNaN(zTerrain)) {
-      // H3 셀 지형 고도를 5m 단위로 앵커링하여 DEM 그리드 보간 흔들림 박멸
-      zTerrain = Math.round(zTerrain / 5.0) * 5.0;
-    } else {
-      zTerrain = 30.0;
-    }
+    // 🏔️ H3 공간 셀 단위 지표면 고도 앵커링
+    let zTerrain = atmosData.elevationMsl !== null ? Math.round(atmosData.elevationMsl / 5.0) * 5.0 : null;
     const pSeaLevel = atmosData.seaLevelPressureHpa;
 
-    const numAccuracy = Number(accuracy || 19.0); // 수색 반경 ±19.0m
+    const numAccuracy = accuracy !== undefined && accuracy !== null ? Number(accuracy) : 19.0;
 
-    // 🎯 지표면 기대 기압 (P_ground_expected) 역산:
-    // 국토부 지표면 고도(zTerrain)에서의 기온/기압 물리 모델 적용
-    const pGroundExpected = pSeaLevel * Math.pow(1.0 - zTerrain / 44330.0, 5.2558);
+    // 🎯 실시간 지표면 기대 기압 (P_ground_expected):
+    // Open-Meteo 실시간 지표기압(surfacePressureHpa)이 존재하는 경우 최우선 1:1 동기화
+    const pGroundExpected = atmosData.surfacePressureHpa !== null
+      ? atmosData.surfacePressureHpa
+      : (zTerrain !== null ? pSeaLevel * Math.pow(1.0 - zTerrain / 44330.0, 5.2558) : pSeaLevel);
 
     const userFloor = (body.floor !== undefined && body.floor !== null) ? Number(body.floor) : null;
     const numPressure = pressure ? Number(pressure) : null;
-    let zDevice = zTerrain;
+    let zDevice = zTerrain !== null ? zTerrain : 0;
     let hasValidSensor = false;
     let isBarometerApplied = false;
 
     if (userFloor !== null && !isNaN(userFloor)) {
-      // 1) 층수가 전송된 경우 (테스트 모드/수동 입력): 층수 최우선 확정
-      const estimatedDz = userFloor > 0 ? (userFloor - 1) * 3.0 : userFloor * 3.5;
-      zDevice = zTerrain + estimatedDz;
+      // 1) 수동 층수 전송된 경우
+      const estimatedDz = userFloor > 0 ? (userFloor - 1) * 3.3 : userFloor * 3.5;
+      zDevice = (zTerrain !== null ? zTerrain : 0) + estimatedDz;
       hasValidSensor = true;
     } else if (numPressure && numPressure > 800 && numPressure < 1100) {
-      // 2) 스마트폰 기압계 실측치가 전송된 경우: P_ground_expected 대비 기압 차이(hPa)로 지표면 위 높이 dzBaro 연산 (1 hPa ≈ 8.53m)
+      // 2) 기압계 실측치 전송된 경우 (P_ground_expected 대비 차이로 수직 고도 연산: 1 hPa ≈ 8.53m)
       const dzBaro = (pGroundExpected - numPressure) * 8.53;
-      zDevice = zTerrain + dzBaro;
+      zDevice = (zTerrain !== null ? zTerrain : 0) + dzBaro;
       hasValidSensor = true;
       isBarometerApplied = true;
     } else {
-      // 3) 기압계 센서 미지원 Web PWA 환경: HTML5 GPS 해발고도(±50m 노이즈)로 인한 23층 환각 연산을 원천 차단하고 지상 1층 안정화
-      zDevice = zTerrain;
+      // 3) 기압계 센서 미지원 환경
+      zDevice = zTerrain !== null ? zTerrain : 0;
       hasValidSensor = false;
     }
 
-    // 🎯 순수 지면 기준 건물 수직 높이: dzRaw = Z_device - Z_terrain
-    let dzRaw = 0;
-    if (hasValidSensor) {
-      dzRaw = zDevice - zTerrain;
-    } else {
-      dzRaw = 0;
-    }
+    // 🎯 순수 지면 기준 수직 고도차 dzRaw (미터 단위)
+    const dzRaw = hasValidSensor && zTerrain !== null ? zDevice - zTerrain : 0;
 
-    // 🏢 3D 물리 수직 구역 자동 판정 (특허 수직 오차 목표 ±3.0m / 100% 무버튼 자동 연산)
+    // 🏢 3D 물리 수직 구역 자동 판정 (연속 표준 수학 공식 적용: F = round(dz / 3.3) + 1)
     let envType: "URBAN_INDOOR_HIGH" | "MOUNTAIN_TERRAIN" | "UNDERGROUND_SUBTERRANEAN" | "URBAN_OUTDOOR_GROUND" | "MARITIME_WATER" | "SENSOR_UNCERTAIN" = "URBAN_OUTDOOR_GROUND";
     let locationText = `건물 지상 1층 위치 (수직고도 0m ±3m)`;
     let envTitle = "지상 1층/야외";
     let exactRescuerLocation = "건물 지상 1층 / 단지 야외";
 
-    const isMountain = zTerrain >= 100 || roadAddress.includes("산") || buildingName.includes("산");
+    const isMountain = zTerrain !== null && (zTerrain >= 100 || roadAddress.includes("산") || buildingName.includes("산"));
 
     if (userFloor !== null && !isNaN(userFloor)) {
-      // 수동 지정 수치가 있을 경우 연산
       if (userFloor < 0) {
         envType = "UNDERGROUND_SUBTERRANEAN";
         const depth = Math.abs(userFloor) * 3.5;
@@ -381,49 +369,39 @@ export async function POST(req: Request) {
         envTitle = "건물 지상 1층";
       } else {
         envType = "URBAN_INDOOR_HIGH";
-        const dz = (userFloor - 1) * 3.0;
+        const dz = (userFloor - 1) * 3.3;
         exactRescuerLocation = `건물 지상 ${userFloor}층 추정 (${Math.max(1, userFloor - 1)}~${userFloor + 1}층 구간)`;
         locationText = `${exactRescuerLocation} (수직고도 +${Math.round(dz)}m ±3m)`;
         envTitle = `건물 지상 ${userFloor}층`;
       }
     } else if (isMountain && Math.abs(dzRaw) <= 4.0) {
-      // ⛰️ 산악 지대 / 등산로 지표면 정밀 감지
       envType = "MOUNTAIN_TERRAIN";
       exactRescuerLocation = `산악 지대 / 등산로 구역`;
       locationText = `${exactRescuerLocation} (해발고도 ${Math.round(zDevice)}m ±3m)`;
       envTitle = "산악 등산로";
-    } else if (hasValidSensor && dzRaw < -4.0) {
-      // 🎯 지하 공간 / 절벽 아래 실족 (지표면 땅보다 4m 이상 낮은 기압/고도 - 기상 노이즈 방어)
-      const depth = Math.abs(dzRaw);
-      if (isMountain || zDevice >= 100.0) {
-        // 산악/절벽 실족 구역
-        envType = "MOUNTAIN_TERRAIN";
-        exactRescuerLocation = `절벽 아래 / 계곡 실족 구역 (등산로 대비 -${depth.toFixed(1)}m 추정)`;
-        locationText = `${exactRescuerLocation} (해발고도 ${Math.round(zDevice)}m ±3m)`;
-        envTitle = "절벽/계곡 실족";
-      } else {
+    } else if (hasValidSensor) {
+      // 🎯 연속 수학 공식 기반 층수 정량 판정 (F = round(dz / 3.3) + 1)
+      const approxFloor = Math.round(dzRaw / 3.3) + 1;
+
+      if (approxFloor < 1) {
+        const undergroundFloor = Math.abs(approxFloor - 1);
         envType = "UNDERGROUND_SUBTERRANEAN";
-        const undergroundFloor = Math.max(1, Math.round((depth + 1.0) / 3.5));
         exactRescuerLocation = `건물 지하 ${undergroundFloor}층 추정`;
-        locationText = `${exactRescuerLocation} (수직고도 -${depth.toFixed(1)}m ±3m)`;
+        locationText = `${exactRescuerLocation} (수직고도 ${dzRaw.toFixed(1)}m ±3m)`;
         envTitle = `건물 지하 ${undergroundFloor}층`;
+      } else if (approxFloor === 1) {
+        envType = "URBAN_OUTDOOR_GROUND";
+        exactRescuerLocation = "건물 지상 1층 / 단지 야외";
+        locationText = `${exactRescuerLocation} (수직고도 ${dzRaw.toFixed(1)}m ±3m)`;
+        envTitle = "건물 지상 1층";
+      } else {
+        const minF = Math.max(1, approxFloor - 1);
+        const maxF = approxFloor + 1;
+        envType = "URBAN_INDOOR_HIGH";
+        exactRescuerLocation = `건물 지상 ${approxFloor}층 추정 (${minF}~${maxF}층 구간)`;
+        locationText = `${exactRescuerLocation} (수직고도 +${Math.round(dzRaw)}m ±3m)`;
+        envTitle = `건물 지상 ${approxFloor}층`;
       }
-    } else if (hasValidSensor && dzRaw > 4.0) {
-      // 🏢 실내 고층 (센서 고도 실측 기반 지표면 땅보다 4m 이상 높은 3D 수직 고도)
-      envType = "URBAN_INDOOR_HIGH";
-      const dz = Math.max(0, dzRaw);
-      const approxFloor = Math.max(2, Math.round(dz / 3.0) + 1);
-      const minF = Math.max(1, approxFloor - 1);
-      const maxF = approxFloor + 1;
-      exactRescuerLocation = `건물 지상 ${approxFloor}층 추정 (${minF}~${maxF}층 구간)`;
-      locationText = `${exactRescuerLocation} (수직고도 +${Math.round(dz)}m ±3m)`;
-      envTitle = `건물 지상 ${approxFloor}층`;
-    } else if (hasValidSensor && Math.abs(dzRaw) <= 4.0) {
-      // 🎯 지상 1층 / 단지 야외 (지표면 ±4m 노이즈 데드존 방어 확정)
-      envType = "URBAN_OUTDOOR_GROUND";
-      exactRescuerLocation = "건물 지상 1층 / 단지 야외";
-      locationText = `${exactRescuerLocation} (수직고도 0m ±3m)`;
-      envTitle = "건물 지상 1층";
     }
 
     const sosDispatchId = `SOS-${new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14)}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -436,12 +414,12 @@ export async function POST(req: Request) {
     const baroText = numPressure ? `${numPressure.toFixed(1)}hPa` : "미전송(Web PWA)";
     const pGroundText = `${pGroundExpected.toFixed(1)}hPa`;
     const pMslText = `${pSeaLevel.toFixed(1)}hPa`;
-    const terrainText = `${zTerrain.toFixed(1)}m(H3앵커)`;
+    const terrainText = zTerrain !== null ? `${zTerrain.toFixed(1)}m(H3앵커)` : "지형미수신(0m)";
     const zDeviceText = `${zDevice.toFixed(1)}m`;
     const dzText = `${dzRaw >= 0 ? "+" : ""}${dzRaw.toFixed(1)}m`;
     const floorSourceText = userFloor !== null ? `수동지정(${userFloor}층)` : (isBarometerApplied ? "기압계실측연산" : "지표면기본수렴");
 
-    const telemetryLine = `\n[물리 센서 실측 진단]\n- 기압: 실측 ${baroText} | 지표기대 ${pGroundText} | 해수면 ${pMslText}\n- 고도: 지표면 ${terrainText} | 측정해발 ${zDeviceText} | 수직차이 ${dzText}\n- 연산기준: ${floorSourceText} (v3.5.3)`;
+    const telemetryLine = `\n[물리 센서 실측 진단]\n- 기압: 실측 ${baroText} | 지표기대 ${pGroundText} | 해수면 ${pMslText}\n- 고도: 지표면 ${terrainText} | 측정해발 ${zDeviceText} | 수직차이 ${dzText}\n- 연산기준: ${floorSourceText} (v6.8.0-UNIFIED)`;
 
     const { bloodType, medicalConditions, medications, ageGender } = body;
     let medicalLine = "";
@@ -544,7 +522,7 @@ export async function POST(req: Request) {
       },
       altitudeMetrics: {
         deviceAltitudeMsl: Math.round(zDevice * 100) / 100,
-        terrainElevationMsl: Math.round(zTerrain * 100) / 100,
+        terrainElevationMsl: zTerrain !== null ? Math.round(zTerrain * 100) / 100 : null,
         relativeHeightM: Math.round(dzRaw * 100) / 100,
         seaLevelPressureHpa: pSeaLevel,
         devicePressureHpa: numPressure
