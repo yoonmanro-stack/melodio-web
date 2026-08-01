@@ -152,14 +152,9 @@ function SosMapContent() {
     text: autoEnv.text
   };
 
-  // H3 셀 경계 좌표
-  const centerBoundary = sosData.h3Index ? h3.cellToBoundary(sosData.h3Index) : [];
-  const ringCells = sosData.h3Index ? h3.gridDisk(sosData.h3Index, 1).filter(c => c !== sosData.h3Index) : [];
-
   useEffect(() => {
     if (!mapRef.current) return;
 
-    // Leaflet CDN 로드 및 동적 렌더링
     const renderMap = () => {
       const L = (window as any).L;
       if (!L || !mapRef.current) return;
@@ -170,8 +165,11 @@ function SosMapContent() {
         mapRef.current.innerHTML = "";
       }
 
+      const mapLat = sosData.lat && !isNaN(sosData.lat) && sosData.lat !== 0 ? sosData.lat : 37.55727;
+      const mapLng = sosData.lng && !isNaN(sosData.lng) && sosData.lng !== 0 ? sosData.lng : 127.16609;
+
       const map = L.map(mapRef.current, {
-        center: [sosData.lat, sosData.lng],
+        center: [mapLat, mapLng],
         zoom: 18,
         zoomControl: true,
         attributionControl: false
@@ -191,8 +189,13 @@ function SosMapContent() {
         }).addTo(map);
       }
 
+      // 타일 렌더링 깨짐 방지 0.1초 invalidateSize 락인
+      setTimeout(() => {
+        try { map.invalidateSize(); } catch {}
+      }, 100);
+
       // 🎯 B2G 특허: f1(50% 핵심 93평), f2(30% 중간 252평), f3(20% 외곽 650평) 3단계 확률 등고선 멀티 히트맵
-      const targetH3 = (sosData.lat && sosData.lng) ? h3.latLngToCell(sosData.lat, sosData.lng, 13) : "";
+      const targetH3 = sosData.h3Index || ((mapLat && mapLng) ? h3.latLngToCell(mapLat, mapLng, 13) : "");
 
       if (targetH3) {
         try {
@@ -207,12 +210,12 @@ function SosMapContent() {
                 color: "#facc15",
                 weight: 2.0,
                 fillColor: "#fde047",
-                fillOpacity: 0.12
+                fillOpacity: 0.15
               }).addTo(map);
             }
           });
 
-          // 🟠 2차 중간 수색 구역 (f2: 30% 확률 / k=2 링 19개 벌집 셀 / 지름 38m / 252평 - 117동/118동 커버!)
+          // 🟠 2차 중간 수색 구역 (f2: 30% 확률 / k=2 링 19개 벌집 셀 / 지름 38m / 252평)
           const diskK2 = Array.from(diskK2Set);
           const diskK1Set = new Set(h3.gridDisk(targetH3, 1));
           diskK2.forEach(cell => {
@@ -223,7 +226,7 @@ function SosMapContent() {
                 color: "#fb923c",
                 weight: 2.8,
                 fillColor: "#fbbf24",
-                fillOpacity: 0.22
+                fillOpacity: 0.25
               }).addTo(map);
             }
           });
@@ -238,7 +241,7 @@ function SosMapContent() {
                 color: isCenter ? "#f87171" : "#ef4444",
                 weight: isCenter ? 4.5 : 3.5,
                 fillColor: "#dc2626",
-                fillOpacity: isCenter ? 0.45 : 0.35
+                fillOpacity: isCenter ? 0.55 : 0.40
               }).addTo(map);
 
               if (isCenter) {
