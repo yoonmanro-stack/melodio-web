@@ -134,6 +134,7 @@ export default function PioneerRescuePage() {
     checkLatestServerVersion();
   }, []);
 
+  const [selectedFloor, setSelectedFloor] = useState<number | null>(null);
   const [showBiometricModal, setShowBiometricModal] = useState<boolean>(false);
   const [biometricScanProgress, setBiometricScanProgress] = useState<"idle" | "scanning" | "success">("idle");
   const biometricResolverRef = useRef<((value: boolean) => void) | null>(null);
@@ -722,7 +723,7 @@ export default function PioneerRescuePage() {
             accuracy,
             altitude: alt,
             pressure: devicePressure,
-            floor: null,
+            floor: selectedFloor,
             spotCategory: "INDOOR_REAL",
             channel: "HTTP/5G",
             bloodType,
@@ -1342,6 +1343,35 @@ export default function PioneerRescuePage() {
           </div>
 
 
+
+          {/* 🏢 실내/고층 층수 직접 선택 바 (웹 브라우저 PWA 테스트 및 고층 수동 보정) */}
+          <div className="mt-3 w-full p-3.5 rounded-2xl bg-zinc-900/90 border border-amber-500/40 flex flex-col gap-2 shadow-lg">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-300 flex items-center gap-1.5">
+                <Building2 className="w-4 h-4 text-amber-400" />
+                현재 계신 층수 지정 (웹 브라우저 / 고층 보정)
+              </span>
+              <span className="text-[10px] font-mono text-zinc-400">
+                {selectedFloor !== null ? `${selectedFloor}층 선택됨` : "자동 센서 연산"}
+              </span>
+            </div>
+            <div className="grid grid-cols-7 gap-1 text-center font-bold">
+              {[1, 3, 5, 7, 9, 12, 15].map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setSelectedFloor(selectedFloor === f ? null : f)}
+                  className={`py-1.5 rounded-lg border text-xs transition-all cursor-pointer ${
+                    selectedFloor === f
+                      ? "bg-amber-400 text-black border-amber-300 font-extrabold shadow-lg scale-105"
+                      : "bg-black/60 text-zinc-300 border-zinc-800 hover:border-zinc-600"
+                  }`}
+                >
+                  {f}층
+                </button>
+              ))}
+            </div>
+          </div>
 
           {/* 📲 안드로이드 전용 네이티브 앱 (.APK) 원클릭 다운로드 바 */}
           <div className="mt-3 w-full p-3.5 rounded-2xl bg-gradient-to-r from-emerald-950/90 via-teal-950/80 to-zinc-900 border border-emerald-500/50 flex items-center justify-between shadow-xl">
