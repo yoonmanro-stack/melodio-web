@@ -817,7 +817,7 @@ export default function PioneerRescuePage() {
         </span>
         <div className="flex items-center gap-1.5">
           <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/40 font-bold tracking-tight">
-            v6.9.0-PHYSICS (08.01 16:45)
+            v7.0.0-FLAG (08.01 16:55)
           </span>
           <button
             onClick={() => {
@@ -1067,19 +1067,30 @@ export default function PioneerRescuePage() {
                     </div>
                   )}
 
-                  {/* 네이티브 HTML5 대표 카메라 촬영 래벨 버튼 */}
+                  {/* 네이티브 인앱 라이브 카메라 & 갤러리 듀얼 버튼 */}
                   {photoFiles.filter(Boolean).length < 3 ? (
-                    <label
-                      htmlFor={`pioneer-photo-input-${photoFiles.findIndex((p) => !p || !p.trim()) !== -1 ? photoFiles.findIndex((p) => !p || !p.trim()) : 0}`}
-                      className="w-full py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-black font-black text-sm rounded-2xl shadow-xl border border-amber-300 transition-all active:scale-[0.98] flex items-center justify-center gap-2.5 cursor-pointer shadow-amber-500/20"
-                    >
-                      <Camera className="w-5 h-5 text-black animate-bounce" />
-                      <span>
-                        {photoFiles.filter(Boolean).length === 0
-                          ? "📷 1/3번째 사진 촬영하기 (터치하여 카메라 켜기)"
-                          : `📷 ${photoFiles.filter(Boolean).length + 1}/3번째 사진 촬영하기 (터치하여 카메라 켜기)`}
-                      </span>
-                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={triggerUnifiedCaptureFlow}
+                        className="flex-1 py-4 bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 hover:from-amber-400 hover:to-orange-500 text-black font-black text-xs sm:text-sm rounded-2xl shadow-xl border border-amber-300 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer shadow-amber-500/20"
+                      >
+                        <Camera className="w-5 h-5 text-black animate-bounce" />
+                        <span>
+                          {photoFiles.filter(Boolean).length === 0
+                            ? "📷 1/3번째 인앱 라이브 카메라"
+                            : `📷 ${photoFiles.filter(Boolean).length + 1}/3번째 인앱 라이브 카메라`}
+                        </span>
+                      </button>
+
+                      <label
+                        htmlFor={`pioneer-photo-input-${photoFiles.findIndex((p) => !p || !p.trim()) !== -1 ? photoFiles.findIndex((p) => !p || !p.trim()) : 0}`}
+                        className="py-4 px-3 bg-[#161b26] hover:bg-zinc-800 border border-zinc-700 text-zinc-200 font-bold text-xs rounded-2xl transition-all flex items-center justify-center gap-1 cursor-pointer active:scale-95 shadow"
+                      >
+                        <span className="text-sm">🖼️</span>
+                        <span>갤러리</span>
+                      </label>
+                    </div>
                   ) : (
                     <div className="space-y-2.5">
                       <button
@@ -1104,7 +1115,11 @@ export default function PioneerRescuePage() {
                       {photoFiles.filter(Boolean).length < 10 && (
                         <button
                           type="button"
-                          onClick={addPhotoSlot}
+                          onClick={() => {
+                            const firstEmptyIndex = photoFiles.findIndex((p) => !p || !p.trim());
+                            const targetIdx = firstEmptyIndex !== -1 ? firstEmptyIndex : (photoFiles.length < 10 ? photoFiles.length : 0);
+                            startInAppCamera(targetIdx);
+                          }}
                           className="w-full py-2.5 bg-[#161b26] hover:bg-amber-500/10 border border-amber-500/40 text-amber-300 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
                         >
                           <Camera className="w-4 h-4 text-amber-400" />
