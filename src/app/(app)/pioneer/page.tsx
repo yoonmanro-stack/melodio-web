@@ -114,6 +114,69 @@ export default function PioneerRescuePage() {
   const [biometricScanProgress, setBiometricScanProgress] = useState<"idle" | "scanning" | "success">("idle");
   const biometricResolverRef = useRef<((value: boolean) => void) | null>(null);
 
+  // 📸 인앱 라이브 뷰파인더 카메라 엔진 (WebRTC WebCam + Fallback)
+  const [showInAppCameraModal, setShowInAppCameraModal] = useState<boolean>(false);
+  const [activeCameraSlotIdx, setActiveCameraSlotIdx] = useState<number>(0);
+  const inAppVideoRef = useRef<HTMLVideoElement | null>(null);
+  const inAppStreamRef = useRef<MediaStream | null>(null);
+
+  const startInAppCamera = async (slotIdx: number) => {
+    setActiveCameraSlotIdx(slotIdx);
+    setShowInAppCameraModal(true);
+    try {
+      if (typeof window !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
+        });
+        inAppStreamRef.current = stream;
+        if (inAppVideoRef.current) {
+          inAppVideoRef.current.srcObject = stream;
+        }
+      } else {
+        triggerCameraNextSlot(slotIdx);
+      }
+    } catch (err) {
+      console.warn("In-App camera stream fallback to file input:", err);
+      triggerCameraNextSlot(slotIdx);
+    }
+  };
+
+  const stopInAppCamera = () => {
+    if (inAppStreamRef.current) {
+      inAppStreamRef.current.getTracks().forEach((track) => track.stop());
+      inAppStreamRef.current = null;
+    }
+    setShowInAppCameraModal(false);
+  };
+
+  const captureInAppPhoto = () => {
+    if (!inAppVideoRef.current) return;
+    const video = inAppVideoRef.current;
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 1280;
+    canvas.height = video.videoHeight || 720;
+    const ctx = canvas.getContext("2d");
+    if (ctx) {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      setPhotoFiles((prev) => {
+        const next = [...prev];
+        next[activeCameraSlotIdx] = dataUrl;
+        return next;
+      });
+
+      if (typeof window !== "undefined" && navigator.vibrate) {
+        navigator.vibrate([100]);
+      }
+
+      if (activeCameraSlotIdx < 2) {
+        setActiveCameraSlotIdx(activeCameraSlotIdx + 1);
+      } else {
+        stopInAppCamera();
+      }
+    }
+  };
+
   const triggerBiometricAuth = (): Promise<boolean> => {
     return new Promise<boolean>((resolve) => {
       biometricResolverRef.current = resolve;
@@ -122,10 +185,17 @@ export default function PioneerRescuePage() {
     });
   };
 
-  const triggerUnifiedCaptureFlow = () => {
-    const firstEmptyIndex = photoFiles.findIndex((p) => !p || !p.trim());
-    const targetIdx = firstEmptyIndex !== -1 ? firstEmptyIndex : (photoFiles.length < 10 ? photoFiles.length : 0);
-    triggerCameraNextSlot(targetIdx);
+  const triggerUnifiedCaptureFlow = async () => {
+    let verified = isBiometricVerified;
+    if (!verified) {
+      verified = await triggerBiometricAuth();
+    }
+
+    if (verified) {
+      const firstEmptyIndex = photoFiles.findIndex((p) => !p || !p.trim());
+      const targetIdx = firstEmptyIndex !== -1 ? firstEmptyIndex : (photoFiles.length < 10 ? photoFiles.length : 0);
+      startInAppCamera(targetIdx);
+    }
   };
 
   const executeHardwareBiometricScan = async (type: "fingerprint" | "face" = "fingerprint") => {
@@ -725,7 +795,7 @@ export default function PioneerRescuePage() {
           <span>Melodio Pioneer 3D</span>
         </span>
         <span className="text-[10px] font-mono text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded-full border border-emerald-500/40 font-bold tracking-tight">
-          v6.6.0-LIVE (08.01 15:45)
+          v6.7.0-LIVE (08.01 16:05)
         </span>
       </div>
 
@@ -1646,6 +1716,53 @@ export default function PioneerRescuePage() {
                 </div>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 📸 인앱 라이브 뷰파인더 카메라 모달 */}
+      {showInAppCameraModal && (
+        <div className="fixed inset-0 z-50 bg-black/95 flex flex-col items-center justify-between p-4 animate-in fade-in duration-200">
+          <div className="w-full max-w-sm flex items-center justify-between py-2 px-1">
+            <span className="text-sm font-bold text-amber-300 flex items-center gap-2">
+              <Camera className="w-5 h-5 text-amber-400 animate-pulse" />
+              <span>현장 3D 증빙 촬영 ({activeCameraSlotIdx + 1}/3장)</span>
+            </span>
+            <button
+              onClick={stopInAppCamera}
+              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-full p-2 shadow cursor-pointer active:scale-95"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+
+          <div className="relative w-full max-w-sm h-[60vh] bg-zinc-900 rounded-3xl overflow-hidden border-2 border-amber-500/80 shadow-2xl flex items-center justify-center">
+            <video
+              ref={(el) => {
+                inAppVideoRef.current = el;
+                if (el && inAppStreamRef.current && el.srcObject !== inAppStreamRef.current) {
+                  el.srcObject = inAppStreamRef.current;
+                }
+              }}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            <div className="absolute inset-4 border-2 border-dashed border-amber-400/50 rounded-2xl pointer-events-none flex items-center justify-center">
+              <span className="text-[11px] font-bold text-amber-300 bg-black/70 px-3 py-1 rounded-full border border-amber-500/40">
+                🎯 피사체를 정밀하게 맞춰주세요 ({activeCameraSlotIdx + 1}/3)
+              </span>
+            </div>
+          </div>
+
+          <div className="w-full max-w-sm py-4 flex items-center justify-center gap-6">
+            <button
+              type="button"
+              onClick={captureInAppPhoto}
+              className="w-20 h-20 bg-gradient-to-r from-amber-400 via-orange-500 to-amber-500 hover:from-amber-300 hover:to-orange-400 rounded-full border-4 border-white flex items-center justify-center shadow-2xl active:scale-95 cursor-pointer shadow-amber-500/50"
+            >
+              <Camera className="w-10 h-10 text-black" />
+            </button>
           </div>
         </div>
       )}

@@ -155,7 +155,7 @@ async function fetchVWorldSpatialInfo(lat: number, lng: number) {
         const singleAddress = roadAddress || parcelAddress || (resultList[0] && resultList[0].text) || "";
         const singleBuilding = buildingName || singleAddress;
 
-        if (singleAddress && !singleAddress.includes("동남로82길")) {
+        if (singleAddress) {
           return {
             buildingName: singleBuilding,
             roadAddress: singleAddress
@@ -167,11 +167,11 @@ async function fetchVWorldSpatialInfo(lat: number, lng: number) {
     console.warn("[VWorld] VWorld Geocoder API note:", e);
   }
 
-  // 2차: Smart Complex Container Reverse Geocoding (골목길 오매핑 100% 방지)
+  // 2차: Smart Complex Container Reverse Geocoding (골목길 오매핑 방지)
   try {
     const headersOsm = { "User-Agent": "MelodioPioneerSOS/1.0 (rescue-ops@melodio.app)" };
     
-    // Zoom 18 (건물 동번호 e.g. 117동 추출) & Zoom 15 (단지 메인 건물명 e.g. 고덕그라시움 333 추출)
+    // Zoom 18 (건물 동번호 e.g. 117동 추출) & Zoom 15 (단지 메인 건물명 추출)
     const [res18, res15] = await Promise.all([
       fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`, { cache: "no-store", headers: headersOsm, signal: AbortSignal.timeout(3000) }),
       fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}&zoom=15&addressdetails=1`, { cache: "no-store", headers: headersOsm, signal: AbortSignal.timeout(3000) })
@@ -184,18 +184,16 @@ async function fetchVWorldSpatialInfo(lat: number, lng: number) {
       const addr18 = data18.address || {};
       const addr15 = data15.address || {};
 
-      const city = addr18.city || addr15.city || "서울특별시";
-      const borough = addr18.borough || addr15.borough || "강동구";
-      const quarter = addr18.quarter || addr15.quarter || addr18.suburb || "고덕동";
+      const city = addr18.city || addr15.city || addr18.province || addr15.province || "";
+      const borough = addr18.borough || addr15.borough || addr18.county || addr15.county || "";
+      const quarter = addr18.quarter || addr15.quarter || addr18.suburb || addr15.suburb || addr18.neighbourhood || addr15.neighbourhood || "";
 
       const complexName = addr15.residential || addr15.building || addr15.apartment || addr18.building || addr18.apartment || data15.name || data18.name || "";
       const dongNum = addr18.house_number && addr18.house_number.includes("동") ? addr18.house_number : "";
       const mainBuildingNum = addr15.house_number && !addr15.house_number.includes("동") ? addr15.house_number : "";
 
-      const smartBuildingTitle = [complexName, dongNum].filter(Boolean).join(" ") || `${borough} 지상 건물`;
-      const smartRoadAddress = mainBuildingNum
-        ? `${city} ${borough} ${quarter} (${complexName} ${mainBuildingNum})`
-        : `${city} ${borough} ${quarter} ${complexName}`.trim();
+      const smartBuildingTitle = [complexName, dongNum].filter(Boolean).join(" ") || (borough ? `${borough} 지상 건물` : `GPS 현위치 건물`);
+      const smartRoadAddress = [city, borough, quarter, complexName, mainBuildingNum].filter(Boolean).join(" ").trim() || `GPS 좌표 ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
 
       return {
         buildingName: smartBuildingTitle,
