@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export async function GET() {
   return NextResponse.json(
     {
-      version: "v8.1.0-ROADVIEW-STREETMAP",
+      version: "v9.1.0-APK-CAM",
       timestamp: new Date().toISOString(),
       status: "LIVE"
     },

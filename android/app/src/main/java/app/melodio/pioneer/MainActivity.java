@@ -14,6 +14,7 @@ import android.hardware.SensorManager;
 import androidx.core.app.ActivityCompat;
 import androidx.core.content.ContextCompat;
 import com.getcapacitor.BridgeActivity;
+import com.getcapacitor.BridgeWebChromeClient;
 
 import android.webkit.PermissionRequest;
 
@@ -62,10 +63,11 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
             // Bypass WebView cache to load fresh Vercel updates on app start
             webView.getSettings().setCacheMode(android.webkit.WebSettings.LOAD_NO_CACHE);
             
-            // Auto grant WebView Geolocation & Camera Permissions
-            webView.setWebChromeClient(new WebChromeClient() {
+            // Auto grant WebView Geolocation & Camera Permissions while retaining Capacitor Bridge file chooser
+            webView.setWebChromeClient(new BridgeWebChromeClient(this.bridge) {
                 @Override
                 public void onGeolocationPermissionsShowPrompt(String origin, GeolocationPermissions.Callback callback) {
+                    super.onGeolocationPermissionsShowPrompt(origin, callback);
                     callback.invoke(origin, true, false);
                 }
 
@@ -81,6 +83,7 @@ public class MainActivity extends BridgeActivity implements SensorEventListener 
                             }
                         }
                     });
+                    super.onPermissionRequest(request);
                 }
             });
         }

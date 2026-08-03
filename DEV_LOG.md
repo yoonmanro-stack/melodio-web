@@ -2,6 +2,30 @@
 
 ---
 
+## 2026-08-03 (Mon) — Pioneer v9.1.0-APK-CAM 안드로이드 설치앱 웹뷰 카메라 (`onShowFileChooser`) 복구
+
+### 🎯 목표
+웹앱에서 작동하던 개척하기 카메라가 Android APK (Capacitor) 설치앱 환경에서 작동하지 않던 결함 수술적 복구
+
+---
+
+### ✅ 완료 항목
+
+#### 1. `MainActivity.java` `BridgeWebChromeClient` 상속 복구
+- 기존 `webView.setWebChromeClient(new WebChromeClient() {...})` 오버라이딩으로 인해 소실되었던 Capacitor의 `onShowFileChooser` (안드로이드 네이티브 카메라/파일 선택 인텐트) 핸들러 복구.
+- `BridgeWebChromeClient`를 계승하여 안드로이드 네이티브 카메라 Picker와 WebRTC 센서/위치/카메라 자동 승인을 동시에 수호.
+
+#### 2. `pioneer/page.tsx` WebRTC 카메라 예외 방어 및 폴백 강화
+- `startInAppCamera` 내 `getUserMedia` 제약 조건을 `{ facingMode: { ideal: "environment" } }` -> `{ video: true }` 다중 폴백 구조로 개선하여 웹뷰 하드웨어 호환성 극대화.
+
+---
+
+### 📁 수정 파일
+- `android/app/src/main/java/app/melodio/pioneer/MainActivity.java`
+- `src/app/(app)/pioneer/page.tsx`
+
+---
+
 ## 2026-08-01 (Sat) — Pioneer v8.1.0-ROADVIEW-STREETMAP 3D 공간 개척 & 긴급구조 무결성 완성
 
 ### 🎯 목표

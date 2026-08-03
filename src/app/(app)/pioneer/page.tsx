@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import * as h3 from "h3-js";
 
-const PIONEER_CURRENT_VERSION = "v7.7.0-CAM";
-const PIONEER_BUILD_TIMESTAMP = "(08.01 22:05)";
+const PIONEER_CURRENT_VERSION = "v9.1.0-APK-CAM";
+const PIONEER_BUILD_TIMESTAMP = "(08.03 22:33)";
 
 export default function PioneerRescuePage() {
   // Main Sub-Tab: "victim" (조난자 1-Tap SOS) vs "flag" (깃발 개척하기) vs "center" (관제 센터 모니터링)
@@ -246,9 +246,14 @@ export default function PioneerRescuePage() {
     setShowInAppCameraModal(true);
     try {
       if (typeof window !== "undefined" && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }
-        });
+        let stream: MediaStream | null = null;
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: { ideal: "environment" } }
+          });
+        } catch (subErr) {
+          stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        }
         inAppStreamRef.current = stream;
         if (inAppVideoRef.current) {
           inAppVideoRef.current.srcObject = stream;
