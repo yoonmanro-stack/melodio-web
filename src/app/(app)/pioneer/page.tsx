@@ -7,8 +7,8 @@ import {
 } from "lucide-react";
 import * as h3 from "h3-js";
 
-const PIONEER_CURRENT_VERSION = "v9.1.0-APK-CAM";
-const PIONEER_BUILD_TIMESTAMP = "(08.03 22:33)";
+const PIONEER_CURRENT_VERSION = "v9.2.0-REALTIME-GPS";
+const PIONEER_BUILD_TIMESTAMP = "(08.03 22:50)";
 
 export default function PioneerRescuePage() {
   // Main Sub-Tab: "victim" (조난자 1-Tap SOS) vs "flag" (깃발 개척하기) vs "center" (관제 센터 모니터링)
@@ -463,24 +463,27 @@ export default function PioneerRescuePage() {
 
     setIsClaimingFlag(true);
 
-    // 📍 100% 실시간 오리지널 GPS 위치 수신 (가짜 좌표 37.5665 원천 차단)
-    let currentLat = userLocation?.lat;
-    let currentLng = userLocation?.lng;
+    // 📍 100% 실시간 오리지널 GPS 위치 수신 (이전 캐시 좌표가 아닌 현 시점 정밀 GPS 획득)
+    let currentLat = 0;
+    let currentLng = 0;
 
-    if (!currentLat || !currentLng) {
-      try {
-        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
-          navigator.geolocation.getCurrentPosition(resolve, reject, {
-            enableHighAccuracy: true,
-            timeout: 8000,
-            maximumAge: 0
-          });
+    try {
+      const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 8000,
+          maximumAge: 0
         });
-        currentLat = pos.coords.latitude;
-        currentLng = pos.coords.longitude;
-        setUserLocation({ lat: currentLat, lng: currentLng, accuracy: pos.coords.accuracy });
-      } catch (err) {
-        alert("📍 스마트폰 GPS 위치 측정 실패: 브라우저 위치 권한을 켜주세요.");
+      });
+      currentLat = pos.coords.latitude;
+      currentLng = pos.coords.longitude;
+      setUserLocation({ lat: currentLat, lng: currentLng, accuracy: pos.coords.accuracy });
+    } catch (err) {
+      if (userLocation?.lat && userLocation?.lng) {
+        currentLat = userLocation.lat;
+        currentLng = userLocation.lng;
+      } else {
+        alert("📍 스마트폰 GPS 위치 측정 실패: 브라우저/앱 위치 권한을 켜주세요.");
         setIsClaimingFlag(false);
         return;
       }

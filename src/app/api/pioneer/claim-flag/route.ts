@@ -69,8 +69,15 @@ export async function POST(req: Request) {
     } = decoded;
 
     // 2. H3 중심 격자 포함 유동적 k-Ring 번들링 연산
-    const bundledH3Modules: string[] = h3.gridDisk(h3Index, kRing);
-    const finalCellName = place_name || placeName || spot_name || spotName || `PLACE CELL (${h3Index})`;
+    let realH3Index = h3Index;
+    if (lat && lng) {
+      try {
+        realH3Index = h3.latLngToCell(Number(lat), Number(lng), 13);
+      } catch {}
+    }
+
+    const bundledH3Modules: string[] = h3.gridDisk(realH3Index, kRing);
+    const finalCellName = place_name || placeName || spot_name || spotName || `PLACE CELL (${realH3Index})`;
     const finalCellDesc = place_desc || placeDesc || "공간 개척 완료!";
     const photosList = Array.isArray(photoUrls) ? photoUrls : photoUrls ? [photoUrls] : [];
     const fingerprintObj = spotFingerprint || {};
@@ -87,13 +94,13 @@ export async function POST(req: Request) {
     const spatialLayers = {
       spot: {
         res: 14,
-        h3Index: h3IndexR14 || spotH3Index || h3Index,
+        h3Index: h3IndexR14 || spotH3Index || realH3Index,
         size: "2.5m (마이크로 유틸리티 자산 핀포인트)",
         description: "초정밀 벤치/라커/유틸리티 핀포인트 공간"
       },
       cell: {
         res: 13,
-        h3Index: h3Index,
+        h3Index: realH3Index,
         size: `7m x ${bundledH3Modules.length}개 모듈 (k-Ring ${kRing} 팽창/수축 입체 돔)`,
         bundledModulesCount: bundledH3Modules.length,
         bundledH3Modules,
@@ -155,9 +162,9 @@ export async function POST(req: Request) {
                   category: category || "CAFE_FOOD",
                   floor_type: floor_type || "GROUND",
                   floor_number: floor_number || "지상 층",
-                  lat: lat || 37.55771,
-                  lng: lng || 127.16192,
-                  roadAddress: road_address || roadAddress || "서울특별시 강동구 고덕동 333",
+                  lat: lat ? Number(lat) : 37.55771,
+                  lng: lng ? Number(lng) : 127.16192,
+                  roadAddress: road_address || roadAddress || (lat && lng ? `위도 ${Number(lat).toFixed(5)}, 경도 ${Number(lng).toFixed(5)}` : "서울특별시 강동구 고덕동 333"),
                   buildingName: building_name || buildingName || finalCellName
                 }
               }
@@ -198,11 +205,11 @@ export async function POST(req: Request) {
         category: category || "CAFE_FOOD",
         floor_type: floor_type || "GROUND",
         floor_number: floor_number || "지상 층",
-        lat: lat || 37.55771,
-        lng: lng || 127.16192,
-        roadAddress: road_address || roadAddress || "서울특별시 강동구 고덕동 333 (고덕동)",
+        lat: lat ? Number(lat) : 37.55771,
+        lng: lng ? Number(lng) : 127.16192,
+        roadAddress: road_address || roadAddress || (lat && lng ? `위도 ${Number(lat).toFixed(5)}, 경도 ${Number(lng).toFixed(5)}` : "서울특별시 강동구 고덕동 333 (고덕동)"),
         buildingName: building_name || buildingName || finalCellName,
-        h3Index,
+        h3Index: realH3Index,
         status: "active",
         createdAt: new Date().toISOString(),
         photos: photosList,

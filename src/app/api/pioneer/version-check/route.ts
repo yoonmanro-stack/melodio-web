@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export async function GET() {
   return NextResponse.json(
     {
-      version: "v9.1.0-APK-CAM",
+      version: "v9.2.0-REALTIME-GPS",
       timestamp: new Date().toISOString(),
       status: "LIVE"
     },
