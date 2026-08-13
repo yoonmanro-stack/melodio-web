@@ -1,7 +1,7 @@
 # 🎵 Melodio Web App Development Guide & Change Log (DEV.md)
 
 > **Melodio Web** — Next.js 16.2 (Turbopack) 기반 AI 음악 & 바이럴 숏폼 비디오 서비스  
-> **최종 업데이트일**: 2026-07-26  
+> **최종 업데이트일**: 2026-08-14
 > **배포 상태**: Mac Mini Dev Server (`ONLINE`) / Vercel Production (`https://melodio.app`)
 
 ---
@@ -64,4 +64,64 @@ npx vercel --prod --yes
 
 ---
 
-*Melodio Engineering Team — Built with Google Antigravity AI*
+## 🔐 2026-08-14 소스 단일화 및 보안 운영 정리
+
+### 1. 공식 소스 및 배포 기준 단일화
+
+- GitHub `yoonmanro-stack/melodio-web`의 `main`을 공식 기준 저장소로 확정.
+- MacBook Air의 최신 프로덕션 웹 소스와 Mac mini worker 소스를 공식 작업 폴더로 통합.
+- Vercel Production과 소스 정합성을 역순으로 검증하고 `melodio.app` 배포가 `Ready`임을 확인.
+- 사이드 메뉴 `/pioneer`(HexaWave 공간 개척)는 본 프로젝트가 아닌 임시 테스트 기능으로 유지.
+- 공식 소스 및 기기별 역할은 `CANONICAL_SOURCE.md`를 기준으로 관리.
+
+### 2. 노출 자격증명 폐기 및 서비스별 키 분리
+
+- 노출된 Telegram 봇 토큰 2개를 폐기하고 `@Melodio_Muse_bot`, `@macmuse_bot`에 신규 토큰 적용.
+- Supabase Legacy `anon`·`service_role` API 키를 비활성화.
+- Legacy HS256 JWT signing key를 폐기하여 기존 `service_role` JWT의 신뢰를 완전히 제거.
+- Supabase 신규 키를 Vercel, worker, 관리 스크립트 용도로 각각 분리.
+- Anthropic API 키를 Melodio 브리지와 HiveDesk 브리지 용도로 분리.
+- Antigravity Claude MCP 전용 키는 Mac mini 서비스와 분리하여 유지.
+- 키·토큰 원문 및 식별 가능한 일부 문자열은 문서와 Git에 기록하지 않음.
+
+### 3. GitHub 이력 및 재유입 방지
+
+- 전체 Git 이력을 재작성하여 과거 커밋에 포함된 비밀정보 흔적 제거.
+- Gitleaks 전체 이력 검사 결과 0건 확인.
+- 커밋 전 Gitleaks 훅을 활성화하여 신규 비밀정보 커밋 차단.
+- GitHub `main`의 강제 푸시와 브랜치 삭제를 차단.
+- MacBook의 기존 복제본을 새 Git 이력과 동기화.
+
+### 4. Mac mini 운영환경 정리
+
+- 실제 PM2 실행 경로를 SSH로 확인하고 복사본이 아닌 운영 환경파일에 신규 키 적용.
+- 환경파일 권한을 `600`으로 제한.
+- Telegram·Anthropic·Supabase 인증을 실제 API 응답으로 검증.
+- 실행 코드와 보관용 JavaScript 파일의 하드코딩 비밀정보 0건 확인.
+- 폐기된 비밀정보가 포함된 백업 및 `DISABLED` 파일 삭제.
+- Telegram 봇 런타임 의존성을 명시하고 보안 수정 버전으로 갱신.
+
+### 5. 최종 운영 검증
+
+다음 PM2 프로세스가 모두 `online`임을 확인함.
+
+- `macminiops-bridge`
+- `hivedesk-bridge`
+- `melodio-worker`
+- `melodio-youtube-scheduler`
+- `melodio-b2b-loop-worker`
+- `melodio-telegram-bot`
+- `melodio-web`
+
+### 6. 관련 Git 커밋
+
+- `73262f3` — 프로덕션 웹·worker 소스 통합
+- `63a10aa` — 하드코딩 자격증명 제거 및 비밀정보 검사 적용
+- `0fa31d9` — Supabase 키 요청 시점 검증 수정
+- `87bc84e` — Telegram 봇 런타임 의존성 명시
+
+> 운영 원칙: 비밀값은 Git 추적 파일, 개발 문서, 채팅, 스크린샷에 남기지 않는다. 서비스별 환경파일 또는 배포 플랫폼의 Secret 관리 기능에만 저장한다.
+
+---
+
+*Melodio Engineering Team — Maintained with Antigravity AI and OpenAI Codex*
