@@ -3,10 +3,14 @@ import * as h3 from "h3-js";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://jfsfxzhunkrjyibsdswb.supabase.co";
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+function getSupabase() {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!key) throw new Error("A Supabase API key is required");
+  return createClient(supabaseUrl, key);
+}
 
 export async function POST(req: Request) {
+  const supabase = getSupabase();
   try {
     const body = await req.json();
     const {
@@ -36,7 +40,7 @@ export async function POST(req: Request) {
     const placeCellId = `cell_${Date.now()}`;
 
     // Supabase DB 저장 파이프라인 (RDBMS / Fallback)
-    if (supabaseKey) {
+    if (supabase) {
       try {
         const { data: cellData } = await supabase
           .from("place_cells")

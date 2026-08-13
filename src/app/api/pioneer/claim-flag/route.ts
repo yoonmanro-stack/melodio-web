@@ -5,10 +5,14 @@ import { createClient } from "@supabase/supabase-js";
 
 const JWT_SECRET = process.env.JWT_SECRET || "melodio-enfc-secret-key-2026";
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://jfsfxzhunkrjyibsdswb.supabase.co";
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+function getSupabase() {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!key) throw new Error("A Supabase API key is required");
+  return createClient(supabaseUrl, key);
+}
 
 export async function POST(req: Request) {
+  const supabase = getSupabase();
   try {
     const body = await req.json();
     const {
@@ -137,7 +141,7 @@ export async function POST(req: Request) {
     let flagId: string | null = null;
 
     // 3. Supabase DB 저장 파이프라인
-    if (supabaseKey) {
+    if (supabase) {
       try {
         const { data: cellData } = await supabase
           .from("place_cells")

@@ -3,10 +3,14 @@ import * as h3 from "h3-js";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://jfsfxzhunkrjyibsdswb.supabase.co";
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+function getSupabase() {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!key) throw new Error("A Supabase API key is required");
+  return createClient(supabaseUrl, key);
+}
 
 export async function GET(req: Request) {
+  const supabase = getSupabase();
   try {
     const { searchParams } = new URL(req.url);
     const targetId = searchParams.get("id");
@@ -35,7 +39,7 @@ export async function GET(req: Request) {
       }
 
       // Supabase fallback
-      if (supabaseKey) {
+      if (supabase) {
         const { data } = await supabase
           .from("sos_dispatches")
           .select("*")
@@ -67,7 +71,7 @@ export async function GET(req: Request) {
     }
 
     // 2. Fallback to Supabase for all dispatches if empty
-    if (dispatches.length === 0 && supabaseKey) {
+    if (dispatches.length === 0) {
       const { data } = await supabase
         .from("sos_dispatches")
         .select("*")
@@ -282,6 +286,7 @@ async function fetchRealtimeAtmosphericData(lat: number, lng: number) {
 }
 
 export async function POST(req: Request) {
+  const supabase = getSupabase();
   try {
     const body = await req.json();
     const { lat, lng, accuracy, altitude, pressure, callerPhone, channel, spotCategory } = body;
@@ -437,7 +442,7 @@ export async function POST(req: Request) {
     const smsPayload = `[SOS 긴급 구조 요청]\n구조자 위치 -> ${exactRescuerLocation}\n추정 수색범위 -> ${searchRangeText}${buildingLine}${addressLine}\n위치 오차 범위: 수평 ${horizontalAccText}, 수직 ±3m\nH3-R14:${centerH3IndexR14}\nH3-R13:${centerH3Index}\nGPS:${numLat.toFixed(5)},${numLng.toFixed(5)}${medicalLine}${telemetryLine}`;
 
     // DB 및 로컬 저장
-    if (supabaseKey) {
+    if (supabase) {
       try {
         await supabase.from("sos_dispatches").insert([
           {
@@ -556,4 +561,3 @@ export async function POST(req: Request) {
     );
   }
 }
-

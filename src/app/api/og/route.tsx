@@ -6,8 +6,12 @@ export const runtime = 'nodejs'
 const DEFAULT_COVER = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xkhujzszvhnxzmxrmnzn.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-const supabase = createClient(supabaseUrl, supabaseAnonKey)
+
+function getSupabase() {
+  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  if (!key) throw new Error('NEXT_PUBLIC_SUPABASE_ANON_KEY is required')
+  return createClient(supabaseUrl, key)
+}
 
 const SHOWCASE_STATIC_MAP: Record<string, { title: string; cover: string }> = {
   'viral-omg': {
@@ -249,6 +253,7 @@ function buildOgImageResponse(title: string, coverDataUri: string) {
 }
 
 export async function GET(request: Request) {
+  const supabase = getSupabase()
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id') || ''

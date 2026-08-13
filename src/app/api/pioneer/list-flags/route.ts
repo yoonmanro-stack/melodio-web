@@ -2,15 +2,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://jfsfxzhunkrjyibsdswb.supabase.co";
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = createClient(supabaseUrl, supabaseKey);
+function getSupabase() {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (!key) throw new Error("A Supabase API key is required");
+  return createClient(supabaseUrl, key);
+}
 
 export async function GET() {
+  const supabase = getSupabase();
   try {
-    if (!supabaseKey) {
-      return NextResponse.json({ success: true, flags: [] });
-    }
-
     // Read file-persisted flags backup
     let localFlags: any[] = [];
     try {
