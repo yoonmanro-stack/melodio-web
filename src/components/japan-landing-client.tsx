@@ -69,6 +69,9 @@ const FadeInImage = ({ src, alt, className = "" }: { src: string; alt: string; c
 
 // ─── 과거 이미지 미등록 음원용 컨셉 매핑 썸네일 헬퍼 ───
 const getFallbackCoverArt = (item: any): string => {
+  if (item?.cover_art_url && !item.cover_art_url.includes('unsplash.com')) {
+    return item.cover_art_url;
+  }
   let styleText = "";
   if (item.license_hash) {
     try {
@@ -77,29 +80,20 @@ const getFallbackCoverArt = (item: any): string => {
     } catch { /* ignore */ }
   }
   
-  const titleText = (item.title || "").toLowerCase();
-  
-  if (styleText.includes("lo-fi") || styleText.includes("lofi") || styleText.includes("acoustic") || styleText.includes("folk") || styleText.includes("healing")) {
-    return "https://images.unsplash.com/photo-1518173946687-a4c8a383392f?w=300&q=80";
+  if (styleText.includes("city") || styleText.includes("japan") || styleText.includes("시티팝")) {
+    return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png";
   }
-  if (styleText.includes("hip-hop") || styleText.includes("hiphop") || styleText.includes("rap") || styleText.includes("trap") || styleText.includes("디스")) {
-    return "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&q=80";
+  if (styleText.includes("jazz") || styleText.includes("matcha")) {
+    return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png";
   }
-  if (styleText.includes("city") || styleText.includes("synth") || styleText.includes("retro") || styleText.includes("레트로") || styleText.includes("시티팝")) {
-    return "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=300&q=80";
+  if (styleText.includes("lo-fi") || styleText.includes("lofi") || styleText.includes("tea")) {
+    return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png";
   }
-  if (styleText.includes("rock") || styleText.includes("metal") || styleText.includes("guitar") || styleText.includes("락") || styleText.includes("밴드")) {
-    return "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=300&q=80";
-  }
-  if (styleText.includes("dance") || styleText.includes("pop") || styleText.includes("k-pop") || styleText.includes("댄스") || styleText.includes("club")) {
-    return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&q=80";
+  if (styleText.includes("chanson") || styleText.includes("vintage")) {
+    return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png";
   }
   
-  if (titleText.includes("[cf]") || styleText.includes("commercial") || styleText.includes("advertising")) {
-    return "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=300&q=80";
-  }
-  
-  return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=300&q=80";
+  return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png";
 };
 
 // ─── 음원 실시간 길이(Duration) 획득용 컴포넌트 ───
@@ -143,6 +137,17 @@ const TrackDuration = ({ audioUrl, initialDuration }: { audioUrl?: string; initi
 
 type Variant = "A" | "B" | "C";
 
+const JP_PRESET_IMAGES = [
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png"
+];
+
 const jpPresets = [
   {
     id: "romance-pop",
@@ -152,7 +157,7 @@ const jpPresets = [
     emoji: "💗",
     gradient: "from-[#ff9a9e] to-[#fecfef]",
     category: "retro",
-    cardImage: "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=400&q=80",
+    cardImage: JP_PRESET_IMAGES[0],
     defaultTitle: "Tokyo Neon Romance",
     defaultTopic: "비 내리는 도쿄의 밤거리, 흘러간 사랑",
     lyricsTemplate: `[Verse 1]\n夜の街、流れるネオンライト\n君の影を探している\n\n[Chorus]\nシティポップ가 響く街角で\nもう一度だけ 微笑んで`
@@ -165,7 +170,7 @@ const jpPresets = [
     emoji: "📚",
     gradient: "from-[#667eea] to-[#764ba2]",
     category: "focus",
-    cardImage: "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=400&q=80",
+    cardImage: JP_PRESET_IMAGES[1],
     defaultTitle: "Midnight Rain Study",
     defaultTopic: "조용히 창문을 두드리는 빗소리, 새벽의 다이어리",
     lyricsTemplate: `[Verse 1]\n静かな雨、窓を叩く音\n教科書を閉じて、目を閉じる\n\n[Chorus]\nLofi 비트에 내 몸을 맡기고\n잠들지 않는 이 밤을 보내자`
@@ -178,7 +183,7 @@ const jpPresets = [
     emoji: "🍷",
     gradient: "from-[#a18cd1] to-[#fbc2eb]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1511192336575-5a79af67a629?w=400&q=80",
+    cardImage: JP_PRESET_IMAGES[2],
     defaultTitle: "Shibuya Jazz Espresso",
     defaultTopic: "은은한 에스프레소 향기, 어두운 조명, 밤하늘의 색소폰",
     lyricsTemplate: `[Verse 1]\nコーヒーの香り、薄暗い照明\nサックスの音が胸に染みる\n\n[Chorus]\n深夜のカフェ、ふたりの時間\n静かにジャズを聴こう`
@@ -191,7 +196,7 @@ const jpPresets = [
     emoji: "🌿",
     gradient: "from-[#56ab2f] to-[#a8e063]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=400&q=80",
+    cardImage: JP_PRESET_IMAGES[3],
     defaultTitle: "Shibuya Morning Breeze",
     defaultTopic: "상쾌한 아침 이슬, 언덕 위에 부는 바람, 새들의 지저귐",
     lyricsTemplate: `[Verse 1]\n風が通り抜ける渋谷の朝\nアコースティックギターの音色、爽やかに\n\n[Chorus]\n자연의 멜로디, 힐링의 시간\n한 걸음 멈춰 서서 깊은 호흡을 해`
@@ -204,7 +209,7 @@ const jpPresets = [
     emoji: "🦄",
     gradient: "from-[#fbc2eb] to-[#a6c1ee]",
     category: "focus",
-    cardImage: "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     defaultTitle: "Harajuku Pink Heart",
     defaultTopic: "핑크빛 하라주쿠 네온, 젤리 팝 스위트 하트",
     lyricsTemplate: `[Verse 1]\nカラフルなクレープ、猫通りの午後\n君と手を繋いで、飛び跳ねるよ\n\n[Chorus]\nカワイイ未来へ、ふたりでジャンプ！\nキラキラの星空、追いかけていこう`
@@ -217,7 +222,7 @@ const jpPresets = [
     emoji: "🌺",
     gradient: "from-[#84fab0] to-[#8fd3f4]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     defaultTitle: "Okinawa Emerald Wave",
     defaultTopic: "오키나와의 에메랄드 해변, 산들바람에 들리는 삼신",
     lyricsTemplate: `[Verse 1]\n赤い夕日、波の音が響く\n三線の音色に、思いをのせて\n\n[Chorus]\n琉球の風よ、遥か彼方へ\nあの人に届けて、私の唄を`
@@ -230,7 +235,7 @@ const jpPresets = [
     emoji: "🎋",
     gradient: "from-[#a8ff78] to-[#78ffd6]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     defaultTitle: "Kyoto Bamboo Silence",
     defaultTopic: "고요한 아라시야마, 마음을 정화하는 빗방울",
     lyricsTemplate: `[Verse 1]\n竹林を抜ける風、静寂의 朝\n苔むした庭で、心を研ぎ澄ます\n\n[Chorus]\n風鈴の音が、遠くで響き\n古都의 고요함 속에 깊이 스며드네`
@@ -243,7 +248,7 @@ const jpPresets = [
     emoji: "⚡",
     gradient: "from-[#ff9966] to-[#ff5e62]",
     category: "focus",
-    cardImage: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     defaultTitle: "Tokyo Youth Runway",
     defaultTopic: "방과 후 노을 지는 운동장, 한계 없는 질주",
     lyricsTemplate: `[Verse 1]\n放課後のチャイム、自転車を漕ぎ出して\n夕日に向かって、がむしゃらに走った\n\n[Chorus]\n僕らの約束、あの空の向こうへ\n絶対叶えてみせる、限界を超えて`
@@ -256,7 +261,7 @@ const jpPresets = [
     emoji: "🕺",
     gradient: "from-[#f093fb] to-[#f5576c]",
     category: "retro",
-    cardImage: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     defaultTitle: "Neon Night Disco",
     defaultTopic: "화려한 네온사인 댄스 플로어, 레트로 비트의 유혹",
     lyricsTemplate: `[Verse 1]\nミラーボールが回る深夜のフロア\nステップを踏んで、朝まで踊ろう\n\n[Chorus]\nフューチャーファンкのビートに乗って\n僕たちの夜は、これから始まる`
@@ -269,7 +274,7 @@ const jpPresets = [
     emoji: "❄️",
     gradient: "from-[#e6e9f0] to-[#eef1f5]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1485594050903-8e8ee7b071a8?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     defaultTitle: "Sapporo Snow Cabin",
     defaultTopic: "창밖에 내리는 흰 눈, 따뜻한 핫초코 한 잔",
     lyricsTemplate: `[Verse 1]\n静かに降る雪、窓の外は白く\n暖炉の火を見つめて、お茶을 마신다\n\n[Chorus]\n冬のLofi가 心を温める\n白い息を吐きながら、夢を見よう`
@@ -282,7 +287,7 @@ const jpPresets = [
     emoji: "🎸",
     gradient: "from-[#434343] to-[#000000]",
     category: "focus",
-    cardImage: "https://images.unsplash.com/photo-1470229722913-7c0e2dbbafd3?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     defaultTitle: "Shibuya Underground Live",
     defaultTopic: "땀방울 맺힌 무대, 기타 피드백 노이즈",
     lyricsTemplate: `[Verse 1]\n地下のライブハウス、歪むギター의 音\n狭いステージで、僕らは叫んだ\n\n[Chorus]\n渋谷のネオンに負けないくらい\n僕らのメロディ、夜空へ響かせよう`
@@ -295,7 +300,7 @@ const jpPresets = [
     emoji: "🌊",
     gradient: "from-[#4facfe] to-[#00f2fe]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     defaultTitle: "Kamakura Train Sunset",
     defaultTopic: "노을빛 건널목, 저멀리 밀려오는 에메랄드 파도",
     lyricsTemplate: `[Verse 1]\n踏切의 向こう、広がる青い海\n波의 소리に合わせて、ギターを弾く\n\n[Chorus]\n鎌倉의 夕日、오렌지색으로 染まる\n이 바람을 타고、너를 만나러 갈게`
@@ -308,7 +313,7 @@ const jpPresets = [
     emoji: "🐙",
     gradient: "from-[#ff0844] to-[#ffb199]",
     category: "retro",
-    cardImage: "https://images.unsplash.com/photo-1534080564583-6be75777b70a?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     defaultTitle: "Dotonbori Street Carnival",
     defaultTopic: "갓 구운 타코야끼 향기, 유쾌한 웃음 가득한 오사카의 밤",
     lyricsTemplate: `[Verse 1]\n賑やかな道頓堀の夜\n美味しい香りに誘われて\n\n[Chorus]\nお祭りのリズムに乗って\nみんなで一緒に踊り明かそう`
@@ -321,7 +326,7 @@ const jpPresets = [
     emoji: "🗻",
     gradient: "from-[#30cfd0] to-[#330867]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     defaultTitle: "Dawn Over Mount Fuji",
     defaultTopic: "호수 위에 어리는 아침 안개, 산새들의 깊은 기도",
     lyricsTemplate: `[Verse 1]\n朝霧の中、そびえ立つ富士山\n静かに奏でる琴の音色\n\n[Chorus]\n夜明けの光が世界を照らし\n静かな祈리가 하늘에 닿기를`
@@ -334,7 +339,7 @@ const jpPresets = [
     emoji: "✨",
     gradient: "from-[#e2d1c3] to-[#fdfcfb]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1448375240586-882707db888b?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     defaultTitle: "Fantasy Forest Path",
     defaultTopic: "햇살 비치는 나뭇잎 터널, 마음 깊이 남겨진 소망",
     lyricsTemplate: `[Verse 1]\n木漏れ日の森、妖精の足音\nピアノ의 메로디、우아하게 響く\n\n[Chorus]\n不思議な旅へ出かけよう\n懐かしい夢が待っているから`
@@ -347,7 +352,7 @@ const jpPresets = [
     emoji: "👾",
     gradient: "from-[#f5d130] to-[#f472b6]",
     category: "retro",
-    cardImage: "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     defaultTitle: "8Bit Akiba Quest",
     defaultTopic: "고전 아케이드 모험, 레트로 픽셀 아트",
     lyricsTemplate: `[Verse 1]\nピコピコ動く画面の向こう\nレトロゲームの世界へようこそ\n\n[Chorus]\n8ビットの冒険が始まるよ\nハイスコアを目指して走り抜けよう`
@@ -360,7 +365,7 @@ const jpPresets = [
     emoji: "🌅",
     gradient: "from-[#ff7e5f] to-[#feb47b]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1505118380757-91f5f5632de0?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     defaultTitle: "Sunset Okinawa Beach",
     defaultTopic: "해변의 마지막 햇살, 파도에 쓰는 편지",
     lyricsTemplate: `[Verse 1]\n夕暮れの浜辺、波が引き裂く\n君との思い出が胸をかすめる\n\n[Chorus]\nオリオンビール片手に歌う\nサヨナラは言わずに、またねと笑おう`
@@ -373,7 +378,7 @@ const jpPresets = [
     emoji: "🚗",
     gradient: "from-[#2b5876] to-[#4e4376]",
     category: "retro",
-    cardImage: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     defaultTitle: "Shibuya Expressway Neon",
     defaultTopic: "도쿄 야간 고속도로, 네온사인의 잔상, 음악의 리듬",
     lyricsTemplate: `[Verse 1]\n首都高速、流れるヘッドライト\nカーステレオから流れるメロディ\n\n[Chorus]\n真夜中のドライブ、君の横顔\nシティポップに乗せて駆け抜けよう`
@@ -386,7 +391,7 @@ const jpPresets = [
     emoji: "🌧️",
     gradient: "from-[#37ecba] to-[#72afd3]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1534349762230-e0cadf78f5da?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     defaultTitle: "Raindrops On The window",
     defaultTopic: "창가에 스미는 빗소리, 차분히 정리되는 생각",
     lyricsTemplate: `[Verse 1]\n窓に当たる雨、静かな午後\n温かいカフェラテを一口飲む\n\n[Chorus]\nピアノの旋律が静かに流れ\n雨の日の憂鬱を溶かしていく`
@@ -399,7 +404,7 @@ const jpPresets = [
     emoji: "🌙",
     gradient: "from-[#09203f] to-[#537895]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1507499739999-097706ad8914?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     defaultTitle: "Midnight Pillow Lofi",
     defaultTopic: "은은한 달빛 아래 방 안 가득 찬 평온함, 잠드는 새벽",
     lyricsTemplate: `[Verse 1]\n静かな部屋、月光が差し込む\n眠りに落ちる、その瞬間まで\n\n[Chorus]\n穏やかなLofi가 night을 包む\n夢の中で、また会えるように`
@@ -412,7 +417,7 @@ const jpPresets = [
     emoji: "🌸",
     gradient: "from-[#fbc2eb] to-[#a6c1ee]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1522383225653-ed111181a951?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     defaultTitle: "Kyoto Sakura Morning",
     defaultTopic: "벚꽃 터널을 지나는 노면전차, 설레는 아침 햇살",
     lyricsTemplate: `[Verse 1]\n桜舞う季節、風に吹かれて\n君との帰り道、少し照れるね\n\n[Chorus]\nアコースティックギターの音色に合わせて\n僕たちの春を始めよう`
@@ -425,7 +430,7 @@ const jpPresets = [
     emoji: "🤖",
     gradient: "from-[#29323c] to-[#485563]",
     category: "focus",
-    cardImage: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     defaultTitle: "Cyber Shibuya Grid",
     defaultTopic: "네온사인 골목, 가상현실 댄스",
     lyricsTemplate: `[Verse 1]\nホログラムの街、電脳の世界\nサイバーパンクのビートに踊る\n\n[Chorus]\nネオンライトの下でジャンプして\nバーチャルの世界を駆け巡ろう`
@@ -438,7 +443,7 @@ const jpPresets = [
     emoji: "🎸",
     gradient: "from-[#f857a6] to-[#ff5858]",
     category: "focus",
-    cardImage: "https://images.unsplash.com/photo-1542051841857-5f90071e7989?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     defaultTitle: "Harajuku Youth Runway",
     defaultTopic: "방과 후 크레페 가게, 밝은 웃음소리",
     lyricsTemplate: `[Verse 1]\n竹下通り、カラフルなファッション\n君의 笑顔が一番眩しい\n\n[Chorus]\nポップロックのビート을 울리게 해서\n청춘의 한 페이지를 불러보자`
@@ -451,7 +456,7 @@ const jpPresets = [
     emoji: "🏄",
     gradient: "from-[#4facfe] to-[#00f2fe]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1502680390469-be75c86b636f?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     defaultTitle: "Enoshima Wave Rider",
     defaultTopic: "에노시마 노면전차, 여름 해변 드라이브",
     lyricsTemplate: `[Verse 1]\n夏の太陽、青い海原\nサーフボードを小脇に抱えて\n
@@ -467,7 +472,7 @@ const jpPresets = [
     emoji: "⛩️",
     gradient: "from-[#d35400] to-[#e67e22]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     defaultTitle: "Asakusa Temple Peace",
     defaultTopic: "고요한 아사쿠사의 저녁 노을, 바람에 날리는 벚꽃",
     lyricsTemplate: `[Verse 1]\n古き寺の鐘が響く夕暮れ\n静かに祈りを捧げる\n\n[Chorus]\n浅草の風に乗せて\n伝統의 메로디가 널리 퍼지네`
@@ -480,7 +485,7 @@ const jpPresets = [
     emoji: "🎺",
     gradient: "from-[#2c3e50] to-[#3498db]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     defaultTitle: "Ginza Midnight Swing",
     defaultTopic: "화려한 불빛 아래 바쁜 발걸음, 나만의 재즈 선율",
     lyricsTemplate: `[Verse 1]\n銀座の街、きらめく光の中\nトランペット의 소리가 울려\n\n[Chorus]\n네온 아래서 춤추듯\n긴자의 밤을 스윙하자`
@@ -493,7 +498,7 @@ const jpPresets = [
     emoji: "⚓",
     gradient: "from-[#1abc9c] to-[#2ecc71]",
     category: "healing",
-    cardImage: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     defaultTitle: "Yokohama Bay Breeze",
     defaultTopic: "멀리 보이는 대관람차, 잔잔한 파도 소리",
     lyricsTemplate: `[Verse 1]\n요코하마 항구, 푸른 바다를 보며\n어쿠스틱 기타를 튕겨본다\n\n[Chorus]\n바람에 실려간 멜로디\n잔잔한 파도 소리와 함께`
@@ -506,7 +511,7 @@ const jpPresets = [
     emoji: "🚇",
     gradient: "from-[#2b5876] to-[#4e4376]",
     category: "retro",
-    cardImage: "https://images.unsplash.com/photo-1506012787146-f92b2d7d6d96?w=400&q=80",
+    cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     defaultTitle: "Tokyo Subway Ride",
     defaultTopic: "퇴근길 붐비는 지하철 창문 너머 노을빛 야경",
     lyricsTemplate: `[Verse 1]\n満員電車の窓に映る 疲れた顔\nヘッドフォンから流れる シティポップのメロディ\n\n[Chorus]\n帰路を急ぐ波の中で\n懐かしい愛を思い出しながら ゆらゆらと揺れる`
@@ -752,7 +757,7 @@ export default function JapanLandingClient() {
     
     const mappedCustoms = customPresets.map(p => {
       const meta = p.metadata || {};
-      const img = meta.cardImage || meta.thumbnail_url || (p as any).cardImage || "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=400&q=80";
+      const img = meta.cardImage || meta.thumbnail_url || (p as any).cardImage || "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png";
       const resolvedName = meta[`name_${language}`] || meta.name_en || meta.name_ko || p.name;
       const resolvedDesc = meta[`desc_${language}`] || meta.desc_en || meta.desc_ko || p.desc;
 
@@ -947,7 +952,7 @@ export default function JapanLandingClient() {
               emoji: metadata.emoji || "🇯🇵",
               gradient: metadata.gradient || "from-[#fcb045] to-[#fd1d1d]",
               category: metadata.category || "retro",
-              cardImage: metadata.cardImage || "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?w=400&q=80",
+              cardImage: metadata.cardImage || "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
               defaultTitle: metadata.defaultTitle || pb.title,
               defaultTopic: metadata.defaultTopic || extractedDesc,
               lyricsTemplate: pb.content || ""
@@ -2187,7 +2192,7 @@ export default function JapanLandingClient() {
                   <div className="flex justify-center flex-shrink-0 py-2">
                     <div className="w-48 h-48 rounded-xl overflow-hidden border border-white/10 shadow-lg relative bg-black/40">
                       <img 
-                        src={detailItem.cover_art_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80'} 
+                        src={detailItem.cover_art_url || 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'}
                         alt={detailItem.title || 'Track Art'} 
                         className="w-full h-full object-cover" 
                       />

@@ -19,25 +19,44 @@ interface PresetGridProps {
 }
 
 const DEFAULT_THUMBNAILS: Record<string, string> = {
-  'developer-debugging': 'https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=600&auto=format&fit=crop',
-  'iced-oolong-tea': 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?q=80&w=600&auto=format&fit=crop',
-  'tokyo-midnight-1984': 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?q=80&w=600&auto=format&fit=crop',
-  'matcha-kyoto-jazz': 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?q=80&w=600&auto=format&fit=crop',
-  'french-vintage-chanson': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=600&auto=format&fit=crop',
-  'deep-sleep-drift': 'https://images.unsplash.com/photo-1511289081367-46c54b5fbc30?q=80&w=600&auto=format&fit=crop',
-  'dead-mall-nostalgia': 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=600&auto=format&fit=crop',
-  'joseon-hip-hop': 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop'
+  'developer-debugging': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png',
+  'iced-oolong-tea': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png',
+  'tokyo-midnight-1984': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png',
+  'matcha-kyoto-jazz': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png',
+  'french-vintage-chanson': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png',
+  'deep-sleep-drift': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png',
+  'dead-mall-nostalgia': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png',
+  'joseon-hip-hop': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png'
+}
+
+const DEFAULT_THUMBNAIL_POOL = Object.values(DEFAULT_THUMBNAILS)
+
+/** 프리셋 id 로 안정적인 해시를 만든다 (같은 프리셋은 항상 같은 폴백 이미지) */
+const hashId = (s: string) => {
+  let h = 0
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
+  return h
 }
 
 const getPresetThumbnail = (p: Preset) => {
-  if (!p) return 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=600&auto=format&fit=crop'
-  if (p.metadata?.thumbnail_url) return p.metadata.thumbnail_url
-  if (p.metadata?.cardImage) return p.metadata.cardImage
-  if ((p as any).thumbnailUrl) return (p as any).thumbnailUrl
-  if ((p as any).thumbnail_url) return (p as any).thumbnail_url
-  if (p.metadata && (p.metadata as any).thumbnailUrl) return (p.metadata as any).thumbnailUrl
-  const id = p.id || ''
-  return DEFAULT_THUMBNAILS[id] || 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=600&auto=format&fit=crop'
+  if (!p) return DEFAULT_THUMBNAILS['dead-mall-nostalgia']
+  const cleanUrl = (url?: string) => (url && !url.includes('unsplash.com') ? url : null);
+  const found = cleanUrl(p.metadata?.thumbnail_url) || cleanUrl(p.metadata?.cardImage) || cleanUrl((p as any).thumbnailUrl) || cleanUrl((p as any).thumbnail_url);
+  if (found) return found;
+
+  const id = p.id || '';
+  if (DEFAULT_THUMBNAILS[id]) return DEFAULT_THUMBNAILS[id];
+
+  /*
+   * 여기 폴백이 예전에는 무조건 'tokyo-midnight-1984' 였다.
+   * DEFAULT_THUMBNAILS 는 초창기 프리셋 8개의 키만 갖고 있는데, 옵시디언에서
+   * 동기화된 장르 프리셋의 키는 스네이크 케이스(afro_cuban_jazz 등)라 하나도
+   * 매칭되지 않았고, 결과적으로 카탈로그 195개가 전부 같은 그림이 됐다.
+   *
+   * 지금은 프리셋별 실제 썸네일이 DB에 채워져 있으므로 여기까지 오는 경우는
+   * 드물지만, 또 한 장으로 뭉치지 않도록 id 해시로 분산시킨다.
+   */
+  return DEFAULT_THUMBNAIL_POOL[hashId(id) % DEFAULT_THUMBNAIL_POOL.length];
 }
 
 /** 프리셋 원클릭 적용 그리드 (4x4, 페이지당 최대 16개 페이징 + 검색 필터 기능 탑재) */
@@ -382,7 +401,7 @@ export default function PresetGrid({
                     src={thumbnailUrl} 
                     alt=""
                     onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=600&auto=format&fit=crop'
+                      (e.target as HTMLImageElement).src = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'
                     }}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 filter brightness-[0.85]"
                     loading="lazy"

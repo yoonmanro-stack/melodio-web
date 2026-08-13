@@ -143,8 +143,6 @@ function SosMapContent() {
     };
   };
 
-  const [mapStyle, setMapStyle] = useState<"satellite" | "standard">("satellite");
-
   const autoEnv = getGlobalTaxonomyDetails();
   const envType = sosData.envType || autoEnv.type;
   const envBadge = {
@@ -178,49 +176,42 @@ function SosMapContent() {
         attributionControl: false
       });
 
-      // 🗺️ 지도 타일 레이어 전환 (3D 위성 항공 지도 vs 2D/3D 일반 스트리트 지도)
-      if (mapStyle === "satellite") {
-        const primaryTile = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+      // 🗺️ 100% 고화질 초정밀 3D 항공/위성 사진 지도 (Esri World Imagery Satellite Photo Map with Mobile Auto-Failover)
+      const primaryTile = L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}", {
+        maxZoom: 19,
+        crossOrigin: true,
+        attribution: "Esri World Imagery"
+      });
+
+      let hasTileError = false;
+      primaryTile.on("tileerror", () => {
+        if (!hasTileError) {
+          hasTileError = true;
+          console.warn("[SOS Map] Esri tile error on mobile network, loading OpenStreetMap fallback");
+          try {
+            L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{y}/{x}.png", {
+              maxZoom: 19,
+              attribution: "OpenStreetMap"
+            }).addTo(map);
+          } catch {}
+        }
+      });
+      primaryTile.addTo(map);
+
+      // 🏷️ 산악/도심 지명 및 도로명 투명 오버레이
+      try {
+        L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}", {
           maxZoom: 19,
           crossOrigin: true,
-          attribution: "Esri World Imagery"
-        });
+          attribution: "Esri Reference"
+        }).addTo(map);
 
-        let hasTileError = false;
-        primaryTile.on("tileerror", () => {
-          if (!hasTileError) {
-            hasTileError = true;
-            console.warn("[SOS Map] Esri tile error on mobile network, loading OpenStreetMap fallback");
-            try {
-              L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{y}/{x}.png", {
-                maxZoom: 19,
-                attribution: "OpenStreetMap"
-              }).addTo(map);
-            } catch {}
-          }
-        });
-        primaryTile.addTo(map);
-
-        // 산악/도심 지명 및 도로명 투명 오버레이
-        try {
-          L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}", {
-            maxZoom: 19,
-            crossOrigin: true
-          }).addTo(map);
-
-          L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
-            maxZoom: 19,
-            crossOrigin: true
-          }).addTo(map);
-        } catch {}
-      } else {
-        // 🗺️ 2D/3D 일반 벡터 스트리트 지도 (OpenStreetMap / CartoDB Voyager High Contrast Map)
-        const streetTile = L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{y}/{x}.png", {
+        L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}", {
           maxZoom: 19,
-          attribution: "OpenStreetMap Standard Street View"
-        });
-        streetTile.addTo(map);
-      }
+          crossOrigin: true,
+          attribution: "Esri Places"
+        }).addTo(map);
+      } catch {}
 
       // 모바일 스마트폰 렌더링 락인: 50ms, 200ms, 600ms, 1200ms 다중 invalidateSize
       [50, 200, 600, 1200].forEach((delay) => {
@@ -281,13 +272,12 @@ function SosMapContent() {
 
               if (isCenter) {
                 poly.bindPopup(
-                  `<div style="font-family:sans-serif;padding:6px;min-width:210px;">
+                  `<div style="font-family:sans-serif;padding:6px;min-width:200px;">
                     <div style="font-weight:bold;color:#d97706;font-size:13px;">${envBadge.icon} ${envBadge.title}</div>
                     <div style="font-weight:extrabold;color:#ef4444;font-size:14px;margin:4px 0;">위치: ${envBadge.text}</div>
                     <div style="font-size:11px;color:#059669;font-weight:bold;margin:2px 0;">🎯 f1 핵심 구역 (50% 확률 / 13.3평)</div>
                     <div style="font-size:11px;color:#4b5563;">H3 Cell: <code style="background:#f3f4f6;padding:2px 4px;border-radius:4px;">${targetH3}</code></div>
                     <div style="font-size:11px;color:#4b5563;margin-top:2px;">GPS: ${sosData.lat.toFixed(6)}, ${sosData.lng.toFixed(6)}</div>
-                    <a href="https://map.kakao.com/link/roadview/${sosData.lat},${sosData.lng}" target="_blank" rel="noreferrer" style="display:inline-block;margin-top:8px;background:#fee500;color:#000;font-weight:bold;padding:5px 10px;border-radius:8px;text-decoration:none;font-size:11px;box-shadow:0 2px 4px rgba(0,0,0,0.2);">📷 360° 카카오 로드뷰 보기</a>
                   </div>`
                 ).openPopup();
               }
@@ -340,7 +330,7 @@ function SosMapContent() {
     };
 
     loadLeaflet();
-  }, [sosData.lat, sosData.lng, sosData.h3Index, mapStyle]);
+  }, [sosData.lat, sosData.lng, sosData.h3Index]);
 
   if (isLoading) {
     return (
@@ -448,47 +438,10 @@ function SosMapContent() {
         </div>
       </div>
 
-      {/* 🗺️ 지도 스타일 스위처 및 360° 로드뷰 도구 바 */}
-      <div className="bg-[#121620] border-y border-amber-500/30 p-2 flex items-center gap-2">
-        <div className="flex-1 bg-black/60 border border-zinc-800 p-1 rounded-xl flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setMapStyle("satellite")}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              mapStyle === "satellite"
-                ? "bg-amber-500 text-black font-black shadow-md"
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            📡 3D 위성 항공 지도
-          </button>
-          <button
-            type="button"
-            onClick={() => setMapStyle("standard")}
-            className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-              mapStyle === "standard"
-                ? "bg-cyan-500 text-black font-black shadow-md"
-                : "text-zinc-400 hover:text-white"
-            }`}
-          >
-            🗺️ 일반 스트리트 지도
-          </button>
-        </div>
-
-        <a
-          href={`https://map.kakao.com/link/roadview/${sosData.lat},${sosData.lng}`}
-          target="_blank"
-          rel="noreferrer"
-          className="py-2 px-3 bg-yellow-400 hover:bg-yellow-300 text-black font-black rounded-xl text-xs flex items-center gap-1 shadow-md transition-all cursor-pointer"
-        >
-          <span>📷 360° 로드뷰</span>
-        </a>
-      </div>
-
       {/* 🗺️ H3 3D 레이다 지도 (100% 다크모드 무결정 전용 렌더링) */}
       <div 
         ref={mapRef} 
-        className="flex-1 w-full min-h-[450px] h-[55vh] relative z-0 border-b border-red-500/20"
+        className="flex-1 w-full min-h-[450px] h-[55vh] relative z-0 border-y border-red-500/20"
         style={{ minHeight: "450px", height: "55vh", width: "100%", background: "#0a0b10" }} 
       />
 

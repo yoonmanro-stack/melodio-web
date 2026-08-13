@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 
 export const runtime = 'nodejs'
 
-const DEFAULT_COVER = 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop'
+const DEFAULT_COVER = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xkhujzszvhnxzmxrmnzn.supabase.co'
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_key_for_build'
@@ -12,19 +12,19 @@ const supabase = createClient(supabaseUrl, supabaseAnonKey)
 const SHOWCASE_STATIC_MAP: Record<string, { title: string; cover: string }> = {
   'viral-omg': {
     title: '여친의 "화 안 났어" 번역기 (연애 행동학 밈)',
-    cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?q=80&w=600&auto=format&fit=crop',
+    cover: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png',
   },
   'showcase-classical': {
     title: '안읽씹/읽씹 뇌절 방지송 (연애 심리학 밈)',
-    cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop',
+    cover: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png',
   },
   'VD-1004': {
     title: '자존감 떡상 성공 확언송 (초긍정 부자 밈)',
-    cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop',
+    cover: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png',
   },
   'VD-1001': {
     title: '도파민 충전 응원 챌린지송 (2)',
-    cover: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop',
+    cover: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png',
   },
 }
 

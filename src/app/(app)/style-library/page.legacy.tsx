@@ -18,41 +18,41 @@ function formatTime(sec: number): string {
 
 // ─── 프리셋 장르/컨셉에 맞춘 프리미엄 썸네일 헬퍼 ───
 const COVER_IMAGE_PALETTE = [
-  "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1511379938547-c1f69419868d?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1465847899084-d164df4dedc6?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1438032005730-c779502df39b?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1515002246390-7bf7e8f87b54?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1556910103-1c02745aae4d?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1518546305927-5a555bb7020d?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1488646953014-85cb44e25828?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1511192336575-5a79af67a629?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1459749411175-04bf5292ceea?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1510915361894-db8b60106cb1?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1542281286-9e0a16bb7366?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1447069387593-a5de0862481e?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1501386761578-eac5c94b800a?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1571266028243-e4733b0f0bb1?q=80&w=600&auto=format&fit=crop",
-  "https://images.unsplash.com/photo-1445307806294-bff7f67ff225?q=80&w=600&auto=format&fit=crop"
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
+  "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png"
 ];
 
 const PRESET_AUDIO_POOL = [
@@ -95,22 +95,22 @@ const getFallbackCoverArtForPreset = (style: any): string => {
   const combinedStr = `${nameStr} ${tagStr}`;
 
   if (combinedStr.includes('phonk') || combinedStr.includes('cyber') || combinedStr.includes('dystopian')) {
-    return "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=600&auto=format&fit=crop";
+    return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png";
   }
   if (combinedStr.includes('lofi') || combinedStr.includes('lo-fi') || combinedStr.includes('study')) {
-    return "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop";
+    return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png";
   }
   if (combinedStr.includes('afro') || combinedStr.includes('reggae') || combinedStr.includes('ethnic')) {
-    return "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop";
+    return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png";
   }
   if (combinedStr.includes('rock') || combinedStr.includes('metal') || combinedStr.includes('punk')) {
-    return "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?q=80&w=600&auto=format&fit=crop";
+    return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png";
   }
   if (combinedStr.includes('pop') || combinedStr.includes('dance') || combinedStr.includes('disco')) {
-    return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop";
+    return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png";
   }
   if (combinedStr.includes('nature') || combinedStr.includes('acoustic') || combinedStr.includes('forest') || combinedStr.includes('새소리') || combinedStr.includes('바람')) {
-    return "https://images.unsplash.com/photo-1510915361894-db8b60106cb1?q=80&w=600&auto=format&fit=crop";
+    return "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png";
   }
 
   const key = String(style.id || style.name || style.title || "");
@@ -133,7 +133,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Male Power Vocals",
     tags: "Heavy rock, 125 BPM, overdrive electric guitar solos, heavy rock drum machine punch, stadium concert reverb, analog valve distortion, raw energetic performance",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/7151048b61c9ec8d098e9dd2ca3ec1e6.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     lyrics: "Running through the neon rain, electric lines inside my brain\nWe are the future that they feared, binary dust that disappeared...",
     countInfo: "Suno 5.5 • 24곡 일괄 패키지",
     color: "from-purple-950 to-indigo-950",
@@ -146,7 +146,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Soulful Choir",
     tags: "Uplifting gospel choir, 78 BPM, warm church organ chords, handclaps, high ceiling hall reverb, warm dual vocal harmonization, authentic black gospel vibe",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/80518f87ed0d35ae6ed1a14a796e6d1e.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1438032005730-c779502df39b?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     lyrics: "Hallelujah, praise the light that guides us through the night...",
     countInfo: "Suno 5.5 • 16곡 일괄 패키지",
     color: "from-amber-950 to-orange-950",
@@ -159,7 +159,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Female Dance Pop",
     tags: "Upbeat dance pop, 120 BPM, retro Juno synths, punchy bassline, bright stereo mix, summer festival vibe, radio ready vocal polish",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/b66ef6378e90637fd6fa0bd4ceae5c2a.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     lyrics: "Feel the beat in the warm summer air, dancing all night without a care...",
     countInfo: "Suno 5.5 • 20곡 일괄 패키지",
     color: "from-fuchsia-950 to-indigo-950",
@@ -172,7 +172,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Warm Baritone",
     tags: "Acoustic country, 84 BPM, slide guitar, acoustic guitar picking, warm room reverb, nostalgic storytelling baritone vocal, organic folk drums",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/bfe3e4d9f67efae7ebec1dd50b696ee3.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     lyrics: "Long dusty roads and clear blue skies, counting the miles as the evening dies...",
     countInfo: "Suno 5.5 • 22곡 일괄 패키지",
     color: "from-yellow-950 to-amber-950",
@@ -185,7 +185,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Salsa Chorus",
     tags: "Energetic salsa, 115 BPM, horn brass section, latin conga percussion, driving acoustic piano montuno, bright danceable mix, festive reverb",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/db2d8d80f833a695bcefa7b4b1a43a05.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     lyrics: "Baila bajo la luna llena, olvida toda la pena...",
     countInfo: "Suno 5.5 • 24곡 일괄 패키지",
     color: "from-emerald-950 to-teal-950",
@@ -198,7 +198,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Rhythmic Male",
     tags: "Afrobeats groove, 102 BPM, rhythmic synth brass, heavy percussive bassline, warm low-mid warmth, summer beach party vibe",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/6b4fb245781a700084f7bbd743a18a99.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516062423079-7ca13cdc7f5a?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     lyrics: "Moving to the rhythm under Lagos skies, sunshine in your eyes...",
     countInfo: "Suno 5.5 • 22곡 일괄 패키지",
     color: "from-orange-950 to-red-950",
@@ -211,7 +211,7 @@ const SHOWCASE_TRACKS = [
     vocal: "No Vocal",
     tags: "Chill lofi hiphop, 74 BPM, cozy jazz rhodes chords, vinyl crackle, gentle rain ambient, vintage cassette saturation, mellow boom-bap",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/f8430ea6c836ec4ff4995f6efdf2a16d.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1515002246390-7bf7e8f87b54?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     lyrics: "(Instrumental - Cozy Rain)",
     countInfo: "Suno 5.5 • 18곡 일괄 패키지",
     color: "from-zinc-950 to-stone-950",
@@ -224,7 +224,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Smooth Saxophone",
     tags: "Vintage jazz bar, 65 BPM, slow double bass, brushed drums groove, smooth smoky tenor saxophone lead, nostalgic warm room reverb",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/9ceee5c56cbfccdf46ebddc932bfbc63.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1486591978090-58e619d37fe7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     lyrics: "Late night saxophone whispers in the dark, leaving a vintage mark...",
     countInfo: "Suno 5.5 • 15곡 일괄 패키지",
     color: "from-blue-950 to-indigo-950",
@@ -237,7 +237,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Nostalgic Female",
     tags: "Retro Japanese city pop, 112 BPM, slap bassline, shiny digital DX7 synthesizers, 80s pop brass riffs, sparkling stereo production",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/3c2a38210fe522646d6b2b6241c2c31e.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     lyrics: "Cruising down the highway, city lights in our eyes...",
     countInfo: "Suno 5.5 • 25곡 일괄 패키지",
     color: "from-violet-950 to-pink-950",
@@ -250,7 +250,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Dual Trot Vocals",
     tags: "Modern Korean Trot pop, 138 BPM, upbeat brass section, acoustic guitar accompaniment, nostalgic trot vocal vibrato, 80s adult contemporary mix",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/e3328e686cfc49d885d500980fae81bd.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     lyrics: "그대 내 사랑의 종착역에 언제쯤 도착하려나...",
     countInfo: "Suno 5.5 • 16곡 일괄 패키지",
     color: "from-rose-950 to-red-950",
@@ -263,7 +263,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Screaming Male",
     tags: "Heavy metal, 160 BPM, double bass drums, aggressive guitar riffs, screaming male vocals, epic battle vibe, intense energy",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/bc3a2a5f8bccbbd366d2cebbd99cd130.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     lyrics: "Crushing the gears of the broken machine, the darkest fire you've ever seen...",
     countInfo: "Suno 5.5 • 18곡 일괄 패키지",
     color: "from-slate-950 to-neutral-950",
@@ -276,7 +276,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Relaxed Male Lead",
     tags: "Root reggae, 76 BPM, offbeat guitar skank, dub delay bass, warm brass section, relaxed male lead vocal, organic percussion",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/a98e47c8e72532ec9bedf58c7706ec0b.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     lyrics: "Walking on the sandy beach, troubles out of reach, feel the sunshine...",
     countInfo: "Suno 5.5 • 15곡 일괄 패키지",
     color: "from-yellow-950 to-green-950",
@@ -289,7 +289,7 @@ const SHOWCASE_TRACKS = [
     vocal: "No Vocal",
     tags: "Retro synthwave, 110 BPM, analog retro lead synth, heavy gating snare, retro futuristic vibe, 80s movie soundtrack, spacious",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/cfd533909f68a8ddbf28204ad7782803.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     lyrics: "(Instrumental - Retro Future)",
     countInfo: "Suno 5.5 • 20곡 일괄 패키지",
     color: "from-pink-950 to-purple-950",
@@ -302,7 +302,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Female Vocal Chops",
     tags: "Modern EDM house, 128 BPM, heavy synth pluck, epic build-up, heavy bass drop, energetic female vocal chops, club ready",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/77a0f845cfc0ee3c394ccddba0d58638.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     lyrics: "Jump into the neon light, dance until the morning light...",
     countInfo: "Suno 5.5 • 25곡 일괄 패키지",
     color: "from-cyan-950 to-blue-950",
@@ -315,7 +315,7 @@ const SHOWCASE_TRACKS = [
     vocal: "No Vocal",
     tags: "Orchestral chamber music, 80 BPM, solo violin melody, warm cello accompaniment, grand concert hall reverb, emotional strings",
     audioUrl: "https://file.302.ai/gpt/imgs/20260720/d931b9e82957a5086edb678d27e1ae05.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1438032005730-c779502df39b?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     lyrics: "(Instrumental - Chamber Serenade)",
     countInfo: "Suno 5.5 • 12곡 일괄 패키지",
     color: "from-stone-950 to-amber-950",
@@ -328,7 +328,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Raw Male Rap",
     tags: "90s boom bap hip hop, 90 BPM, jazzy piano loop, punchy dusty vinyl drums, scratching effects, raw male rap vocals, street vibe",
     audioUrl: "https://file.302.ai/gpt/imgs/20260720/b40f8b7f9a424573be49fb22c0fd2957.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     lyrics: "Rhymes on the concrete, concrete streets, feel the city heartbeat...",
     countInfo: "Suno 5.5 • 22곡 일괄 패키지",
     color: "from-zinc-950 to-neutral-950",
@@ -341,7 +341,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Silky Female",
     tags: "Contemporary R&B, 80 BPM, smooth electric piano, 808 sub bass, silky female harmonies, sensual late night mood, slow jam",
     audioUrl: "https://file.302.ai/gpt/imgs/20260720/d4d5ab6094f165fcaa8f4b4b91da3284.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516062423079-7ca13cdc7f5a?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     lyrics: "Softly whispered in the dark, lighting up a tiny spark...",
     countInfo: "Suno 5.5 • 16곡 일괄 패키지",
     color: "from-rose-950 to-pink-950",
@@ -354,7 +354,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Soft Dual Harmonies",
     tags: "Acoustic indie folk, 90 BPM, fingerstyle acoustic guitar, whistling, warm room reverb, soft dual harmonies, outdoor camp vibe",
     audioUrl: "https://file.302.ai/gpt/imgs/20260720/30c4712a4c654d68c3b3c38659845b91.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1515002246390-7bf7e8f87b54?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     lyrics: "Wind through the pine trees, carrying the summer breeze...",
     countInfo: "Suno 5.5 • 18곡 일괄 패키지",
     color: "from-emerald-950 to-green-950",
@@ -367,7 +367,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Powerful Male Lead",
     tags: "Emotional K-Ballad, 72 BPM, grand acoustic piano, sweeping orchestral strings, tear-jerking powerful vocals, high dynamic range",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/7151048b61c9ec8d098e9dd2ca3ec1e6.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1486591978090-58e619d37fe7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     lyrics: "차가운 바람이 불어올 때, 내 맘속 깊은 눈물이 마르지 않네...",
     countInfo: "Suno 5.5 • 15곡 일괄 패키지",
     color: "from-blue-950 to-slate-950",
@@ -380,7 +380,7 @@ const SHOWCASE_TRACKS = [
     vocal: "Groovy Backing Vocals",
     tags: "70s funk disco, 118 BPM, slapped bass guitar, wah-wah electric guitar, brass horns, groovy backing vocals, dancefloor ready",
     audioUrl: "https://file.302.ai/gpt/imgs/20260721/80518f87ed0d35ae6ed1a14a796e6d1e.mp3",
-    thumbnailUrl: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     lyrics: "Get up and feel the groove, nothing left for you to lose...",
     countInfo: "Suno 5.5 • 22곡 일괄 패키지",
     color: "from-yellow-950 to-orange-950",
@@ -541,7 +541,7 @@ const STYLE_DATA = [
     id: 1,
     name: "Dark Synthwave",
     genre: "Electronic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1515621061946-eff1c2a352bd?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     mood: "Dark",
     bpm: "95–110",
     vocal: "Female Whisper",
@@ -555,7 +555,7 @@ const STYLE_DATA = [
     id: 2,
     name: "Cyberpunk Bass",
     genre: "Electronic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1515621061946-eff1c2a352bd?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     mood: "Aggressive",
     bpm: "135–145",
     vocal: "Male Distorted",
@@ -569,7 +569,7 @@ const STYLE_DATA = [
     id: 3,
     name: "Chillwave Drift",
     genre: "Electronic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1515621061946-eff1c2a352bd?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     mood: "Chill",
     bpm: "80–95",
     vocal: "Soft Male",
@@ -585,7 +585,7 @@ const STYLE_DATA = [
     id: 4,
     name: "Late Night Lo-Fi",
     genre: "Lo-Fi",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     mood: "Chill",
     bpm: "70–80",
     vocal: "No Vocal",
@@ -599,7 +599,7 @@ const STYLE_DATA = [
     id: 5,
     name: "Rainy Day Study",
     genre: "Lo-Fi",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     mood: "Nostalgic",
     bpm: "65–75",
     vocal: "No Vocal",
@@ -613,7 +613,7 @@ const STYLE_DATA = [
     id: 6,
     name: "Coffee Shop Chill",
     genre: "Lo-Fi",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     mood: "Chill",
     bpm: "72–85",
     vocal: "No Vocal",
@@ -629,7 +629,7 @@ const STYLE_DATA = [
     id: 7,
     name: "Trap Darkness",
     genre: "Hip Hop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     mood: "Dark",
     bpm: "140–155",
     vocal: "Male Rap",
@@ -643,7 +643,7 @@ const STYLE_DATA = [
     id: 8,
     name: "Boom Bap Classic",
     genre: "Hip Hop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     mood: "Nostalgic",
     bpm: "90–100",
     vocal: "Male Rap",
@@ -657,7 +657,7 @@ const STYLE_DATA = [
     id: 9,
     name: "Cloud Rap Haze",
     genre: "Hip Hop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     mood: "Dreamy",
     bpm: "125–135",
     vocal: "Auto-Tune Male",
@@ -673,7 +673,7 @@ const STYLE_DATA = [
     id: 10,
     name: "Indie Pop Daydream",
     genre: "Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     mood: "Dreamy",
     bpm: "95–110",
     vocal: "Female Breathy",
@@ -687,7 +687,7 @@ const STYLE_DATA = [
     id: 11,
     name: "Synth Pop 80s Revival",
     genre: "Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     mood: "Nostalgic",
     bpm: "115–125",
     vocal: "Male Melodic",
@@ -701,7 +701,7 @@ const STYLE_DATA = [
     id: 12,
     name: "Dark Pop Anthem",
     genre: "Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     mood: "Dark",
     bpm: "100–115",
     vocal: "Female Powerful",
@@ -717,7 +717,7 @@ const STYLE_DATA = [
     id: 13,
     name: "Neo-Soul Groove",
     genre: "R&B / Soul",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     mood: "Romantic",
     bpm: "80–92",
     vocal: "Female Warm",
@@ -731,7 +731,7 @@ const STYLE_DATA = [
     id: 14,
     name: "Contemporary R&B",
     genre: "R&B / Soul",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     mood: "Romantic",
     bpm: "85–100",
     vocal: "Female Sultry",
@@ -745,7 +745,7 @@ const STYLE_DATA = [
     id: 15,
     name: "Retro Soul Ballad",
     genre: "R&B / Soul",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     mood: "Nostalgic",
     bpm: "68–78",
     vocal: "Male Gritty Soul",
@@ -761,7 +761,7 @@ const STYLE_DATA = [
     id: 16,
     name: "Midnight Jazz Club",
     genre: "Jazz",
-    thumbnailUrl: "https://images.unsplash.com/photo-1511192336575-5a79af67a629?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     mood: "Mysterious",
     bpm: "85–105",
     vocal: "Male Jazz",
@@ -775,7 +775,7 @@ const STYLE_DATA = [
     id: 17,
     name: "Nu-Jazz Electronica",
     genre: "Jazz",
-    thumbnailUrl: "https://images.unsplash.com/photo-1511192336575-5a79af67a629?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     mood: "Chill",
     bpm: "95–110",
     vocal: "Female Scat",
@@ -789,7 +789,7 @@ const STYLE_DATA = [
     id: 18,
     name: "Bossa Nova Lounge",
     genre: "Jazz",
-    thumbnailUrl: "https://images.unsplash.com/photo-1511192336575-5a79af67a629?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     mood: "Chill",
     bpm: "110–120",
     vocal: "Female Warm",
@@ -805,7 +805,7 @@ const STYLE_DATA = [
     id: 19,
     name: "K-Pop Synth Blast",
     genre: "K-Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     mood: "Uplifting",
     bpm: "120–130",
     vocal: "Female Group",
@@ -819,7 +819,7 @@ const STYLE_DATA = [
     id: 20,
     name: "K-Pop Soft R&B",
     genre: "K-Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     mood: "Chill",
     bpm: "82–92",
     vocal: "Male Sweet",
@@ -833,7 +833,7 @@ const STYLE_DATA = [
     id: 21,
     name: "K-Pop Retro Funk",
     genre: "K-Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     mood: "Uplifting",
     bpm: "110–122",
     vocal: "Female Sweet",
@@ -849,7 +849,7 @@ const STYLE_DATA = [
     id: 22,
     name: "J-Pop Anime Energy",
     genre: "J-Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     mood: "Energetic",
     bpm: "165–178",
     vocal: "Female Soaring",
@@ -863,7 +863,7 @@ const STYLE_DATA = [
     id: 23,
     name: "J-Pop Future Bass",
     genre: "J-Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     mood: "Uplifting",
     bpm: "135–148",
     vocal: "Female Kawaii",
@@ -877,7 +877,7 @@ const STYLE_DATA = [
     id: 24,
     name: "J-Pop Retro City",
     genre: "J-Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     mood: "Nostalgic",
     bpm: "112–122",
     vocal: "Female Melodic",
@@ -893,7 +893,7 @@ const STYLE_DATA = [
     id: 25,
     name: "Epic Orchestral Theme",
     genre: "Cinematic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1486591978090-58e619d37fe7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     mood: "Epic",
     bpm: "75–90",
     vocal: "No Vocal",
@@ -907,7 +907,7 @@ const STYLE_DATA = [
     id: 26,
     name: "Sci-Fi Cyberpunk Score",
     genre: "Cinematic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1486591978090-58e619d37fe7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     mood: "Mysterious",
     bpm: "100–115",
     vocal: "No Vocal",
@@ -921,7 +921,7 @@ const STYLE_DATA = [
     id: 27,
     name: "Emotional Piano & Cello",
     genre: "Cinematic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1486591978090-58e619d37fe7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     mood: "Nostalgic",
     bpm: "60–75",
     vocal: "No Vocal",
@@ -937,7 +937,7 @@ const STYLE_DATA = [
     id: 28,
     name: "Ethereal Dreamscape",
     genre: "Ambient",
-    thumbnailUrl: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     mood: "Dreamy",
     bpm: "50–65",
     vocal: "No Vocal",
@@ -951,7 +951,7 @@ const STYLE_DATA = [
     id: 29,
     name: "Deep Space Textures",
     genre: "Ambient",
-    thumbnailUrl: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     mood: "Mysterious",
     bpm: "40–55",
     vocal: "No Vocal",
@@ -965,7 +965,7 @@ const STYLE_DATA = [
     id: 30,
     name: "Nature's Whisper",
     genre: "Ambient",
-    thumbnailUrl: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     mood: "Chill",
     bpm: "60–75",
     vocal: "No Vocal",
@@ -981,7 +981,7 @@ const STYLE_DATA = [
     id: 31,
     name: "Alt-Rock Grunge Revival",
     genre: "Rock",
-    thumbnailUrl: "https://images.unsplash.com/photo-1484755560693-a4074577af3a?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     mood: "Aggressive",
     bpm: "120–135",
     vocal: "Male Grit",
@@ -995,7 +995,7 @@ const STYLE_DATA = [
     id: 32,
     name: "Desert Stoned Groove",
     genre: "Rock",
-    thumbnailUrl: "https://images.unsplash.com/photo-1484755560693-a4074577af3a?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     mood: "Chill",
     bpm: "85–98",
     vocal: "Male Deep",
@@ -1009,7 +1009,7 @@ const STYLE_DATA = [
     id: 33,
     name: "Classic Arena Rock",
     genre: "Rock",
-    thumbnailUrl: "https://images.unsplash.com/photo-1484755560693-a4074577af3a?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     mood: "Epic",
     bpm: "110–125",
     vocal: "Male Soaring",
@@ -1025,7 +1025,7 @@ const STYLE_DATA = [
     id: 34,
     name: "Rustic Cabin Folk",
     genre: "Folk / Acoustic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     mood: "Nostalgic",
     bpm: "88–100",
     vocal: "Male & Female Duet",
@@ -1039,7 +1039,7 @@ const STYLE_DATA = [
     id: 35,
     name: "Modern Acoustic Pop",
     genre: "Folk / Acoustic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     mood: "Uplifting",
     bpm: "95–110",
     vocal: "Female Sweet",
@@ -1053,7 +1053,7 @@ const STYLE_DATA = [
     id: 36,
     name: "Americana Storyteller",
     genre: "Folk / Acoustic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     mood: "Nostalgic",
     bpm: "75–88",
     vocal: "Male Baritone",
@@ -1069,7 +1069,7 @@ const STYLE_DATA = [
     id: 37,
     name: "Salsa Fuego",
     genre: "Latin",
-    thumbnailUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     mood: "Energetic",
     bpm: "170–190",
     vocal: "Male & Group Chant",
@@ -1083,7 +1083,7 @@ const STYLE_DATA = [
     id: 38,
     name: "Reggaeton Urbano",
     genre: "Latin",
-    thumbnailUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     mood: "Energetic",
     bpm: "90–100",
     vocal: "Male Spanish",
@@ -1097,7 +1097,7 @@ const STYLE_DATA = [
     id: 39,
     name: "Sensual Bachata",
     genre: "Latin",
-    thumbnailUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     mood: "Romantic",
     bpm: "110–120",
     vocal: "Female Spanish Sultry",
@@ -1113,7 +1113,7 @@ const STYLE_DATA = [
     id: 40,
     name: "Afrobeats Wave",
     genre: "Afrobeats",
-    thumbnailUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     mood: "Uplifting",
     bpm: "100–115",
     vocal: "Male African Style",
@@ -1127,7 +1127,7 @@ const STYLE_DATA = [
     id: 41,
     name: "Deep Tribal Afro",
     genre: "Afrobeats",
-    thumbnailUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     mood: "Energetic",
     bpm: "115–124",
     vocal: "Tribal Chants",
@@ -1143,7 +1143,7 @@ const STYLE_DATA = [
     id: 42,
     name: "Bollywood Dance",
     genre: "World / Ethnic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     mood: "Uplifting",
     bpm: "128–140",
     vocal: "Male & Female Hindi",
@@ -1156,110 +1156,110 @@ const STYLE_DATA = [
 
   // ── Phonk ──
   { id: 43, name: "Drift Phonk", genre: "Phonk",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Aggressive", bpm: "130–140", vocal: "Pitched-Down Male", tags: "Drift phonk, 135 BPM, high-pitched Memphis cowbell loops, distorted 808 sub bass, aggressive Memphis rap vocal samples, dark trap, no clean vocals", color: "from-red-955 to-zinc-955", accent: "red", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png", mood: "Aggressive", bpm: "130–140", vocal: "Pitched-Down Male", tags: "Drift phonk, 135 BPM, high-pitched Memphis cowbell loops, distorted 808 sub bass, aggressive Memphis rap vocal samples, dark trap, no clean vocals", color: "from-red-955 to-zinc-955", accent: "red", audioUrl: "", lyrics: "" },
   { id: 44, name: "Brazilian Phonk", genre: "Brazilian Phonk",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Energetic", bpm: "140–150", vocal: "MC Vocal Chops", tags: "Brazilian phonk, 145 BPM, funk carioca drum rhythm, aggressive Brazilian rave phonk synth stabs, heavy bass house kick, MC vocal chops, high energy", color: "from-orange-955 to-red-955", accent: "orange", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png", mood: "Energetic", bpm: "140–150", vocal: "MC Vocal Chops", tags: "Brazilian phonk, 145 BPM, funk carioca drum rhythm, aggressive Brazilian rave phonk synth stabs, heavy bass house kick, MC vocal chops, high energy", color: "from-orange-955 to-red-955", accent: "orange", audioUrl: "", lyrics: "" },
   { id: 45, name: "House Phonk", genre: "House Phonk",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Dark", bpm: "125–135", vocal: "None", tags: "House phonk, 128 BPM, phonk cowbell groove, filtered old school funk sample, deep house sub bass, retro synth stabs, club dance mix", color: "from-zinc-900 to-stone-900", accent: "gray", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png", mood: "Dark", bpm: "125–135", vocal: "None", tags: "House phonk, 128 BPM, phonk cowbell groove, filtered old school funk sample, deep house sub bass, retro synth stabs, club dance mix", color: "from-zinc-900 to-stone-900", accent: "gray", audioUrl: "", lyrics: "" },
 
   // ── Hyperpop ──
   { id: 46, name: "Glitch Pop", genre: "Hyperpop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop", mood: "Energetic", bpm: "150–170", vocal: "Pitched-Up Female", tags: "Glitch pop, 160 BPM, glitchy bitcrushed synthesizer leads, pitched-up chipmunk female vocals, maximalist PC Music production, chaotic electronic drops, no natural drums", color: "from-fuchsia-955 to-pink-955", accent: "pink", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png", mood: "Energetic", bpm: "150–170", vocal: "Pitched-Up Female", tags: "Glitch pop, 160 BPM, glitchy bitcrushed synthesizer leads, pitched-up chipmunk female vocals, maximalist PC Music production, chaotic electronic drops, no natural drums", color: "from-fuchsia-955 to-pink-955", accent: "pink", audioUrl: "", lyrics: "" },
   { id: 47, name: "Bubblegum Bass", genre: "Hyperpop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop", mood: "Uplifting", bpm: "140–160", vocal: "Cute Female", tags: "Bubblegum bass, 150 BPM, sweet metallic synthesiser plucks, heavy plastic sub bass, sugary anime-like melodies, polished digital pop, no analog warmth", color: "from-pink-955 to-violet-955", accent: "pink", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png", mood: "Uplifting", bpm: "140–160", vocal: "Cute Female", tags: "Bubblegum bass, 150 BPM, sweet metallic synthesiser plucks, heavy plastic sub bass, sugary anime-like melodies, polished digital pop, no analog warmth", color: "from-pink-955 to-violet-955", accent: "pink", audioUrl: "", lyrics: "" },
 
   // ── Bedroom Pop ──
   { id: 48, name: "Indie Bedroom", genre: "Bedroom Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Dreamy", bpm: "90–110", vocal: "Soft Male", tags: "Indie bedroom pop, 95 BPM, raw lo-fi guitar strumming, intimate whispered male vocal, DIY cassette deck recording texture, warm room reverb, cozy atmosphere", color: "from-amber-955 to-yellow-955", accent: "amber", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png", mood: "Dreamy", bpm: "90–110", vocal: "Soft Male", tags: "Indie bedroom pop, 95 BPM, raw lo-fi guitar strumming, intimate whispered male vocal, DIY cassette deck recording texture, warm room reverb, cozy atmosphere", color: "from-amber-955 to-yellow-955", accent: "amber", audioUrl: "", lyrics: "" },
   { id: 49, name: "Dreamy Bedroom", genre: "Bedroom Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Romantic", bpm: "85–100", vocal: "Soft Female", tags: "Dreamy bedroom pop, 90 BPM, jangly clean electric guitar, soft lazy percussion, nostalgic pop melody, close mic female vocal, sweet reverb", color: "from-rose-955 to-pink-955", accent: "rose", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png", mood: "Romantic", bpm: "85–100", vocal: "Soft Female", tags: "Dreamy bedroom pop, 90 BPM, jangly clean electric guitar, soft lazy percussion, nostalgic pop melody, close mic female vocal, sweet reverb", color: "from-rose-955 to-pink-955", accent: "rose", audioUrl: "", lyrics: "" },
 
   // ── Drill ──
   { id: 50, name: "UK Drill", genre: "Drill",
-    thumbnailUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=600&auto=format&fit=crop", mood: "Aggressive", bpm: "140–145", vocal: "Male Flow", tags: "UK drill, 142 BPM, sliding 808 bass slides, dark minor key piano loops, rapid-fire hi-hat rolls, gritty UK street rap flow, no vocal tune", color: "from-zinc-955 to-gray-900", accent: "gray", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png", mood: "Aggressive", bpm: "140–145", vocal: "Male Flow", tags: "UK drill, 142 BPM, sliding 808 bass slides, dark minor key piano loops, rapid-fire hi-hat rolls, gritty UK street rap flow, no vocal tune", color: "from-zinc-955 to-gray-900", accent: "gray", audioUrl: "", lyrics: "" },
   { id: 51, name: "NY Drill", genre: "Drill",
-    thumbnailUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=600&auto=format&fit=crop", mood: "Dark", bpm: "140–150", vocal: "Aggressive Male", tags: "NY drill, 145 BPM, aggressive sliding 808 sub bass, minor key cinematic strings, heavy syncopated snare rolls, street energy, no autotune", color: "from-stone-900 to-zinc-900", accent: "gray", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png", mood: "Dark", bpm: "140–150", vocal: "Aggressive Male", tags: "NY drill, 145 BPM, aggressive sliding 808 sub bass, minor key cinematic strings, heavy syncopated snare rolls, street energy, no autotune", color: "from-stone-900 to-zinc-900", accent: "gray", audioUrl: "", lyrics: "" },
 
   // ── Amapiano ──
   { id: 52, name: "Deep Amapiano", genre: "Amapiano",
-    thumbnailUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop", mood: "Chill", bpm: "112–118", vocal: "Zulu Vocal", tags: "Deep Amapiano, 114 BPM, heavy log drum bassline, soft electric piano chords, shaker percussion loops, South African deep house groove, chill mood", color: "from-emerald-955 to-teal-955", accent: "teal", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png", mood: "Chill", bpm: "112–118", vocal: "Zulu Vocal", tags: "Deep Amapiano, 114 BPM, heavy log drum bassline, soft electric piano chords, shaker percussion loops, South African deep house groove, chill mood", color: "from-emerald-955 to-teal-955", accent: "teal", audioUrl: "", lyrics: "" },
   { id: 53, name: "Piano Hub", genre: "Amapiano",
-    thumbnailUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop", mood: "Uplifting", bpm: "115–120", vocal: "Female Vocal", tags: "Amapiano pop, 118 BPM, syncopated jazzy piano chord stabs, Soweto house groove, warm rolling bassline, traditional percussion shakers, uplifting vocal hooks", color: "from-teal-955 to-green-955", accent: "green", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png", mood: "Uplifting", bpm: "115–120", vocal: "Female Vocal", tags: "Amapiano pop, 118 BPM, syncopated jazzy piano chord stabs, Soweto house groove, warm rolling bassline, traditional percussion shakers, uplifting vocal hooks", color: "from-teal-955 to-green-955", accent: "green", audioUrl: "", lyrics: "" },
 
   // ── City Pop ──
   { id: 54, name: "80s City Pop", genre: "City Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Nostalgic", bpm: "100–120", vocal: "Female Japanese", tags: "80s Japanese City Pop, 110 BPM, groovy funk bassline, FM synthesiser brass chords, vintage drum machine clap, clean electric jazz guitar, nostalgic city night atmosphere", color: "from-sky-955 to-blue-955", accent: "blue", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png", mood: "Nostalgic", bpm: "100–120", vocal: "Female Japanese", tags: "80s Japanese City Pop, 110 BPM, groovy funk bassline, FM synthesiser brass chords, vintage drum machine clap, clean electric jazz guitar, nostalgic city night atmosphere", color: "from-sky-955 to-blue-955", accent: "blue", audioUrl: "", lyrics: "" },
   { id: 55, name: "Neo City Pop", genre: "City Pop",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Uplifting", bpm: "110–125", vocal: "Soft Male", tags: "Neo city pop, 115 BPM, modern retro pop, jazzy electric guitar licks, analog synthesizer warmth, groovy syncopated bassline, polished metropolitan mix", color: "from-blue-955 to-indigo-955", accent: "blue", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png", mood: "Uplifting", bpm: "110–125", vocal: "Soft Male", tags: "Neo city pop, 115 BPM, modern retro pop, jazzy electric guitar licks, analog synthesizer warmth, groovy syncopated bassline, polished metropolitan mix", color: "from-blue-955 to-indigo-955", accent: "blue", audioUrl: "", lyrics: "" },
 
   // ── Trap ──
   { id: 56, name: "Dark Trap Beats", genre: "Trap",
-    thumbnailUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=600&auto=format&fit=crop", mood: "Dark", bpm: "130–145", vocal: "Auto-tuned Male", tags: "Dark trap beats, 140 BPM, heavy sliding 808 sub bass, eerie bell melody, rapid-fire hi-hat triplets, reverb-drenched auto-tuned male vocals, ambient horror texture", color: "from-zinc-955 to-purple-955", accent: "purple", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png", mood: "Dark", bpm: "130–145", vocal: "Auto-tuned Male", tags: "Dark trap beats, 140 BPM, heavy sliding 808 sub bass, eerie bell melody, rapid-fire hi-hat triplets, reverb-drenched auto-tuned male vocals, ambient horror texture", color: "from-zinc-955 to-purple-955", accent: "purple", audioUrl: "", lyrics: "" },
   { id: 57, name: "Melodic Trap", genre: "Trap",
-    thumbnailUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?q=80&w=600&auto=format&fit=crop", mood: "Dreamy", bpm: "130–140", vocal: "Auto-tuned Male", tags: "Melodic trap, 135 BPM, emotional grand piano, soft rolling 808 bass, lush synthesiser pads, atmospheric vocal reverb, no aggressive drums", color: "from-violet-955 to-indigo-955", accent: "violet", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png", mood: "Dreamy", bpm: "130–140", vocal: "Auto-tuned Male", tags: "Melodic trap, 135 BPM, emotional grand piano, soft rolling 808 bass, lush synthesiser pads, atmospheric vocal reverb, no aggressive drums", color: "from-violet-955 to-indigo-955", accent: "violet", audioUrl: "", lyrics: "" },
 
   // ── Reggaeton ──
   { id: 58, name: "Perreo Disco", genre: "Reggaeton",
-    thumbnailUrl: "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?q=80&w=600&auto=format&fit=crop", mood: "Energetic", bpm: "92–100", vocal: "Male Spanish", tags: "Reggaeton Perreo, 96 BPM, classic dembow drum rhythm, heavy latin hand percussion, bouncy synth bassline, energetic Spanish club vocals", color: "from-yellow-955 to-orange-955", accent: "yellow", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png", mood: "Energetic", bpm: "92–100", vocal: "Male Spanish", tags: "Reggaeton Perreo, 96 BPM, classic dembow drum rhythm, heavy latin hand percussion, bouncy synth bassline, energetic Spanish club vocals", color: "from-yellow-955 to-orange-955", accent: "yellow", audioUrl: "", lyrics: "" },
 
   // ── Indie Rock ──
   { id: 59, name: "Indie Anthem", genre: "Indie Rock",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Uplifting", bpm: "120–135", vocal: "Male Alt", tags: "Indie rock anthem, 125 BPM, jangly electric guitars, driving indie bass guitar, anthemic rock chorus, high-energy live acoustic drums, stadium reverb", color: "from-orange-955 to-amber-955", accent: "orange", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png", mood: "Uplifting", bpm: "120–135", vocal: "Male Alt", tags: "Indie rock anthem, 125 BPM, jangly electric guitars, driving indie bass guitar, anthemic rock chorus, high-energy live acoustic drums, stadium reverb", color: "from-orange-955 to-amber-955", accent: "orange", audioUrl: "", lyrics: "" },
 
   // ── Shoegaze ──
   { id: 60, name: "Wall of Sound", genre: "Shoegaze",
-    thumbnailUrl: "https://images.unsplash.com/photo-1484755560693-a4074577af3a?q=80&w=600&auto=format&fit=crop", mood: "Dreamy", bpm: "80–100", vocal: "Ethereal Female", tags: "Shoegaze wall of sound, 90 BPM, massive distorted guitar layers, heavy guitar feedback, lush room reverb, ethereal whispered female vocals, no autotune", color: "from-pink-955 to-purple-955", accent: "pink", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png", mood: "Dreamy", bpm: "80–100", vocal: "Ethereal Female", tags: "Shoegaze wall of sound, 90 BPM, massive distorted guitar layers, heavy guitar feedback, lush room reverb, ethereal whispered female vocals, no autotune", color: "from-pink-955 to-purple-955", accent: "pink", audioUrl: "", lyrics: "" },
 
   // ── Post-Punk ──
   { id: 61, name: "Cold Wave", genre: "Post-Punk",
-    thumbnailUrl: "https://images.unsplash.com/photo-1484755560693-a4074577af3a?q=80&w=600&auto=format&fit=crop", mood: "Dark", bpm: "110–130", vocal: "Baritone Male", tags: "Post-punk cold wave, 120 BPM, angular electric guitar riffs, driving melodic bass guitar, cold synthesiser pads, raw acoustic drums, baritone male vocal", color: "from-slate-900 to-zinc-900", accent: "gray", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png", mood: "Dark", bpm: "110–130", vocal: "Baritone Male", tags: "Post-punk cold wave, 120 BPM, angular electric guitar riffs, driving melodic bass guitar, cold synthesiser pads, raw acoustic drums, baritone male vocal", color: "from-slate-900 to-zinc-900", accent: "gray", audioUrl: "", lyrics: "" },
 
   // ── Grunge ──
   { id: 62, name: "90s Grunge", genre: "Grunge",
-    thumbnailUrl: "https://images.unsplash.com/photo-1484755560693-a4074577af3a?q=80&w=600&auto=format&fit=crop", mood: "Aggressive", bpm: "100–130", vocal: "Raspy Male", tags: "90s Seattle grunge, 110 BPM, raw distorted electric guitars, heavy bass guitar, aggressive live drums, raspy angsty male vocals, raw studio mix, no polish", color: "from-stone-900 to-zinc-900", accent: "gray", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png", mood: "Aggressive", bpm: "100–130", vocal: "Raspy Male", tags: "90s Seattle grunge, 110 BPM, raw distorted electric guitars, heavy bass guitar, aggressive live drums, raspy angsty male vocals, raw studio mix, no polish", color: "from-stone-900 to-zinc-900", accent: "gray", audioUrl: "", lyrics: "" },
 
   // ── Metal ──
   { id: 63, name: "Modern Metal", genre: "Metal",
-    thumbnailUrl: "https://images.unsplash.com/photo-1484755560693-a4074577af3a?q=80&w=600&auto=format&fit=crop", mood: "Aggressive", bpm: "140–180", vocal: "Growl / Scream", tags: "Modern metal, 160 BPM, low-tuned distorted electric guitars, heavy double-kick drum rolls, aggressive metal riffs, growling vocals, massive raw breakdown", color: "from-red-955 to-black", accent: "red", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png", mood: "Aggressive", bpm: "140–180", vocal: "Growl / Scream", tags: "Modern metal, 160 BPM, low-tuned distorted electric guitars, heavy double-kick drum rolls, aggressive metal riffs, growling vocals, massive raw breakdown", color: "from-red-955 to-black", accent: "red", audioUrl: "", lyrics: "" },
 
   // ── Punk ──
   { id: 64, name: "Fast Punk", genre: "Punk",
-    thumbnailUrl: "https://images.unsplash.com/photo-1484755560693-a4074577af3a?q=80&w=600&auto=format&fit=crop", mood: "Energetic", bpm: "160–200", vocal: "Shouting Male", tags: "Classic punk rock, 180 BPM, fast three-chord power guitar riffs, simple driving bass, fast snare-heavy punk beat, raw shouting vocals, high energy", color: "from-red-900 to-orange-955", accent: "red", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png", mood: "Energetic", bpm: "160–200", vocal: "Shouting Male", tags: "Classic punk rock, 180 BPM, fast three-chord power guitar riffs, simple driving bass, fast snare-heavy punk beat, raw shouting vocals, high energy", color: "from-red-900 to-orange-955", accent: "red", audioUrl: "", lyrics: "" },
 
   // ── Emo / Pop Punk ──
   { id: 65, name: "Emo Revival", genre: "Emo / Pop Punk",
-    thumbnailUrl: "https://images.unsplash.com/photo-1484755560693-a4074577af3a?q=80&w=600&auto=format&fit=crop", mood: "Nostalgic", bpm: "130–150", vocal: "Emotional Male", tags: "Emo revival pop punk, 140 BPM, palm-muted electric guitar verse, explosive melodic chorus, emotional raw male vocals, steady rock drums, nostalgic feel", color: "from-zinc-900 to-rose-955", accent: "rose", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png", mood: "Nostalgic", bpm: "130–150", vocal: "Emotional Male", tags: "Emo revival pop punk, 140 BPM, palm-muted electric guitar verse, explosive melodic chorus, emotional raw male vocals, steady rock drums, nostalgic feel", color: "from-zinc-900 to-rose-955", accent: "rose", audioUrl: "", lyrics: "" },
 
   // ── Synthwave ──
   { id: 66, name: "Outrun", genre: "Synthwave",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Epic", bpm: "100–120", vocal: "None", tags: "Synthwave outrun, 110 BPM, vintage retro 80s synthesiser stabs, driving analog arpeggios, massive drum machine snare, neon retro aesthetic, analog warmth", color: "from-purple-955 to-fuchsia-955", accent: "purple", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png", mood: "Epic", bpm: "100–120", vocal: "None", tags: "Synthwave outrun, 110 BPM, vintage retro 80s synthesiser stabs, driving analog arpeggios, massive drum machine snare, neon retro aesthetic, analog warmth", color: "from-purple-955 to-fuchsia-955", accent: "purple", audioUrl: "", lyrics: "" },
 
   // ── Vaporwave ──
   { id: 67, name: "Mall Soft", genre: "Vaporwave",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Nostalgic", bpm: "70–90", vocal: "Pitched-Down Sample", tags: "Vaporwave mallsoft, 80 BPM, slowed down elevator music sample, heavy reverb environment, lo-fi aesthetic, nostalgic 90s shopping mall ambiance", color: "from-teal-955 to-cyan-955", accent: "teal", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png", mood: "Nostalgic", bpm: "70–90", vocal: "Pitched-Down Sample", tags: "Vaporwave mallsoft, 80 BPM, slowed down elevator music sample, heavy reverb environment, lo-fi aesthetic, nostalgic 90s shopping mall ambiance", color: "from-teal-955 to-cyan-955", accent: "teal", audioUrl: "", lyrics: "" },
 
   // ── Future Bass ──
   { id: 68, name: "Kawaii Future", genre: "Future Bass",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Uplifting", bpm: "140–155", vocal: "Vocal Chops", tags: "Kawaii future bass, 145 BPM, massive sidechained supersaw chords, cute synthesiser melodies, playful vocal chop loops, heavy sub bass, colorful drops", color: "from-cyan-955 to-blue-955", accent: "cyan", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png", mood: "Uplifting", bpm: "140–155", vocal: "Vocal Chops", tags: "Kawaii future bass, 145 BPM, massive sidechained supersaw chords, cute synthesiser melodies, playful vocal chop loops, heavy sub bass, colorful drops", color: "from-cyan-955 to-blue-955", accent: "cyan", audioUrl: "", lyrics: "" },
 
   // ── Drum & Bass ──
   { id: 69, name: "Liquid DnB", genre: "Drum & Bass",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Dreamy", bpm: "170–180", vocal: "Ethereal Female", tags: "Liquid drum and bass, 175 BPM, fast rolling breakbeat drum loops, lush electric piano pads, ethereal solo female vocal, warm sub bassline, spacious stereo field", color: "from-emerald-955 to-cyan-955", accent: "teal", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png", mood: "Dreamy", bpm: "170–180", vocal: "Ethereal Female", tags: "Liquid drum and bass, 175 BPM, fast rolling breakbeat drum loops, lush electric piano pads, ethereal solo female vocal, warm sub bassline, spacious stereo field", color: "from-emerald-955 to-cyan-955", accent: "teal", audioUrl: "", lyrics: "" },
 
   // ── House ──
   { id: 70, name: "Deep House", genre: "House",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Chill", bpm: "120–125", vocal: "Soulful Female", tags: "Deep house, 122 BPM, warm electric synthesizer chords, classic four-on-the-floor kick, smooth walking bassline, soulful female vocal stabs, club lounge reverb", color: "from-violet-955 to-purple-955", accent: "violet", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png", mood: "Chill", bpm: "120–125", vocal: "Soulful Female", tags: "Deep house, 122 BPM, warm electric synthesizer chords, classic four-on-the-floor kick, smooth walking bassline, soulful female vocal stabs, club lounge reverb", color: "from-violet-955 to-purple-955", accent: "violet", audioUrl: "", lyrics: "" },
 
   // ── Techno ──
   { id: 71, name: "Berlin Techno", genre: "Techno",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Dark", bpm: "128–135", vocal: "None", tags: "Berlin techno, 130 BPM, heavy driving industrial kick drum, hypnotic synthesiser loop, dark warehouse acoustics, minimalist electronic percussion", color: "from-gray-900 to-zinc-955", accent: "gray", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png", mood: "Dark", bpm: "128–135", vocal: "None", tags: "Berlin techno, 130 BPM, heavy driving industrial kick drum, hypnotic synthesiser loop, dark warehouse acoustics, minimalist electronic percussion", color: "from-gray-900 to-zinc-955", accent: "gray", audioUrl: "", lyrics: "" },
 
   // ── Trance ──
 {
     id: 72,
     name: "Uplifting Trance",
     genre: "Trance",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     mood: "Epic",
     bpm: "136–142",
     vocal: "Female Ethereal",
@@ -1275,7 +1275,7 @@ const STYLE_DATA = [
     id: 73,
     name: "Celtic Journey",
     genre: "Celtic",
-    thumbnailUrl: "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     mood: "Epic",
     bpm: "100–120",
     vocal: "Female Gaelic",
@@ -1291,7 +1291,7 @@ const STYLE_DATA = [
     id: 74,
     name: "Rio Nights",
     genre: "Bossa Nova",
-    thumbnailUrl: "https://images.unsplash.com/photo-1507525428034-b723cf961d3e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     mood: "Romantic",
     bpm: "90–110",
     vocal: "Soft Female Portuguese",
@@ -1307,7 +1307,7 @@ const STYLE_DATA = [
     id: 75,
     name: "Roots Reggae",
     genre: "Reggae",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     mood: "Chill",
     bpm: "70–85",
     vocal: "Male Jamaican",
@@ -1320,23 +1320,23 @@ const STYLE_DATA = [
 
   // ── Blues ──
   { id: 76, name: "Delta Blues", genre: "Blues",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518173946687-a4c8a383392e?q=80&w=600&auto=format&fit=crop", mood: "Nostalgic", bpm: "60–80", vocal: "Raspy Male", tags: "delta blues, slide guitar, raw acoustic, foot stomp, soulful moan, dusty road", color: "from-amber-950 to-stone-900", accent: "amber", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png", mood: "Nostalgic", bpm: "60–80", vocal: "Raspy Male", tags: "delta blues, slide guitar, raw acoustic, foot stomp, soulful moan, dusty road", color: "from-amber-950 to-stone-900", accent: "amber", audioUrl: "", lyrics: "" },
 
   // ── New Age ──
   { id: 77, name: "Crystal Healing", genre: "New Age",
-    thumbnailUrl: "https://images.unsplash.com/photo-1486591978090-58e619d37fe7?q=80&w=600&auto=format&fit=crop", mood: "Dreamy", bpm: "60–80", vocal: "None", tags: "new age, crystal singing bowls, gentle piano, nature sounds, healing frequency, ethereal", color: "from-sky-950 to-teal-950", accent: "teal", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png", mood: "Dreamy", bpm: "60–80", vocal: "None", tags: "new age, crystal singing bowls, gentle piano, nature sounds, healing frequency, ethereal", color: "from-sky-950 to-teal-950", accent: "teal", audioUrl: "", lyrics: "" },
 
   // ── Gospel / Worship ──
   { id: 78, name: "Modern Worship", genre: "Gospel / Worship",
-    thumbnailUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop", mood: "Uplifting", bpm: "70–80", vocal: "Choir", tags: "modern worship, gospel choir, powerful vocals, uplifting piano, spiritual, anthemic", color: "from-amber-950 to-yellow-950", accent: "amber", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png", mood: "Uplifting", bpm: "70–80", vocal: "Choir", tags: "modern worship, gospel choir, powerful vocals, uplifting piano, spiritual, anthemic", color: "from-amber-950 to-yellow-950", accent: "amber", audioUrl: "", lyrics: "" },
 
   // ── Country ──
   { id: 79, name: "Modern Country", genre: "Country",
-    thumbnailUrl: "https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?q=80&w=600&auto=format&fit=crop", mood: "Uplifting", bpm: "100–120", vocal: "Male Country", tags: "modern country, twangy guitar, steel guitar, storytelling, Nashville sound, dusty road", color: "from-orange-950 to-amber-950", accent: "orange", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png", mood: "Uplifting", bpm: "100–120", vocal: "Male Country", tags: "modern country, twangy guitar, steel guitar, storytelling, Nashville sound, dusty road", color: "from-orange-950 to-amber-950", accent: "orange", audioUrl: "", lyrics: "" },
 
   // ── Meditation ──
   { id: 80, name: "Deep Meditation", genre: "Meditation",
-    thumbnailUrl: "https://images.unsplash.com/photo-1486591978090-58e619d37fe7?q=80&w=600&auto=format&fit=crop", mood: "Chill", bpm: "40–60", vocal: "None", tags: "meditation, tibetan singing bowl, drone pad, binaural beats, deep relaxation, mindfulness", color: "from-indigo-950 to-purple-950", accent: "indigo", audioUrl: "", lyrics: "" },
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png", mood: "Chill", bpm: "40–60", vocal: "None", tags: "meditation, tibetan singing bowl, drone pad, binaural beats, deep relaxation, mindfulness", color: "from-indigo-950 to-purple-950", accent: "indigo", audioUrl: "", lyrics: "" },
 ];
 
 const ACCENT_CLASSES: Record<string, string> = {
@@ -1473,7 +1473,7 @@ export default function StyleLibraryPage() {
       }
     }
     
-    const sampleCoverArt = style.thumbnailUrl || style.cover_art_url || style.image_url || style.imageUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80";
+    const sampleCoverArt = style.thumbnailUrl || style.cover_art_url || style.image_url || style.imageUrl || "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png";
     const sampleAudioUrl = style.audioUrl || style.audio_url || "https://file.302.ai/gpt/imgs/20260721/3c2a38210fe522646d6b2b6241c2c31e.mp3";
     const sampleTags = style.tags || style.stylePrompt || "";
     const sampleLyrics = style.lyrics || style.lyricsPrompt || "";
@@ -1916,7 +1916,7 @@ export default function StyleLibraryPage() {
         title: activeTrackObject.title || activeTrackObject.name || activeTrackObject.prompt || 'Style Library Track',
         genre: activeTrackObject.tags || activeTrackObject.genre || activeTrackObject.stylePrompt || 'Style Library',
         audioUrl: activeTrackObject.audio_url || activeTrackObject.audioUrl,
-        thumbnailUrl: activeTrackObject.image_url || activeTrackObject.imageUrl || activeTrackObject.thumbnailUrl || "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80",
+        thumbnailUrl: activeTrackObject.image_url || activeTrackObject.imageUrl || activeTrackObject.thumbnailUrl || "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
         tags: activeTrackObject.tags || activeTrackObject.stylePrompt || '',
         lyrics: activeTrackObject.lyrics || '',
         updated_at: activeTrackObject.created_at || activeTrackObject.updated_at || new Date().toISOString(),
@@ -2605,7 +2605,7 @@ export default function StyleLibraryPage() {
                       alt={info.title}
                       className="w-full h-full object-cover"
                       onError={(e) => {
-                        (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80";
+                        (e.target as HTMLImageElement).src = "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png";
                       }}
                     />
                   </div>

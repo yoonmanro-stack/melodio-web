@@ -25,6 +25,7 @@ CREATE TABLE public.generations (
   stem_bass_url   TEXT,  -- bass 채널
   stem_other_url  TEXT,  -- guitar/other 채널 (구 stem_melody_url → 변경)
   license_hash TEXT, -- IP Vault 증명용 해시값
+  is_liked BOOLEAN DEFAULT FALSE NOT NULL, -- 좋아요 여부 (개인 취향 학습 데이터용)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL
 );
 

@@ -74,7 +74,16 @@ const FadeInImage = ({ src, alt, className = "" }: { src: string; alt: string; c
   );
 };
 
-// ─── 과거 이미지 미등록 음원용 컨셉 매핑 썸네일 헬퍼 ───
+// ─── 과거 이미지 미등록 음원용 컨셉 매핑 썸네일 헬퍼 (AI 에셋 적용) ───
+const AI_PRESET_THUMBNAILS: Record<string, string> = {
+  lofi: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
+  hiphop: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
+  citypop: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
+  jazz: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
+  chanson: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
+  sleep: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png"
+};
+
 const getFallbackCoverArt = (item: Generation): string => {
   let styleText = "";
   if (item.license_hash) {
@@ -84,29 +93,26 @@ const getFallbackCoverArt = (item: Generation): string => {
     } catch { /* ignore */ }
   }
   
-  const titleText = (item.title || "").toLowerCase();
-  
   if (styleText.includes("lo-fi") || styleText.includes("lofi") || styleText.includes("acoustic") || styleText.includes("folk") || styleText.includes("healing")) {
-    return "https://images.unsplash.com/photo-1518173946687-a4c8a383392f?w=300&q=80";
+    return AI_PRESET_THUMBNAILS.lofi;
   }
   if (styleText.includes("hip-hop") || styleText.includes("hiphop") || styleText.includes("rap") || styleText.includes("trap") || styleText.includes("디스")) {
-    return "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&q=80";
+    return AI_PRESET_THUMBNAILS.hiphop;
   }
   if (styleText.includes("city") || styleText.includes("synth") || styleText.includes("retro") || styleText.includes("레트로") || styleText.includes("시티팝")) {
-    return "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=300&q=80";
+    return AI_PRESET_THUMBNAILS.citypop;
   }
   if (styleText.includes("rock") || styleText.includes("metal") || styleText.includes("guitar") || styleText.includes("락") || styleText.includes("밴드")) {
-    return "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?w=300&q=80";
+    return AI_PRESET_THUMBNAILS.hiphop;
   }
   if (styleText.includes("dance") || styleText.includes("pop") || styleText.includes("k-pop") || styleText.includes("댄스") || styleText.includes("club")) {
-    return "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&q=80";
+    return AI_PRESET_THUMBNAILS.citypop;
+  }
+  if (styleText.includes("chanson") || styleText.includes("french") || styleText.includes("vintage")) {
+    return AI_PRESET_THUMBNAILS.chanson;
   }
   
-  if (titleText.includes("[cf]") || styleText.includes("commercial") || styleText.includes("advertising")) {
-    return "https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=300&q=80";
-  }
-  
-  return "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=300&q=80";
+  return AI_PRESET_THUMBNAILS.sleep;
 };
 
 // ─── Track Library 데이터 로딩용 스켈레톤 컴포넌트 ───
@@ -152,19 +158,18 @@ const TrackDuration = ({ audioUrl, initialDuration }: { audioUrl?: string; initi
   const [duration, setDuration] = useState<number | null>(initialDuration || null);
 
   useEffect(() => {
-    if (initialDuration && initialDuration > 0) {
-      setDuration(initialDuration);
+    if (!audioUrl) {
+      if (initialDuration && initialDuration > 0) setDuration(initialDuration);
       return;
     }
-    if (!audioUrl) return;
 
     const audio = new Audio();
     audio.src = audioUrl;
-    audio.preload = 'metadata'; // 오직 헤더 정보만 로드
+    audio.preload = 'metadata';
 
     const handleLoadedMetadata = () => {
-      if (audio.duration && !isNaN(audio.duration)) {
-        setDuration(audio.duration);
+      if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
+        setDuration(Math.floor(audio.duration));
       }
     };
 
@@ -1357,7 +1362,7 @@ export default function Home() {
                     >
                       {/* 앨범 커버 이미지 또는 장르 컨셉 자동 매핑 (대안 B) 및 AI 재생성 트리거 */}
                       <FadeInImage 
-                        src={item.cover_art_url || getFallbackCoverArt(item)} 
+                        src={(item.cover_art_url && !item.cover_art_url.includes('unsplash.com')) ? item.cover_art_url : getFallbackCoverArt(item)}
                         alt={item.title || 'Track Art'} 
                         className="absolute inset-0 w-full h-full object-cover" 
                       />

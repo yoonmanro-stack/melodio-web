@@ -10,6 +10,7 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? ''
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 
 import { loadVLEMasterPrompt } from '@/lib/vle/vleEngine';
+import { buildStructureDirective, VIRAL_SONG_SPEC } from '@/lib/vle/viralSongSpec';
 
 export interface GenerateLyricsParams {
   stylePrompt: string
@@ -440,14 +441,17 @@ Total lyrics: 34-40 lines.`
 
   let viralModeInstruction = ''
   if (viralMode) {
+    // 길이/구조 규격은 viralSongSpec 이 유일한 출처다. 여기에 초·자수·줄수를
+    // 다시 적으면 과거처럼 서로 충돌하는 규격이 생겨 곡이 붕괴한다.
     viralModeInstruction = `
 ${vleMasterMarkdown}
 
-## ⚡ VIRAL SHORT-FORM B-GRADE SAVAGE COMEDY GOLDEN RULES (VLE 5.0 DIRECT OBSIDIAN EXECUTION):
-1. Execute the 10-step pipeline in order: TOPIC -> HOOK -> CORE RULES -> GENERATOR -> LYRICS SCHEMA -> CRITIC (≥95 SCORE APPROVAL).
-2. Spoken Intro MUST be a 1-sentence shock/curiosity statement (6-14 syllables). NO generic intro statements!
-3. Visual Verse MUST be 2 lines with proper Korean spacing and visible physical objects (카메라 촬영 가능 시각 객체).
-4. Tag Outro MUST be 1 comment-provoking line with Meme Token. NEVER use cliché lines like "다음엔 더 놀라운 상황이!".`
+${buildStructureDirective()}
+
+## ⚡ VIRAL SHORT-FORM COMEDY GOLDEN RULES:
+1. 웃음은 100% 가사에서 나온다. 한국인이 소리 내어 읽고 즉시 이해할 수 있는 문장만 쓴다.
+2. 감정 형용사 대신 카메라로 찍을 수 있는 사물과 숫자로 상황을 보여준다.
+3. 후렴은 Memory Anchor 하나가 지배해야 하며, 그 앵커는 곡이 끝난 뒤에도 입에 남아야 한다.`
   }
 
   // 사용자 정의 지침 및 특정 문구 필수 포함 처리
@@ -462,7 +466,6 @@ If the theme/topic contains specific user instructions, custom lyrics, phrases i
     return `You are a legendary viral content creator and CM-song (CF) director specializing in addictive, meme-worthy, high-dopamine short-form songs for YouTube Shorts, TikTok, and corporate advertisements.
 ${genderInstruction}
 ${viralModeInstruction}
-${durationStructureInstruction}
 ${lyricsQualityRules}
 ${customUserDirectives}
 
@@ -478,8 +481,7 @@ You MUST write all lyrics in ${languageInstruction}.
 {
   "title": "🔥 HIGH-CTR YOUTUBE SHORTS TITLE ENGINE: You MUST construct the title by applying 1 of 4 Syntactic Structural Patterns based on the topic ('${topic || stylePrompt}'): Pattern 1: [Extreme Spoiler Bracket] + Persona + Situation, Pattern 2: Persona Call + Relatable Frustration + Suffix, Pattern 3: Exact Data Number + Tragedy/Comedy + Impact, Pattern 4: Empathy Setup + Interrogative Question. Keep it punchy and under 30 characters.",
   "youtubeTags": "comma, separated, SEO, keywords",
-  "snsHashtags": "#hashtag1 #hashtag2",
-  "lyricsPrompt": "STRICT SHORTS VIRAL LYRICS SCHEMA v2.0 (MUST FOLLOW 100%):\\n[Spoken Shock Intro]\\n\\\"Shocking intro quote line (no questions, e.g. 이거 안 사면 손해다)\\\"\\n\\n[Visual Verse]\\nVisual scene line 1 with rhythm onomatopoeia (e.g. 쿵! 팡! 슉! 띵!)\\nVisual scene line 2\\n\\n[Build-Up]\\nTension line 1 before chorus\\nTension line 2\\n\\n[Killer Chorus]\\nAddictive Hook Line 1 (A A / B A order repetition e.g. 살까 말까~ 살까 말까~)\\nPunchline Hook Line 2 (결국 또 샀다~ 살까 말까~)\\n\\n[Chorus Repeat]\\nAddictive Hook Line 1 repeat (for max retention)\\nAddictive Hook Line 1 repeat\\n\\n[Tag Outro]\\n\\\"Comment CTA question + Meme Token (딩동/결제완료/실화냐) + Next video tease\\\"\\n\\nCRITICAL: DO NOT use garbage tags like [Pansori Crying], [Fast Intro], [속삭임], [고음귀염], [외침], [웃음], [독백]. Focus strictly on ONE single relatable comedy situation.",
+  "lyricsPrompt": "STRUCTURE CONTRACT를 그대로 채운 완성 가사. 섹션 태그는 [Spoken] [Verse] [Pre-Chorus] [Chorus] [Chorus] [Outro] 순서로 쓰고 각 섹션의 줄 수를 정확히 지킨다. 길이·템포 메타 태그([Ultra Short 20s], [Fast Tempo 140BPM] 등)는 절대 넣지 않는다 — Suno가 그것을 가사로 노래한다. 템포 지시는 스타일 프롬프트에만 존재한다.",
   "sections": [
     {
       "type": "intro or verse or chorus or outro",
@@ -490,6 +492,7 @@ You MUST write all lyrics in ${languageInstruction}.
 }
 
 ## CRITICAL: You MUST include the "lyricsPrompt" field with the COMPLETE lyrics as a single formatted string (with \\n line breaks) ready to copy-paste.
+## CRITICAL: 실제로 노래되는 총량은 ${VIRAL_SONG_SPEC.sungSyllablesMin}~${VIRAL_SONG_SPEC.sungSyllablesMax}음절(훅 반복 포함)이어야 Suno가 ${VIRAL_SONG_SPEC.targetSecondsMin}~${VIRAL_SONG_SPEC.targetSecondsMax}초에 마감하고 발음이 뭉개지지 않는다.
 ${playbookInstructions || ''}
 `
   }

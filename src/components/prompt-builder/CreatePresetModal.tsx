@@ -468,13 +468,13 @@ export default function CreatePresetModal({
 
   // 프리셋 카드 색상 자동 매핑을 위해 DEFAULT_THUMBNAILS 매핑 정의
   const DEFAULT_THUMBNAILS: Record<string, string> = {
-    'developer-debugging': 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop',
-    'iced-oolong-tea': 'https://images.unsplash.com/photo-1576092768241-dec231879fc3?q=80&w=600&auto=format&fit=crop',
-    'tokyo-midnight-1984': 'https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=600&auto=format&fit=crop',
-    'matcha-kyoto-jazz': 'https://images.unsplash.com/photo-1493676304819-0d7d8d026dcf?q=80&w=600&auto=format&fit=crop',
-    'french-vintage-chanson': 'https://images.unsplash.com/photo-1502602898657-3e91760cbb34?q=80&w=600&auto=format&fit=crop',
-    'deep-sleep-drift': 'https://images.unsplash.com/photo-1511289081367-46c54b5fbc30?q=80&w=600&auto=format&fit=crop',
-    'dead-mall-nostalgia': 'https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?q=80&w=600&auto=format&fit=crop'
+    'developer-debugging': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png',
+    'iced-oolong-tea': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png',
+    'tokyo-midnight-1984': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png',
+    'matcha-kyoto-jazz': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png',
+    'french-vintage-chanson': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png',
+    'deep-sleep-drift': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png',
+    'dead-mall-nostalgia': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png'
   }
 
   const getPreviewThumbnail = () => {

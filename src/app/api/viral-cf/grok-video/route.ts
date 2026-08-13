@@ -5,16 +5,26 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import ffmpegStatic from 'ffmpeg-static';
+import { planFit, buildFitCommand, probeDurationSeconds } from '@/lib/video/fitVideoToAudio';
 
 const execAsync = promisify(exec);
 
 export const maxDuration = 120; // Allow long polling up to 2 mins on Vercel
 
-async function generateGrokClip(promptText: string, apiKey: string, apiBase: string): Promise<string> {
+async function generateGrokClip(
+  promptText: string,
+  apiKey: string,
+  apiBase: string,
+  allowDance: boolean
+): Promise<string> {
   const outputRequirements = `Output Requirements: - Silent video only - No audio track - No music - No dialogue - No narration - No sound effects - Visual output only`;
-  const noDanceRule = `STRICT DIRECTIVE: ABSOLUTELY NO DANCING, NO STAGE DANCE, NO CHOREOGRAPHY, NO DANCERS, NO DANCE MOVES. FOCUS ON DRAMATIC STORYLINE ACTING, SITUATIONAL HUMOR, AND REALISTIC CHARACTER EMOTIONS.`;
-  const cleanPrompt = `${promptText.trim()}, expert B-grade comedy camera direction, rapid crash-zooms, whip-pans, fisheye angle, ${noDanceRule}, ${outputRequirements}`;
-  
+  // 춤 금지는 카테고리별로 판단한다. '도파민 응원'이나 '트렌드·이슈'처럼
+  // 챌린지 안무가 콘텐츠의 핵심인 카테고리에서 전역 금지는 오히려 해가 된다.
+  const motionRule = allowDance
+    ? `MOTION DIRECTIVE: ENERGETIC CHALLENGE-STYLE BODY MOVEMENT AND SIMPLE REPEATABLE GESTURES ARE ENCOURAGED. KEEP IT SITUATIONAL AND COMEDIC, NOT A POLISHED STAGE PERFORMANCE.`
+    : `STRICT DIRECTIVE: ABSOLUTELY NO DANCING, NO STAGE DANCE, NO CHOREOGRAPHY, NO DANCERS, NO DANCE MOVES. FOCUS ON DRAMATIC STORYLINE ACTING, SITUATIONAL HUMOR, AND REALISTIC CHARACTER EMOTIONS.`;
+  const cleanPrompt = `${promptText.trim()}, expert short-form comedy camera direction, rapid crash-zooms, whip-pans, fisheye angle, ${motionRule}, ${outputRequirements}`;
+
   const initRes = await fetch(`${apiBase}/videos/generations`, {
     method: 'POST',
     headers: {
@@ -104,7 +114,23 @@ async function generateGrokClip(promptText: string, apiKey: string, apiBase: str
   throw new Error('Grok AI 비디오 서버 응답이 지연되었습니다. 잠시 후 다시 시도해 주세요.');
 }
 
-async function mergeClipsAndAudio(videoUrls: string[], audioUrl?: string, reqDuration: number = 30): Promise<string | null> {
+/**
+ * 병합 결과.
+ *
+ * 예전에는 URL 만 돌려줘서, 화면이 길이를 알려면 <video> 가 메타데이터를
+ * 내려받을 때까지 기다려야 했다. 여기서는 이미 ffprobe 로 정확한 초를
+ * 재고 있으므로 그대로 실어 보낸다.
+ */
+interface MergeResult {
+  url: string;
+  durationSeconds: number;
+}
+
+async function mergeClipsAndAudio(
+  videoUrls: string[],
+  audioUrl?: string,
+  reqDuration: number = 30
+): Promise<MergeResult | null> {
   if (!videoUrls || videoUrls.length === 0) return null;
   try {
     const tmpDir = os.tmpdir();
@@ -149,36 +175,62 @@ async function mergeClipsAndAudio(videoUrls: string[], audioUrl?: string, reqDur
       }
     } catch {}
 
-    // 동적 음원 재생 시간 프로브 (FFprobe 탐색)
+    /*
+     * 음원 실제 길이 측정.
+     *
+     * 이 값이 틀리면 뒤의 모든 계산이 틀어진다. 예전에는 여기서 존재하지 않는
+     * ffprobe 를 호출해 늘 실패했고, 조용히 기본값 30초로 넘어갔다. 그래서
+     * 34초 음원이 30초에서 잘렸다. probeDurationSeconds 는 ffprobe 가 없으면
+     * ffmpeg 로 잰다.
+     */
     if (audioFile && fs.existsSync(audioFile)) {
-      try {
-        const ffprobeCmd = ffmpegCmd.replace(/ffmpeg$/i, 'ffprobe');
-        const { stdout } = await execAsync(`"${ffprobeCmd}" -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "${audioFile}"`);
-        const parsedSec = parseFloat(stdout.trim());
-        if (!isNaN(parsedSec) && parsedSec > 0) {
-          targetDurationSec = Math.round(parsedSec * 10) / 10;
-          console.log(`[API/grok-video/ffmpeg] Detected Melodio song audio duration: ${targetDurationSec}s`);
-        }
-      } catch (e) {
-        console.warn(`[API/grok-video/ffmpeg] FFprobe probe failed, using fallback duration ${targetDurationSec}s`);
+      const measured = await probeDurationSeconds(ffmpegCmd, audioFile);
+      if (measured !== null) {
+        targetDurationSec = Math.round(measured * 10) / 10;
+        console.log(`[API/grok-video/ffmpeg] Detected Melodio song audio duration: ${targetDurationSec}s (Full UNCUT Audio Matching)`);
+      } else {
+        console.warn(`[API/grok-video/ffmpeg] 음원 길이 측정 실패 — 기본값 ${targetDurationSec}s 사용 (마지막 소절이 잘릴 수 있음)`);
       }
     }
 
     const concatVideoFile = path.join(tmpDir, `grok_concat_${timestamp}.mp4`);
     const finalOutputFile = path.join(tmpDir, `grok_final_${timestamp}.mp4`);
 
-    // 🚨 원본 Grok 비디오 오디오 100% 제거 (-an) + 음원 실제 길이에 맞춘 심리스 무한 루프 (-stream_loop -1)
+    /*
+     * 원본 Grok 오디오 제거(-an) + 음원 길이에 맞춰 영상 채우기.
+     *
+     * 2클립 concat 은 소스가 30초(15초 × 2)뿐이라 -t 를 크게 줘도 늘어나지 않는다.
+     * 34초 음원에 30초 영상이 붙고 -shortest 로 묶이면서 마지막 소절이 잘렸다.
+     * 남는 구간을 어떻게 채울지는 planFit 이 정한다(기본: 마지막 프레임 고정).
+     */
+    let sourceVideoFile: string;
+    let cleanupConcat: string | null = null;
+
     if (videoFiles.length > 1) {
+      const rawConcatFile = path.join(tmpDir, `grok_concat_raw_${timestamp}.mp4`);
       const inputs = videoFiles.map(f => `-i "${f}"`).join(' ');
       const filter = videoFiles.map((_, idx) => `[${idx}:v]`).join('') + `concat=n=${videoFiles.length}:v=1:a=0[v]`;
-      const concatCmd = `${ffmpegCmd} -y ${inputs} -filter_complex "${filter}" -map "[v]" -an -t ${targetDurationSec} -c:v libx264 -preset fast -crf 22 "${concatVideoFile}"`;
-      console.log(`[API/grok-video/ffmpeg] Concat clips (-an SILENT trimmed to ${targetDurationSec}s): ${concatCmd}`);
+      const concatCmd = `${ffmpegCmd} -y ${inputs} -filter_complex "${filter}" -map "[v]" -an -c:v libx264 -preset fast -crf 22 "${rawConcatFile}"`;
+      console.log(`[API/grok-video/ffmpeg] Concat clips (-an SILENT): ${concatCmd}`);
       await execAsync(concatCmd);
+      sourceVideoFile = rawConcatFile;
+      cleanupConcat = rawConcatFile;
     } else {
-      const singleCmd = `${ffmpegCmd} -y -stream_loop -1 -i "${videoFiles[0]}" -an -t ${targetDurationSec} -c:v libx264 -preset fast -crf 22 "${concatVideoFile}"`;
-      console.log(`[API/grok-video/ffmpeg] Single clip (-an SILENT ${targetDurationSec}s looped trim): ${singleCmd}`);
-      await execAsync(singleCmd);
+      sourceVideoFile = videoFiles[0];
     }
+
+    const plan = planFit(await probeDurationSeconds(ffmpegCmd, sourceVideoFile), targetDurationSec);
+    console.log(`[API/grok-video/ffmpeg] ${plan.reason}`);
+    await execAsync(
+      buildFitCommand({
+        ffmpegCmd,
+        inputFile: sourceVideoFile,
+        outputFile: concatVideoFile,
+        targetSeconds: targetDurationSec,
+        plan,
+      })
+    );
+    if (cleanupConcat) await fs.promises.unlink(cleanupConcat).catch(() => {});
 
     if (audioFile && fs.existsSync(audioFile)) {
       // 멜로디오 음원 오디오 1:1 무손실 Muxing (-shortest 로 음원 마감 프레임에 깔끔 트림)
@@ -225,8 +277,8 @@ async function mergeClipsAndAudio(videoUrls: string[], audioUrl?: string, reqDur
       .from('melodio-assets')
       .getPublicUrl(filePath);
 
-    console.log(`[API/grok-video/supabase] Single unified 29.5s MP4 uploaded successfully: ${publicUrl}`);
-    return publicUrl;
+    console.log(`[API/grok-video/supabase] Merged ${targetDurationSec}s MP4 uploaded successfully: ${publicUrl}`);
+    return { url: publicUrl, durationSeconds: targetDurationSec };
   } catch (err: any) {
     console.error('[API/grok-video/ffmpeg] Local merge failed, delegating to Mac Mini server proxy:', err.message);
     try {
@@ -239,7 +291,10 @@ async function mergeClipsAndAudio(videoUrls: string[], audioUrl?: string, reqDur
         const data = await macMiniRes.json();
         if (data.success && data.mergedVideoUrl) {
           console.log('[API/grok-video/ffmpeg] Proxy merge succeeded via Mac Mini:', data.mergedVideoUrl);
-          return data.mergedVideoUrl;
+          return {
+            url: data.mergedVideoUrl,
+            durationSeconds: Number(data.durationSeconds) || 0,
+          };
         }
       }
     } catch (proxyErr: any) {
@@ -260,7 +315,23 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { prompt, audioUrl, duration = 30, aspectRatio = '9:16', generate30SecFull = true } = body;
+    const {
+      prompt,
+      audioUrl,
+      generate30SecFull = true,
+      // 카테고리를 받아 연출을 결정한다. 기존에는 이 값이 없어서 모든 카테고리에
+      // 'butler / pet reaction' 연출이 하드코딩으로 주입됐다.
+      category,
+      allowDance = false,
+      cutCadenceSeconds = 1.5,
+    } = body as {
+      prompt?: string;
+      audioUrl?: string;
+      generate30SecFull?: boolean;
+      category?: string;
+      allowDance?: boolean;
+      cutCadenceSeconds?: number;
+    };
 
     if (!prompt) {
       return NextResponse.json(
@@ -275,23 +346,33 @@ export async function POST(req: NextRequest) {
       console.log(`[API/grok-video] Generating 30-sec full short-form video with 2 distinct Grok 15-sec clips in parallel...`);
 
       const noTextRule = `STRICT DIRECTIVE: ABSOLUTELY NO TEXT ON SCREEN, NO KOREAN OR ENGLISH SUBTITLES, NO TYPOGRAPHY, NO LABELS. PURE CLEAN VISUAL MOTION ONLY.`;
-      const continuityDirective = `CHARACTER CONSISTENCY DIRECTIVE: MAINTAIN THE EXACT SAME ANIMAL BREED, FUR COLOURING, CLOTHING, HUMAN ACTOR, AND ROOM DECOR FOR 1:1 VISUAL SCENE CONTINUITY.`;
+      const continuityDirective = `CHARACTER CONSISTENCY DIRECTIVE: MAINTAIN THE EXACT SAME SUBJECT APPEARANCE, WARDROBE, SUPPORTING ACTOR, AND SET DECOR FOR 1:1 VISUAL SCENE CONTINUITY.`;
 
-      // 🎬 전반부(Part 1) vs 후반부(Part 2) 서로 다른 연출 & 프롬프트 지정
-      const comicCam1 = `CAMERAWORK: Dynamic whip-pan camera entrance, 0.5x ultra-wide fisheye meme angle, rapid crash-zoom to hilarious comedic facial expression and frantic butler interaction.`;
-      const comicCam2 = `CAMERAWORK: Dramatic high-dopamine climax, Dutch angle snap zooms, slow-mo spin cuts, exaggerated hilarious pet reaction and butler comedy climax.`;
+      // 컷 밀도는 클립 수를 늘리지 않고 클립 내부 하드컷 지시로 확보한다.
+      // 15초 클립 × 1.5초 케이던스 = 클립당 10컷, 30초 영상에 총 20컷.
+      const CLIP_SECONDS = 15;
+      const cutsPerClip = Math.max(2, Math.round(CLIP_SECONDS / cutCadenceSeconds));
+      const cutDirective = `EDITING RHYTHM: ${cutsPerClip} DISTINCT HARD CUTS ACROSS THIS ${CLIP_SECONDS}-SECOND CLIP, A NEW CAMERA ANGLE EVERY ${cutCadenceSeconds} SECONDS. RAPID WHIP-PAN AND CRASH-ZOOM TRANSITIONS BETWEEN CUTS. NEVER HOLD A SINGLE STATIC SHOT LONGER THAN ${cutCadenceSeconds} SECONDS.`;
 
-      const promptPart1 = `${prompt}\n(Part 1 - Verse Setup: ${comicCam1} ${continuityDirective} ${noTextRule})`;
-      const promptPart2 = `${prompt}\n(Part 2 - Chorus Climax: ${comicCam2} ${continuityDirective} ${noTextRule})`;
+      // 전반부/후반부 연출은 카테고리 중립적으로 기술한다.
+      // (기존에는 'frantic butler interaction', 'pet reaction'이 하드코딩돼
+      //  K-드라마·역사 부캐 영상에도 집사와 반려동물 연출이 주입됐다.)
+      const comicCam1 = `CAMERAWORK: Dynamic whip-pan entrance, 0.5x ultra-wide fisheye angle, rapid crash-zoom onto the protagonist's comedic facial expression as the situation is set up.`;
+      const comicCam2 = `CAMERAWORK: High-dopamine climax, Dutch-angle snap zooms, slow-mo spin cuts, the protagonist's most exaggerated reaction of the whole skit.`;
+
+      const promptPart1 = `${prompt}\n(Part 1 - Hook & Setup: ${comicCam1} ${cutDirective} ${continuityDirective} ${noTextRule})`;
+      const promptPart2 = `${prompt}\n(Part 2 - Hook Repeat & Climax: ${comicCam2} ${cutDirective} ${continuityDirective} ${noTextRule})`;
 
       let videoUrl1: string | null = null;
       let videoUrl2: string | null = null;
 
       try {
-        console.log('[API/grok-video] Rendering Clip 1 (Verse) & Clip 2 (Chorus) in PARALLEL...');
+        console.log(
+          `[API/grok-video] Rendering 2 clips in PARALLEL (category=${category ?? 'n/a'}, ${cutsPerClip} cuts/clip @ ${cutCadenceSeconds}s, allowDance=${allowDance})...`
+        );
         const [result1, result2] = await Promise.allSettled([
-          generateGrokClip(promptPart1, xaiApiKey, apiBase),
-          generateGrokClip(promptPart2, xaiApiKey, apiBase)
+          generateGrokClip(promptPart1, xaiApiKey, apiBase, allowDance),
+          generateGrokClip(promptPart2, xaiApiKey, apiBase, allowDance)
         ]);
 
         if (result1.status === 'fulfilled') videoUrl1 = result1.value;
@@ -304,16 +385,16 @@ export async function POST(req: NextRequest) {
       }
 
       if (!videoUrl1 && !videoUrl2) {
-        videoUrl1 = await generateGrokClip(prompt, xaiApiKey, apiBase);
+        videoUrl1 = await generateGrokClip(prompt, xaiApiKey, apiBase, allowDance);
       }
 
       const activeClips = [videoUrl1, videoUrl2].filter(Boolean) as string[];
       console.log(`[API/grok-video] Finished distinct clips (${activeClips.length}). Merging 30s clips & audio...`);
 
-      let finalUrl = await mergeClipsAndAudio(activeClips, audioUrl);
-      
+      let merged = await mergeClipsAndAudio(activeClips, audioUrl);
+
       // 🚨 FFmpeg 결합 실패 시 Melodio 맥미니 서버에 결합 강제 요청
-      if (!finalUrl && activeClips.length > 0) {
+      if (!merged && activeClips.length > 0) {
         console.warn('[API/grok-video] Local merge failed, calling Melodio Mac Mini merge proxy directly...');
         try {
           const proxyRes = await fetch('https://hivedesk-app.hivedesk.ai/api/viral-cf/grok-video/merge', {
@@ -324,7 +405,10 @@ export async function POST(req: NextRequest) {
           if (proxyRes.ok) {
             const proxyData = await proxyRes.json();
             if (proxyData.success && proxyData.mergedVideoUrl) {
-              finalUrl = proxyData.mergedVideoUrl;
+              merged = {
+                url: proxyData.mergedVideoUrl,
+                durationSeconds: Number(proxyData.durationSeconds) || 0,
+              };
             }
           }
         } catch (proxyErr: any) {
@@ -332,26 +416,30 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      if (!finalUrl) {
-        throw new Error('30초 비디오 결합 및 음원 인코딩에 실패했습니다. 맥미니 서버 상태를 확인해주세요.');
+      if (!merged) {
+        throw new Error('비디오 결합 및 음원 인코딩에 실패했습니다. 맥미니 서버 상태를 확인해주세요.');
       }
 
       return NextResponse.json({
         success: true,
-        videoUrl: finalUrl,
+        videoUrl: merged.url,
+        // 화면이 <video> 메타데이터를 기다리지 않고 바로 길이를 표시할 수 있게 한다.
+        durationSeconds: merged.durationSeconds,
         clips: activeClips,
         is30SecFull: activeClips.length > 1,
-        message: '30초 단일 풀 숏폼 MP4 비디오 (영상 결합 + 멜로디오 음원 매핑) 생성이 완료되었습니다!'
+        message: `${merged.durationSeconds}초 숏폼 MP4 (영상 결합 + 멜로디오 음원 매핑) 생성이 완료되었습니다!`
       });
     } else {
       console.log(`[API/grok-video] Generating single 15-sec Grok AI video clip...`);
-      const singleUrl = await generateGrokClip(prompt, xaiApiKey, apiBase);
-      const mergedUrl = await mergeClipsAndAudio([singleUrl], audioUrl);
-      const finalUrl = mergedUrl || singleUrl;
+      const singleUrl = await generateGrokClip(prompt, xaiApiKey, apiBase, allowDance);
+      const merged = await mergeClipsAndAudio([singleUrl], audioUrl);
+      const finalUrl = merged?.url || singleUrl;
 
       return NextResponse.json({
         success: true,
         videoUrl: finalUrl,
+        // 병합에 실패해 원본 클립을 그대로 쓰는 경우 길이를 알 수 없다(0 = 미측정).
+        durationSeconds: merged?.durationSeconds ?? 0,
         clips: [finalUrl],
         is30SecFull: false,
         message: 'Grok AI 비디오 + 멜로디오 음원 결합이 완료되었습니다.'

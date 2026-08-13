@@ -259,258 +259,43 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
   return { taskId, engine: 'suno_v5' }
 }
 
-// ─── 앨범 커버 이미지 생성 및 업로드 ──────────────────────────────────────────
-async function blendVisualPromptWithMetadata(
-  payload: PromptPayload,
-  playbook: any
-): Promise<string> {
-  const openaiApiKey = process.env.OPENAI_API_KEY
-  if (!openaiApiKey) {
-    if (playbook?.metadata?.logo_prompt) {
-      return `${playbook.metadata.logo_prompt}. Designed as a high-resolution 1:1 square album cover art, representing the music. Keep the edges clean.`
-    }
-    return `Beautiful 1:1 square album cover art for a song. Style: ${payload.stylePrompt}. Clean aesthetic, high resolution, digital art.`
-  }
+// ─── 앨범 커버 생성은 melodio-worker 로 이관됨 ────────────────────────────────
+// blendVisualPromptWithMetadata / generateAndUploadCoverArt 는 워커의
+// buildCoverPrompt / generateCoverArt 로 옮겼다. Vercel 서버리스에서는 응답 후
+// 백그라운드 프로미스 완료가 보장되지 않아 여기서는 절대 동작할 수 없었다.
+//
+// 아래 getGenreFallback 은 남는다 — 생성 중 잠시 걸어둘 자리표시자를 고르는 용도.
+// 곡이 완성되면 워커가 Suno 커버 또는 AI 커버로 교체한다.
 
-  const basePrompt = playbook?.metadata?.logo_prompt || `Beautiful 1:1 square album cover art for a song. Style: ${payload.stylePrompt}. Clean aesthetic, high resolution, digital art.`
-  const title = payload.title || 'Untitled'
-  const lyricsPrompt = payload.lyricsPrompt || ''
-  const stylePrompt = payload.stylePrompt || ''
-
-  const systemPrompt = `You are a creative visual director for a music streaming platform.
-Your task is to take a base brand visual style and dynamically adapt/enrich it to match the specific song's title, lyrics, and style.
-This ensures that while the core brand identity is preserved, each song gets a unique, relevant album cover variation, avoiding repetitive visual penalties on platforms like YouTube.
-
-INPUTS:
-1. Base Brand Style Prompt: "${basePrompt}"
-2. Song Title: "${title}"
-3. Style Prompt: "${stylePrompt}"
-4. Song Lyrics: "${lyricsPrompt}"
-
-RULES:
-1. PRESERVE THE BRAND: Strictly keep the medium, color schemes, and core aesthetic of the Base Brand Style Prompt (e.g. if it specifies "traditional Korean ink wash painting (soomuk-hwa)", the output MUST still be that exact medium and style).
-2. INTRODUCE VARIATION: Extract 1 or 2 specific visual metaphors, weather conditions, times of day, seasons, or background details from the Title and Lyrics, and blend them naturally into the scene (e.g., if rain/rainy is mentioned, make the scene rainy; if winter/snow is mentioned, add snow; if coffee/cafe is mentioned, add a warm mug or cafe steam).
-3. KEEP IT SIMPLE: Output ONLY the final generated English prompt of 60 to 100 words. No explanations, no formatting, no markdown, no quotes. Just the raw prompt string.`
-
-  const models = ['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.6-terra', 'gpt-4o', 'gpt-4o-mini']
-  const apiBase = process.env.OPENAI_API_BASE || 'https://api.openai.com'
-  const url = `${apiBase}/v1/chat/completions`
-
-  for (const model of models) {
-    try {
-      console.log(`[API/generate] Visual Blender calling OpenAI ${model}...`)
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${openaiApiKey}`
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: `Blend the prompt for song title: "${title}"` }
-          ],
-          temperature: 0.7,
-          max_tokens: 200
-        })
-      })
-
-      if (res.ok) {
-        const data = await res.json()
-        const blended = data.choices?.[0]?.message?.content?.trim()
-        if (blended && blended.length > 10) {
-          console.log(`[API/generate] Dynamic visual blending successful: "${blended}"`)
-          return `${blended}. Designed as a high-resolution 1:1 square album cover art. Keep the edges clean.`
-        }
-      } else {
-        const errText = await res.text()
-        console.warn(`[API/generate] Visual Blender model ${model} failed:`, errText)
-      }
-    } catch (err: any) {
-      console.warn(`[API/generate] Visual Blender model ${model} error:`, err.message)
-    }
-  }
-
-  return `${basePrompt}. Designed as a high-resolution 1:1 square album cover art. Keep the edges clean.`
-}
+/**
+ * 생성 중에 임시로 걸어둘 커버.
+ *
+ * 단어 경계 필수: 예전에는 p.includes('rap') 이었는데, 스타일 프롬프트의
+ * "avoid: aggressive rap" 이 걸려 모든 바이럴곡이 개발자 그림을 받았다.
+ * 'dev' 도 device/development 에 걸린다.
+ */
+const FALLBACK_PRESET_BASE =
+  'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets';
 
 function getGenreFallback(pStr: string, pb: any) {
-  if (pb?.metadata?.thumbnail_url) return pb.metadata.thumbnail_url;
+  // ⚠️ playbook 썸네일을 곡 커버로 쓰지 않는다.
+  // /preset-thumbs/ 는 Preset Studio 장르 카탈로그 이미지이고, 곡 내용과 무관하다.
+  // (강아지 노래에 vocaloid_pop.png 가 붙던 사고 — 2026-08-09)
+  const pbThumb = pb?.metadata?.thumbnail_url;
+  if (pbThumb && !pbThumb.includes('unsplash.com') && !pbThumb.includes('/preset-thumbs/')) {
+    return pbThumb;
+  }
   const p = (pStr || '').toLowerCase();
-  if (p.includes('joseon') || p.includes('조선') || p.includes('gugak') || p.includes('국악') || p.includes('pansori') || p.includes('판소리')) {
-    return 'https://images.unsplash.com/photo-1578632767115-351597cf2477?q=80&w=600&auto=format&fit=crop';
-  }
-  if (p.includes('boom bap') || p.includes('hip hop') || p.includes('hiphop') || p.includes('rap')) {
-    return 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop';
-  }
-  if (p.includes('synthwave') || p.includes('cyberpunk') || p.includes('retro')) {
-    return 'https://images.unsplash.com/photo-1607799279861-4dd421887fb3?q=80&w=600&auto=format&fit=crop';
-  }
-  if (p.includes('city pop') || p.includes('tokyo') || p.includes('japan')) {
-    return 'https://images.unsplash.com/photo-1540959733332-eab4deceeaf7?q=80&w=600&auto=format&fit=crop';
-  }
-  if (p.includes('jazz')) {
-    return 'https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?q=80&w=600&auto=format&fit=crop';
-  }
-  if (p.includes('lofi') || p.includes('lo-fi') || p.includes('chill') || p.includes('tea')) {
-    return 'https://images.unsplash.com/photo-1544787219-7f47ccb76574?q=80&w=600&auto=format&fit=crop';
-  }
-  return 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop';
-}
+  const has = (...words: string[]) =>
+    words.some((w) => new RegExp(`(^|[^a-z가-힣])${w.replace(/[-\s]/g, '[-\\s]?')}([^a-z가-힣]|$)`, 'i').test(p));
 
-async function generateAndUploadCoverArt(
-  payload: PromptPayload,
-  playbook: any,
-  serviceSupabase: any
-): Promise<string> {
-  const defaultFallback = getGenreFallback(payload.stylePrompt, playbook);
-  try {
-    let imageUrl = ''
-    const finalPrompt = await blendVisualPromptWithMetadata(payload, playbook)
-
-    console.log(`[API/generate] Generating cover art with prompt: "${finalPrompt.slice(0, 100)}..."`)
-
-    // ─────────────────────────────────────────────────────────────────────
-    // 이미지 엔진: gpt-image-2 via 302.ai (타임아웃 30초로 확장)
-    // ─────────────────────────────────────────────────────────────────────
-    const sunoApiKey = process.env.SUNO_API_KEY
-    const sunoApiBase = (process.env.SUNO_API_URL || 'https://api.302.ai').replace(/\/+$/, '')
-
-    if (sunoApiKey) {
-      try {
-        console.log(`[API/generate] gpt-image-2 via 302.ai 호출 시도 중...`)
-        const controller = new AbortController()
-        const timeoutId = setTimeout(() => controller.abort(), 30000)
-
-        const res = await fetch(`${sunoApiBase}/v1/images/generations`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${sunoApiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'gpt-image-2',
-            prompt: finalPrompt,
-            n: 1,
-            size: '1024x1024',
-            quality: 'auto',
-            response_format: 'b64_json',
-          }),
-          signal: controller.signal
-        })
-        clearTimeout(timeoutId)
-
-        if (res.ok) {
-          const gptImageData = await res.json()
-          const b64Data = gptImageData.data?.[0]?.b64_json
-          const rawUrl = gptImageData.data?.[0]?.url
-          if (b64Data) {
-            imageUrl = `data:image/png;base64,${b64Data}`
-            console.log(`[API/generate] gpt-image-2 이미지 생성 성공 (Base64)!`)
-          } else if (rawUrl) {
-            imageUrl = rawUrl
-            console.log(`[API/generate] gpt-image-2 이미지 생성 성공 (URL)!`)
-          }
-        } else {
-          const errorText = await res.text()
-          console.warn(`[API/generate] gpt-image-2 실패:`, errorText)
-        }
-      } catch (err: any) {
-        console.error(`[API/generate] gpt-image-2 에러:`, err.message)
-      }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Fallback 1: OpenAI DALL-E-3 (공식 OpenAI Key 사용)
-    // ─────────────────────────────────────────────────────────────────────
-    if (!imageUrl && process.env.OPENAI_API_KEY) {
-      try {
-        console.log(`[API/generate] OpenAI DALL-E 3 커버 아트 생성 시도 중...`)
-        const openAiRes = await fetch('https://api.openai.com/v1/images/generations', {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${process.env.OPENAI_API_KEY.trim()}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            model: 'dall-e-3',
-            prompt: `Professional music album cover art, 1:1 square ratio, vivid concept art matching lyrics: ${finalPrompt.slice(0, 400)}`,
-            n: 1,
-            size: '1024x1024',
-            response_format: 'b64_json',
-          })
-        })
-        if (openAiRes.ok) {
-          const openAiData = await openAiRes.json()
-          const b64 = openAiData.data?.[0]?.b64_json
-          if (b64) {
-            imageUrl = `data:image/png;base64,${b64}`
-            console.log(`[API/generate] OpenAI DALL-E 3 커버 이미지 생성 성공!`)
-          }
-        }
-      } catch (dalleErr: any) {
-        console.warn(`[API/generate] DALL-E 3 생성 예외:`, dalleErr.message)
-      }
-    }
-
-    // ─────────────────────────────────────────────────────────────────────
-    // Fallback 2: Pollinations AI (초고속 실시간 맞춤 앨범 커버 생성)
-    // ─────────────────────────────────────────────────────────────────────
-    if (!imageUrl) {
-      console.log(`[API/generate] Pollinations AI 고품질 커버아트 실시간 생성 중...`)
-      imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(`album cover art, ${finalPrompt.slice(0, 250)}`)}?width=1024&height=1024&seed=${Math.floor(Math.random() * 900000) + 100000}&nologo=true`
-    }
-
-    if (imageUrl) {
-      const fileId = crypto.randomUUID()
-      const filePath = `covers/${fileId}.png`
-      
-      let uploadBuf: Buffer
-      let contentType = 'image/png'
-
-      if (imageUrl.startsWith('data:image')) {
-        const base64Data = imageUrl.split(',')[1]
-        uploadBuf = Buffer.from(base64Data, 'base64')
-      } else {
-        const imgRes = await fetch(imageUrl)
-        if (!imgRes.ok) throw new Error(`Generated image download failed: ${imgRes.status}`)
-        const arrayBuf = await imgRes.arrayBuffer()
-        uploadBuf = Buffer.from(arrayBuf)
-        contentType = imgRes.headers.get('content-type') || 'image/png'
-      }
-
-      console.log(`[API/generate] Uploading cover art to storage: ${filePath}`)
-      const { error: uploadError } = await serviceSupabase.storage
-        .from('melodio-assets')
-        .upload(filePath, uploadBuf, {
-          contentType,
-          upsert: true
-        })
-
-      if (uploadError) {
-        console.error('[API/generate] Storage upload error:', uploadError.message)
-        return defaultFallback
-      }
-
-      const { data: { publicUrl } } = serviceSupabase.storage
-        .from('melodio-assets')
-        .getPublicUrl(filePath)
-
-      console.log(`[API/generate] Cover art upload success. Public URL: ${publicUrl}`)
-      return publicUrl
-    }
-
-    if (!imageUrl) {
-      console.log(`[API/generate] Fallback: Pollinations AI 커버 이미지 100% 즉시 생성...`)
-      imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=1024&height=1024&nologo=true&seed=${Date.now()}`;
-    }
-
-    return imageUrl || defaultFallback;
-  } catch (err: any) {
-    console.error(`[API/generate] 커버 이미지 생성 예외 발생:`, err.message);
-    return defaultFallback;
-  }
+  if (has('joseon', '조선', 'gugak', '국악', 'pansori', '판소리')) return `${FALLBACK_PRESET_BASE}/joseon-hip-hop.png`;
+  if (has('boom bap', 'hip hop', 'hiphop', 'rap', 'developer')) return `${FALLBACK_PRESET_BASE}/developer-debugging.png`;
+  if (has('synthwave', 'cyberpunk', 'retro')) return `${FALLBACK_PRESET_BASE}/dead-mall-nostalgia.png`;
+  if (has('city pop', 'tokyo', 'japan')) return `${FALLBACK_PRESET_BASE}/tokyo-midnight-1984.png`;
+  if (has('jazz', 'kyoto', 'matcha')) return `${FALLBACK_PRESET_BASE}/matcha-kyoto-jazz.png`;
+  if (has('lofi', 'lo-fi', 'chill', 'tea')) return `${FALLBACK_PRESET_BASE}/iced-oolong-tea.png`;
+  return `${FALLBACK_PRESET_BASE}/deep-sleep-drift.png`;
 }
 
 // ─── Lyria 엔진 (기존 동기 방식 유지 — 즉시 반환) ──────────────────────────────
@@ -686,6 +471,18 @@ export async function POST(request: NextRequest) {
       console.error('[API/generate] INSERT 에러:', genError.message, genError.details)
       throw new Error(`데이터베이스 저장 실패: ${genError.message}`)
     }
+
+    /*
+     * 🎨 커버 아트 생성은 melodio-worker 로 이관됐다.
+     *
+     * 이 자리에 있던 코드는 응답을 반환한 뒤 .then() 으로 도는 fire-and-forget
+     * 이었다. Vercel 서버리스는 응답을 보내는 순간 함수를 얼리므로 그 프로미스가
+     * 완료된다는 보장이 없다 — 맥미니(상시 실행)에서는 되고 프로덕션에서는 안 되는
+     * 구조였고, 그래서 공개 플레이리스트의 커버가 전부 자리표시자로 남았다.
+     *
+     * 지금은 위에서 coverArtUrl1(자리표시자)만 걸어두고, 곡이 완성되는 시점에
+     * 워커가 Suno 커버 → AI 생성 순으로 교체한다. (isPlaceholderCover 참조)
+     */
 
     return NextResponse.json({
       success: true,

@@ -2,26 +2,25 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 
-export async function GET(req: Request) {
+export async function GET() {
   try {
     const filePath = path.join(process.cwd(), "public", "Pioneer119Rescue.apk");
-    if (fs.existsSync(filePath)) {
-      const fileBuffer = fs.readFileSync(filePath);
-      return new NextResponse(fileBuffer, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/vnd.android.package-archive",
-          "Content-Disposition": 'attachment; filename="Pioneer119Rescue.apk"',
-          "Content-Length": fileBuffer.length.toString(),
-          "Cache-Control": "no-cache, no-store, must-revalidate"
-        }
-      });
+    if (!fs.existsSync(filePath)) {
+      return NextResponse.json({ error: "APK file not found on server" }, { status: 404 });
     }
 
-    const url = new URL(req.url);
-    return NextResponse.redirect(`${url.protocol}//${url.host}/Pioneer119Rescue.apk`, 302);
-  } catch (err: any) {
-    const url = new URL(req.url);
-    return NextResponse.redirect(`${url.protocol}//${url.host}/Pioneer119Rescue.apk`, 302);
+    const fileBuffer = fs.readFileSync(filePath);
+
+    return new NextResponse(fileBuffer, {
+      status: 200,
+      headers: {
+        "Content-Type": "application/vnd.android.package-archive",
+        "Content-Disposition": 'attachment; filename="Pioneer119Rescue.apk"',
+        "Content-Length": fileBuffer.length.toString(),
+        "Cache-Control": "public, max-age=3600"
+      }
+    });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message || "Download failed" }, { status: 500 });
   }
 }

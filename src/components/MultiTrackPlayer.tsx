@@ -212,10 +212,13 @@ export default function MultiTrackPlayer({
     audioGrade?: string;
     clippingCount?: number;
     dissonanceScore?: number;
+    coverArtUrl?: string;
   }>({
     title: 'Neon Drift — Extended Mix',
     artist: 'Melodio AI · Persona #007',
   });
+  // 커버 로딩 실패 시 그라데이션 자리표시자로 되돌린다
+  const [coverFailed, setCoverFailed] = useState(false);
 
   useEffect(() => {
     if (!generationId) {
@@ -230,10 +233,10 @@ export default function MultiTrackPlayer({
       try {
         const { data, error } = await supabase
           .from('generations')
-          .select('title, id, audio_grade, clipping_count, dissonance_score')
+          .select('title, id, audio_grade, clipping_count, dissonance_score, cover_art_url')
           .eq('id', generationId)
           .single();
-        
+
         if (data && !error) {
           setTrackMetadata({
             title: data.title || 'Untitled Track',
@@ -241,6 +244,7 @@ export default function MultiTrackPlayer({
             audioGrade: data.audio_grade || undefined,
             clippingCount: data.clipping_count ?? undefined,
             dissonanceScore: data.dissonance_score ?? undefined,
+            coverArtUrl: data.cover_art_url || undefined,
           });
         }
       } catch (err) {
@@ -248,6 +252,7 @@ export default function MultiTrackPlayer({
       }
     };
 
+    setCoverFailed(false); // 곡이 바뀌면 커버 실패 상태를 초기화한다
     const interval = setInterval(fetchGenMeta, 4000); // 4초마다 갱신 (로딩완료/재시도 반영용)
     fetchGenMeta();
     return () => clearInterval(interval);
@@ -319,9 +324,19 @@ export default function MultiTrackPlayer({
 
       {/* ── 트랙 정보 + 전체 컨트롤 ── */}
       <div className="flex items-center gap-4 p-4 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-        <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${MOCK_TRACK.coverGradient} flex-shrink-0 flex items-center justify-center text-xl shadow-lg`}>
-          🎵
-        </div>
+        {/* 실제 앨범 커버. 없거나 로딩 실패 시에만 그라데이션 자리표시자로 떨어진다. */}
+        {trackMetadata.coverArtUrl && !coverFailed ? (
+          <img
+            src={trackMetadata.coverArtUrl}
+            alt={`${trackMetadata.title} 앨범 커버`}
+            onError={() => setCoverFailed(true)}
+            className="w-14 h-14 rounded-xl flex-shrink-0 object-cover shadow-lg"
+          />
+        ) : (
+          <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${MOCK_TRACK.coverGradient} flex-shrink-0 flex items-center justify-center text-xl shadow-lg`}>
+            🎵
+          </div>
+        )}
 
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">

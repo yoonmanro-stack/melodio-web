@@ -26,7 +26,10 @@ export default function SharedPlayerClient({ generation }: SharedPlayerClientPro
   const [isMuted, setIsMuted] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  const coverUrl = generation.cover_art_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop';
+  const rawCover = generation.cover_art_url;
+  const coverUrl = (rawCover && !rawCover.includes('unsplash.com'))
+    ? rawCover
+    : 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png';
   const audioUrl = generation.audio_url;
 
   useEffect(() => {

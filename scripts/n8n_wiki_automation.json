@@ -1,0 +1,231 @@
+{
+  "name": "Melodio Music Wiki Auto-Generator",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "add-genre",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "webhook-trigger",
+      "name": "Webhook Trigger"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://100.100.27.10:3001/api/autopilot/query-notebooklm",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"notebookId\": \"16216b66-3584-4565-b568-77648ab8f20f\",\n  \"query\": \"다음 음악 장르에 대한 역사, 대표 악기, 템포(BPM), Suno AI용 프롬프트 태그(suno_tags), 어울리는 이미지 앨범 커버용 프롬프트(logo_prompt), 음악적 무드를 정리해줘: \" + $json.body.genre\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        200,
+        0
+      ],
+      "id": "query-notebooklm",
+      "name": "Query NotebookLM",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "melodio-supabase-key",
+          "name": "Melodio - Supabase Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "gpt-4o-mini",
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1,
+      "position": [
+        380,
+        180
+      ],
+      "id": "openai-model",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "melodio-openai-key",
+          "name": "Melodio - OpenAI Key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=NotebookLM이 분석한 음악 지식을 바탕으로 아래 장르에 대한 최상의 음악 큐레이션 플레이북 데이터를 JSON 포맷으로 생성해주세요.\n\n장르명: {{ $node[\"Webhook Trigger\"].json.body.genre }}\n\nNotebookLM 분석 정보:\n{{ $node[\"Query NotebookLM\"].json.data.answer }}\n\n출력 스키마:\n{\n  \"category\": \"genre\",\n  \"key_name\": \"영문 소문자 및 하이픈 구조의 키명 (예: joseon-hiphop)\",\n  \"title\": \"장르명 (한글명) (예: 조선힙합 (Joseon Hip Hop))\",\n  \"content\": \"## 📊 채널 적합성 및 예상 평점\\n- 예상 평점: X/10\\n- 분석: ...\\n\\n## 💡 핵심 컨셉\\n...\\n\\n## 🚀 채널 운영 전략\\n...\\n\\n## 🏷️ 추천 브랜드명 & 핸들\\n...\\n\\n## 🎵 음악적 특징\\n...\\n\\n## ✍️ 가사 테마 및 은유 가이드\\n...\",\n  \"metadata\": {\n    \"bpm_range\": \"예: 90-110\",\n    \"suno_tags\": \"Suno AI에 입력할 최적의 쉼표 구분 태그들\",\n    \"instruments\": \"사용 악기들\",\n    \"moods\": \"무드 단어들\",\n    \"logo_prompt\": \"이 장르 음악에 어울리는 최적의 1:1 이미지 생성용 영문 프롬프트\",\n    \"category\": \"이 프리셋에 부합하는 대분류 카테고리를 영문으로 할당하십시오. 💆‍♂️ 마음의 위로와 힐링이면 'healing', ✏️ 몰입과 생산성이면 'focus', 📻 아날로그와 향수/시티팝이면 'retro'를 선택하십시오.\"\n  }\n}\n\n[특별 지침 — 일본 특화 감성 자동 지원]:\n만약 입력된 장르명이나 내용이 일본 특화 음악 스타일(예: J-Pop, City Pop, Shibuya-kei, 애니메이션 BGM, 재즈 힙합, 일본 전통 악기 퓨전 등)에 해당하는 경우, 이에 맞춤화된 시각적/청각적 요소를 부여하십시오.\n- suno_tags: 일본 서브컬처 감성에 어울리는 태그 (예: cute anime vocal, shibuya-kei, melancholic piano melody 등) 추가.\n- logo_prompt: 도쿄 밤거리, 네온사인, 미려한 애니메이션 감성 일러스트 등의 묘사를 추가.\n- content: 일본 시장 타겟팅 전략 및 가사 은유 기법(도쿄의 계절감, 비, 전철 소음 등)을 포함하여 작성.",
+        "options": {
+          "systemMessage": "You are a professional music curator and database engineer. You output only clean JSON playbooks following the strict schema requested based on raw NotebookLM analysis."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 1.6,
+      "position": [
+        440,
+        0
+      ],
+      "id": "ai-agent",
+      "name": "AI Agent Generator"
+    },
+    {
+      "parameters": {
+        "jsCode": "const output = $('AI Agent Generator').first().json.output;\nlet playbook = output;\nif (typeof output === 'string') {\n  let cleaned = output.trim();\n  if (cleaned.startsWith('```')) {\n    cleaned = cleaned.replace(/^```(?:json)?\\n/, '').replace(/\\n```$/, '');\n  }\n  playbook = JSON.parse(cleaned.trim());\n}\nreturn { json: playbook };"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        540,
+        -100
+      ],
+      "id": "parse-playbook",
+      "name": "Parse Playbook"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://jfsfxzhunkrjyibsdswb.supabase.co/rest/v1/curation_playbooks",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "httpCustomAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({\n  \"category\": $json.category,\n  \"key_name\": $json.key_name,\n  \"title\": $json.title,\n  \"content\": $json.content,\n  \"metadata\": $json.metadata,\n  \"updated_at\": new Date().toISOString()\n}) }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        700,
+        0
+      ],
+      "id": "supabase-upsert",
+      "name": "Supabase DB Upsert",
+      "credentials": {
+        "httpCustomAuth": {
+          "id": "melodio-supabase-custom-auth",
+          "name": "Melodio - Supabase Custom Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const fs = require('fs');\nconst path = require('path');\n\nconst playbook = $('Parse Playbook').first().json;\n\nconst category = playbook.category;\nconst key_name = playbook.key_name;\nconst title = playbook.title;\nconst bpm_range = playbook.metadata.bpm_range;\nconst suno_tags = playbook.metadata.suno_tags;\nconst instruments = playbook.metadata.instruments;\nconst moods = playbook.metadata.moods;\nconst logo_prompt = playbook.metadata.logo_prompt;\nconst content = playbook.content;\n\nconst mdContent = `--- \ncategory: ${category}\nkey_name: ${key_name}\ntitle: ${title}\nbpm_range: ${bpm_range}\nsuno_tags: ${suno_tags}\ninstruments: ${instruments}\nmoods: ${moods}\nlogo_prompt: ${logo_prompt}\n---\n# ${title}\n\n${content}\n`;\n\nconst dirPath = '/data/vault/04_Context/Melodio/Music-Wiki';\nconst filePath = path.join(dirPath, `${key_name}.md`);\n\nif (!fs.existsSync(dirPath)) {\n  fs.mkdirSync(dirPath, { recursive: true });\n}\n\nfs.writeFileSync(filePath, mdContent, 'utf-8');\n\nreturn {\n  success: true,\n  file_written: filePath\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        900,
+        0
+      ],
+      "id": "write-obsidian-file",
+      "name": "Write to Obsidian Vault"
+    }
+  ],
+  "connections": {
+    "Webhook Trigger": {
+      "main": [
+        [
+          {
+            "node": "Query NotebookLM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query NotebookLM": {
+      "main": [
+        [
+          {
+            "node": "AI Agent Generator",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent Generator",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent Generator": {
+      "main": [
+        [
+          {
+            "node": "Parse Playbook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Playbook": {
+      "main": [
+        [
+          {
+            "node": "Supabase DB Upsert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase DB Upsert": {
+      "main": [
+        [
+          {
+            "node": "Write to Obsidian Vault",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

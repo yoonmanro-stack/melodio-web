@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
 import PublicTrackGrid from "@/components/prompt-builder/PublicTrackGrid";
+import { getCategorySpec, buildStylePromptV2 } from "@/lib/vle/viralCategorySpec";
+import { VIRAL_SONG_SPEC, estimateSeconds } from "@/lib/vle/viralSongSpec";
 
 // 커스텀 유튜브 아이콘 SVG
 function YoutubeIcon({ className }: { className?: string }) {
@@ -51,29 +53,29 @@ interface Concept {
 
 // ── 썸네일 이미지 매퍼 ────────────────────────────────────────────────────────
 const CONCEPT_THUMBNAIL_MAP: Record<string, string> = {
-  'trend-var':       'https://images.unsplash.com/photo-1560272564-c83b66b1ad12?w=400&q=80',
-  'trend-yoajeong':  'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=400&q=80',
-  'trend-ai-finger': 'https://images.unsplash.com/photo-1677442135703-1787eea5ce01?w=400&q=80',
-  'trend-algorithm': 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=400&q=80',
-  'history-sunshin': 'https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?w=400&q=80',
-  'history-jeongjo': 'https://images.unsplash.com/photo-1509391366360-2e959784a276?w=400&q=80',
-  'history-saimdang':'https://images.unsplash.com/photo-1541961017774-22349e4a1262?w=400&q=80',
-  'history-sejong':  'https://images.unsplash.com/photo-1555421689-d68471e189f2?w=400&q=80',
-  'human-study-cafe':'https://images.unsplash.com/photo-1501339847302-ac426a4a7cbb?w=400&q=80',
-  'human-instagram': 'https://images.unsplash.com/photo-1611162616475-46b635cb6868?w=400&q=80',
-  'human-monday':    'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=400&q=80',
-  'human-mbti':      'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=400&q=80',
+  'trend-var':       'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png',
+  'trend-yoajeong':  'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png',
+  'trend-ai-finger': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png',
+  'trend-algorithm': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png',
+  'history-sunshin': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png',
+  'history-jeongjo': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png',
+  'history-saimdang':'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png',
+  'history-sejong':  'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png',
+  'human-study-cafe':'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png',
+  'human-instagram': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png',
+  'human-monday':    'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png',
+  'human-mbti':      'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png',
 };
 
 const CATEGORY_THUMBNAIL_MAP: Record<string, string> = {
-  challenge: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
-  relationship: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=400&q=80',
-  trend: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=400&q=80',
-  history: 'https://images.unsplash.com/photo-1598300042247-d088f8ab3a91?w=400&q=80',
-  human: 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=400&q=80',
-  brand: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=400&q=80',
-  drama: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=400&q=80',
-  pet: 'https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=400&q=80',
+  challenge: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png',
+  relationship: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png',
+  trend: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png',
+  history: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png',
+  human: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png',
+  brand: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png',
+  drama: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png',
+  pet: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png',
 };
 
 const CATEGORY_TITLES: Record<string, string> = {
@@ -113,7 +115,7 @@ function getConceptThumbnail(concept: Concept): { url: string; isStatic: boolean
   if (mapped) return { url: mapped, isStatic: true };
   const catMapped = CATEGORY_THUMBNAIL_MAP[concept.tab_type];
   if (catMapped) return { url: catMapped, isStatic: true };
-  return { url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80', isStatic: true };
+  return { url: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png', isStatic: true };
 }
 
 // 카테고리 설정 (높은 이용도/떡상 예상순 배치)
@@ -266,7 +268,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Jacob Allan",
     audioUrl: REAL_VIRAL_AUDIO_POOL[0],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-in-front-of-a-store-40545-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     tags: "viral trap, heavy 808 bass, omg chant, punchy drums"
   },
   {
@@ -276,7 +278,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "KAYA",
     audioUrl: REAL_VIRAL_AUDIO_POOL[1],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-dj-playing-music-at-a-club-42283-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     tags: "japanese lofi arpeggios, soft bells, chillhop beat"
   },
   {
@@ -286,7 +288,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Barol Beats",
     audioUrl: REAL_VIRAL_AUDIO_POOL[2],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-neon-sign-of-a-pizza-slice-40546-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     tags: "comical narrative hip-hop, bouncy bass, ding effect"
   },
   {
@@ -296,7 +298,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "oceanfigo",
     audioUrl: REAL_VIRAL_AUDIO_POOL[3],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-man-dancing-under-neon-lights-40549-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1515002246390-7bf7e8f87b54?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     tags: "emo rock, distorted guitars, emotional shouting vocals"
   },
   {
@@ -306,7 +308,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "korean_hamin",
     audioUrl: REAL_VIRAL_AUDIO_POOL[4],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-hands-of-a-pianist-playing-the-piano-40573-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     tags: "korean study beat, cute synthesizers, 95 BPM"
   },
   {
@@ -316,7 +318,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Lidell",
     audioUrl: REAL_VIRAL_AUDIO_POOL[5],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-guitarist-playing-an-acoustic-guitar-42261-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     tags: "dramatic synth pop, intense reverb, heavy vocal doubling"
   },
   {
@@ -326,7 +328,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "BrokeBoi",
     audioUrl: REAL_VIRAL_AUDIO_POOL[6],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-spinning-vinyl-record-on-a-turntable-40575-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     tags: "comical lofi hiphop, sad brass horn, acoustic guitar"
   },
   {
@@ -336,7 +338,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "GhostBuster",
     audioUrl: REAL_VIRAL_AUDIO_POOL[7],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-womans-feet-walking-on-rainy-streets-40544-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     tags: "rnb soul, emotional female vocal, deep bass"
   },
   {
@@ -346,7 +348,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Overworked",
     audioUrl: REAL_VIRAL_AUDIO_POOL[8],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-coffee-cup-with-steam-rising-40578-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     tags: "heavy metal punk, screaming vocals, fast drums"
   },
   {
@@ -356,7 +358,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "FoodieJunkie",
     audioUrl: REAL_VIRAL_AUDIO_POOL[9],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-neon-sign-of-a-pizza-slice-40546-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1565299624946-b28f40a0ae38?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     tags: "funky disco pop, cheerful brass, groovy slap bass"
   },
   {
@@ -366,7 +368,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "NetAddict",
     audioUrl: REAL_VIRAL_AUDIO_POOL[10],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-man-dancing-under-neon-lights-40549-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     tags: "glitch hop synth, frantic beat, electronic FX"
   },
   {
@@ -376,7 +378,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Iron Lifter",
     audioUrl: REAL_VIRAL_AUDIO_POOL[11],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-in-front-of-a-store-40545-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1517838277536-f5f99be501cd?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     tags: "cyberpunk gym electronic, heavy growl bass, 130 BPM"
   },
   {
@@ -386,7 +388,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Gordon R.",
     audioUrl: REAL_VIRAL_AUDIO_POOL[12],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-coffee-cup-with-steam-rising-40578-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1556910103-1c02745aae4d?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     tags: "lofi acoustic satire, funny whistle, casual beats"
   },
   {
@@ -396,7 +398,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "HODL King",
     audioUrl: REAL_VIRAL_AUDIO_POOL[0],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-spinning-vinyl-record-on-a-turntable-40575-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1518546305927-5a555bb7020d?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     tags: "hyperpop crash, dramatic glitch beats, pitched vocals"
   },
   {
@@ -406,7 +408,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Meow Mix",
     audioUrl: REAL_VIRAL_AUDIO_POOL[1],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-man-dancing-under-neon-lights-40549-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     tags: "bouncy house, cat meow sound effects, upbeat groove"
   },
   {
@@ -416,7 +418,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Shop Addict",
     audioUrl: REAL_VIRAL_AUDIO_POOL[2],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-neon-sign-of-a-pizza-slice-40546-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1483985988355-763728e1935b?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     tags: "indie pop electro, sassy female narration, retail therapy"
   },
   {
@@ -426,7 +428,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Caffeine Addict",
     audioUrl: REAL_VIRAL_AUDIO_POOL[3],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-coffee-cup-with-steam-rising-40578-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     tags: "chill jazz lofi, smooth rhodes keys, coffee ambient"
   },
   {
@@ -436,7 +438,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Wanderlust",
     audioUrl: REAL_VIRAL_AUDIO_POOL[4],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-womans-feet-walking-on-rainy-streets-40544-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1488646953014-85cb44e25828?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     tags: "melodic house trance, ambient airport sounds, deep bass"
   },
   {
@@ -446,7 +448,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Diet Tomorrow",
     audioUrl: REAL_VIRAL_AUDIO_POOL[5],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-neon-sign-of-a-pizza-slice-40546-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1498837167922-ddd27525d352?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     tags: "funk disco pop, comical brass horn, danceable rhythm"
   },
   {
@@ -456,7 +458,7 @@ const VIRAL_SHOWCASE_TRACKS = [
     userName: "Insomniac",
     audioUrl: REAL_VIRAL_AUDIO_POOL[6],
     videoUrl: "https://assets.mixkit.co/videos/preview/mixkit-girl-in-neon-sign-in-front-of-a-store-40545-large.mp4",
-    thumbnailUrl: "https://images.unsplash.com/photo-1511295742364-92767fa62d9f?q=80&w=600&auto=format&fit=crop",
+    thumbnailUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     tags: "chillwave synthpop, nostalgic pads, soft clock ticking"
   }
 ];
@@ -493,8 +495,34 @@ export default function ViralTrendZonePage() {
 
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [autoTuneFlash, setAutoTuneFlash] = useState(false);
+  // 사용자가 고른 사운드가 카테고리 톤과 충돌할 때 서버가 내려주는 경고
+  const [styleWarnings, setStyleWarnings] = useState<string[]>([]);
+
+  // 카테고리를 바꾸면 Step 2 드롭다운을 그 카테고리의 권장 사운드로 맞춘다.
+  // 사용자는 이후 자유롭게 바꿀 수 있고, 바꾼 값이 항상 우선한다.
+  useEffect(() => {
+    const spec = getCategorySpec(genCategory);
+    if (!spec) return;
+    setSelectedGenre(spec.recommendedUi.genre);
+    setSelectedMood(spec.recommendedUi.mood);
+    setSelectedVocal(spec.recommendedUi.vocal);
+    setStyleWarnings([]);
+  }, [genCategory]);
 
   const handleAutoTuneShortsSound = () => {
+    // 카테고리 권장 사운드가 있으면 그것을 쓴다. 무작위 조합을 던지면
+    // 귀여운 댕냥이에 사이버펑크·떼창이 걸리는 사고가 다시 난다.
+    const spec = getCategorySpec(genCategory);
+    if (spec) {
+      setSelectedGenre(spec.recommendedUi.genre);
+      setSelectedMood(spec.recommendedUi.mood);
+      setSelectedVocal(spec.recommendedUi.vocal);
+      setStyleWarnings([]);
+      setAutoTuneFlash(true);
+      setTimeout(() => setAutoTuneFlash(false), 2000);
+      return;
+    }
+
     const presetPairs = [
       { genre: "K-Pop 댄스", mood: "Comical (코믹한)", vocal: "Bright Female Vocal" },
       { genre: "힙합/디스곡", mood: "Raw (날것의)", vocal: "Auto-Tune Vocal" },
@@ -535,6 +563,8 @@ export default function ViralTrendZonePage() {
       const data = await response.json();
       if (data.success && data.brief) {
         setProducerBrief(data.brief);
+        setCustomTopic(`[컨셉] ${data.brief.title} (${data.brief.hook})`);
+        setCustomLyrics(data.brief.lyrics);
         setBriefCredits(9999);
         localStorage.setItem('melodio_brief_credits', '9999');
       } else {
@@ -617,7 +647,7 @@ export default function ViralTrendZonePage() {
         genre: selectedGenre,
         vocal: selectedVocal,
         userName: brandName || 'My AI Channel',
-        thumbnailUrl: generatedResult?.thumbnailUrl || CATEGORY_THUMBNAIL_MAP[genCategory] || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
+        thumbnailUrl: generatedResult?.thumbnailUrl || CATEGORY_THUMBNAIL_MAP[genCategory] || 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png',
         audioUrl: generatedResult?.audioUrl,
         tags: optimizedPrompt || 'viral short-form, catchy, dopamine mix'
       };
@@ -632,7 +662,7 @@ export default function ViralTrendZonePage() {
       id: playingId,
       title: 'Viral Dopamine Anthem',
       audioUrl: '',
-      thumbnailUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
+      thumbnailUrl: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png',
       userName: 'Melodio Viral',
       genre: 'Viral Trend',
       tags: 'TikTok, Shorts, Reels'
@@ -667,7 +697,12 @@ export default function ViralTrendZonePage() {
     "[Scene 3] Extreme close-up of a restaurant receipt floating down. Large stylized Korean text \"(whispered) 계산은 왜 늘 내 앞으로 와?\" rendered in white subtitles.\n" +
     "[Scene 4] Young Korean friends chanting around the boiling pot. Vibrant 3D neon text \"환승역 연애심리학! ㅋㅋㅋ\" pulsing with bright colors --ar 9:16"
   );
+  // 영상 연출 파라미터. 카테고리 스펙에서 내려오며, 서버가 컷 밀도와
+  // 춤 허용 여부를 결정하는 데 쓴다.
+  const [grokAllowDance, setGrokAllowDance] = useState(false);
+  const [grokCutCadence, setGrokCutCadence] = useState(1.5);
   const [isGeneratingGrokVideo, setIsGeneratingGrokVideo] = useState(false);
+  const [isTuningPrompt, setIsTuningPrompt] = useState(false);
   const [grokVideoProgress, setGrokVideoProgress] = useState(0);
   const [grokVideoResult, setGrokVideoResult] = useState<string | null>(null);
   const [grokVideoError, setGrokVideoError] = useState<string | null>(null);
@@ -802,6 +837,9 @@ export default function ViralTrendZonePage() {
       });
       if (res.ok) {
         const data = await res.json();
+        // v2 스펙 카테고리는 컷 케이던스와 춤 허용 여부를 함께 내려준다.
+        if (typeof data.allowDance === 'boolean') setGrokAllowDance(data.allowDance);
+        if (typeof data.cutCadenceSeconds === 'number') setGrokCutCadence(data.cutCadenceSeconds);
         if (data.prompt) return data.prompt;
       }
     } catch (e) {
@@ -833,11 +871,41 @@ export default function ViralTrendZonePage() {
     }
   }, [selectedGrokTrack, fetchDynamicGrokPrompt]);
 
+  /*
+   * 음원 길이 선측정.
+   *
+   * 기존에는 공용 <audio> 의 onLoadedMetadata 로만 길이를 잡았는데, 그 이벤트는
+   * 사용자가 재생을 눌러 src 가 붙어야 발생한다. 그래서 생성 직후에는
+   * audioDuration 이 0 이라 길이 배지가 아예 안 떴다("길이 표시가 없어 불편").
+   * 생성이 끝나면 재생과 무관하게 메타데이터만 따로 받아 온다.
+   */
+  useEffect(() => {
+    const url = generatedResult?.audio_url || generatedResult?.audioUrl;
+    if (!url) return;
+    let cancelled = false;
+    const probe = new Audio();
+    probe.preload = 'metadata';
+    probe.src = url;
+    const onMeta = () => {
+      if (!cancelled && Number.isFinite(probe.duration) && probe.duration > 0) {
+        setAudioDuration(probe.duration);
+      }
+    };
+    probe.addEventListener('loadedmetadata', onMeta);
+    return () => {
+      cancelled = true;
+      probe.removeEventListener('loadedmetadata', onMeta);
+      probe.src = '';
+    };
+  }, [generatedResult?.audio_url, generatedResult?.audioUrl]);
+
   const handleTuneGrokPrompt = () => {
     if (selectedGrokTrack) {
+      setIsTuningPrompt(true);
       fetchDynamicGrokPrompt(selectedGrokTrack).then(p => {
         if (p) setGrokVideoPrompt(p);
-      });
+        setIsTuningPrompt(false);
+      }).catch(() => setIsTuningPrompt(false));
     }
   };
   const handleGenerateGrokVideo = async (overrideTrack?: any) => {
@@ -865,7 +933,11 @@ export default function ViralTrendZonePage() {
           audioUrl: targetAudio,
           duration: 30,
           aspectRatio: '9:16',
-          generate30SecFull: true
+          generate30SecFull: true,
+          // 카테고리를 넘겨야 서버가 연출·컷 밀도·춤 허용 여부를 판단한다.
+          category: activeTrack?.category || activeTrack?.tab_type || genCategory,
+          allowDance: grokAllowDance,
+          cutCadenceSeconds: grokCutCadence
         })
       });
 
@@ -881,6 +953,8 @@ export default function ViralTrendZonePage() {
       }
       if (data.success && data.videoUrl) {
         setGrokVideoResult(data.videoUrl);
+        // 서버가 ffprobe 로 잰 실제 길이. <video> 메타데이터 로딩을 기다리지 않는다.
+        if (Number(data.durationSeconds) > 0) setGrokVideoDuration(Number(data.durationSeconds));
         if (data.clips && Array.isArray(data.clips) && data.clips.length > 0) {
           setGrokVideoClips(data.clips);
         } else {
@@ -1004,50 +1078,107 @@ export default function ViralTrendZonePage() {
     }, 0);
   };
 
-  const DURATION_CHAR_LIMIT: Record<string, number> = {
-    '15s': 150, '20s': 200, '30s': 350, '40s': 450, '50s': 600, '60s': 800,
-  };
-  const currentCharLimit = DURATION_CHAR_LIMIT[duration] || 150;
-  const durationSeconds = parseInt(duration.replace('s', ''), 10) || 30;
+  const durationSeconds = parseInt(duration.replace('s', ''), 10) || 28;
+
+  /**
+   * 가사 분량 표시.
+   *
+   * 기존 카운터는 섹션 태그와 공백까지 포함한 문자 수를 세어 "165 / 110자"처럼
+   * 표시했는데, 그 숫자는 곡 길이와 아무 상관이 없었고 초과해도 생성이 그대로
+   * 진행됐다(입력창 타이핑만 막고 API가 채운 값은 검사하지 않았다).
+   *
+   * 실제로 노래되는 것은 한글 음절이므로 그것을 센다. 다만 Suno 길이는
+   * 음절 수로 결정되지 않는다는 것이 실측으로 확인됐으므로(86음절 → 43초),
+   * 이 값은 "전달력" 지표이지 길이 보장 수단이 아니다. 길이는 워커가
+   * 후보 선택과 트림으로 보장한다.
+   */
+  const sungSyllables = (customLyrics.match(/[가-힣]/g) || []).length;
+  /*
+   * 상한은 스펙에서 가져온다.
+   *
+   * 여기 93이 하드코딩돼 있어서, 스펙이 76(현재 72)으로 내려간 뒤에도 화면은
+   * "91 / 93음절 — 정상" 이라고 표시했다. 그 91음절이 34.0초짜리 곡이 됐다.
+   * 숫자를 두 군데 적으면 반드시 이렇게 어긋난다.
+   */
+  const SYLLABLE_SOFT_MAX = VIRAL_SONG_SPEC.sungSyllablesMax;
+  const lyricsEstimatedSeconds = estimateSeconds(sungSyllables);
+  const isOverBudget = sungSyllables > SYLLABLE_SOFT_MAX;
+  const isUnderBudget = sungSyllables > 0 && sungSyllables < VIRAL_SONG_SPEC.sungSyllablesMin;
 
   const handleOptimizePrompt = async () => {
     setIsOptimizing(true);
     let basePrompt = "";
     try {
-      // ── 상황 입력이 비어있으면 프로듀서 브리프 API로 자동 기획 ──
+      // ── 상황 입력이나 가사가 비어있으면 프로듀서 브리프 API로 자동 기획 ──
       let topicInput = customTopic.trim();
-      if (!topicInput) {
+      let currentLyrics = customLyrics.trim();
+      // 서버가 카테고리 사운드 정체성에 맞춰 조립해 준 스타일 프롬프트.
+      // 이게 있으면 화면에서 다시 조립하지 않는다 — 전역 접미사를 덧붙이면
+      // 카테고리 정체성이 무너진다(귀여운 댕냥이 → 사이버펑크 디스곡).
+      let serverStylePrompt = "";
+
+      if (!topicInput || !currentLyrics) {
         try {
           const briefRes = await fetch('/api/viral-cf/producer-brief', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category: genCategory })
+            body: JSON.stringify({
+              category: genCategory,
+              // Step 2에서 사용자가 고른 사운드가 카테고리 기본값을 덮어쓴다.
+              genreEn: VIRAL_GENRE_PROMPT_MAP[selectedGenre] || '',
+              vocalEn: selectedVocal.replace(/[ㄱ-힝]/g, '').trim(),
+              moodEn: selectedMood.split(' ')[0] || ''
+            })
           });
           const briefData = await briefRes.json();
           if (briefData.success && briefData.brief) {
-            topicInput = `[컨셉] ${briefData.brief.title}\n[훅] ${briefData.brief.hook}\n[상황] ${briefData.brief.lyrics}`;
+            setProducerBrief(briefData.brief);
+            topicInput = `[컨셉] ${briefData.brief.title} (${briefData.brief.hook})`;
             setCustomTopic(topicInput);
+            currentLyrics = briefData.brief.lyrics;
+            setCustomLyrics(currentLyrics);
+            if (briefData.brief.stylePrompt) {
+              serverStylePrompt = briefData.brief.stylePrompt;
+            }
+            setStyleWarnings(briefData.brief.styleWarnings || []);
           }
         } catch (briefErr) {
           console.warn('[ViralPage] Auto producer-brief fallback:', briefErr);
         }
       }
 
-      const randomVariations = [
-        "소심하고 어리숙한 관찰자 시점, 풍자적이고 우스꽝스러운 무드",
-        "극도로 분노한 자영업자/피해자 시점, 빠르고 강렬한 메탈/락 디스 스타일",
-        "얄밉고 귀여운 틱톡 댄서 시점, 통통 튀고 냉소적인 일렉트로닉 팝 스타일",
-        "인생 해탈한 애늙은이 시점, 잔잔하지만 뼈를 깊게 찌르는 어쿠스틱 포크 스타일",
-        "부자 허세 가득한 힙합 래퍼 시점, 돈 자랑과 자조적 자폭이 섞인 트랩 스타일",
-        "로봇 또는 AI 관찰자 시점, 차갑고 팩트 위주의 사이버펑크 스타일"
-      ];
-      const randomVariation = randomVariations[Math.floor(Math.random() * randomVariations.length)];
-      const baseGenrePrompt = VIRAL_GENRE_PROMPT_MAP[selectedGenre];
-      
-      const categoryLabel = CATEGORY_TITLES[genCategory] || 'B급 광고';
+      // 서버 스타일 프롬프트가 있으면 그대로 채택하고 끝낸다.
+      if (serverStylePrompt) {
+        setOptimizedPrompt(serverStylePrompt);
+        return;
+      }
 
-      const topicText = topicInput || `${categoryLabel} 테마 자유 주제`;
-      basePrompt = `vocal-centric mix, dry upfront vocals close to mic, minimal backing beat, crystal clear vocal delivery, ${categoryLabel} 바이럴 숏폼 송, ${baseGenrePrompt}, ${selectedMood}, ${selectedVocal}, comical parody tone, goofy and humorous vocals, witty expression, B-grade meme energy, variation style: [${randomVariation}], user special request: ${topicText}`;
+      /*
+       * 브리프를 부르지 않은 경우(이미 상황·가사가 채워져 있어 재실행한 경우)에도
+       * v2 카테고리라면 카테고리 사운드로 조립한다.
+       *
+       * 이게 없어서, 두 번째 클릭 시 아래 레거시 경로로 떨어져
+       * '댕냥이'에 `140 BPM, aggressive hip-hop, gang vocals` 가 붙는 사고가 났다.
+       * 카테고리 정체성이 실행 순서에 따라 달라지면 안 된다.
+       */
+      const specV2 = getCategorySpec(genCategory);
+      if (specV2) {
+        setOptimizedPrompt(
+          buildStylePromptV2(specV2, {
+            genreEn: VIRAL_GENRE_PROMPT_MAP[selectedGenre] || '',
+            vocalEn: selectedVocal.replace(/[ㄱ-힝]/g, '').trim(),
+            moodEn: selectedMood.split(' ')[0] || '',
+          })
+        );
+        return;
+      }
+
+      // ── 폴백: v2 미이관 카테고리만 화면에서 조립한다 ──
+      const baseGenrePrompt = VIRAL_GENRE_PROMPT_MAP[selectedGenre] || "Hip-hop, Trap, 140 BPM, punchy drums";
+      const cleanVocal = selectedVocal.replace(/[\u3131-\uD79D]/g, '').trim() || "Talk-Sung, Comical Narrative Vocal";
+      const moodEnglish = selectedMood.split(' ')[0] || "Comical";
+
+      basePrompt = `no intro, instant vocal start, vocal-centric mix, dry upfront vocals close to mic, minimal backing beat, crystal clear vocal delivery, ${baseGenrePrompt}, ${moodEnglish}, ${cleanVocal}`;
 
       let finalPrompt = basePrompt;
       try {
@@ -1058,51 +1189,15 @@ export default function ViralTrendZonePage() {
         });
         if (optRes.ok) {
           const optData = await optRes.json();
-          if (optData.optimized) finalPrompt = optData.optimized;
+          if (optData.optimized) {
+            // 한글 문자 및 잔여 레이블 제거하여 Suno 전용 순수 영어 사운드 태그 유지
+            finalPrompt = optData.optimized.replace(/[\u3131-\uD79D]/g, '').replace(/\s+/g, ' ').trim();
+          }
         }
       } catch (optErr) {
         console.warn('[ViralPage] prompt-optimize API fallback to basePrompt:', optErr);
       }
       setOptimizedPrompt(finalPrompt);
-
-      const fullTopic = `카테고리: ${categoryLabel}. 주제: ${topicText}. [구조 필수: 첫 3초 팩폭 스포일러 독백 나레이션(spoken intro) -> 2줄 팩폭 상황 벌스 -> 2줄 빵터지는 펀치라인 아웃트로]. 페르소나: [${randomVariation}]`;
-
-      try {
-        const lyrRes = await fetch('/api/lyrics/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            stylePrompt: finalPrompt,
-            topic: fullTopic,
-            language: 'ko',
-            isPlaylistMode: false,
-            trackCount: 1,
-            presetId: genCategory,
-            durationSeconds,
-            viralMode: true,
-          })
-        });
-        if (lyrRes.ok) {
-          const lyrData = await lyrRes.json();
-          if (lyrData.success && lyrData.lyricsPrompt) {
-            setCustomLyrics(lyrData.lyricsPrompt);
-            if (lyrData.title) {
-              setProducerBrief(prev => ({
-                title: lyrData.title,
-                hook: prev?.hook || lyrData.title,
-                lyrics: lyrData.lyricsPrompt
-              }));
-            }
-          } else {
-            setCustomLyrics(`[Fast Intro]\n${brandName ? brandName + '! ' : ''}${categoryLabel} 정신 번쩍!\n[Outro]\n도파민 폭발 가자!`);
-          }
-        } else {
-          setCustomLyrics(`[Fast Intro]\n${brandName ? brandName + '! ' : ''}${categoryLabel} 정신 번쩍!\n[Outro]\n도파민 폭발 가자!`);
-        }
-      } catch (lyrErr) {
-        console.warn('[ViralPage] lyrics/generate API fallback:', lyrErr);
-        setCustomLyrics(`[Fast Intro]\n${brandName ? brandName + '! ' : ''}${categoryLabel} 정신 번쩍!\n[Outro]\n도파민 폭발 가자!`);
-      }
     } catch (e) {
       console.error('[ViralPage] handleOptimizePrompt error:', e);
       setOptimizedPrompt(basePrompt);
@@ -1116,28 +1211,27 @@ export default function ViralTrendZonePage() {
       alert("가사가 비어 있습니다. Step 3의 [AI 기획 분석] 버튼으로 가사를 먼저 생성해 주세요!");
       return;
     }
+    const prevTrack = generatedResult;
     setIsGenerating(true);
     setGenProgress(5);
-    setGeneratedResult(null);
     setSelectedGrokTrackId('');
     setIsPlaying(false);
     try {
       const baseGenrePrompt = VIRAL_GENRE_PROMPT_MAP[selectedGenre];
-      const comicalSuffix = ", no intro, instant vocal start, acapella start, comical parody tone, goofy and humorous vocals, dry close-up vocals, vocal-centric mix, minimal instrumentation, crystal clear vocal delivery, funny theatrical expression, witty delivery, B-grade meme energy, dynamic transitions";
-      let finalStyle = optimizedPrompt || `${baseGenrePrompt}, ${selectedMood}, ${selectedVocal}${comicalSuffix}, high-fidelity studio mastering`;
+      // 카테고리 사운드 정체성은 서버(producer-brief)가 결정한다.
+      // 여기서 "B-grade meme energy" 같은 전역 접미사를 덧붙이면 모든
+      // 카테고리가 같은 소리가 나고, 귀여운 댕냥이가 디스곡이 된다.
+      const neutralSuffix = ", no intro, instant vocal start, vocal-centric mix, dry close-up vocals, minimal instrumentation, crystal clear vocal delivery";
+      let finalStyle = optimizedPrompt || `${baseGenrePrompt}, ${selectedMood}, ${selectedVocal}${neutralSuffix}, high-fidelity studio mastering`;
       if (optimizedPrompt && !optimizedPrompt.includes('no intro')) {
-        finalStyle = `no intro, instant vocal start, acapella start, ${optimizedPrompt}`;
+        finalStyle = `no intro, instant vocal start, ${optimizedPrompt}`;
       }
       let finalLyrics = customLyrics;
 
-      const categoryLabel =
-        genCategory === 'trend' ? '트렌드/이슈' :
-        genCategory === 'history' ? '역사 부캐' :
-        genCategory === 'human' ? '현대인/직장인' :
-        genCategory === 'challenge' ? '도파민 충전 응원' :
-        genCategory === 'relationship' ? '연애/남녀 심리' :
-        genCategory === 'drama' ? 'K-드라마/명대사' :
-        genCategory === 'pet' ? '댕냥이/집사속마음' : 'B급 광고 패러디';
+      // 12개 카테고리 라벨의 단일 출처. 기존 8분기 ternary는 parenting,
+      // food_diet, horror_mystery, ai_future 를 전부 'B급 광고 패러디'로
+      // 잘못 라벨링해 DB에 저장하고 있었다.
+      const categoryLabel = CATEGORY_TITLES[genCategory] || '바이럴 숏폼';
 
       let finalTitle = "";
       if (producerBrief?.title) {
@@ -1171,13 +1265,31 @@ export default function ViralTrendZonePage() {
           metadata: { brand_name: brandName, tab_type: genCategory, duration, durationSeconds }
         })
       });
-      if (!res.ok) throw new Error(`생성 실패: ${await res.text()}`);
+      if (!res.ok) {
+        if (prevTrack) setGeneratedResult(prevTrack);
+        throw new Error(`생성 실패: ${await res.text()}`);
+      }
       const data = await res.json();
-      if (!data.success || !data.track?.id) throw new Error(data.error || '생성 작업 ID 누락');
+      if (!data.success || !data.track?.id) {
+        if (prevTrack) setGeneratedResult(prevTrack);
+        throw new Error(data.error || '생성 작업 ID 누락');
+      }
       const trackId = data.track.id;
       setGenProgress(20);
       let pollCount = 0;
-      const maxPolls = 65;
+      /*
+       * 폴링 예산.
+       *
+       * 기존 65회(×5초 = 325초 = 5분 25초)는 **Suno 왕복 1회**만 가정한 값이었다.
+       * 실제로는 워커가 길이 미달 시 최대 2회까지 재발행하므로 왕복이 3회가 될 수 있다.
+       *   왕복 3회 × 약 2분 + 커버 생성 약 40초 ≈ 6분 40초
+       * 실측(2026-08-10 c9fd73ca): 6분 40초에 완료됐는데 화면은 5분 25초에 포기해
+       * "생성 타임아웃" 을 띄웠다. 곡은 멀쩡히 만들어져 있었다.
+       *
+       * 재발행 조건을 합격선(20~38초)으로 넓혀 재발행 자체가 드물어졌지만,
+       * 남아 있는 최악 경로를 덮도록 9분으로 잡는다.
+       */
+      const maxPolls = 108; // × 5초 = 540초 (9분)
       const interval = setInterval(async () => {
         pollCount++;
         setGenProgress(prev => Math.min(95, prev + Math.floor(Math.random() * 4) + 1));
@@ -1197,7 +1309,7 @@ export default function ViralTrendZonePage() {
                 style: finalStyle,
                 audioUrl: gen.audio_url || gen.source_audio_url,
                 audio_url: gen.audio_url || gen.source_audio_url,
-                thumbnailUrl: gen.thumbnail_url || gen.image_url || CATEGORY_THUMBNAIL_MAP[genCategory] || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
+                thumbnailUrl: gen.thumbnail_url || gen.image_url || CATEGORY_THUMBNAIL_MAP[genCategory] || 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png',
                 visualGuide: "9:16 vertical shorts visual outline",
                 tags: [selectedGenre, selectedMood, selectedVocal, 'viral'],
                 suggestedTitle: finalTitle,
@@ -1233,11 +1345,10 @@ export default function ViralTrendZonePage() {
                 localStorage.setItem('melodio_viral_tracks', JSON.stringify(updated));
               } catch {}
               setIsGenerating(false);
-              // ✅ 음원 완료 — 영상은 Step 5에서 사용자가 수동으로 시작
-              // (자동 비디오 생성 제거: 사용자가 음원 먼저 확인 후 진행)
             } else if (gen && gen.status === 'failed') {
               clearInterval(interval);
               setIsGenerating(false);
+              if (prevTrack) setGeneratedResult(prevTrack);
               alert('음원 생성 작업이 실패했습니다. 다시 시도해 주세요.');
             }
           }
@@ -1245,11 +1356,18 @@ export default function ViralTrendZonePage() {
         if (pollCount >= maxPolls) {
           clearInterval(interval);
           setIsGenerating(false);
-          alert('생성 타임아웃. Track Library에서 완료 여부를 확인해 주십시오.');
+          if (prevTrack) setGeneratedResult(prevTrack);
+          // 실패가 아니다. 화면이 기다리기를 멈출 뿐 서버 작업은 계속 진행된다.
+          // 기존 문구("생성 타임아웃")는 곡이 날아간 것처럼 읽혀 실제로 오해를 샀다.
+          alert(
+            '아직 생성이 진행 중입니다. 화면 대기만 종료하며 작업은 서버에서 계속됩니다.\n' +
+            '잠시 후 Track Library에서 완성된 곡을 확인하실 수 있습니다.'
+          );
         }
       }, 5000);
     } catch (err: any) {
       console.error(err);
+      if (prevTrack) setGeneratedResult(prevTrack);
       alert(`생성 처리 중 에러: ${err.message}`);
       setIsGenerating(false);
     }
@@ -1286,7 +1404,7 @@ export default function ViralTrendZonePage() {
           category: t.presetId || t.metadata?.tab_type || t.tab_type || 'trend',
           genre: t.genre || t.styleName || (Array.isArray(t.tags) ? t.tags[0] : 'Viral Mix'),
           audioUrl: t.audioUrl || t.audio_url,
-          thumbnailUrl: t.thumbnailUrl || t.thumbnail_url || CATEGORY_THUMBNAIL_MAP[t.tab_type || 'trend'] || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80',
+          thumbnailUrl: t.thumbnailUrl || t.thumbnail_url || CATEGORY_THUMBNAIL_MAP[t.tab_type || 'trend'] || 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png',
           tags: Array.isArray(t.tags) ? t.tags : (t.suggestedTags || ['#바이럴', '#숏폼']),
           lyrics: t.lyrics || t.lyricsPrompt || t.source || '',
           raw: t
@@ -1573,14 +1691,14 @@ export default function ViralTrendZonePage() {
             {/* 기획 의도 카드 (선택된 카테고리에 맞춰 가변 연출) */}
             {(() => {
               const bgImages = {
-                drama: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=800&q=80",
-                pet: "https://images.unsplash.com/photo-1543466835-00a7907e9de1?w=800&q=80",
-                trend: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=800&q=80",
-                history: "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=800&q=80",
-                human: "https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800&q=80",
-                brand: "https://images.unsplash.com/photo-1560169897-fc0cdbdfa4d5?w=800&q=80",
-                challenge: "https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?w=800&q=80",
-                relationship: "https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=800&q=80"
+                drama: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
+                pet: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
+                trend: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
+                history: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
+                human: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
+                brand: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
+                challenge: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
+                relationship: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png"
               };
               const bgImg = bgImages[genCategory as keyof typeof bgImages] || bgImages.trend;
               const categoryTitle = CATEGORY_TITLES[genCategory] || "나만의 바이럴 숏폼 제작";
@@ -1837,6 +1955,17 @@ export default function ViralTrendZonePage() {
                   <ChevronDown className="w-4 h-4 text-zinc-400 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
+
+              {/* 카테고리 톤과 충돌하는 사운드를 골랐을 때의 경고. 생성은 막지 않는다. */}
+              {styleWarnings.length > 0 && (
+                <div className="sm:col-span-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 space-y-1">
+                  {styleWarnings.map((w, i) => (
+                    <p key={i} className="text-[11px] sm:text-xs text-amber-200 font-semibold leading-relaxed">
+                      ⚠️ {w}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Step 3: 상황 설정 & AI 기획 */}
@@ -1934,11 +2063,29 @@ export default function ViralTrendZonePage() {
                         ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300'
                         : 'bg-purple-500/20 border border-purple-500/40 text-purple-300'
                     }`}>{generatedResult ? <Check className="w-3 h-3" /> : '4'}</div>
-                    가사 확인 & 음원 생성 (최대 {currentCharLimit}자)
+                    가사 확인 & 음원 생성 (⚡ {VIRAL_SONG_SPEC.targetSecondsMin}~{VIRAL_SONG_SPEC.targetSecondsMax}초 숏폼)
                     {!optimizedPrompt.trim() && <Lock className="w-3.5 h-3.5 text-zinc-500 ml-1" />}
                   </h3>
-                  <span className={`text-xs font-mono font-black ${customLyrics.length > currentCharLimit ? "text-red-400" : "text-zinc-400"}`}>
-                    {customLyrics.length} / {currentCharLimit}자
+                  {/*
+                    음절 수만 보여주면 그 숫자가 몇 초인지 감이 안 온다.
+                    실측 발화 속도로 환산한 예상 길이를 함께 띄워서, 생성 버튼을
+                    누르기 전에 30초를 넘길지 판단할 수 있게 한다.
+                  */}
+                  <span
+                    className={`text-xs font-mono font-black flex items-center gap-1.5 ${
+                      isOverBudget ? 'text-amber-400' : isUnderBudget ? 'text-sky-400' : 'text-zinc-400'
+                    }`}
+                    title={`실제로 노래되는 한글 음절 수입니다. 허용 ${VIRAL_SONG_SPEC.sungSyllablesMin}~${SYLLABLE_SOFT_MAX}음절 (초당 ${2.7}음절 실측 기준 ${VIRAL_SONG_SPEC.targetSecondsMin}~${VIRAL_SONG_SPEC.targetSecondsMax}초).`}
+                  >
+                    <span>{sungSyllables} / {SYLLABLE_SOFT_MAX}음절</span>
+                    {sungSyllables > 0 && (
+                      <span className="px-1.5 py-0.5 rounded bg-black/50 border border-white/10 flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        예상 ≈ {lyricsEstimatedSeconds}초
+                        {isOverBudget && ' ⚠️ 초과'}
+                        {isUnderBudget && ' ⚠️ 부족'}
+                      </span>
+                    )}
                   </span>
                 </div>
 
@@ -1965,9 +2112,10 @@ export default function ViralTrendZonePage() {
                 <textarea
                   ref={textareaRef}
                   value={customLyrics}
-                  onChange={(e) => {
-                    if (e.target.value.length <= currentCharLimit) setCustomLyrics(e.target.value);
-                  }}
+                  // 문자 수 하드 블록 제거: 섹션 태그까지 포함해 세던 기준이라
+                  // 정상 가사도 입력이 막혔고, 정작 API가 채운 값은 검사하지 않아
+                  // 초과 상태로 생성이 진행됐다. 분량은 위 음절 카운터로 안내한다.
+                  onChange={(e) => setCustomLyrics(e.target.value)}
                   disabled={!optimizedPrompt.trim()}
                   className={`w-full h-[220px] bg-black/50 border rounded-xl p-4 text-xs sm:text-sm leading-relaxed font-mono focus:outline-none resize-none font-medium ${
                     !optimizedPrompt.trim()
@@ -2036,6 +2184,37 @@ export default function ViralTrendZonePage() {
               {(() => {
                 const isReadyToGenerate = !!(optimizedPrompt.trim() && (customLyrics.trim() || customTopic.trim())) && !isOptimizing;
 
+                if (generatedResult && !isGenerating && !isGeneratingGrokVideo) {
+                  return (
+                    <div className="space-y-3">
+                      <div className="relative">
+                        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-purple-600 opacity-40 blur-xl animate-pulse pointer-events-none" />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            step4CardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          }}
+                          className="relative w-full py-5 rounded-2xl text-base sm:text-lg font-black tracking-tight flex items-center justify-center gap-2.5 transition-all bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white border border-fuchsia-400/50 shadow-[0_0_35px_rgba(217,70,239,0.4)] hover:shadow-[0_0_50px_rgba(217,70,239,0.5)] hover:scale-[1.01] active:scale-[0.99]"
+                        >
+                          <Film className="w-6 h-6 text-fuchsia-300 animate-bounce" />
+                          🎬 Step 5 AI 영상 생성하러 바로가기 (클릭)
+                        </button>
+                      </div>
+                      <div className="text-center">
+                        <button
+                          type="button"
+                          onClick={handleGenerate}
+                          disabled={isGenerating || isOptimizing}
+                          className="text-xs font-bold text-zinc-400 hover:text-zinc-200 underline inline-flex items-center gap-1.5 transition-all"
+                        >
+                          <RotateCcw className="w-3.5 h-3.5 text-zinc-400" />
+                          🔄 다른 파라미터로 음원 새로 다시 생성하기
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <div className="relative">
                     {!isGenerating && isReadyToGenerate && (
@@ -2094,9 +2273,17 @@ export default function ViralTrendZonePage() {
                       <Sparkles className="w-5 h-5 text-yellow-300 animate-pulse" />
                       <h4 className="text-sm font-black text-white">{generatedResult.title}</h4>
                       {audioDuration > 0 && (
-                        <span className="text-xs font-mono font-bold text-cyan-300 px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-500/40 shadow-sm flex items-center gap-1">
+                        <span className="text-xs font-mono font-bold text-cyan-300 px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-500/40 shadow-sm flex items-center gap-1 flex-wrap">
                           <Clock className="w-3 h-3 text-cyan-400" />
                           <span>⏱️ {audioDuration.toFixed(1)}초</span>
+                          <span className="text-[10px] text-emerald-300 font-extrabold bg-emerald-950/80 border border-emerald-500/40 px-1.5 py-0.5 rounded ml-1">
+                            {/* 30초는 영상 클립 경계다. 넘으면 15초 클립이 하나 더 붙는다. */}
+                            {audioDuration <= VIRAL_SONG_SPEC.targetSecondsMax
+                              ? `🎵 목표 ${VIRAL_SONG_SPEC.targetSecondsMin}~${VIRAL_SONG_SPEC.targetSecondsMax}초 달성 (🛡️ 영상 2클립으로 커버)`
+                              : audioDuration <= 30
+                                ? `⚠️ 목표 ${VIRAL_SONG_SPEC.targetSecondsMax}초 초과 — 아직 영상 2클립 안쪽`
+                                : `🚨 30초 초과 — 남는 ${(audioDuration - 30).toFixed(1)}초는 마지막 프레임 정지로 채웁니다`}
+                          </span>
                         </span>
                       )}
                     </div>
@@ -2111,44 +2298,39 @@ export default function ViralTrendZonePage() {
                     </a>
                   </div>
 
-                  {/* 음원 오디오 플레이어 */}
-                  <div className="p-3.5 bg-black/70 border border-white/10 rounded-xl flex items-center gap-3 shadow-inner">
-                    <button
-                      type="button"
-                      onClick={() => togglePlay()}
-                      className="w-10 h-10 rounded-full bg-cyan-400 hover:bg-cyan-300 text-black flex items-center justify-center font-black transition-all shadow-md shrink-0 cursor-pointer active:scale-95"
-                    >
-                      {isPlaying && currentPlayingTrack?.id === generatedResult.id ? (
-                        <Pause className="w-5 h-5 fill-current" />
-                      ) : (
-                        <Play className="w-5 h-5 fill-current ml-0.5" />
-                      )}
-                    </button>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-extrabold text-cyan-300 truncate">{generatedResult.title}</p>
-                      <p className="text-[11px] text-zinc-400 truncate">{generatedResult.genre || 'Suno V5.5 Vocal Mix'}</p>
+                  {/* 음원 오디오 플레이어 (하단 글로벌 플레이어 바 연동) */}
+                  <div className="p-3.5 bg-black/70 border border-white/10 rounded-xl flex items-center justify-between gap-3 shadow-inner">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
+                      <button
+                        type="button"
+                        onClick={() => togglePlay()}
+                        className="w-10 h-10 rounded-full bg-cyan-400 hover:bg-cyan-300 text-black flex items-center justify-center font-black transition-all shadow-md shrink-0 cursor-pointer active:scale-95"
+                      >
+                        {isPlaying && (currentPlayingTrack?.id === generatedResult.id || currentPlayingTrack?.audioUrl === (generatedResult.audio_url || generatedResult.audioUrl)) ? (
+                          <Pause className="w-5 h-5 fill-current" />
+                        ) : (
+                          <Play className="w-5 h-5 fill-current ml-0.5" />
+                        )}
+                      </button>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-extrabold text-cyan-300 truncate">{generatedResult.title}</p>
+                        <p className="text-[11px] text-zinc-400 truncate">🎵 재생 시 하단 메인 오디오 플레이어 바에서 실시간 이동 동기화됩니다</p>
+                      </div>
                     </div>
-                    <audio
-                      ref={audioRef}
-                      src={generatedResult.audio_url}
-                      controls
-                      onLoadedMetadata={(e) => setAudioDuration(e.currentTarget.duration)}
-                      className="h-8 max-w-[200px]"
-                    />
                   </div>
 
                   {/* ✅ 음원 완료 → Step 5 영상 생성 안내 */}
                   <div className="pt-3 border-t border-white/10 flex items-center justify-between flex-wrap gap-2">
                     <span className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
                       <Check className="w-4 h-4 text-emerald-400" />
-                      ✅ 음원 생성 완료! 아래 Step 5에서 AI 영상을 만들어 보세요
+                      ✅ 음원 생성 완료! 아래 Step 5에서 "🎬 30초 AI 영상 생성 시작하기" 버튼을 눌러보세요
                     </span>
                     <button
                       type="button"
                       onClick={() => {
                         step4CardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
                       }}
-                      className="text-xs font-extrabold text-fuchsia-300 hover:text-fuchsia-200 bg-fuchsia-950/60 border border-fuchsia-500/40 px-3 py-1.5 rounded-lg flex items-center gap-1 transition-all shadow-md active:scale-95"
+                      className="text-xs font-extrabold text-fuchsia-300 hover:text-fuchsia-200 bg-fuchsia-950/80 border border-fuchsia-500/50 px-3.5 py-1.5 rounded-lg flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
                     >
                       ↓ Step 5 AI 영상 생성으로 이동
                     </button>
@@ -2252,10 +2434,20 @@ export default function ViralTrendZonePage() {
                     <button
                       type="button"
                       onClick={handleTuneGrokPrompt}
-                      className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-cyan-950/40 border border-cyan-500/30 hover:bg-cyan-900/50 transition-all"
+                      disabled={isTuningPrompt}
+                      className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 px-3 py-1 rounded-lg bg-cyan-950/40 border border-cyan-500/30 hover:bg-cyan-900/50 transition-all disabled:opacity-50"
                     >
-                      <Sparkles className="w-3 h-3 text-cyan-400 animate-spin" />
-                      🎬 가사 맞춤 한글 자막 자동 추출
+                      {isTuningPrompt ? (
+                        <>
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                          <span>⏳ 자막/프롬프트 추출 중...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Wand2 className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>🎬 가사 맞춤 한글 자막 자동 추출</span>
+                        </>
+                      )}
                     </button>
                   </div>
 
@@ -2267,7 +2459,30 @@ export default function ViralTrendZonePage() {
                     className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500/50 resize-none font-mono leading-relaxed"
                   />
 
-                  {/* 🎬 2단계 비디오 결과 표시 영역 (하단 중복 버튼 제거, 순수 결과물 노출) */}
+                  {/* 🚀 [Step 5 메인 액션 버튼] Grok 30초 AI 비디오 생성 버튼 */}
+                  <div className="relative pt-1">
+                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 opacity-50 blur-xl animate-pulse pointer-events-none" />
+                    <button
+                      type="button"
+                      onClick={() => handleGenerateGrokVideo()}
+                      disabled={isGeneratingGrokVideo || (!generatedResult && !selectedGrokTrack)}
+                      className="relative w-full py-4.5 rounded-2xl text-base font-black tracking-tight flex items-center justify-center gap-2.5 transition-all bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white border border-fuchsia-400/60 shadow-[0_0_35px_rgba(217,70,239,0.5)] hover:shadow-[0_0_50px_rgba(217,70,239,0.7)] hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 cursor-pointer"
+                    >
+                      {isGeneratingGrokVideo ? (
+                        <>
+                          <RefreshCw className="w-5 h-5 animate-spin text-fuchsia-300" />
+                          <span>🎬 Grok Imagine 30초 AI 비디오 렌더링 중... ({grokVideoProgress}%)</span>
+                        </>
+                      ) : (
+                        <>
+                          <Film className="w-5 h-5 text-yellow-300 animate-bounce" />
+                          <span>🎬 30초 AI 영상 생성 시작하기 (클릭)</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+
+                  {/* 🎬 2단계 비디오 결과 표시 영역 */}
                   {isGeneratingGrokVideo ? (
                     <div className="p-6 rounded-2xl bg-zinc-900/90 border border-fuchsia-500/40 flex flex-col items-center justify-center text-center space-y-3 shadow-inner">
                       <RefreshCw className="w-8 h-8 animate-spin text-fuchsia-400" />
@@ -2289,12 +2504,6 @@ export default function ViralTrendZonePage() {
                         <RotateCcw className="w-4 h-4" />
                         🎬 영상만 재시도 (음원 유지)
                       </button>
-                    </div>
-                  ) : !grokVideoResult ? (
-                    <div className="p-8 rounded-2xl bg-zinc-900/40 border border-dashed border-white/10 flex flex-col items-center justify-center text-center space-y-2">
-                      <Video className="w-8 h-8 text-zinc-600 animate-pulse" />
-                      <p className="text-sm font-bold text-zinc-300">🎬 AI 숏폼 비디오 결과 보관함</p>
-                      <p className="text-xs text-zinc-500 max-w-md">Step 4에서 음원을 생성한 후, 이곳에서 AI 영상을 생성할 수 있습니다.</p>
                     </div>
                   ) : null}
 
@@ -2348,19 +2557,27 @@ export default function ViralTrendZonePage() {
 
                       <div className="p-3 rounded-xl bg-zinc-900/80 border border-white/5 text-[11px] text-zinc-400 space-y-1">
                         <p className="text-white font-bold flex items-center gap-1">
-                          📁 생성된 29.5초 풀 쇼츠 비디오 구성 및 보관 위치:
+                          📁 생성된 {grokVideoDuration > 0 ? `${grokVideoDuration.toFixed(1)}초` : ''} 풀 쇼츠 비디오 구성 및 보관 위치:
                         </p>
-                        <p>1. 🎬 <strong>29.5초 코믹 숏폼 MP4</strong>: B급 코믹 뮤비 연출(Snap-zoom, 0.5x wide, whip-pan) 렌더링 및 멜로디오 음원 인코딩 완료 (15초 3단계 과금 방어 적용).</p>
+                        <p>1. 🎬 <strong>{grokVideoDuration > 0 ? `${grokVideoDuration.toFixed(1)}초` : ''} 코믹 숏폼 MP4</strong>: B급 코믹 뮤비 연출(Snap-zoom, 0.5x wide, whip-pan) 렌더링 및 음원 전체 길이에 맞춘 인코딩 완료.</p>
                         <p>2. 🔒 <strong>내 보관함 (Vault / 히스토리)</strong>: 데이터베이스에 자동 영구 보관되며 언제든 재다운로드 가능합니다.</p>
                       </div>
 
-                      <div className="relative aspect-[9/16] max-w-[220px] mx-auto rounded-xl overflow-hidden border border-white/20 shadow-2xl bg-zinc-900">
+                      <div className="relative aspect-[9/16] max-w-[220px] mx-auto rounded-xl overflow-hidden border border-white/20 shadow-2xl bg-zinc-900 group/vid">
+                        {/* 재생 전에도 길이가 보이도록 영상 위에 상시 배지를 올린다. */}
+                        {grokVideoDuration > 0 && (
+                          <span className="absolute top-2 right-2 z-10 px-2 py-0.5 rounded-md bg-black/80 border border-white/20 text-[11px] font-mono font-bold text-white shadow-lg pointer-events-none">
+                            {grokVideoDuration.toFixed(1)}초
+                          </span>
+                        )}
                         <video
                           ref={previewVideoRef}
                           src={grokVideoResult}
                           controls
                           autoPlay
                           loop
+                          preload="metadata"
+                          title={grokVideoDuration > 0 ? `영상 길이 ${grokVideoDuration.toFixed(1)}초` : undefined}
                           onLoadedMetadata={(e) => {
                             setGrokVideoDuration(e.currentTarget.duration);
                           }}
@@ -2418,7 +2635,7 @@ export default function ViralTrendZonePage() {
             <div className="flex items-center gap-3.5 min-w-[240px] max-w-[320px] shrink-0">
               <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 bg-zinc-900 border border-white/10 shadow-md relative">
                 <img 
-                  src={currentPlayingTrack.thumbnailUrl || currentPlayingTrack.thumbnail_url || currentPlayingTrack.coverUrl || CATEGORY_THUMBNAIL_MAP[genCategory] || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80'} 
+                  src={currentPlayingTrack.thumbnailUrl || currentPlayingTrack.thumbnail_url || currentPlayingTrack.coverUrl || CATEGORY_THUMBNAIL_MAP[genCategory] || 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png'}
                   alt={currentPlayingTrack.title || currentPlayingTrack.name || 'Viral Track'}
                   className="w-full h-full object-cover"
                 />

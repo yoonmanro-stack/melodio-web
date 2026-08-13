@@ -17,7 +17,7 @@ function makeMockTrack(req: SunoGenerateRequest): GeneratedTrack {
     duration: 180,
     engine: 'suno_v5',
     stylePrompt: req.prompt,
-    coverArtUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&q=80',
+    coverArtUrl: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png',
     createdAt: new Date().toISOString(),
   }
 }

@@ -17,7 +17,7 @@ function makeMockTrack(prompt: string): GeneratedTrack {
     duration: 30,
     engine: 'lyria3',
     stylePrompt: prompt,
-    coverArtUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&q=80',
+    coverArtUrl: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png',
     createdAt: new Date().toISOString(),
   }
 }

@@ -1,0 +1,5 @@
+ALTER TABLE curation_playbooks 
+ADD COLUMN IF NOT EXISTS category VARCHAR(50),
+ADD COLUMN IF NOT EXISTS inferred_genre VARCHAR(100),
+ADD COLUMN IF NOT EXISTS visual_metadata JSONB,
+ADD COLUMN IF NOT EXISTS audio_metadata JSONB;

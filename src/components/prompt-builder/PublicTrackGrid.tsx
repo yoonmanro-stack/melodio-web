@@ -38,12 +38,10 @@ export default function PublicTrackGrid({
         const cached = localStorage.getItem(`melodio_cached_public_grid_${sourceMenu}`);
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-        const genCached = localStorage.getItem('melodio_cached_generations');
-        if (genCached) {
-          const parsed = JSON.parse(genCached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            const hasUnsplash = parsed.some(t => (t.cover_art_url || t.image_url || '').includes('unsplash.com'));
+            if (!hasUnsplash) return parsed;
+          }
         }
       } catch {}
     }
@@ -310,18 +308,33 @@ export default function PublicTrackGrid({
     }
   }, [volume, isMuted])
 
+  const AI_GRID_PRESETS = [
+    'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png',
+    'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png',
+    'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png',
+    'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png',
+    'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png',
+    'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png'
+  ];
+
   const getFallbackCover = (style: any) => {
-    const promptText = (style.title || style.tags || '').toLowerCase()
-    if (promptText.includes('lo-fi') || promptText.includes('lofi') || promptText.includes('acoustic')) {
-      return 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=300&q=80'
+    const promptText = (style.title || style.tags || style.license_hash || '').toLowerCase();
+    if (promptText.includes('lo-fi') || promptText.includes('lofi') || promptText.includes('tea') || promptText.includes('healing')) {
+      return AI_GRID_PRESETS[0];
     }
-    if (promptText.includes('hip-hop') || promptText.includes('hiphop') || promptText.includes('rap')) {
-      return 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&q=80'
+    if (promptText.includes('hip-hop') || promptText.includes('hiphop') || promptText.includes('rap') || promptText.includes('dev')) {
+      return AI_GRID_PRESETS[1];
     }
-    if (promptText.includes('synth') || promptText.includes('retro') || promptText.includes('city')) {
-      return 'https://images.unsplash.com/photo-1508700115892-45ecd05ae2ad?w=300&q=80'
+    if (promptText.includes('city') || promptText.includes('japan') || promptText.includes('tokyo') || promptText.includes('synth') || promptText.includes('retro')) {
+      return AI_GRID_PRESETS[2];
     }
-    return '/image_to_music_banner.png'
+    if (promptText.includes('jazz') || promptText.includes('kyoto') || promptText.includes('matcha')) {
+      return AI_GRID_PRESETS[3];
+    }
+    if (promptText.includes('chanson') || promptText.includes('french') || promptText.includes('vintage')) {
+      return AI_GRID_PRESETS[4];
+    }
+    return AI_GRID_PRESETS[5];
   }
 
   const isCurrentPlaying = (trackId: string) => {
@@ -437,7 +450,8 @@ export default function PublicTrackGrid({
               <div className="flex gap-4 overflow-x-auto scrollbar-none pb-2 pt-1 snap-x snap-mandatory">
                 {searchedTracks.map((track) => {
                   const playing = isCurrentPlaying(track.id)
-                  const coverUrl = track.cover_art_url || getFallbackCover(track)
+                  const rawCover = track.cover_art_url || track.image_url
+                  const coverUrl = (rawCover && !rawCover.includes('unsplash.com')) ? rawCover : getFallbackCover(track)
                   
                   let genre = 'BGM'
                   let vocal = 'No Vocal'
@@ -525,7 +539,8 @@ export default function PublicTrackGrid({
             <div className={columns === 1 ? "grid grid-cols-1 gap-3" : "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"}>
               {paginated.map((track) => {
                 const playing = isCurrentPlaying(track.id)
-                const coverUrl = track.cover_art_url || getFallbackCover(track)
+                const rawCover = track.cover_art_url || track.image_url
+                const coverUrl = (rawCover && !rawCover.includes('unsplash.com')) ? rawCover : getFallbackCover(track)
                 
                 let genre = 'BGM'
                 let vocal = 'No Vocal'
