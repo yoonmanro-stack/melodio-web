@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import dotenv from 'dotenv';
 dotenv.config({path: '.env.local'});
 // Use the service role key from worker env
-const sRKey = 'REDACTED_JWT';
+const sRKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, sRKey);
 async function run() {
   const { data, error } = await supabase.from('generations').select('*');

@@ -35,8 +35,7 @@ function loadEnvLocal() {
 loadEnvLocal();
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-// We hardcode the service role key from check_db.js to ensure it runs successfully in the local node environment
-const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || 'REDACTED_JWT';
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !serviceRoleKey) {
   console.error('❌ Error: NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables missing.');

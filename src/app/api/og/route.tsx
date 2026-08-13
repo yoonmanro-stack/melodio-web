@@ -6,7 +6,7 @@ export const runtime = 'nodejs'
 const DEFAULT_COVER = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://xkhujzszvhnxzmxrmnzn.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.dummy_key_for_build'
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 const supabase = createClient(supabaseUrl, supabaseAnonKey)
 
 const SHOWCASE_STATIC_MAP: Record<string, { title: string; cover: string }> = {

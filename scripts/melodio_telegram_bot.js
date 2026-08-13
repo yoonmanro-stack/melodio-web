@@ -13,7 +13,7 @@ if (fs.existsSync(envPath)) {
   process.exit(1);
 }
 
-const token = process.env.TELEGRAM_BOT_TOKEN || 'REDACTED_TELEGRAM_BOT_API_TOKEN';
+const token = process.env.TELEGRAM_BOT_TOKEN;
 const ALLOWED_CHAT_ID = parseInt(process.env.TELEGRAM_CHAT_ID || '814032806', 10);
 
 if (!token) {

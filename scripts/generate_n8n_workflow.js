@@ -2728,10 +2728,10 @@ return {
 const VERSION = '1.9.3';
 
 let jsonStr = JSON.stringify(workflow, null, 2);
-jsonStr = jsonStr.replaceAll('melodio-telegram-key', 'REDACTED_GENERIC_API_KEY');
-jsonStr = jsonStr.replaceAll('melodio-supabase-custom-auth', 'cwrYzSSzKQsKmUqv');
-jsonStr = jsonStr.replaceAll('melodio-openai-key', 'REDACTED_GENERIC_API_KEY');
-jsonStr = jsonStr.replaceAll('melodio-supabase-key', 'REDACTED_GENERIC_API_KEY');
+jsonStr = jsonStr.replaceAll('melodio-telegram-key', process.env.N8N_TELEGRAM_CREDENTIAL_ID || '');
+jsonStr = jsonStr.replaceAll('melodio-supabase-custom-auth', process.env.N8N_SUPABASE_CUSTOM_AUTH_CREDENTIAL_ID || '');
+jsonStr = jsonStr.replaceAll('melodio-openai-key', process.env.N8N_OPENAI_CREDENTIAL_ID || '');
+jsonStr = jsonStr.replaceAll('melodio-supabase-key', process.env.N8N_SUPABASE_CREDENTIAL_ID || '');
 
 fs.writeFileSync(
   path.resolve(__dirname, 'n8n_wiki_automation_telegram.json'),

@@ -19,7 +19,7 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-const sRKey = envConfig.SUPABASE_SERVICE_ROLE_KEY || 'REDACTED_JWT';
+const sRKey = envConfig.SUPABASE_SERVICE_ROLE_KEY;
 const supabaseUrl = envConfig.NEXT_PUBLIC_SUPABASE_URL || 'https://jfsfxzhunkrjyibsdswb.supabase.co';
 
 const supabase = createClient(supabaseUrl, sRKey);
