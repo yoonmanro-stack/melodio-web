@@ -572,6 +572,13 @@ export default function JapanLandingClient() {
   const [isGeneratingMusic, setIsGeneratingMusic] = useState(false);
   const [genModalState, setGenModalState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [genErrorMsg, setGenErrorMsg] = useState("");
+  const [generationJob, setGenerationJob] = useState<{
+    ids: string[];
+    status: 'submitting' | 'generating' | 'completed' | 'error';
+    title: string;
+    isPublic: boolean;
+    message?: string;
+  } | null>(null);
   const [publicTracksRefreshSignal, setPublicTracksRefreshSignal] = useState(0);
   const [myTracks, setMyTracks] = useState<any[]>([]);
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
@@ -1092,6 +1099,9 @@ export default function JapanLandingClient() {
   };
 
   const handleGenerateMusic = async () => {
+    if (generationJob?.status === 'submitting' || generationJob?.status === 'generating') {
+      return;
+    }
     if (!user) {
       alert("음악을 생성하려면 로그인이 필요합니다. 로그인 페이지로 이동합니다.");
       window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
@@ -1106,7 +1116,9 @@ export default function JapanLandingClient() {
       setIsGeneratingMusic(true);
       setGenModalState('submitting');
       setGenErrorMsg("");
+      setGenerationJob({ ids: [], status: 'submitting', title: `${tracks.length}곡 플레이리스트`, isPublic });
       try {
+        const submittedIds: string[] = [];
         const resolvedEngine = engine === 'auto' ? 'suno_v5' : engine;
 
         const mergeAndClampStyle = (common: string, desc?: string): string => {
@@ -1234,14 +1246,23 @@ export default function JapanLandingClient() {
             }),
           });
 
+          const result = await res.json().catch(() => null);
           if (!res.ok) {
-            console.error(`Failed to generate track ${i + 1}`);
+            throw new Error(result?.error || `${i + 1}번 음원 생성에 실패했습니다.`);
           }
+          if (result?.track?.id) submittedIds.push(result.track.id);
 
           if (user) {
             await saveHistory(trackPayload, {});
           }
         }
+        setGenerationJob({
+          ids: submittedIds,
+          status: submittedIds.length > 0 ? 'generating' : 'completed',
+          title: `${tracks.length}곡 플레이리스트`,
+          isPublic,
+          message: submittedIds.length > 0 ? '워커에서 음원을 생성하고 있습니다.' : '음원 생성 요청이 완료됐습니다.',
+        });
         setGenModalState('success');
         setPublicTracksRefreshSignal((value) => value + 1);
         window.setTimeout(() => setPublicTracksRefreshSignal((value) => value + 1), 10_000);
@@ -1250,6 +1271,13 @@ export default function JapanLandingClient() {
       } catch (err: any) {
         console.error("Music gen error:", err);
         setGenErrorMsg(err.message || "오류가 발생했습니다.");
+        setGenerationJob((current) => ({
+          ids: current?.ids || [],
+          status: 'error',
+          title: current?.title || '플레이리스트',
+          isPublic: current?.isPublic ?? isPublic,
+          message: err.message || '음원 생성 중 오류가 발생했습니다.',
+        }));
         setGenModalState("error");
       } finally {
         setIsGeneratingMusic(false);
@@ -1262,6 +1290,7 @@ export default function JapanLandingClient() {
       setIsGeneratingMusic(true);
       setGenModalState("submitting");
       setGenErrorMsg("");
+      setGenerationJob({ ids: [], status: 'submitting', title: title || activePreset?.name || '일본 BGM', isPublic });
       try {
         const resolvedEngine = engine === 'auto' ? 'suno_v5' : engine;
 
@@ -1385,10 +1414,18 @@ export default function JapanLandingClient() {
             isPublic: isPublic,
           }),
         });
+        const result = await res.json().catch(() => null);
         if (!res.ok) {
-          const errorData = await res.json().catch(() => null);
-          throw new Error(errorData?.error || '음원 생성에 실패했습니다.');
+          throw new Error(result?.error || '음원 생성에 실패했습니다.');
         }
+        const submittedId = result?.track?.id;
+        setGenerationJob({
+          ids: submittedId ? [submittedId] : [],
+          status: result?.track?.status === 'completed' || !submittedId ? 'completed' : 'generating',
+          title: result?.track?.title || title || activePreset?.name || '일본 BGM',
+          isPublic,
+          message: result?.track?.status === 'completed' ? '음원이 완성됐습니다.' : '워커에서 음원을 생성하고 있습니다.',
+        });
         if (user) {
           await saveHistory(resolvedPayload, {});
         }
@@ -1400,12 +1437,58 @@ export default function JapanLandingClient() {
       } catch (err: any) {
         console.error("Music gen error:", err);
         setGenErrorMsg(err.message || "오류가 발생했습니다.");
+        setGenerationJob((current) => ({
+          ids: current?.ids || [],
+          status: 'error',
+          title: current?.title || title || '일본 BGM',
+          isPublic: current?.isPublic ?? isPublic,
+          message: err.message || '음원 생성 중 오류가 발생했습니다.',
+        }));
         setGenModalState("error");
       } finally {
         setIsGeneratingMusic(false);
       }
     }
   };
+
+  useEffect(() => {
+    if (!generationJob || generationJob.status !== 'generating' || generationJob.ids.length === 0) return;
+
+    let cancelled = false;
+    const checkGenerationStatus = async () => {
+      try {
+        const results = await Promise.all(generationJob.ids.map(async (id) => {
+          const res = await fetch(`/api/generations?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+          if (!res.ok) return null;
+          const data = await res.json();
+          return data.generation || null;
+        }));
+        if (cancelled) return;
+
+        const available = results.filter(Boolean);
+        if (available.some((item: any) => item.status === 'failed')) {
+          setGenerationJob((current) => current ? { ...current, status: 'error', message: '음원 생성에 실패했습니다.' } : current);
+          setGenModalState('error');
+          return;
+        }
+        if (available.length === generationJob.ids.length && available.every((item: any) => item.status === 'completed')) {
+          setGenerationJob((current) => current ? { ...current, status: 'completed', message: `${available.length}곡의 음원 생성이 완료됐습니다.` } : current);
+          setGenModalState('success');
+          setPublicTracksRefreshSignal((value) => value + 1);
+          fetchMyJpTracks();
+        }
+      } catch (error) {
+        console.error('Failed to check Japan generation status:', error);
+      }
+    };
+
+    checkGenerationStatus();
+    const intervalId = window.setInterval(checkGenerationStatus, 5_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [generationJob?.ids.join(','), generationJob?.status]);
 
   const handlePlayTrack = (item: any) => {
     const el = audioRef.current;
@@ -2010,7 +2093,7 @@ export default function JapanLandingClient() {
               sourceMenu="japan"
               compositorResult={{ prompt: styleTags, charCount: styleTags.length, truncatedCount: 0, maxChars: 1000 }}
               onGenerate={handleGenerateMusic}
-              isGenerating={isGeneratingMusic}
+              isGenerating={isGeneratingMusic || generationJob?.status === 'submitting' || generationJob?.status === 'generating'}
               isPlaylistMode={isPlaylistMode}
               trackCount={trackCount}
               isPro={isPro}
@@ -2063,6 +2146,62 @@ export default function JapanLandingClient() {
           </div>
 
         </div>
+
+        {/* 공개 여부와 무관하게 현재 사용자의 생성 상태를 항상 표시 */}
+        {generationJob && (
+          <div className={`fixed bottom-6 right-6 z-[100] w-[min(380px,calc(100vw-3rem))] rounded-2xl border p-4 shadow-2xl backdrop-blur-xl ${
+            generationJob.status === 'completed'
+              ? 'border-emerald-400/40 bg-emerald-950/90'
+              : generationJob.status === 'error'
+                ? 'border-red-400/40 bg-red-950/90'
+                : 'border-cyan-400/40 bg-zinc-950/95'
+          }`} role="status" aria-live="polite">
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 shrink-0">
+                {generationJob.status === 'completed' ? (
+                  <Check className="h-5 w-5 text-emerald-400" />
+                ) : generationJob.status === 'error' ? (
+                  <AlertCircle className="h-5 w-5 text-red-400" />
+                ) : (
+                  <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <p className="truncate text-sm font-black text-white">
+                    {generationJob.status === 'submitting'
+                      ? '음원 생성 요청 접수 중'
+                      : generationJob.status === 'generating'
+                        ? '음원 생성 중'
+                        : generationJob.status === 'completed'
+                          ? '음원 생성 완료'
+                          : '음원 생성 오류'}
+                  </p>
+                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold ${generationJob.isPublic ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'bg-zinc-700/70 text-zinc-300'}`}>
+                    {generationJob.isPublic ? '공개' : '비공개'}
+                  </span>
+                </div>
+                <p className="mt-1 truncate text-xs font-semibold text-zinc-200">{generationJob.title}</p>
+                <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
+                  {generationJob.message || (generationJob.status === 'submitting' ? '생성 서버에 요청을 전달하고 있습니다.' : '완료될 때까지 중복 생성을 방지합니다.')}
+                </p>
+                {generationJob.status === 'completed' && !generationJob.isPublic && (
+                  <p className="mt-1 text-[10px] text-emerald-300">비공개 음원은 대시보드에서 확인할 수 있습니다.</p>
+                )}
+              </div>
+              {(generationJob.status === 'completed' || generationJob.status === 'error') && (
+                <button
+                  type="button"
+                  onClick={() => setGenerationJob(null)}
+                  className="shrink-0 rounded-lg p-1 text-zinc-400 transition hover:bg-white/10 hover:text-white"
+                  aria-label="생성 상태 알림 닫기"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* J-BGM 공개 음원 목록 */}
         <section className="pt-6 border-t border-white/5">
