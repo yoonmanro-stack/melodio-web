@@ -148,6 +148,8 @@ const JP_PRESET_IMAGES = [
   "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png"
 ];
 
+const JAPAN_PRESETS_PER_PAGE = 20;
+
 const jpPresets = [
   {
     id: "romance-pop",
@@ -722,7 +724,7 @@ export default function JapanLandingClient() {
         lyricsTemplate: p.lyricsTemplate,
         selections: {},
         metadata: {
-          cardImage: p.cardImage,
+          cardImage: `/japan-presets/${p.id}.webp`,
           category: p.category,
           defaultTitle: p.defaultTitle,
           defaultTopic: p.defaultTopic,
@@ -931,7 +933,13 @@ export default function JapanLandingClient() {
         
         if (error) throw error;
         if (data) {
-          const formatted = data.map((pb: any) => {
+          const formatted = data
+            .filter((pb: any) => {
+              const metadata = pb.metadata || {};
+              const label = `${pb.key_name || ''} ${pb.title || ''}`;
+              return metadata.is_test !== true && !/(^|[\s_-])(test|demo|sample|테스트|샘플)([\s_-]|$)/i.test(label);
+            })
+            .map((pb: any) => {
             const metadata = pb.metadata || {};
             let extractedDesc = '';
             if (pb.content) {
@@ -944,6 +952,11 @@ export default function JapanLandingClient() {
               extractedDesc = metadata.desc || pb.content.slice(0, 100);
             }
 
+            const thumbnailUrl = metadata.thumbnail_url
+              || (Array.isArray(metadata.thumbnail_urls) ? metadata.thumbnail_urls[0] : '')
+              || metadata.cardImage
+              || '';
+
             return {
               id: pb.key_name,
               name: pb.title,
@@ -952,10 +965,11 @@ export default function JapanLandingClient() {
               emoji: metadata.emoji || "🇯🇵",
               gradient: metadata.gradient || "from-[#fcb045] to-[#fd1d1d]",
               category: metadata.category || "retro",
-              cardImage: metadata.cardImage || "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
+              cardImage: thumbnailUrl || "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
               defaultTitle: metadata.defaultTitle || pb.title,
               defaultTopic: metadata.defaultTopic || extractedDesc,
-              lyricsTemplate: pb.content || ""
+              lyricsTemplate: pb.content || "",
+              metadata
             };
           });
           setDbPresets(formatted);
@@ -1704,9 +1718,9 @@ export default function JapanLandingClient() {
               </div>
             </div>
 
-            {/* 2x3 격자 네모 카드 그리드 */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              {filteredJpPresets.slice((jpPage - 1) * 27, jpPage * 27).map((preset) => {
+            {/* 데스크톱 2열 × 10행, 페이지당 20개 */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {filteredJpPresets.slice((jpPage - 1) * JAPAN_PRESETS_PER_PAGE, jpPage * JAPAN_PRESETS_PER_PAGE).map((preset) => {
                 const isSelected = selectedPresetId === preset.id;
                 const cardImage = (preset.metadata as any)?.cardImage || (preset.metadata as any)?.thumbnail_url || (preset as any).cardImage || (preset as any).thumbnailUrl || (preset as any).thumbnail_url;
                 const category = (preset.metadata as any)?.category || (preset as any).category || "CUSTOM BGM";
@@ -1837,7 +1851,7 @@ export default function JapanLandingClient() {
               })}
             </div>
 
-            {/* Pagination Controls - Slice 27 (Always visible) */}
+            {/* Pagination Controls - 페이지당 20개 */}
             {filteredJpPresets.length > 0 && (
               <div className="flex items-center justify-center gap-1.5 pt-2">
                 <button
@@ -1847,7 +1861,7 @@ export default function JapanLandingClient() {
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                {Array.from({ length: Math.ceil(filteredJpPresets.length / 27) }).map((_, idx) => {
+                {Array.from({ length: Math.ceil(filteredJpPresets.length / JAPAN_PRESETS_PER_PAGE) }).map((_, idx) => {
                   const pageNum = idx + 1;
                   return (
                     <button
@@ -1864,8 +1878,8 @@ export default function JapanLandingClient() {
                   );
                 })}
                 <button
-                  onClick={() => setJpPage(prev => Math.min(prev + 1, Math.ceil(filteredJpPresets.length / 27)))}
-                  disabled={jpPage === Math.ceil(filteredJpPresets.length / 27)}
+                  onClick={() => setJpPage(prev => Math.min(prev + 1, Math.ceil(filteredJpPresets.length / JAPAN_PRESETS_PER_PAGE)))}
+                  disabled={jpPage === Math.ceil(filteredJpPresets.length / JAPAN_PRESETS_PER_PAGE)}
                   className="p-1 rounded bg-zinc-900/40 border border-zinc-800 text-zinc-500 hover:text-zinc-300 disabled:opacity-30 transition-all flex items-center justify-center"
                 >
                   <ChevronRight className="w-4 h-4" />
