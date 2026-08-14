@@ -1749,7 +1749,7 @@ export default function JapanLandingClient() {
                         )}
                       </div>
                       {/* Top Left Big Overlay Category Title */}
-                      <div className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded bg-white/70 border border-white/80 text-black text-[9px] font-extrabold uppercase tracking-widest transition-all font-mono shadow-sm backdrop-blur-sm">
+                      <div className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded bg-white/50 text-black text-[9px] font-extrabold uppercase tracking-widest transition-all font-mono shadow-sm backdrop-blur-sm">
                         {category}
                       </div>
 
