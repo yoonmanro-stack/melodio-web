@@ -1882,6 +1882,36 @@ export default function Home() {
           }
         }
 
+        const styleText = String(meta.stylePrompt || '');
+        const selectedVocals = Array.isArray(meta.selections?.vocal)
+          ? meta.selections.vocal.filter(Boolean)
+          : [];
+        const inferredVocal = meta.isInstrumental
+          ? 'Instrumental'
+          : meta.vocal
+            || (meta.voiceDna ? `Voice DNA ${meta.voiceDna}` : '')
+            || (selectedVocals.length > 0 ? selectedVocals.join(' / ') : '')
+            || (/\b(duet|duo|male and female|mixed vocal)\b/i.test(styleText) ? 'Duet / Mixed Vocal' : '')
+            || (/\b(female|woman|girl|soprano|alto)\b/i.test(styleText) ? 'Female Vocal' : '')
+            || (/\b(male|man|boy|tenor|baritone)\b/i.test(styleText) ? 'Male Vocal' : '')
+            || (/\b(choir|choral|group vocal)\b/i.test(styleText) ? 'Choir / Group Vocal' : '')
+            || 'Vocal (기록 없음)';
+        const selectedGenres = Array.isArray(meta.selections?.genre)
+          ? meta.selections.genre.filter(Boolean)
+          : [];
+        const categoryOnlyGenre = ['healing', 'focus', 'retro', 'curation', 'genre'].includes(String(meta.genre || '').toLowerCase());
+        const inferredGenre = meta.genreLabel
+          || (selectedGenres.length > 0 ? selectedGenres.join(' / ') : '')
+          || (meta.sourceMenu === 'japan' || categoryOnlyGenre ? styleText.split(',')[0]?.trim() : '')
+          || meta.genre
+          || '기록 없음';
+        const engineLabel = meta.engine === 'suno_v5'
+          ? 'Suno'
+          : meta.engine === 'lyria3'
+            ? 'Lyria'
+            : meta.engine || '기록 없음';
+        const versionLabel = meta.sunoVersion || (meta.engine === 'lyria3' ? 'Lyria 3' : '기록 없음');
+
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setDetailItem(null)}>
             <div className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6 space-y-4 flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
@@ -2301,18 +2331,28 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* 태그 그리드 */}
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    {meta.engine && (
-                      <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/5">
-                        <span className="text-zinc-500">Engine</span>
-                        <span className="ml-2 text-white font-mono">{meta.engine} {meta.sunoVersion || ''}</span>
-                      </div>
-                    )}
-                    {meta.genre && (
-                      <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/5">
-                        <span className="text-zinc-500">Genre</span>
-                        <span className="ml-2 text-white">{meta.genre}{meta.subGenre ? ` / ${meta.subGenre}` : ''}</span>
+                  {/* 실제 생성 시 저장된 설정 정보 */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                    <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
+                      <span className="text-zinc-500">음악 엔진</span>
+                      <span className="text-white font-semibold">{engineLabel}</span>
+                    </div>
+                    <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
+                      <span className="text-zinc-500">엔진 버전</span>
+                      <span className="text-cyan-300 font-mono font-semibold">{versionLabel}</span>
+                    </div>
+                    <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
+                      <span className="text-zinc-500">선택 보컬</span>
+                      <span className="text-white font-semibold text-right">{inferredVocal}</span>
+                    </div>
+                    <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
+                      <span className="text-zinc-500">음악 장르</span>
+                      <span className="text-white font-semibold text-right">{inferredGenre}{meta.subGenre ? ` / ${meta.subGenre}` : ''}</span>
+                    </div>
+                    {meta.genre && meta.genre !== inferredGenre && (
+                      <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
+                        <span className="text-zinc-500">프리셋 카테고리</span>
+                        <span className="text-zinc-200 font-semibold capitalize">{meta.genre}</span>
                       </div>
                     )}
                     {meta.bpm && (
@@ -2327,10 +2367,6 @@ export default function Home() {
                         <span className="ml-2 text-white">{meta.mood}</span>
                       </div>
                     )}
-                    <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/5">
-                      <span className="text-zinc-500">Vocals</span>
-                      <span className="ml-2 text-white">{meta.isInstrumental ? '❌ Instrumental' : '✅ Vocal'}</span>
-                    </div>
                   </div>
                 </div>
               </div>

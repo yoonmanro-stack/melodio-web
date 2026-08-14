@@ -33,6 +33,26 @@ function buildLyricsPromptFromSections(sections: unknown): string {
     .join('\n\n')
 }
 
+function inferVocalLabel(payload: PromptPayload, selections: any, vdCode?: string): string {
+  if (payload.isInstrumental) return 'Instrumental'
+  if (vdCode) return `Voice DNA ${vdCode}`
+  const selected = Array.isArray(selections?.vocal) ? selections.vocal.filter(Boolean) : []
+  if (selected.length > 0) return selected.join(' / ')
+
+  const style = payload.stylePrompt.toLowerCase()
+  if (/\b(duet|duo|male and female|mixed vocal)\b/.test(style)) return 'Duet / Mixed Vocal'
+  if (/\b(female|woman|girl|soprano|alto)\b/.test(style)) return 'Female Vocal'
+  if (/\b(male|man|boy|tenor|baritone)\b/.test(style)) return 'Male Vocal'
+  if (/\b(choir|choral|group vocal)\b/.test(style)) return 'Choir / Group Vocal'
+  return 'Vocal (unspecified)'
+}
+
+function inferGenreLabel(payload: PromptPayload, selections: any): string {
+  const selected = Array.isArray(selections?.genre) ? selections.genre.filter(Boolean) : []
+  if (selected.length > 0) return selected.join(' / ')
+  return payload.stylePrompt.split(',')[0]?.trim() || payload.metadata?.primaryGenre || 'Unspecified'
+}
+
 async function generateSongMetadata(stylePrompt: string, lyricsPrompt: string): Promise<{ title: string; description: string; tags: string }> {
   const openaiApiKey = process.env.OPENAI_API_KEY
   const pLower = stylePrompt.toLowerCase();
@@ -462,10 +482,13 @@ export async function POST(request: NextRequest) {
       isInstrumental: payload.isInstrumental,
       sunoVersion: payload.sunoVersion || 'v5.5',
       genre: payload.metadata?.primaryGenre || '',
+      genreLabel: inferGenreLabel(payload, selections),
       subGenre: payload.metadata?.subGenre || '',
       bpm: payload.metadata?.bpm || '',
       mood: payload.metadata?.mood || '',
       selections: selections || {},
+      vocal: inferVocalLabel(payload, selections, vdCode),
+      voiceDna: vdCode || null,
       lyricsSections: lyricsSections || [],
       duration: rawBody.metadata?.duration || '',
       durationSeconds: rawBody.metadata?.durationSeconds || null,
