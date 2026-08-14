@@ -13,7 +13,7 @@ import {
   Shuffle, SkipBack, SkipForward, Repeat, Video, Film, Dog, Baby, Utensils, Ghost, RotateCcw, Cpu
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
-import ViralVideoLibrary, { type ViralVideo } from "@/components/viral/ViralVideoLibrary";
+import ViralVideoLibrary, { readCachedViralVideos, type ViralVideo } from "@/components/viral/ViralVideoLibrary";
 import { getCategorySpec, buildStylePromptV2 } from "@/lib/vle/viralCategorySpec";
 import { VIRAL_SONG_SPEC, estimateSeconds } from "@/lib/vle/viralSongSpec";
 
@@ -599,7 +599,7 @@ export default function ViralTrendZonePage() {
   const [audioDuration, setAudioDuration] = useState(0);
   const [volume, setVolume] = useState(0.8);
   const [copiedLinkTrackId, setCopiedLinkTrackId] = useState<string | null>(null);
-  const [viralVideos, setViralVideos] = useState<ViralVideo[]>([]);
+  const [viralVideos, setViralVideos] = useState<ViralVideo[]>(readCachedViralVideos);
   const [topPlayingId, setTopPlayingId] = useState<string | null>(null);
 
   const viralScrollRef = useRef<HTMLDivElement | null>(null);
@@ -1558,7 +1558,7 @@ export default function ViralTrendZonePage() {
                     {/* Dark gradient overlay for typography readability */}
                     <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/20 to-black/75 rounded-2xl z-15" />
 
-                    <div className="absolute left-3 top-3 z-30 flex h-8 min-w-8 items-center justify-center rounded-lg bg-fuchsia-600 px-2 text-sm font-black text-white shadow-lg">
+                    <div className="absolute left-3 top-3 z-30 flex h-8 min-w-8 items-center justify-center rounded-lg border border-white/80 bg-white/75 px-2 text-sm font-black text-fuchsia-600 shadow-lg shadow-black/20 backdrop-blur-md">
                       {index + 1}
                     </div>
 

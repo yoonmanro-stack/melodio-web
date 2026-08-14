@@ -49,6 +49,7 @@ const CATEGORY_KEYWORDS: Record<ViralCategory, string[]> = {
 }
 
 const FALLBACK_POSTER = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'
+const VIDEO_CACHE_KEY = 'melodio_viral_video_library_v1'
 
 function parseMetadata(raw: unknown): Record<string, unknown> {
   if (!raw) return {}
@@ -115,19 +116,28 @@ function toViralVideo(item: Record<string, unknown>): ViralVideo | null {
 
 const ITEMS_PER_PAGE = 12
 
+export function readCachedViralVideos(): ViralVideo[] {
+  if (typeof window === 'undefined') return []
+  try {
+    const cached = JSON.parse(localStorage.getItem(VIDEO_CACHE_KEY) || '[]')
+    return Array.isArray(cached) ? cached : []
+  } catch {
+    return []
+  }
+}
+
 export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?: (videos: ViralVideo[]) => void }) {
-  const [videos, setVideos] = useState<ViralVideo[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [videos, setVideos] = useState<ViralVideo[]>(readCachedViralVideos)
+  const [isLoading, setIsLoading] = useState(() => readCachedViralVideos().length === 0)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<ViralCategory>('trend')
+  const [selectedCategory, setSelectedCategory] = useState<ViralCategory | 'all'>('all')
   const [currentPage, setCurrentPage] = useState(1)
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null)
   const videoRefs = useRef(new Map<string, HTMLVideoElement>())
 
   const loadVideos = useCallback(async () => {
-    setIsLoading(true)
     try {
-      const response = await fetch('/api/generations', { cache: 'no-store' })
+      const response = await fetch('/api/viral-videos', { cache: 'force-cache' })
       if (!response.ok) throw new Error('영상 목록을 불러오지 못했습니다.')
       const payload = await response.json() as { generations?: unknown[] }
       const seenVideos = new Set<string>()
@@ -140,6 +150,11 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
         })
       setVideos(nextVideos)
       onVideosLoaded?.(nextVideos)
+      try {
+        localStorage.setItem(VIDEO_CACHE_KEY, JSON.stringify(nextVideos))
+      } catch {
+        // Storage can be unavailable in private browsing mode.
+      }
     } catch (error) {
       console.error('[ViralVideoLibrary]', error)
       setVideos([])
@@ -159,7 +174,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
   const filteredVideos = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
     return videos.filter((video) => {
-      if (video.category !== selectedCategory) return false
+      if (selectedCategory !== 'all' && video.category !== selectedCategory) return false
       if (!normalizedQuery) return true
       return `${video.title} ${video.genre} ${video.creator}`.toLowerCase().includes(normalizedQuery)
     })
@@ -223,14 +238,26 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-2" aria-label="영상 카테고리">
+        <div className="grid grid-cols-3 gap-2" aria-label="영상 카테고리">
+          <button
+            type="button"
+            onClick={() => setSelectedCategory('all')}
+            aria-pressed={selectedCategory === 'all'}
+            className={`col-span-3 min-h-10 rounded-xl px-2.5 py-2 text-[11px] font-extrabold leading-tight transition ${
+              selectedCategory === 'all'
+                ? 'bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-950/50'
+                : 'border border-white/10 bg-black/40 text-zinc-400 hover:text-white'
+            }`}
+          >
+            전체
+          </button>
           {CATEGORIES.map((category) => (
             <button
               key={category.id}
               type="button"
               onClick={() => setSelectedCategory(category.id)}
               aria-pressed={selectedCategory === category.id}
-              className={`min-h-10 rounded-xl px-2.5 py-2 text-[10px] font-extrabold leading-tight transition sm:text-[11px] ${
+              className={`min-h-11 rounded-xl px-1.5 py-2 text-[9px] font-extrabold leading-tight transition sm:px-2 sm:text-[10px] ${
                 selectedCategory === category.id
                   ? 'bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-950/50'
                   : 'border border-white/10 bg-black/40 text-zinc-400 hover:text-white'
