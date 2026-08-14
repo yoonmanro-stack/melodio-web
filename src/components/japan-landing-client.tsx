@@ -1251,8 +1251,8 @@ export default function JapanLandingClient() {
         setIsGeneratingMusic(false);
       }
     } else {
-      if (!title || !styleTags) {
-        alert("곡 제목과 스타일 태그는 필수 입력 사항입니다!");
+      if (!styleTags.trim()) {
+        alert("스타일 태그는 필수 입력 사항입니다!");
         return;
       }
       setIsGeneratingMusic(true);
@@ -1382,7 +1382,8 @@ export default function JapanLandingClient() {
           }),
         });
         if (!res.ok) {
-          throw new Error('음원 생성에 실패했습니다.');
+          const errorData = await res.json().catch(() => null);
+          throw new Error(errorData?.error || '음원 생성에 실패했습니다.');
         }
         if (user) {
           await saveHistory(resolvedPayload, {});
