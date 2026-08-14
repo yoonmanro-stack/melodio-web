@@ -16,6 +16,14 @@ function readString(...values: unknown[]): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
+function readNumber(...values: unknown[]): number {
+  for (const value of values) {
+    const parsed = typeof value === 'number' ? value : Number(value)
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed
+  }
+  return 0
+}
+
 const getCachedViralVideoRows = unstable_cache(
   async () => {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -31,7 +39,7 @@ const getCachedViralVideoRows = unstable_cache(
 
     const { data, error } = await supabase
       .from('generations')
-      .select('id,title,status,license_hash,created_at,play_count,cover_art_url')
+      .select('id,title,status,license_hash,created_at,cover_art_url')
       .eq('status', 'completed')
       .order('created_at', { ascending: false })
       .limit(240)
@@ -52,7 +60,7 @@ const getCachedViralVideoRows = unstable_cache(
         status: row.status,
         is_public: true,
         created_at: row.created_at,
-        play_count: row.play_count,
+        play_count: readNumber(metadata.play_count, metadata.viewCount, metadata.view_count),
         cover_art_url: row.cover_art_url,
         license_hash: JSON.stringify({
           sourceMenu: source,
