@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
 import MultiTrackPlayer from "@/components/MultiTrackPlayer";
+import DashboardViralCarousel, { type DashboardViralVideo } from "@/components/dashboard/DashboardViralCarousel";
 
 const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg 
@@ -52,6 +53,7 @@ type Generation = {
   audio_grade?: string;
   clipping_count?: number;
   cover_art_url?: string | null;
+  video_url?: string | null;
   dissonance_score?: number;
   retry_count?: number;
 };
@@ -573,7 +575,7 @@ export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [categoryTab, setCategoryTab] = useState<'all' | 'audio-forge' | 'style-library' | 'japan' | 'viral-cf'>('all');
+  const [categoryTab, setCategoryTab] = useState<'all' | 'audio-forge' | 'style-library' | 'japan'>('all');
   const [sortBy, setSortBy] = useState('newest');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -975,10 +977,29 @@ export default function Home() {
     return 'audio-forge'; // Default
   };
 
+  const dashboardViralVideos: DashboardViralVideo[] = history
+    .filter((item) => !!item.user_id && getTrackCategory(item) === 'viral-cf')
+    .map((item) => {
+      let meta: any = {};
+      if (item.license_hash) {
+        try { meta = JSON.parse(item.license_hash); } catch { /* ignore */ }
+      }
+      return {
+        id: item.id,
+        title: item.title || 'Untitled Viral Short',
+        videoUrl: item.video_url || meta.video_url || meta.grok_video_url || meta.videoUrl || '',
+        posterUrl: item.cover_art_url || getFallbackCoverArt(item),
+        createdAt: item.created_at,
+        isPublic: meta.isPublic !== false,
+      };
+    })
+    .filter((item) => !!item.videoUrl)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
   // ─── 클라이언트 사이드 검색, 필터, 정렬 ───
-  let filtered = history.filter(item => 
-    (item.title || 'Untitled').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  let filtered = history
+    .filter((item) => getTrackCategory(item) !== 'viral-cf')
+    .filter(item => (item.title || 'Untitled').toLowerCase().includes(searchQuery.toLowerCase()));
 
   if (statusFilter !== 'all') {
     filtered = filtered.filter(item => item.status === statusFilter);
@@ -1201,6 +1222,14 @@ export default function Home() {
           </Link>
         </div>
       </div>
+
+      <DashboardViralCarousel
+        videos={dashboardViralVideos}
+        onOpenDetails={(id) => {
+          const target = history.find((item) => item.id === id);
+          if (target) setDetailItem(target);
+        }}
+      />
       
       {/* ─── Suno 스타일 곡 라이브러리 패널 (Overhaul) ─── */}
       <div className="mt-12 glass-panel p-6">
@@ -1214,7 +1243,7 @@ export default function Home() {
               </span>
             </div>
 
-            {/* 카테고리별 분리 탭 (5대 메뉴 일치) */}
+            {/* 바이럴 영상은 상단 전용 그리드로 분리하고 일반 음원 메뉴만 유지 */}
             <div className="flex items-center gap-1 bg-black/40 border border-white/5 p-1 rounded-xl w-fit flex-wrap">
               <button
                 onClick={() => { setCategoryTab('all'); setCurrentPage(1); }}
@@ -1256,16 +1285,6 @@ export default function Home() {
               >
                 <span>일본 BGM 포지</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
-              </button>
-              <button
-                onClick={() => { setCategoryTab('viral-cf'); setCurrentPage(1); }}
-                className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${
-                  categoryTab === 'viral-cf'
-                    ? 'bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/20'
-                    : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
-                }`}
-              >
-                바이럴 & 트렌드 존
               </button>
             </div>
           </div>
