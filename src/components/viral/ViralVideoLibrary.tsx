@@ -202,7 +202,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
   return (
     <section aria-labelledby="viral-video-library-title" className="rounded-3xl border border-white/10 bg-zinc-950/60 p-4 shadow-xl backdrop-blur-md sm:p-5">
       <div className="flex flex-col gap-3 border-b border-white/10 pb-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
           <div>
             <div className="flex items-center gap-2">
               <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-fuchsia-500/15 text-fuchsia-300">
@@ -214,28 +214,29 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2">
-            <label className="relative">
-              <span className="sr-only">바이럴 영상 검색</span>
-              <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
-              <input
-                type="search"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                placeholder="영상 검색"
-                className="w-40 rounded-xl border border-white/10 bg-black/50 py-2 pl-9 pr-3 text-xs text-white outline-none transition focus:border-fuchsia-500/60 sm:w-48"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={loadVideos}
-              disabled={isLoading}
-              aria-label="영상 목록 새로고침"
-              className="rounded-xl border border-white/10 bg-white/5 p-2 text-zinc-400 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
-            >
-              <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-            </button>
-          </div>
+        </div>
+
+        <div className="relative w-full">
+          <label className="block w-full">
+            <span className="sr-only">바이럴 영상 검색</span>
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="영상 검색"
+              className="w-full rounded-xl border border-white/10 bg-black/50 py-2.5 pl-9 pr-12 text-xs text-white outline-none transition focus:border-fuchsia-500/60"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={loadVideos}
+            disabled={isLoading}
+            aria-label="영상 목록 새로고침"
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg p-2 text-zinc-400 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          </button>
         </div>
 
         <div className="grid grid-cols-3 gap-2" aria-label="영상 카테고리">

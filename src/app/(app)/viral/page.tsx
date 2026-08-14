@@ -1528,14 +1528,14 @@ export default function ViralTrendZonePage() {
               return (
                 <div 
                   key={track.id}
-                  className="w-44 shrink-0 snap-start flex flex-col group/card relative pt-4"
+                  className="w-52 shrink-0 snap-start flex flex-col group/card relative pt-4 sm:w-56"
                 >
                   {/* Card Stack Deck Background Layers */}
                   <div className="absolute top-2 left-2.5 right-2.5 h-4 rounded-t-2xl bg-zinc-800/85 border border-white/5 opacity-40 transform scale-[0.96] z-0 origin-bottom" />
                   <div className="absolute top-0.5 left-5 right-5 h-4 rounded-t-2xl bg-zinc-700/60 border border-white/5 opacity-25 transform scale-[0.91] z-0 origin-bottom" />
 
                   {/* Album Cover Art Card (9:16 Ratio Box) */}
-                  <div className="relative w-44 h-[280px] rounded-2xl overflow-hidden border border-white/10 shadow-2xl z-10 bg-zinc-950 select-none group-hover/card:border-zinc-500/50 transition-colors duration-300">
+                  <div className="relative aspect-[9/16] w-full rounded-2xl overflow-hidden border border-white/10 shadow-2xl z-10 bg-zinc-950 select-none group-hover/card:border-zinc-500/50 transition-colors duration-300">
                     <video 
                       ref={(element) => {
                         if (element) showcaseVideoRefs.current.set(track.id, element);
