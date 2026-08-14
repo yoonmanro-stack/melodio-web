@@ -76,7 +76,7 @@ const getCachedViralVideoRows = unstable_cache(
       }]
     })
   },
-  ['viral-video-library-v1'],
+  ['viral-video-library-v2'],
   { revalidate: 30, tags: ['viral-video-library'] }
 )
 

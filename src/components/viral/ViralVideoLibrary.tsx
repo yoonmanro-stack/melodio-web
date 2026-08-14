@@ -49,7 +49,7 @@ const CATEGORY_KEYWORDS: Record<ViralCategory, string[]> = {
 }
 
 const FALLBACK_POSTER = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'
-const VIDEO_CACHE_KEY = 'melodio_viral_video_library_v1'
+const VIDEO_CACHE_KEY = 'melodio_viral_video_library_v2'
 
 function parseMetadata(raw: unknown): Record<string, unknown> {
   if (!raw) return {}
@@ -137,7 +137,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
 
   const loadVideos = useCallback(async () => {
     try {
-      const response = await fetch('/api/viral-videos', { cache: 'force-cache' })
+      const response = await fetch('/api/viral-videos?coverVersion=2', { cache: 'no-store' })
       if (!response.ok) throw new Error('영상 목록을 불러오지 못했습니다.')
       const payload = await response.json() as { generations?: unknown[] }
       const seenVideos = new Set<string>()
