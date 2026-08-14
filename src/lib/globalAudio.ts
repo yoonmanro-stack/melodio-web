@@ -1,10 +1,10 @@
 'use client'
 
 // 멜로디오 전역 단일 음원 재생 관리자 (Global Singleton Audio Manager)
-let activeAudioInstance: HTMLAudioElement | null = null
+let activeAudioInstance: HTMLMediaElement | null = null
 let activeStopCallback: (() => void) | null = null
 
-export function registerActiveAudio(audio: HTMLAudioElement, stopCb?: () => void) {
+export function registerActiveAudio(audio: HTMLMediaElement, stopCb?: () => void) {
   if (typeof window === 'undefined') return
 
   // 이전에 재생 중이던 오디오가 있다면 일시정지 및 UI 상태 초기화
