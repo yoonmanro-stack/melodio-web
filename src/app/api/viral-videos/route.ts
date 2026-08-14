@@ -31,7 +31,7 @@ const getCachedViralVideoRows = unstable_cache(
 
     const { data, error } = await supabase
       .from('generations')
-      .select('id,title,status,is_public,license_hash,created_at,play_count,cover_art_url')
+      .select('id,title,status,license_hash,created_at,play_count,cover_art_url')
       .eq('status', 'completed')
       .order('created_at', { ascending: false })
       .limit(240)
@@ -44,7 +44,7 @@ const getCachedViralVideoRows = unstable_cache(
       const videoUrl = readString(metadata.video_url, metadata.grok_video_url, metadata.videoUrl)
       const isViral = metadata.viralMode === true || source === 'viral' || source === 'viral-cf'
 
-      if (row.is_public === false || metadata.isPublic === false || !isViral || !videoUrl) return []
+      if (metadata.isPublic === false || !isViral || !videoUrl) return []
 
       return [{
         id: row.id,
