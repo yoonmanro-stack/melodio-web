@@ -1287,6 +1287,10 @@ export default function JapanLandingClient() {
         alert("스타일 태그는 필수 입력 사항입니다!");
         return;
       }
+      if (!isInstrumental && !lyricsSections.some((section) => section.content?.trim())) {
+        alert("보컬곡을 생성하려면 먼저 가사를 작성하거나 AI 가사를 생성해주세요.");
+        return;
+      }
       setIsGeneratingMusic(true);
       setGenModalState("submitting");
       setGenErrorMsg("");

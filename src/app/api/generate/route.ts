@@ -321,6 +321,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'stylePrompt가 필요합니다' }, { status: 400 })
     }
 
+    // 일본 BGM 보컬곡은 Suno의 임의 가사 생성을 허용하지 않는다.
+    // 빈 가사로 제출하면 같은 작업의 두 후보가 서로 다른 구성으로 생성되어
+    // 길이가 1분 이상 벌어지는 사례가 확인됐다.
+    if (rawBody.sourceMenu === 'japan' && !payload.isInstrumental && !payload.lyricsPrompt?.trim()) {
+      return NextResponse.json({ error: '보컬곡 가사가 비어 있습니다. 가사를 먼저 생성해주세요.' }, { status: 400 })
+    }
+
     // Apply Voice DNA Scrubber
     if (vdCode) {
       const { scrubAndComposeVoiceDna } = await import('@/lib/voice-dna-scrubber')

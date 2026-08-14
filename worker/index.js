@@ -910,6 +910,18 @@ async function pollSunoGenerations() {
             }
           } else {
             scannedClips.sort((a, b) => {
+              // 일반 보컬곡은 목표 길이(약 3:15)에 도달한 완성 후보를 우선한다.
+              // 음질 등급만 비교하면 1분대 조기 종료본이 2~3분 완성본보다 먼저
+              // 선택되는 문제가 있었다.
+              if (!metaObj.isInstrumental && String(metaObj.lyricsPrompt || '').trim()) {
+                const da = clipSeconds(a.clip), db = clipSeconds(b.clip);
+                const completeDiff = ((db !== null && db >= 120) ? 1 : 0) - ((da !== null && da >= 120) ? 1 : 0);
+                if (completeDiff !== 0) return completeDiff;
+                if (da !== null && db !== null) {
+                  const targetGap = Math.abs(da - 195) - Math.abs(db - 195);
+                  if (targetGap !== 0) return targetGap;
+                }
+              }
               const gradeDiff = gradePriority[b.quality.grade] - gradePriority[a.quality.grade];
               if (gradeDiff !== 0) return gradeDiff;
               return a.quality.clippingPerMinute - b.quality.clippingPerMinute;
@@ -1066,9 +1078,22 @@ async function pollSunoGenerations() {
             }
           }
 
-          // 6단계: 두 번째 곡(서브 곡) 무조건 저장 (Suno 기본 2곡 생성 보장)
+          // 6단계: 두 번째 곡(서브 곡) 저장 — 길이 편차가 큰 조기 종료본은 제외
           if (loser && loser.clip.audio_url) {
             const loserTitle = (row.title ? row.title + " (2)" : loser.clip.title) || "Untitled (2)";
+            const winnerSec = clipSeconds(winner.clip);
+            const loserSec = clipSeconds(loser.clip);
+            const isIncompleteGeneralVariant = !isShortForm
+              && !metaObj.isInstrumental
+              && winnerSec !== null
+              && loserSec !== null
+              && Math.min(winnerSec, loserSec) / Math.max(winnerSec, loserSec) < 0.7
+              && Math.abs(winnerSec - loserSec) > 45;
+
+            if (isIncompleteGeneralVariant) {
+              log("WARN", `[SUNO POLL] 서브 곡 저장 제외 — 동일 요청 후보 길이 편차 과다 (${winnerSec}s / ${loserSec}s)`, { title: loserTitle });
+              continue;
+            }
             
             const { data: existing } = await supabase.from("generations")
               .select("id")
