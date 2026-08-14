@@ -1,34 +1,39 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Film, RefreshCw, Search, Sparkles } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Film, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { registerActiveAudio } from '@/lib/globalAudio'
 
-type ViralCategory = 'all' | 'drama' | 'pet' | 'relationship' | 'human' | 'trend' | 'challenge' | 'brand' | 'history'
+export type ViralCategory = 'drama' | 'pet' | 'relationship' | 'human' | 'trend' | 'challenge' | 'brand' | 'history' | 'parenting' | 'food_diet' | 'horror_mystery' | 'ai_future'
 
-type ViralVideo = {
+export type ViralVideo = {
   id: string
   title: string
   videoUrl: string
   posterUrl?: string
-  category: Exclude<ViralCategory, 'all'>
+  category: ViralCategory
   genre: string
   creator: string
+  viewCount: number
+  createdAt: string
 }
 
 const CATEGORIES: Array<{ id: ViralCategory; label: string }> = [
-  { id: 'all', label: '전체' },
-  { id: 'drama', label: 'K-드라마' },
-  { id: 'pet', label: '댕냥이' },
-  { id: 'relationship', label: '연애·심리' },
-  { id: 'human', label: '직장인' },
-  { id: 'trend', label: '트렌드' },
-  { id: 'challenge', label: '챌린지' },
+  { id: 'drama', label: 'K-드라마 명대사' },
+  { id: 'pet', label: '댕냥이 집사속마음' },
+  { id: 'relationship', label: '연애·남녀심리' },
+  { id: 'human', label: '현대인·직장인' },
+  { id: 'trend', label: '트렌드·이슈' },
+  { id: 'challenge', label: '도파민 응원' },
   { id: 'brand', label: 'B급 광고' },
   { id: 'history', label: '역사 부캐' },
+  { id: 'parenting', label: '육아·잼민이 월드' },
+  { id: 'food_diet', label: '야식·다이어트' },
+  { id: 'horror_mystery', label: '이불킥·흑역사' },
+  { id: 'ai_future', label: 'AI·미래 판타지' },
 ]
 
-const CATEGORY_KEYWORDS: Record<Exclude<ViralCategory, 'all'>, string[]> = {
+const CATEGORY_KEYWORDS: Record<ViralCategory, string[]> = {
   drama: ['드라마', '명대사', '연진', '넷플릭스'],
   pet: ['강아지', '고양이', '집사', '댕냥이', '사료'],
   relationship: ['연애', '카톡', '읽씹', '남녀', '심리', '이별'],
@@ -37,6 +42,10 @@ const CATEGORY_KEYWORDS: Record<Exclude<ViralCategory, 'all'>, string[]> = {
   challenge: ['갓생', '택배', '도파민', '응원', '언박싱', '챌린지'],
   brand: ['광고', '브랜드', 'cm', 'b급'],
   history: ['이순신', '정조', '신사임당', '세종', '역사', '부캐'],
+  parenting: ['육아', '아이', '엄마', '아빠', '잼민이', '등원'],
+  food_diet: ['야식', '다이어트', '먹방', '음식', '치킨', '라면'],
+  horror_mystery: ['이불킥', '흑역사', '괴담', '공포', '미스터리'],
+  ai_future: ['ai', '인공지능', '로봇', '미래', '메타버스'],
 }
 
 const FALLBACK_POSTER = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'
@@ -57,15 +66,23 @@ function readString(...values: unknown[]): string {
   return typeof value === 'string' ? value.trim() : ''
 }
 
-function resolveCategory(item: Record<string, unknown>, meta: Record<string, unknown>): Exclude<ViralCategory, 'all'> {
+function readNumber(...values: unknown[]): number {
+  for (const value of values) {
+    const parsed = typeof value === 'number' ? value : Number(value)
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed
+  }
+  return 0
+}
+
+function resolveCategory(item: Record<string, unknown>, meta: Record<string, unknown>): ViralCategory {
   const rawCategory = readString(meta.presetId, meta.tab_type, meta.genCategory, item.preset_id, item.category)
-  if (CATEGORIES.some((category) => category.id === rawCategory) && rawCategory !== 'all') {
-    return rawCategory as Exclude<ViralCategory, 'all'>
+  if (CATEGORIES.some((category) => category.id === rawCategory)) {
+    return rawCategory as ViralCategory
   }
 
   const haystack = `${item.title || ''} ${item.prompt || ''} ${item.lyrics_prompt || ''}`.toLowerCase()
   const match = Object.entries(CATEGORY_KEYWORDS).find(([, keywords]) => keywords.some((keyword) => haystack.includes(keyword)))
-  return (match?.[0] as Exclude<ViralCategory, 'all'> | undefined) || 'trend'
+  return (match?.[0] as ViralCategory | undefined) || 'trend'
 }
 
 function toViralVideo(item: Record<string, unknown>): ViralVideo | null {
@@ -91,14 +108,19 @@ function toViralVideo(item: Record<string, unknown>): ViralVideo | null {
     category: resolveCategory(item, metadata),
     genre: readString(metadata.genre, item.genre, metadata.styleName) || 'Viral Short',
     creator: readString(item.creator_name, item.channel_name, metadata.brand_name) || 'Melodio Creator',
+    viewCount: readNumber(item.play_count, item.view_count, metadata.play_count, metadata.viewCount),
+    createdAt: readString(item.created_at, item.created_date, metadata.created_at) || new Date(0).toISOString(),
   }
 }
 
-export default function ViralVideoLibrary() {
+const ITEMS_PER_PAGE = 12
+
+export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?: (videos: ViralVideo[]) => void }) {
   const [videos, setVideos] = useState<ViralVideo[]>([])
   const [isLoading, setIsLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCategory, setSelectedCategory] = useState<ViralCategory>('all')
+  const [selectedCategory, setSelectedCategory] = useState<ViralCategory>('trend')
+  const [currentPage, setCurrentPage] = useState(1)
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null)
   const videoRefs = useRef(new Map<string, HTMLVideoElement>())
 
@@ -117,13 +139,14 @@ export default function ViralVideoLibrary() {
           return true
         })
       setVideos(nextVideos)
+      onVideosLoaded?.(nextVideos)
     } catch (error) {
       console.error('[ViralVideoLibrary]', error)
       setVideos([])
     } finally {
       setIsLoading(false)
     }
-  }, [])
+  }, [onVideosLoaded])
 
   useEffect(() => {
     loadVideos()
@@ -136,11 +159,19 @@ export default function ViralVideoLibrary() {
   const filteredVideos = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
     return videos.filter((video) => {
-      if (selectedCategory !== 'all' && video.category !== selectedCategory) return false
+      if (video.category !== selectedCategory) return false
       if (!normalizedQuery) return true
       return `${video.title} ${video.genre} ${video.creator}`.toLowerCase().includes(normalizedQuery)
     })
   }, [searchQuery, selectedCategory, videos])
+
+  const totalPages = Math.max(1, Math.ceil(filteredVideos.length / ITEMS_PER_PAGE))
+  const activePage = Math.min(currentPage, totalPages)
+  const paginatedVideos = filteredVideos.slice((activePage - 1) * ITEMS_PER_PAGE, activePage * ITEMS_PER_PAGE)
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [searchQuery, selectedCategory])
 
   const handlePlay = useCallback((videoId: string, video: HTMLVideoElement) => {
     videoRefs.current.forEach((candidate, candidateId) => {
@@ -192,14 +223,14 @@ export default function ViralVideoLibrary() {
           </div>
         </div>
 
-        <div className="flex gap-1.5 overflow-x-auto pb-1" aria-label="영상 카테고리">
+        <div className="grid grid-cols-2 gap-2" aria-label="영상 카테고리">
           {CATEGORIES.map((category) => (
             <button
               key={category.id}
               type="button"
               onClick={() => setSelectedCategory(category.id)}
               aria-pressed={selectedCategory === category.id}
-              className={`shrink-0 rounded-lg px-2.5 py-1.5 text-[11px] font-extrabold transition ${
+              className={`min-h-10 rounded-xl px-2.5 py-2 text-[10px] font-extrabold leading-tight transition sm:text-[11px] ${
                 selectedCategory === category.id
                   ? 'bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-950/50'
                   : 'border border-white/10 bg-black/40 text-zinc-400 hover:text-white'
@@ -216,7 +247,7 @@ export default function ViralVideoLibrary() {
           <RefreshCw className="h-6 w-6 animate-spin" />
           완성 영상을 불러오는 중입니다.
         </div>
-      ) : filteredVideos.length === 0 ? (
+      ) : paginatedVideos.length === 0 ? (
         <div className="flex min-h-64 flex-col items-center justify-center gap-3 px-6 text-center">
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-fuchsia-500/10 text-fuchsia-300">
             <Film className="h-6 w-6" />
@@ -231,7 +262,7 @@ export default function ViralVideoLibrary() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
-          {filteredVideos.map((video) => {
+          {paginatedVideos.map((video) => {
             const isActive = activeVideoId === video.id
             return (
               <article key={video.id} className={`overflow-hidden rounded-2xl border bg-black/50 transition ${isActive ? 'border-fuchsia-400 shadow-[0_0_24px_rgba(217,70,239,0.22)]' : 'border-white/10 hover:border-white/20'}`}>
@@ -271,6 +302,39 @@ export default function ViralVideoLibrary() {
               </article>
             )
           })}
+          {totalPages > 1 ? (
+            <nav aria-label="바이럴 영상 페이지" className="col-span-full flex items-center justify-center gap-1.5 border-t border-white/10 pt-4">
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                disabled={activePage === 1}
+                aria-label="이전 페이지"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-zinc-400 transition hover:text-white disabled:opacity-30"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              {Array.from({ length: totalPages }, (_, index) => index + 1).map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  onClick={() => setCurrentPage(page)}
+                  aria-current={activePage === page ? 'page' : undefined}
+                  className={`h-8 min-w-8 rounded-lg px-2 text-xs font-black transition ${activePage === page ? 'bg-fuchsia-500 text-white' : 'border border-white/10 text-zinc-400 hover:text-white'}`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
+                disabled={activePage === totalPages}
+                aria-label="다음 페이지"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-zinc-400 transition hover:text-white disabled:opacity-30"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </nav>
+          ) : null}
         </div>
       )}
     </section>

@@ -13,7 +13,7 @@ import {
   Shuffle, SkipBack, SkipForward, Repeat, Video, Film, Dog, Baby, Utensils, Ghost, RotateCcw, Cpu
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
-import ViralVideoLibrary from "@/components/viral/ViralVideoLibrary";
+import ViralVideoLibrary, { type ViralVideo } from "@/components/viral/ViralVideoLibrary";
 import { getCategorySpec, buildStylePromptV2 } from "@/lib/vle/viralCategorySpec";
 import { VIRAL_SONG_SPEC, estimateSeconds } from "@/lib/vle/viralSongSpec";
 
@@ -599,7 +599,8 @@ export default function ViralTrendZonePage() {
   const [audioDuration, setAudioDuration] = useState(0);
   const [volume, setVolume] = useState(0.8);
   const [copiedLinkTrackId, setCopiedLinkTrackId] = useState<string | null>(null);
-  const [failedShowcaseIds, setFailedShowcaseIds] = useState<Set<string>>(() => new Set());
+  const [viralVideos, setViralVideos] = useState<ViralVideo[]>([]);
+  const [topPlayingId, setTopPlayingId] = useState<string | null>(null);
 
   const viralScrollRef = useRef<HTMLDivElement | null>(null);
   const showcaseVideoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
@@ -671,10 +672,14 @@ export default function ViralTrendZonePage() {
     };
   }, [playingId, playingTrackObj, generatedResult, selectedGenre, selectedVocal, brandName, genCategory, optimizedPrompt]);
 
-  const visibleShowcaseTracks = useMemo(
-    () => VIRAL_SHOWCASE_TRACKS.filter((track) => Boolean(track.videoUrl) && !failedShowcaseIds.has(track.id)),
-    [failedShowcaseIds]
-  );
+  const topViralVideos = useMemo(() => {
+    const oneMonthAgo = new Date();
+    oneMonthAgo.setMonth(oneMonthAgo.getMonth() - 1);
+    return viralVideos
+      .filter((video) => new Date(video.createdAt).getTime() >= oneMonthAgo.getTime())
+      .toSorted((a, b) => b.viewCount - a.viewCount || new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 20);
+  }, [viralVideos]);
 
   // Grok 30-sec Video Studio States
   const [autoGrokVideo, setAutoGrokVideo] = useState(false);
@@ -1002,26 +1007,16 @@ export default function ViralTrendZonePage() {
   const handleTogglePlay = (id: string, audioUrl: string, trackObj?: any) => {
     if (!audioRef.current) return;
 
-    const showcaseVideo = showcaseVideoRefs.current.get(String(id));
-
     if (playingId === id) {
       if (isPlaying) {
         audioRef.current.pause();
-        showcaseVideo?.pause();
         setIsPlaying(false);
       } else {
         registerActiveAudio(audioRef.current, () => setIsPlaying(false));
         audioRef.current.play().catch(() => {});
-        showcaseVideo?.play().catch(() => {});
         setIsPlaying(true);
       }
     } else {
-      showcaseVideoRefs.current.forEach((video, videoId) => {
-        if (videoId !== String(id)) {
-          video.pause();
-          video.currentTime = 0;
-        }
-      });
       setPlayingId(id);
       if (trackObj) {
         setPlayingTrackObj(trackObj);
@@ -1034,18 +1029,40 @@ export default function ViralTrendZonePage() {
       audioRef.current.load();
       registerActiveAudio(audioRef.current, () => setIsPlaying(false));
       audioRef.current.play().catch(() => {});
-      if (showcaseVideo) {
-        showcaseVideo.currentTime = 0;
-        showcaseVideo.play().catch(() => {});
-      }
     }
+  };
+
+  const handleTopVideoPlay = (id: string, video: HTMLVideoElement) => {
+    showcaseVideoRefs.current.forEach((candidate, candidateId) => {
+      if (candidateId !== id) candidate.pause();
+    });
+    setTopPlayingId(id);
+    registerActiveAudio(video, () => {
+      video.pause();
+      setTopPlayingId((current) => current === id ? null : current);
+    });
+  };
+
+  const handleToggleTopVideo = (id: string) => {
+    const video = showcaseVideoRefs.current.get(id);
+    if (!video) return;
+    if (!video.paused) {
+      video.pause();
+      setTopPlayingId(null);
+      return;
+    }
+    video.play().catch(() => {});
   };
 
   useEffect(() => {
     const handleOtherAudioStart = (e: any) => {
       if (e.detail?.audio && audioRef.current && e.detail.audio !== audioRef.current) {
-        showcaseVideoRefs.current.forEach((video) => video.pause());
         setIsPlaying(false);
+      }
+      const isTopVideo = Array.from(showcaseVideoRefs.current.values()).some((video) => video === e.detail?.audio);
+      if (!isTopVideo) {
+        showcaseVideoRefs.current.forEach((video) => video.pause());
+        setTopPlayingId(null);
       }
     };
     window.addEventListener("melodio-audio-started", handleOtherAudioStart);
@@ -1475,10 +1492,6 @@ export default function ViralTrendZonePage() {
         onTimeUpdate={(e) => setCurrentTime(e.currentTarget.currentTime)}
         onLoadedMetadata={(e) => setAudioDuration(e.currentTarget.duration)}
         onEnded={() => {
-          showcaseVideoRefs.current.forEach((video) => {
-            video.pause();
-            video.currentTime = 0;
-          });
           setIsPlaying(false);
           setPlayingId(null);
         }}
@@ -1495,11 +1508,11 @@ export default function ViralTrendZonePage() {
         {/* Top Branding & Value Prop Copy */}
         <div className="space-y-1 text-left pl-2 pt-1">
           <h2 className="text-2xl sm:text-3xl font-black tracking-tight leading-none bg-gradient-to-r from-fuchsia-400 via-purple-300 to-cyan-400 bg-clip-text text-transparent">
-            오늘의 Viral Shorts TOP {visibleShowcaseTracks.length}
+            최신 Viral Shorts TOP 20
           </h2>
           
           <p className="text-xs font-normal text-zinc-400 leading-snug">
-            유튜브 쇼츠, 틱톡, 릴스를 강타한 최신 B급 풍자 음악과 중독성 넘치는 바이럴 트렌드 사운드를 9:16 비주얼로 감상해 보세요.
+            최근 한 달 이내 업로드된 완성 영상 중 조회수가 높은 순서로 최대 20개를 보여드립니다.
           </p>
         </div>
 
@@ -1510,8 +1523,8 @@ export default function ViralTrendZonePage() {
             ref={viralScrollRef}
             className="flex gap-4 overflow-x-auto scrollbar-none pt-1 pb-4 scroll-smooth snap-x snap-mandatory z-10"
           >
-            {visibleShowcaseTracks.map((track) => {
-              const isTrackPlaying = playingId === track.id && isPlaying;
+            {topViralVideos.map((track, index) => {
+              const isTrackPlaying = topPlayingId === track.id;
               return (
                 <div 
                   key={track.id}
@@ -1529,26 +1542,15 @@ export default function ViralTrendZonePage() {
                         else showcaseVideoRefs.current.delete(track.id);
                       }}
                       src={track.videoUrl} 
-                      poster={track.thumbnailUrl}
+                      poster={track.posterUrl}
                       loop
-                      muted
                       playsInline
+                      preload="metadata"
                       className="w-full h-full object-cover rounded-2xl group-hover/card:scale-105 transition-transform duration-700 select-none"
-                      onMouseEnter={(e) => {
-                        if (!isTrackPlaying) e.currentTarget.play().catch(() => {});
-                      }}
-                      onMouseLeave={(e) => {
-                        if (!isTrackPlaying) {
-                          e.currentTarget.pause();
-                          e.currentTarget.currentTime = 0;
-                        }
-                      }}
+                      onPlay={(event) => handleTopVideoPlay(track.id, event.currentTarget)}
+                      onPause={() => setTopPlayingId((current) => current === track.id ? null : current)}
                       onError={() => {
-                        setFailedShowcaseIds((current) => {
-                          const next = new Set(current);
-                          next.add(track.id);
-                          return next;
-                        });
+                        setViralVideos((current) => current.filter((video) => video.id !== track.id));
                       }}
                       aria-label={`${track.title} 영상 미리보기`}
                     />
@@ -1556,11 +1558,8 @@ export default function ViralTrendZonePage() {
                     {/* Dark gradient overlay for typography readability */}
                     <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/20 to-black/75 rounded-2xl z-15" />
 
-                    {/* Center Text Caption Overlay */}
-                    <div className="absolute inset-x-3.5 top-1/2 -translate-y-1/2 text-center z-20 flex flex-col justify-center select-none pointer-events-none">
-                      <span className="text-[11.5px] font-black text-white leading-snug tracking-tight drop-shadow-[0_2px_4px_rgba(0,0,0,0.85)] line-clamp-5 uppercase font-sans antialiased">
-                        {track.centerCaption}
-                      </span>
+                    <div className="absolute left-3 top-3 z-30 flex h-8 min-w-8 items-center justify-center rounded-lg bg-fuchsia-600 px-2 text-sm font-black text-white shadow-lg">
+                      {index + 1}
                     </div>
 
                     {/* Top Right Active Playing Waveform Badge */}
@@ -1579,10 +1578,10 @@ export default function ViralTrendZonePage() {
                       </div>
                       <div className="flex items-center gap-1.5 pt-0.5">
                         <div className="w-4 h-4 rounded-full bg-gradient-to-tr from-cyan-500 to-indigo-500 flex items-center justify-center text-[8.5px] font-extrabold text-white shrink-0 shadow-md">
-                          {track.userName.slice(0, 1).toUpperCase()}
+                          {track.creator.slice(0, 1).toUpperCase()}
                         </div>
                         <span className="text-[9.5px] text-zinc-300 font-bold truncate drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)]">
-                          {track.userName}
+                          {track.creator} · 조회수 {track.viewCount.toLocaleString()}
                         </span>
                       </div>
                     </div>
@@ -1595,7 +1594,7 @@ export default function ViralTrendZonePage() {
                           aria-label={`${track.title} 일시정지`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleTogglePlay(track.id, track.audioUrl);
+                            handleToggleTopVideo(track.id);
                           }}
                           className="w-11 h-11 rounded-full bg-fuchsia-600 border border-white/10 flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-transform"
                         >
@@ -1607,7 +1606,7 @@ export default function ViralTrendZonePage() {
                           aria-label={`${track.title} 영상과 음원 재생`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleTogglePlay(track.id, track.audioUrl);
+                            handleToggleTopVideo(track.id);
                           }}
                           className="w-11 h-11 rounded-full bg-black/60 border border-white/10 flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-transform"
                         >
@@ -1617,25 +1616,18 @@ export default function ViralTrendZonePage() {
                     </div>
                   </div>
 
-                  {/* Tiny click info */}
-                  <div className="mt-2.5 px-1 flex justify-between items-center">
-                    <span 
-                      onClick={() => {
-                        if (!isPro) {
-                          setIsUpgradeModalOpen(true);
-                        } else {
-                          navigator.clipboard.writeText(track.tags);
-                          alert("Pro Viral 스타일 프롬프트가 복사되었습니다!");
-                        }
-                      }}
-                      className="text-[9.5px] text-zinc-500 hover:text-cyan-400 font-bold uppercase tracking-wider cursor-pointer transition-colors"
-                    >
-                      Copy Recipe
-                    </span>
+                  <div className="mt-2.5 flex items-center justify-between px-1 text-[9.5px] font-bold text-zinc-500">
+                    <span>{track.category}</span>
+                    <span>{new Date(track.createdAt).toLocaleDateString('ko-KR')}</span>
                   </div>
                 </div>
               );
             })}
+            {topViralVideos.length === 0 ? (
+              <div className="flex min-h-[280px] w-full items-center justify-center rounded-2xl border border-dashed border-white/10 bg-black/20 px-6 text-center text-xs text-zinc-500">
+                최근 한 달 이내 공개된 완성 영상이 없습니다.
+              </div>
+            ) : null}
           </div>
 
           {/* Left Navigation Chevron Overlay */}
@@ -1661,7 +1653,7 @@ export default function ViralTrendZonePage() {
 
         {/* ── 좌측: 영상과 음원이 결합된 완성 숏폼만 노출 ── */}
         <div className="lg:col-span-5 flex flex-col space-y-4">
-          <ViralVideoLibrary />
+          <ViralVideoLibrary onVideosLoaded={setViralVideos} />
         </div>
 
         {/* ── 우측: 생성 조종석 ───────────────────────────────────────────── */}
@@ -2699,8 +2691,6 @@ export default function ViralTrendZonePage() {
                 <button
                   onClick={() => {
                     if (audioRef.current) audioRef.current.currentTime = 0;
-                    const showcaseVideo = playingId ? showcaseVideoRefs.current.get(String(playingId)) : undefined;
-                    if (showcaseVideo) showcaseVideo.currentTime = 0;
                   }}
                   className="text-zinc-400 hover:text-white transition-colors p-1"
                   title="처음부터 재생"
@@ -2725,10 +2715,6 @@ export default function ViralTrendZonePage() {
                 <button
                   onClick={() => {
                     if (audioRef.current) audioRef.current.currentTime = audioDuration;
-                    const showcaseVideo = playingId ? showcaseVideoRefs.current.get(String(playingId)) : undefined;
-                    if (showcaseVideo && Number.isFinite(showcaseVideo.duration)) {
-                      showcaseVideo.currentTime = showcaseVideo.duration;
-                    }
                   }}
                   className="text-zinc-400 hover:text-white transition-colors p-1"
                   title="끝으로 이동"
@@ -2766,10 +2752,6 @@ export default function ViralTrendZonePage() {
                     if (audioRef.current) {
                       audioRef.current.currentTime = val;
                       setCurrentTime(val);
-                    }
-                    const showcaseVideo = playingId ? showcaseVideoRefs.current.get(String(playingId)) : undefined;
-                    if (showcaseVideo && Number.isFinite(showcaseVideo.duration) && showcaseVideo.duration > 0) {
-                      showcaseVideo.currentTime = val % showcaseVideo.duration;
                     }
                   }}
                   className="flex-1 h-1 rounded-full appearance-none cursor-pointer"
@@ -2881,10 +2863,6 @@ export default function ViralTrendZonePage() {
                   if (audioRef.current) {
                     audioRef.current.pause();
                   }
-                  showcaseVideoRefs.current.forEach((video) => {
-                    video.pause();
-                    video.currentTime = 0;
-                  });
                   setIsPlaying(false);
                   setPlayingId(null);
                 }}
