@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Check, ChevronLeft, ChevronRight, Film, RefreshCw, Search, Sparkles } from 'lucide-react'
+import { Check, ChevronLeft, ChevronRight, Film, Pause, Play, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { registerActiveAudio } from '@/lib/globalAudio'
 
 export type ViralCategory = 'drama' | 'pet' | 'relationship' | 'human' | 'trend' | 'challenge' | 'brand' | 'history' | 'parenting' | 'food_diet' | 'horror_mystery' | 'ai_future'
@@ -199,6 +199,13 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
     })
   }, [])
 
+  const toggleVideo = useCallback((videoId: string) => {
+    const video = videoRefs.current.get(videoId)
+    if (!video) return
+    if (video.paused) video.play().catch(() => {})
+    else video.pause()
+  }, [])
+
   return (
     <section aria-labelledby="viral-video-library-title" className="rounded-3xl border border-white/10 bg-zinc-950/60 p-4 shadow-xl backdrop-blur-md sm:p-5">
       <div className="flex flex-col gap-3 border-b border-white/10 pb-4">
@@ -293,8 +300,8 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
           {paginatedVideos.map((video) => {
             const isActive = activeVideoId === video.id
             return (
-              <article key={video.id} className={`overflow-hidden rounded-2xl border bg-black/50 transition ${isActive ? 'border-fuchsia-400 shadow-[0_0_24px_rgba(217,70,239,0.22)]' : 'border-white/10 hover:border-white/20'}`}>
-                <div className="relative aspect-[9/16] bg-zinc-950">
+              <article key={video.id} className={`group/card overflow-hidden rounded-2xl border bg-black/50 transition ${isActive ? 'border-fuchsia-400 shadow-[0_0_24px_rgba(217,70,239,0.22)]' : 'border-white/10 hover:border-white/20'}`}>
+                <div className="relative aspect-[9/16] overflow-hidden bg-zinc-950">
                   <video
                     ref={(element) => {
                       if (element) videoRefs.current.set(video.id, element)
@@ -302,9 +309,8 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
                     }}
                     src={video.videoUrl}
                     poster={video.posterUrl}
-                    controls
                     playsInline
-                    preload="metadata"
+                    preload="none"
                     onPlay={(event) => handlePlay(video.id, event.currentTarget)}
                     onPause={() => setActiveVideoId((current) => current === video.id ? null : current)}
                     onEnded={() => setActiveVideoId((current) => current === video.id ? null : current)}
@@ -314,18 +320,33 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
                   >
                     브라우저가 동영상 재생을 지원하지 않습니다.
                   </video>
-                  <span className="pointer-events-none absolute left-2.5 top-2.5 inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-black/75 px-2 py-1 text-[9px] font-black text-emerald-300 backdrop-blur">
+
+                  <button
+                    type="button"
+                    onClick={() => toggleVideo(video.id)}
+                    aria-label={isActive ? `${video.title} 일시정지` : `${video.title} 재생`}
+                    className="absolute inset-0 z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400"
+                  />
+
+                  <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 h-40 bg-gradient-to-t to-transparent transition-opacity duration-300 ${isActive ? 'from-black/40 via-black/5 opacity-100' : 'from-black/75 via-black/15 opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`} />
+
+                  <span className={`pointer-events-none absolute left-2.5 top-2.5 z-20 inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-black/65 px-2 py-1 text-[9px] font-black text-emerald-300 opacity-0 backdrop-blur transition-opacity duration-300 group-hover/card:opacity-100 group-focus-within/card:opacity-100 ${isActive ? 'opacity-100' : ''}`}>
                     <Check className="h-2.5 w-2.5" /> VIDEO READY
                   </span>
-                </div>
-                <div className="space-y-3 p-3.5">
+
+                  <span className={`pointer-events-none absolute left-1/2 top-1/2 z-20 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 text-white opacity-0 shadow-xl backdrop-blur transition-all duration-300 group-hover/card:scale-105 group-hover/card:opacity-100 group-focus-within/card:opacity-100 ${isActive ? 'bg-fuchsia-600/90 opacity-100' : 'bg-black/55'}`}>
+                    {isActive ? <Pause className="h-5 w-5 fill-current" /> : <Play className="ml-0.5 h-5 w-5 fill-current" />}
+                  </span>
+
+                  <div className={`pointer-events-none absolute inset-x-3.5 bottom-3.5 z-20 translate-y-2 space-y-2 opacity-0 transition-all duration-300 group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100 ${isActive ? 'translate-y-0 opacity-100' : ''}`}>
                   <div>
                     <h3 className="line-clamp-2 text-sm font-black leading-snug text-white">{video.title}</h3>
-                    <p className="mt-1 text-[10px] font-bold text-zinc-500">{video.creator} · {video.genre}</p>
+                    <p className="mt-1 text-[10px] font-bold text-zinc-300">{video.creator} · {video.genre}</p>
                   </div>
-                  <a href="#viral-studio" className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 px-3 py-2 text-[11px] font-black text-fuchsia-200 transition hover:bg-fuchsia-500/20">
+                  <a href="#viral-studio" className="pointer-events-auto flex w-full items-center justify-center gap-1.5 rounded-xl border border-fuchsia-400/30 bg-black/55 px-3 py-2 text-[11px] font-black text-fuchsia-100 backdrop-blur transition hover:bg-fuchsia-500/25">
                     <Sparkles className="h-3.5 w-3.5" /> 이 포맷으로 만들기
                   </a>
+                  </div>
                 </div>
               </article>
             )

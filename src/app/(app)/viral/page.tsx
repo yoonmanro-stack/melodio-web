@@ -1591,8 +1591,8 @@ export default function ViralTrendZonePage() {
                       poster={track.posterUrl}
                       loop
                       playsInline
-                      preload="metadata"
-                      className="w-full h-full object-cover rounded-2xl group-hover/card:scale-105 transition-transform duration-700 select-none"
+                      preload="none"
+                      className="w-full h-full object-cover rounded-2xl group-hover/card:scale-[1.02] transition-transform duration-700 select-none"
                       onPlay={(event) => handleTopVideoPlay(track.id, event.currentTarget)}
                       onPause={() => setTopPlayingId((current) => current === track.id ? null : current)}
                       onError={() => {
@@ -1601,16 +1601,10 @@ export default function ViralTrendZonePage() {
                       aria-label={`${track.title} 영상 미리보기`}
                     />
 
-                    {/* Keep only a subtle bottom fade while playing so the original video stays bright. */}
-                    <div
-                      className={`pointer-events-none absolute inset-x-0 bottom-0 z-15 rounded-b-2xl bg-gradient-to-t to-transparent transition-all duration-300 ${
-                        isTrackPlaying
-                          ? 'h-28 from-black/45 via-black/10'
-                          : 'h-2/3 from-black/80 via-black/25'
-                      }`}
-                    />
+                    {/* Keep the cover clean until the card is hovered, focused, or playing. */}
+                    <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-15 h-32 rounded-b-2xl bg-gradient-to-t to-transparent transition-opacity duration-300 ${isTrackPlaying ? 'from-black/40 via-black/5 opacity-100' : 'from-black/65 via-black/10 opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`} />
 
-                    <div className="absolute left-3 top-3 z-30 flex h-8 min-w-8 items-center justify-center rounded-lg border border-white/80 bg-white/75 px-2 text-sm font-black text-fuchsia-600 shadow-lg shadow-black/20 backdrop-blur-md">
+                    <div className={`pointer-events-none absolute left-3 top-3 z-30 flex h-8 min-w-8 items-center justify-center rounded-lg border border-white/80 bg-white/75 px-2 text-sm font-black text-fuchsia-600 opacity-0 shadow-lg shadow-black/20 backdrop-blur-md transition-opacity duration-300 group-hover/card:opacity-100 group-focus-within/card:opacity-100 ${isTrackPlaying ? 'opacity-100' : ''}`}>
                       {index + 1}
                     </div>
 
@@ -1624,7 +1618,7 @@ export default function ViralTrendZonePage() {
                     )}
 
                     {/* Bottom Metadata Info Overlay */}
-                    <div className="absolute inset-x-3.5 bottom-3.5 z-20 space-y-1 text-left select-none pointer-events-none">
+                    <div className={`absolute inset-x-3.5 bottom-3.5 z-20 translate-y-2 space-y-1 text-left opacity-0 transition-all duration-300 select-none pointer-events-none group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100 ${isTrackPlaying ? 'translate-y-0 opacity-100' : ''}`}>
                       <div className="text-[12px] font-extrabold text-white truncate drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.9)]">
                         {track.title}
                       </div>
@@ -1639,45 +1633,31 @@ export default function ViralTrendZonePage() {
                     </div>
 
                     {/* Play / Pause Overlays on Hover */}
-                    <div
+                    <button
+                      type="button"
+                      aria-label={isTrackPlaying ? `${track.title} 일시정지` : `${track.title} 영상과 음원 재생`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleTopVideo(track.id);
+                      }}
                       className={`absolute inset-0 z-25 flex items-center justify-center transition-all duration-300 ${
                         isTrackPlaying
                           ? 'bg-transparent opacity-100 backdrop-blur-none'
-                          : 'bg-black/35 opacity-100 backdrop-blur-[1px] sm:opacity-0 sm:group-hover/card:opacity-100'
+                          : 'bg-transparent opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100'
                       }`}
                     >
                       {isTrackPlaying ? (
-                        <button
-                          type="button"
-                          aria-label={`${track.title} 일시정지`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleTopVideo(track.id);
-                          }}
-                          className="w-11 h-11 rounded-full bg-fuchsia-600 border border-white/10 flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-transform"
-                        >
+                        <span className="w-11 h-11 rounded-full bg-fuchsia-600 border border-white/10 flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-transform">
                           <Pause className="w-4 h-4 text-white fill-current" />
-                        </button>
+                        </span>
                       ) : (
-                        <button
-                          type="button"
-                          aria-label={`${track.title} 영상과 음원 재생`}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleTopVideo(track.id);
-                          }}
-                          className="w-11 h-11 rounded-full bg-black/60 border border-white/10 flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-transform"
-                        >
+                        <span className="w-11 h-11 rounded-full bg-black/60 border border-white/10 flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-transform">
                           <Play className="w-4 h-4 text-white fill-current ml-0.5" />
-                        </button>
+                        </span>
                       )}
-                    </div>
+                    </button>
                   </div>
 
-                  <div className="mt-2.5 flex items-center justify-between px-1 text-[9.5px] font-bold text-zinc-500">
-                    <span>{track.category}</span>
-                    <span>{new Date(track.createdAt).toLocaleDateString('ko-KR')}</span>
-                  </div>
                 </div>
               );
             })}

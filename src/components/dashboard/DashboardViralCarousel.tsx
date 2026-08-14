@@ -100,28 +100,33 @@ export default function DashboardViralCarousel({ videos, onOpenDetails }: Dashbo
                     aria-label={`${video.title} 영상`}
                   />
 
-                  <div className={`pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t to-transparent transition ${isPlaying ? "from-black/40 via-black/5" : "from-black/80 via-black/20"}`} />
-
-                  <span className={`absolute left-2.5 top-2.5 rounded-full border px-2 py-1 text-[9px] font-black backdrop-blur ${video.isPublic ? "border-emerald-400/30 bg-black/60 text-emerald-300" : "border-zinc-400/30 bg-black/60 text-zinc-300"}`}>
-                    {video.isPublic ? "PUBLIC" : "PRIVATE"}
-                  </span>
-
                   <button
                     type="button"
                     onClick={() => toggleVideo(video.id)}
                     aria-label={isPlaying ? `${video.title} 일시정지` : `${video.title} 재생`}
-                    className={`absolute left-1/2 top-1/2 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 text-white shadow-xl backdrop-blur transition hover:scale-105 ${isPlaying ? "bg-fuchsia-600/90" : "bg-black/55"}`}
-                  >
-                    {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="ml-0.5 h-5 w-5 fill-current" />}
-                  </button>
+                    className="absolute inset-0 z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400"
+                  />
 
-                  <div className="absolute inset-x-3 bottom-3">
+                  <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 h-32 bg-gradient-to-t to-transparent transition-opacity duration-300 ${isPlaying ? "from-black/40 via-black/5 opacity-100" : "from-black/65 via-black/10 opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100"}`} />
+
+                  <span className={`pointer-events-none absolute left-2.5 top-2.5 z-20 rounded-full border px-2 py-1 text-[9px] font-black opacity-0 backdrop-blur transition-opacity duration-300 group-hover/card:opacity-100 group-focus-within/card:opacity-100 ${isPlaying ? "opacity-100" : ""} ${video.isPublic ? "border-emerald-400/30 bg-black/60 text-emerald-300" : "border-zinc-400/30 bg-black/60 text-zinc-300"}`}>
+                    {video.isPublic ? "PUBLIC" : "PRIVATE"}
+                  </span>
+
+                  <span className={`pointer-events-none absolute left-1/2 top-1/2 z-20 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 text-white opacity-0 shadow-xl backdrop-blur transition-all duration-300 group-hover/card:scale-105 group-hover/card:opacity-100 group-focus-within/card:opacity-100 ${isPlaying ? "bg-fuchsia-600/90 opacity-100" : "bg-black/55"}`}>
+                    {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="ml-0.5 h-5 w-5 fill-current" />}
+                  </span>
+
+                  <div className={`pointer-events-none absolute inset-x-3 bottom-3 z-20 translate-y-2 opacity-0 transition-all duration-300 group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100 ${isPlaying ? "translate-y-0 opacity-100" : ""}`}>
                     <h3 className="line-clamp-2 text-xs font-black leading-snug text-white drop-shadow-lg">{video.title}</h3>
                     <div className="mt-1 flex items-center justify-between gap-2 text-[9px] font-bold text-zinc-300">
                       <span>{new Date(video.createdAt).toLocaleDateString("ko-KR")}</span>
                       <button
                         type="button"
-                        onClick={() => onOpenDetails(video.id)}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onOpenDetails(video.id);
+                        }}
                         className="pointer-events-auto rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-white transition hover:bg-white/15"
                       >
                         관리
