@@ -410,7 +410,7 @@ export default function PresetGrid({
                   {/* On Hover Info Overlay */}
                   <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-250 flex flex-col justify-between items-start p-4 z-10">
                     {/* Top: Metadata items (Left-aligned, larger & brighter) */}
-                    <div className="flex flex-col gap-1.5 items-start rounded-xl border border-white/70 bg-white/85 px-2.5 py-2 text-left text-zinc-900 shadow-lg backdrop-blur-sm">
+                    <div className="flex flex-col gap-1.5 items-start rounded-xl border border-white/50 bg-white/50 px-2.5 py-2 text-left text-zinc-900 shadow-lg backdrop-blur-sm">
                       {isCustom ? (
                         <>
                           <div className="text-xs font-mono flex items-center gap-2">
@@ -437,10 +437,10 @@ export default function PresetGrid({
                           e.stopPropagation()
                           onEditPreset?.(preset)
                         }}
-                        className="w-12 h-12 rounded-full bg-white/90 hover:bg-white text-zinc-800 hover:text-fuchsia-600 border border-white/80 flex items-center justify-center transition-all shadow-lg backdrop-blur-sm active:scale-95"
+                        className="w-10 h-10 rounded-full bg-white/50 hover:bg-white/60 text-zinc-800 hover:text-fuchsia-600 border border-white/50 flex items-center justify-center transition-all shadow-lg backdrop-blur-sm active:scale-95"
                         title="자세히 보기 / 수정"
                       >
-                        <Maximize2 className="w-6 h-6" />
+                        <Maximize2 className="w-4 h-4" />
                       </button>
                     </div>
                   </div>
