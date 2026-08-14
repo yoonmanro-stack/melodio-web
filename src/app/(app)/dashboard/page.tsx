@@ -1982,8 +1982,25 @@ export default function Home() {
                       }
                     }
 
-                    // 만약 이름도 없고 스타일 프롬프트도 아예 없는 과거 초창기 곡인 경우는 렌더링하지 않음
-                    if (!displayPresetId && !displayPresetName && !meta.stylePrompt) return null;
+                    // 과거 초창기 곡처럼 재현 메타데이터가 없는 경우에도 탐색 경로는 제공한다.
+                    if (!displayPresetId && !displayPresetName && !meta.stylePrompt) {
+                      return (
+                        <div className="bg-white/5 rounded-xl p-3.5 border border-white/5 flex items-center justify-between gap-4">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider mb-1">Legacy Track</div>
+                            <div className="text-white text-sm font-semibold">원본 프리셋 정보 없음</div>
+                            <div className="text-zinc-500 text-[10px] mt-0.5">초기 생성곡은 재현 정보가 없어 Style Library에서 유사한 프리셋을 찾을 수 있습니다.</div>
+                          </div>
+                          <Link
+                            href="/style-library"
+                            className="px-3.5 py-2 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 hover:text-white border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0"
+                            onClick={() => setDetailItem(null)}
+                          >
+                            <span>🪄 Style Library 이동하기</span>
+                          </Link>
+                        </div>
+                      );
+                    }
 
                     // 2. 제작 소스 메뉴 유추 (과거 곡 폴백용)
                     let resolvedMenu = sourceMenu;
@@ -2030,6 +2047,8 @@ export default function Home() {
                       let linkUrl = `/audio?preset=${encodeURIComponent(displayPresetId)}&style=${encodeURIComponent(meta.stylePrompt || '')}&name=${encodeURIComponent(displayPresetName || '')}${meta.excludePrompt ? `&exclude=${encodeURIComponent(meta.excludePrompt)}` : ''}`;
                       if (resolvedMenu === 'viral-cf' || resolvedMenu === 'viral') {
                         linkUrl = `/viral?preset=${encodeURIComponent(displayPresetId)}`;
+                      } else if (resolvedMenu === 'japan') {
+                        linkUrl = `/japan?preset=${encodeURIComponent(displayPresetId)}&style=${encodeURIComponent(meta.stylePrompt || '')}&name=${encodeURIComponent(displayPresetName || '')}`;
                       } else if (resolvedMenu === 'style-library') {
                         linkUrl = `/audio?preset=${encodeURIComponent(displayPresetId)}&sourceMenu=style-library&style=${encodeURIComponent(meta.stylePrompt || '')}&name=${encodeURIComponent(displayPresetName || '')}${meta.excludePrompt ? `&exclude=${encodeURIComponent(meta.excludePrompt)}` : ''}`;
                       }
@@ -2054,19 +2073,36 @@ export default function Home() {
 
                     // B. 프리셋은 등록되어 있었으나 현재 삭제된 상태
                     if (displayPresetId && isDeleted) {
+                      let recoveryName = 'Audio Forge';
+                      let recoveryUrl = meta.stylePrompt
+                        ? `/audio?style=${encodeURIComponent(meta.stylePrompt)}${meta.excludePrompt ? `&exclude=${encodeURIComponent(meta.excludePrompt)}` : ''}`
+                        : '/style-library';
+                      if (resolvedMenu === 'japan') {
+                        recoveryName = '일본 BGM 포지';
+                        recoveryUrl = `/japan?style=${encodeURIComponent(meta.stylePrompt || '')}&name=${encodeURIComponent(displayPresetName || '')}`;
+                      } else if (resolvedMenu === 'style-library') {
+                        recoveryName = 'Style Library';
+                        recoveryUrl = meta.stylePrompt
+                          ? `/audio?sourceMenu=style-library&style=${encodeURIComponent(meta.stylePrompt)}&name=${encodeURIComponent(displayPresetName || '')}`
+                          : '/style-library';
+                      } else if (resolvedMenu === 'viral-cf' || resolvedMenu === 'viral') {
+                        recoveryName = 'Viral & Trend Zone';
+                        recoveryUrl = `/viral?style=${encodeURIComponent(meta.stylePrompt || '')}`;
+                      }
                       return (
-                        <div className="bg-white/5 rounded-xl p-3.5 border border-red-500/20 bg-red-950/5 flex items-center justify-between gap-4">
+                        <div className="bg-white/5 rounded-xl p-3.5 border border-amber-500/20 bg-amber-950/5 flex items-center justify-between gap-4">
                           <div className="min-w-0 flex-1">
-                            <div className="text-red-400 text-[10px] font-bold uppercase tracking-wider mb-1">Applied Preset (Deleted)</div>
-                            <div className="text-zinc-400 text-sm font-semibold truncate line-through">{displayPresetName || displayPresetId}</div>
-                            <div className="text-red-400/80 text-[10px] mt-0.5">이 곡에 사용된 콘텐츠(프리셋)는 이미 삭제되어 더 이상 사용할 수 없습니다.</div>
+                            <div className="text-amber-400 text-[10px] font-bold uppercase tracking-wider mb-1">Preset Recovery</div>
+                            <div className="text-zinc-200 text-sm font-semibold truncate">{displayPresetName || displayPresetId}</div>
+                            <div className="text-amber-300/80 text-[10px] mt-0.5">원본 프리셋을 찾지 못해 저장된 스타일 프롬프트로 복원합니다.</div>
                           </div>
-                          <button 
-                            disabled
-                            className="px-3.5 py-2 bg-zinc-800 text-zinc-500 border border-zinc-700/50 rounded-xl text-xs font-semibold shrink-0 cursor-not-allowed"
+                          <Link
+                            href={recoveryUrl}
+                            className="px-3.5 py-2 bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 hover:text-white border border-amber-500/20 hover:border-amber-500/40 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0"
+                            onClick={() => setDetailItem(null)}
                           >
-                            사용 불가
-                          </button>
+                            🪄 {recoveryName} 이동하기
+                          </Link>
                         </div>
                       );
                     }
@@ -2079,7 +2115,12 @@ export default function Home() {
                       targetUrl = `/viral?style=${encodeURIComponent(meta.stylePrompt || '')}`;
                     } else if (resolvedMenu === 'style-library') {
                       menuName = "Style Library";
-                      targetUrl = `/style-library`;
+                      targetUrl = meta.stylePrompt
+                        ? `/audio?sourceMenu=style-library&style=${encodeURIComponent(meta.stylePrompt)}${meta.excludePrompt ? `&exclude=${encodeURIComponent(meta.excludePrompt)}` : ''}`
+                        : `/style-library`;
+                    } else if (resolvedMenu === 'japan') {
+                      menuName = "일본 BGM 포지";
+                      targetUrl = `/japan?style=${encodeURIComponent(meta.stylePrompt || '')}`;
                     }
 
                     return (
