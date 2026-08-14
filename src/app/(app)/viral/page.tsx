@@ -1100,7 +1100,11 @@ export default function ViralTrendZonePage() {
 
   const handleTopVideoPlay = (id: string, video: HTMLVideoElement) => {
     showcaseVideoRefs.current.forEach((candidate, candidateId) => {
-      if (candidateId !== id) candidate.pause();
+      if (candidateId !== id && !candidate.paused) {
+        candidate.pause();
+        candidate.currentTime = 0;
+        candidate.load();
+      }
     });
     setTopPlayingId(id);
     registerActiveAudio(video, () => {
@@ -1602,23 +1606,14 @@ export default function ViralTrendZonePage() {
                     />
 
                     {/* Keep the cover clean until the card is hovered, focused, or playing. */}
-                    <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-15 h-32 rounded-b-2xl bg-gradient-to-t to-transparent transition-opacity duration-300 ${isTrackPlaying ? 'from-black/40 via-black/5 opacity-100' : 'from-black/65 via-black/10 opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`} />
+                    <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-15 h-32 rounded-b-2xl bg-gradient-to-t from-black/65 via-black/10 to-transparent transition-opacity duration-300 ${isTrackPlaying ? 'opacity-0' : 'opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`} />
 
-                    <div className={`pointer-events-none absolute left-3 top-3 z-30 flex h-8 min-w-8 items-center justify-center rounded-lg border border-white/80 bg-white/75 px-2 text-sm font-black text-fuchsia-600 opacity-0 shadow-lg shadow-black/20 backdrop-blur-md transition-opacity duration-300 group-hover/card:opacity-100 group-focus-within/card:opacity-100 ${isTrackPlaying ? 'opacity-100' : ''}`}>
+                    <div className={`pointer-events-none absolute left-3 top-3 z-30 flex h-8 min-w-8 items-center justify-center rounded-lg border border-white/80 bg-white/75 px-2 text-sm font-black text-fuchsia-600 opacity-0 shadow-lg shadow-black/20 backdrop-blur-md transition-opacity duration-300 ${isTrackPlaying ? 'opacity-0' : 'group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`}>
                       {index + 1}
                     </div>
 
-                    {/* Top Right Active Playing Waveform Badge */}
-                    {isTrackPlaying && (
-                      <div className="absolute top-3 right-3 z-30 bg-black/60 border border-white/10 backdrop-blur-sm px-2 py-1 rounded-full flex items-center gap-0.5 justify-center shadow-md">
-                        <span className="w-0.5 h-2 bg-fuchsia-400 rounded-full animate-[bounce_0.6s_infinite_100ms]" />
-                        <span className="w-0.5 h-3 bg-fuchsia-400 rounded-full animate-[bounce_0.6s_infinite_300ms]" />
-                        <span className="w-0.5 h-2 bg-fuchsia-400 rounded-full animate-[bounce_0.6s_infinite_500ms]" />
-                      </div>
-                    )}
-
                     {/* Bottom Metadata Info Overlay */}
-                    <div className={`absolute inset-x-3.5 bottom-3.5 z-20 translate-y-2 space-y-1 text-left opacity-0 transition-all duration-300 select-none pointer-events-none group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100 ${isTrackPlaying ? 'translate-y-0 opacity-100' : ''}`}>
+                    <div className={`absolute inset-x-3.5 bottom-3.5 z-20 translate-y-2 space-y-1 text-left opacity-0 transition-all duration-300 select-none pointer-events-none ${isTrackPlaying ? 'opacity-0' : 'group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100'}`}>
                       <div className="text-[12px] font-extrabold text-white truncate drop-shadow-[0_1.5px_3px_rgba(0,0,0,0.9)]">
                         {track.title}
                       </div>
@@ -1642,7 +1637,7 @@ export default function ViralTrendZonePage() {
                       }}
                       className={`absolute inset-0 z-25 flex items-center justify-center transition-all duration-300 ${
                         isTrackPlaying
-                          ? 'bg-transparent opacity-100 backdrop-blur-none'
+                          ? 'bg-transparent opacity-0 backdrop-blur-none'
                           : 'bg-transparent opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100'
                       }`}
                     >

@@ -35,7 +35,11 @@ export default function DashboardViralCarousel({ videos, onOpenDetails }: Dashbo
 
   const handlePlay = (id: string, video: HTMLVideoElement) => {
     videoRefs.current.forEach((candidate, candidateId) => {
-      if (candidateId !== id) candidate.pause();
+      if (candidateId !== id && !candidate.paused) {
+        candidate.pause();
+        candidate.currentTime = 0;
+        candidate.load();
+      }
     });
     setPlayingId(id);
     registerActiveAudio(video, () => {
@@ -52,7 +56,11 @@ export default function DashboardViralCarousel({ videos, onOpenDetails }: Dashbo
   };
 
   const goToPage = (page: number) => {
-    videoRefs.current.forEach((video) => video.pause());
+    videoRefs.current.forEach((video) => {
+      video.pause();
+      video.currentTime = 0;
+      video.load();
+    });
     setPlayingId(null);
     setCurrentPage(Math.min(totalPages, Math.max(1, page)));
   };
@@ -107,17 +115,17 @@ export default function DashboardViralCarousel({ videos, onOpenDetails }: Dashbo
                     className="absolute inset-0 z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400"
                   />
 
-                  <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 h-32 bg-gradient-to-t to-transparent transition-opacity duration-300 ${isPlaying ? "from-black/40 via-black/5 opacity-100" : "from-black/65 via-black/10 opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100"}`} />
+                  <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 h-32 bg-gradient-to-t from-black/65 via-black/10 to-transparent transition-opacity duration-300 ${isPlaying ? "opacity-0" : "opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100"}`} />
 
-                  <span className={`pointer-events-none absolute left-2.5 top-2.5 z-20 rounded-full border px-2 py-1 text-[9px] font-black opacity-0 backdrop-blur transition-opacity duration-300 group-hover/card:opacity-100 group-focus-within/card:opacity-100 ${isPlaying ? "opacity-100" : ""} ${video.isPublic ? "border-emerald-400/30 bg-black/60 text-emerald-300" : "border-zinc-400/30 bg-black/60 text-zinc-300"}`}>
+                  <span className={`pointer-events-none absolute left-2.5 top-2.5 z-20 rounded-full border px-2 py-1 text-[9px] font-black opacity-0 backdrop-blur transition-opacity duration-300 ${isPlaying ? "opacity-0" : "group-hover/card:opacity-100 group-focus-within/card:opacity-100"} ${video.isPublic ? "border-emerald-400/30 bg-black/60 text-emerald-300" : "border-zinc-400/30 bg-black/60 text-zinc-300"}`}>
                     {video.isPublic ? "PUBLIC" : "PRIVATE"}
                   </span>
 
-                  <span className={`pointer-events-none absolute left-1/2 top-1/2 z-20 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 text-white opacity-0 shadow-xl backdrop-blur transition-all duration-300 group-hover/card:scale-105 group-hover/card:opacity-100 group-focus-within/card:opacity-100 ${isPlaying ? "bg-fuchsia-600/90 opacity-100" : "bg-black/55"}`}>
+                  <span className={`pointer-events-none absolute left-1/2 top-1/2 z-20 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 text-white opacity-0 shadow-xl backdrop-blur transition-all duration-300 ${isPlaying ? "bg-fuchsia-600/90 opacity-0" : "bg-black/55 group-hover/card:scale-105 group-hover/card:opacity-100 group-focus-within/card:opacity-100"}`}>
                     {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="ml-0.5 h-5 w-5 fill-current" />}
                   </span>
 
-                  <div className={`pointer-events-none absolute inset-x-3 bottom-3 z-20 translate-y-2 opacity-0 transition-all duration-300 group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100 ${isPlaying ? "translate-y-0 opacity-100" : ""}`}>
+                  <div className={`pointer-events-none absolute inset-x-3 bottom-3 z-20 translate-y-2 opacity-0 transition-all duration-300 ${isPlaying ? "opacity-0" : "group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100"}`}>
                     <h3 className="line-clamp-2 text-xs font-black leading-snug text-white drop-shadow-lg">{video.title}</h3>
                     <div className="mt-1 flex items-center justify-between gap-2 text-[9px] font-bold text-zinc-300">
                       <span>{new Date(video.createdAt).toLocaleDateString("ko-KR")}</span>
@@ -127,7 +135,8 @@ export default function DashboardViralCarousel({ videos, onOpenDetails }: Dashbo
                           event.stopPropagation();
                           onOpenDetails(video.id);
                         }}
-                        className="pointer-events-auto rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-white transition hover:bg-white/15"
+                        tabIndex={isPlaying ? -1 : 0}
+                        className={`rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-white transition hover:bg-white/15 ${isPlaying ? "pointer-events-none" : "pointer-events-auto"}`}
                       >
                         관리
                       </button>

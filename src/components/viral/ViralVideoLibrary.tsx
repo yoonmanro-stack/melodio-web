@@ -190,7 +190,11 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
 
   const handlePlay = useCallback((videoId: string, video: HTMLVideoElement) => {
     videoRefs.current.forEach((candidate, candidateId) => {
-      if (candidateId !== videoId) candidate.pause()
+      if (candidateId !== videoId && !candidate.paused) {
+        candidate.pause()
+        candidate.currentTime = 0
+        candidate.load()
+      }
     })
     setActiveVideoId(videoId)
     registerActiveAudio(video, () => {
@@ -328,22 +332,22 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
                     className="absolute inset-0 z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400"
                   />
 
-                  <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 h-40 bg-gradient-to-t to-transparent transition-opacity duration-300 ${isActive ? 'from-black/40 via-black/5 opacity-100' : 'from-black/75 via-black/15 opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`} />
+                  <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 h-40 bg-gradient-to-t from-black/75 via-black/15 to-transparent transition-opacity duration-300 ${isActive ? 'opacity-0' : 'opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`} />
 
-                  <span className={`pointer-events-none absolute left-2.5 top-2.5 z-20 inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-black/65 px-2 py-1 text-[9px] font-black text-emerald-300 opacity-0 backdrop-blur transition-opacity duration-300 group-hover/card:opacity-100 group-focus-within/card:opacity-100 ${isActive ? 'opacity-100' : ''}`}>
+                  <span className={`pointer-events-none absolute left-2.5 top-2.5 z-20 inline-flex items-center gap-1 rounded-full border border-emerald-400/30 bg-black/65 px-2 py-1 text-[9px] font-black text-emerald-300 opacity-0 backdrop-blur transition-opacity duration-300 ${isActive ? 'opacity-0' : 'group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`}>
                     <Check className="h-2.5 w-2.5" /> VIDEO READY
                   </span>
 
-                  <span className={`pointer-events-none absolute left-1/2 top-1/2 z-20 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 text-white opacity-0 shadow-xl backdrop-blur transition-all duration-300 group-hover/card:scale-105 group-hover/card:opacity-100 group-focus-within/card:opacity-100 ${isActive ? 'bg-fuchsia-600/90 opacity-100' : 'bg-black/55'}`}>
+                  <span className={`pointer-events-none absolute left-1/2 top-1/2 z-20 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 text-white opacity-0 shadow-xl backdrop-blur transition-all duration-300 ${isActive ? 'bg-fuchsia-600/90 opacity-0' : 'bg-black/55 group-hover/card:scale-105 group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`}>
                     {isActive ? <Pause className="h-5 w-5 fill-current" /> : <Play className="ml-0.5 h-5 w-5 fill-current" />}
                   </span>
 
-                  <div className={`pointer-events-none absolute inset-x-3.5 bottom-3.5 z-20 translate-y-2 space-y-2 opacity-0 transition-all duration-300 group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100 ${isActive ? 'translate-y-0 opacity-100' : ''}`}>
+                  <div className={`pointer-events-none absolute inset-x-3.5 bottom-3.5 z-20 translate-y-2 space-y-2 opacity-0 transition-all duration-300 ${isActive ? 'opacity-0' : 'group-hover/card:translate-y-0 group-hover/card:opacity-100 group-focus-within/card:translate-y-0 group-focus-within/card:opacity-100'}`}>
                   <div>
                     <h3 className="line-clamp-2 text-sm font-black leading-snug text-white">{video.title}</h3>
                     <p className="mt-1 text-[10px] font-bold text-zinc-300">{video.creator} · {video.genre}</p>
                   </div>
-                  <a href="#viral-studio" className="pointer-events-auto flex w-full items-center justify-center gap-1.5 rounded-xl border border-fuchsia-400/30 bg-black/55 px-3 py-2 text-[11px] font-black text-fuchsia-100 backdrop-blur transition hover:bg-fuchsia-500/25">
+                  <a href="#viral-studio" tabIndex={isActive ? -1 : 0} className={`flex w-full items-center justify-center gap-1.5 rounded-xl border border-fuchsia-400/30 bg-black/55 px-3 py-2 text-[11px] font-black text-fuchsia-100 backdrop-blur transition hover:bg-fuchsia-500/25 ${isActive ? 'pointer-events-none' : 'pointer-events-auto'}`}>
                     <Sparkles className="h-3.5 w-3.5" /> 이 포맷으로 만들기
                   </a>
                   </div>
