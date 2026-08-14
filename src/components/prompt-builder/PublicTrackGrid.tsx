@@ -19,6 +19,7 @@ interface PublicTrackGridProps {
   isTrackPlaying?: boolean
   onPlayTrack?: (track: any) => void
   onPauseTrack?: () => void
+  refreshSignal?: number
 }
 
 export default function PublicTrackGrid({
@@ -31,6 +32,7 @@ export default function PublicTrackGrid({
   isTrackPlaying: extIsTrackPlaying,
   onPlayTrack: extOnPlayTrack,
   onPauseTrack: extOnPauseTrack,
+  refreshSignal = 0,
 }: PublicTrackGridProps) {
   const [tracks, setTracks] = useState<any[]>(() => {
     if (typeof window !== 'undefined') {
@@ -157,7 +159,7 @@ export default function PublicTrackGrid({
 
   useEffect(() => {
     fetchPublicTracks()
-  }, [sourceMenu])
+  }, [sourceMenu, refreshSignal])
 
   // 재생 컨트롤 헬퍼
   const handleTogglePlay = (track: any) => {

@@ -572,6 +572,7 @@ export default function JapanLandingClient() {
   const [isGeneratingMusic, setIsGeneratingMusic] = useState(false);
   const [genModalState, setGenModalState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [genErrorMsg, setGenErrorMsg] = useState("");
+  const [publicTracksRefreshSignal, setPublicTracksRefreshSignal] = useState(0);
   const [myTracks, setMyTracks] = useState<any[]>([]);
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
   const [detailItem, setDetailItem] = useState<any | null>(null);
@@ -1242,6 +1243,9 @@ export default function JapanLandingClient() {
           }
         }
         setGenModalState('success');
+        setPublicTracksRefreshSignal((value) => value + 1);
+        window.setTimeout(() => setPublicTracksRefreshSignal((value) => value + 1), 10_000);
+        window.setTimeout(() => setPublicTracksRefreshSignal((value) => value + 1), 30_000);
         fetchMyJpTracks();
       } catch (err: any) {
         console.error("Music gen error:", err);
@@ -1389,6 +1393,9 @@ export default function JapanLandingClient() {
           await saveHistory(resolvedPayload, {});
         }
         setGenModalState('success');
+        setPublicTracksRefreshSignal((value) => value + 1);
+        window.setTimeout(() => setPublicTracksRefreshSignal((value) => value + 1), 10_000);
+        window.setTimeout(() => setPublicTracksRefreshSignal((value) => value + 1), 30_000);
         fetchMyJpTracks();
       } catch (err: any) {
         console.error("Music gen error:", err);
@@ -2059,7 +2066,7 @@ export default function JapanLandingClient() {
 
         {/* J-BGM 공개 음원 목록 */}
         <section className="pt-6 border-t border-white/5">
-          <PublicTrackGrid sourceMenu="japan" itemsPerPage={16} />
+          <PublicTrackGrid sourceMenu="japan" itemsPerPage={16} refreshSignal={publicTracksRefreshSignal} />
         </section>
 
         {/* 🔮 일본 특화 나만의 프리셋 만들기/수정 모달 */}
