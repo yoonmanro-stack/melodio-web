@@ -148,7 +148,7 @@ const JP_PRESET_IMAGES = [
   "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png"
 ];
 
-const JAPAN_PRESETS_PER_PAGE = 20;
+const JAPAN_PRESETS_PER_PAGE = 14;
 
 const jpPresets = [
   {
@@ -1718,7 +1718,7 @@ export default function JapanLandingClient() {
               </div>
             </div>
 
-            {/* 데스크톱 2열 × 10행, 페이지당 20개 */}
+            {/* 데스크톱 2열 × 7행, 페이지당 14개 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {filteredJpPresets.slice((jpPage - 1) * JAPAN_PRESETS_PER_PAGE, jpPage * JAPAN_PRESETS_PER_PAGE).map((preset) => {
                 const isSelected = selectedPresetId === preset.id;
@@ -1851,7 +1851,7 @@ export default function JapanLandingClient() {
               })}
             </div>
 
-            {/* Pagination Controls - 페이지당 20개 */}
+            {/* Pagination Controls - 페이지당 14개 */}
             {filteredJpPresets.length > 0 && (
               <div className="flex items-center justify-center gap-1.5 pt-2">
                 <button
