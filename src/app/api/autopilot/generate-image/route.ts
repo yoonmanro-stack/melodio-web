@@ -2,7 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt: rawPrompt, size = '1:1', imageType = 'logo', channelTitle = '', key_name = '' } = await request.json()
+    const {
+      prompt: rawPrompt,
+      size = '1:1',
+      imageType = 'logo',
+      channelTitle = '',
+      key_name = '',
+      count: rawCount = 2,
+    } = await request.json()
+    if (typeof rawPrompt !== 'string' || !rawPrompt.trim()) {
+      return NextResponse.json({ error: '이미지 프롬프트가 필요합니다.' }, { status: 400 })
+    }
+    const imageCount = Math.min(2, Math.max(1, Number(rawCount) || 1))
     // 이미지 엔진: gpt-image-2 via 302.ai (단일 엔진 — 2026-07-17 통합)
     const sunoApiKey = process.env.SUNO_API_KEY
     const sunoApiUrl = (process.env.SUNO_API_URL || 'https://api.302.ai').replace(/\/+$/, '')
@@ -47,13 +58,19 @@ export async function POST(request: NextRequest) {
       finalPrompt = `${finalPrompt}, designed as a high-resolution circular profile logo, perfectly centered within the frame, suitable for a YouTube avatar icon. Keep the edges clean and empty of critical details.`
     } else if (imageType === 'thumbnail') {
       finalPrompt = `${finalPrompt}. Clean, cinematic, high-fidelity atmospheric aesthetic illustration. Crucially, there must be NO text, NO typography, NO logos, NO watermark, NO letters, and NO writing whatsoever on the image.`
+    } else if (imageType === 'viral-video-cover') {
+      finalPrompt = `${finalPrompt}. Create a premium photorealistic live-action keyframe that looks captured directly from the same video production. Preserve the exact protagonist identity, face, age, hairstyle, wardrobe colors, supporting actor, core prop, location, action, camera lens, and lighting described above. Natural skin texture, realistic hands and anatomy, physically plausible objects, crisp facial focus, cinematic Korean short-form reality cinematography, dramatic but believable lighting. Compose the main subject centrally with enough safe space for a 9:16 vertical thumbnail crop. Absolutely no illustration, no anime, no cartoon, no 3D render, no CGI look, no text, no typography, no logos, no watermark, no letters, and no writing.`
     }
 
     // ────────────────────────────────────────────────────────────────────────
     // 이미지 생성: gpt-image-2 via 302.ai (단일 엔진)
     // ────────────────────────────────────────────────────────────────────────
     async function generateSingleImage(promptText: string, sizeOption: string): Promise<string> {
-      const sizeParam = sizeOption === '16:9' ? '1792x1024' : '1024x1024'
+      const sizeParam = sizeOption === '16:9'
+        ? '1792x1024'
+        : sizeOption === '9:16'
+          ? '1024x1536'
+          : '1024x1024'
       const endpointUrl = `${sunoApiUrl}/v1/images/generations`
 
       console.log(`[API/generate-image] gpt-image-2 via 302.ai 호출 (size: ${sizeParam})`)
@@ -69,7 +86,8 @@ export async function POST(request: NextRequest) {
           prompt: promptText,
           n: 1,
           size: sizeParam,
-          quality: 'auto',
+          quality: imageType === 'viral-video-cover' ? 'high' : 'auto',
+          output_format: 'png',
         })
       })
 
@@ -88,12 +106,10 @@ export async function POST(request: NextRequest) {
       return imageUrl
     }
 
-    // 2개 병렬 생성 실행
-    console.log('[API/generate-image] 2개 이미지 병렬 생성 요청 중...')
-    const [imageUrl1, imageUrl2] = await Promise.all([
-      generateSingleImage(finalPrompt, size),
-      generateSingleImage(finalPrompt, size)
-    ])
+    console.log(`[API/generate-image] ${imageCount}개 이미지 병렬 생성 요청 중...`)
+    const generatedImageUrls = await Promise.all(
+      Array.from({ length: imageCount }, () => generateSingleImage(finalPrompt, size))
+    )
 
     // Upload to Supabase Storage to get permanent URLs
     let permanentUrls: string[] = []
@@ -134,10 +150,9 @@ export async function POST(request: NextRequest) {
         return publicUrl;
       }
 
-      permanentUrls = await Promise.all([
-        uploadImage(imageUrl1, 1),
-        uploadImage(imageUrl2, 2)
-      ])
+      permanentUrls = await Promise.all(
+        generatedImageUrls.map((imageUrl, index) => uploadImage(imageUrl, index + 1))
+      )
       console.log(`[API/generate-image] Permanent URLs generated:`, permanentUrls);
 
       // If key_name is provided, update the database row in curation_playbooks
@@ -169,9 +184,10 @@ export async function POST(request: NextRequest) {
           console.error(`[API/generate-image] Failed to fetch playbook for update: ${pbError.message}`);
         }
       }
-    } catch (err: any) {
-      console.error('[API/generate-image] Failed to upload to Supabase storage, falling back to raw urls:', err.message);
-      permanentUrls = [imageUrl1, imageUrl2]
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err)
+      console.error('[API/generate-image] Failed to upload to Supabase storage, falling back to raw urls:', message);
+      permanentUrls = generatedImageUrls
     }
 
     return NextResponse.json({

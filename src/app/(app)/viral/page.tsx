@@ -118,6 +118,16 @@ function getConceptThumbnail(concept: Concept): { url: string; isStatic: boolean
   return { url: 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png', isStatic: true };
 }
 
+function buildViralVideoCoverPrompt(videoPrompt: string, title: string, category: string): string {
+  return [
+    `Photorealistic live-action thumbnail keyframe for the vertical viral short video "${title || 'Viral Short'}".`,
+    `Category: ${CATEGORY_TITLES[category] || category || 'viral short-form'}.`,
+    videoPrompt,
+    'Choose the single strongest hook or punchline moment from this exact scene.',
+    'The thumbnail must look like a real frame from the generated video, not separate album artwork.',
+  ].filter(Boolean).join(' ')
+}
+
 // 카테고리 설정 (높은 이용도/떡상 예상순 배치)
 const CATEGORY_CONFIG = {
   drama: {
@@ -933,7 +943,8 @@ export default function ViralTrendZonePage() {
     try {
       const activeTrack = overrideTrack || selectedGrokTrack || generatedResult || currentPlayingTrack;
       const targetAudio = activeTrack?.audio_url || activeTrack?.audioUrl || activeTrack?.audio || activeTrack?.url || activeTrack?.stream_url || activeTrack?.file_url;
-      const activePrompt = overrideTrack ? await fetchDynamicGrokPrompt(overrideTrack) : grokVideoPrompt;
+      const activePrompt = await fetchDynamicGrokPrompt(activeTrack) || grokVideoPrompt;
+      const activeCategory = activeTrack?.category || activeTrack?.tab_type || activeTrack?.presetId || genCategory;
 
       console.log('[ViralPage] Triggering Grok video for track:', { id: activeTrack?.id, title: activeTrack?.title, audioUrl: targetAudio });
 
@@ -947,14 +958,14 @@ export default function ViralTrendZonePage() {
           aspectRatio: '9:16',
           generate30SecFull: true,
           // 카테고리를 넘겨야 서버가 연출·컷 밀도·춤 허용 여부를 판단한다.
-          category: activeTrack?.category || activeTrack?.tab_type || genCategory,
+          category: activeCategory,
           allowDance: grokAllowDance,
           cutCadenceSeconds: grokCutCadence
         })
       });
 
       clearInterval(interval);
-      setGrokVideoProgress(100);
+      setGrokVideoProgress(96);
 
       let data: any;
       try {
@@ -964,7 +975,35 @@ export default function ViralTrendZonePage() {
         throw new Error('Grok 영상 서버 응답 타임아웃 (Vercel 120초 제한). 잠시 후 [영상만 재시도] 버튼을 눌러주세요.');
       }
       if (data.success && data.videoUrl) {
+        let generatedCoverUrl = '';
+        try {
+          const coverRes = await fetch('/api/autopilot/generate-image', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: buildViralVideoCoverPrompt(
+                activePrompt,
+                activeTrack?.title || 'Viral Short',
+                activeCategory
+              ),
+              size: '9:16',
+              imageType: 'viral-video-cover',
+              channelTitle: activeTrack?.title || 'Viral Short',
+              count: 1,
+            })
+          });
+          if (coverRes.ok) {
+            const coverData = await coverRes.json();
+            generatedCoverUrl = coverData.imageUrl || '';
+          } else {
+            console.warn('[Viral] 실사 영상 커버 생성 실패:', await coverRes.text());
+          }
+        } catch (coverError) {
+          console.warn('[Viral] 실사 영상 커버 생성 예외:', coverError);
+        }
+
         setGrokVideoResult(data.videoUrl);
+        setGrokVideoProgress(100);
         // 서버가 ffprobe 로 잰 실제 길이. <video> 메타데이터 로딩을 기다리지 않는다.
         if (Number(data.durationSeconds) > 0) setGrokVideoDuration(Number(data.durationSeconds));
         if (data.clips && Array.isArray(data.clips) && data.clips.length > 0) {
@@ -974,6 +1013,26 @@ export default function ViralTrendZonePage() {
         }
         setActiveClipIndex(0);
 
+        if (generatedCoverUrl && activeTrack?.id) {
+          const updateCover = (track: any) => String(track?.id) === String(activeTrack.id)
+            ? {
+                ...track,
+                thumbnailUrl: generatedCoverUrl,
+                thumbnail_url: generatedCoverUrl,
+                coverUrl: generatedCoverUrl,
+                cover_art_url: generatedCoverUrl,
+              }
+            : track;
+          setGeneratedResult((current: any) => current ? updateCover(current) : current);
+          setAvailableTracks((current) => current.map(updateCover));
+          try {
+            const storedTracks = JSON.parse(localStorage.getItem('melodio_viral_tracks') || '[]');
+            if (Array.isArray(storedTracks)) {
+              localStorage.setItem('melodio_viral_tracks', JSON.stringify(storedTracks.map(updateCover)));
+            }
+          } catch {}
+        }
+
         // 🎬 비디오 화면으로 자동 스와이프 스크롤
         setTimeout(() => {
           if (previewVideoRef.current) {
@@ -981,16 +1040,23 @@ export default function ViralTrendZonePage() {
           }
         }, 400);
 
-        // 🎬 Supabase DB (generations)에 video_url 영구 수록 (대시보드 노출용)
-        if (selectedGrokTrack?.id) {
-          fetch('/api/generations', {
+        // 🎬 영상 URL과 동일 장면 기반 실사 커버를 함께 영구 저장한다.
+        const generationId = activeTrack?.id && activeTrack.id !== 'generated'
+          ? activeTrack.id
+          : selectedGrokTrack?.id;
+        if (generationId) {
+          const persistRes = await fetch('/api/generations', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              id: selectedGrokTrack.id,
-              video_url: data.videoUrl
+              id: generationId,
+              video_url: data.videoUrl,
+              ...(generatedCoverUrl ? { cover_art_url: generatedCoverUrl } : {}),
             })
-          }).catch(err => console.warn('[Viral] Failed to persist video_url to generation:', err));
+          });
+          if (!persistRes.ok) {
+            console.warn('[Viral] 영상·커버 저장 실패:', await persistRes.text());
+          }
         }
       } else {
         setGrokVideoError(data.error || 'Grok 비디오 생성 중 오류가 발생했습니다.');
@@ -1358,26 +1424,6 @@ export default function ViralTrendZonePage() {
               setSelectedGrokTrackId(String(trackId));
               setGeneratedResult(newViralTrack);
 
-              // 🎨 앨범 커버 아트 AI 이미지 동적 자동 생성 및 갱신
-              (async () => {
-                try {
-                  const coverPrompt = `Album cover art for "${finalTitle}", 9:16 vertical viral short-form theme, ${selectedGenre}, ${selectedMood}, vibrant cinematic pop aesthetic, high resolution studio art`;
-                  const imgRes = await fetch('/api/autopilot/generate-image', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ prompt: coverPrompt, style: 'anime', aspectRatio: '1:1' })
-                  });
-                  if (imgRes.ok) {
-                    const imgData = await imgRes.json();
-                    const newCoverUrl = imgData.imageUrl || imgData.url;
-                    if (newCoverUrl) {
-                      setGeneratedResult((prev: any) => prev ? { ...prev, thumbnailUrl: newCoverUrl, coverUrl: newCoverUrl } : prev);
-                    }
-                  }
-                } catch (imgErr) {
-                  console.warn('[ViralPage] Cover art generation warning:', imgErr);
-                }
-              })();
               try {
                 const existing = JSON.parse(localStorage.getItem('melodio_viral_tracks') || '[]');
                 const updated = [newViralTrack, ...existing.filter((t: any) => String(t.id) !== String(trackId))];
