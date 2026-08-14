@@ -1555,8 +1555,14 @@ export default function ViralTrendZonePage() {
                       aria-label={`${track.title} 영상 미리보기`}
                     />
 
-                    {/* Dark gradient overlay for typography readability */}
-                    <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-black/20 to-black/75 rounded-2xl z-15" />
+                    {/* Keep only a subtle bottom fade while playing so the original video stays bright. */}
+                    <div
+                      className={`pointer-events-none absolute inset-x-0 bottom-0 z-15 rounded-b-2xl bg-gradient-to-t to-transparent transition-all duration-300 ${
+                        isTrackPlaying
+                          ? 'h-28 from-black/45 via-black/10'
+                          : 'h-2/3 from-black/80 via-black/25'
+                      }`}
+                    />
 
                     <div className="absolute left-3 top-3 z-30 flex h-8 min-w-8 items-center justify-center rounded-lg border border-white/80 bg-white/75 px-2 text-sm font-black text-fuchsia-600 shadow-lg shadow-black/20 backdrop-blur-md">
                       {index + 1}
@@ -1587,7 +1593,13 @@ export default function ViralTrendZonePage() {
                     </div>
 
                     {/* Play / Pause Overlays on Hover */}
-                    <div className="absolute inset-0 bg-black/35 backdrop-blur-[1px] opacity-100 sm:opacity-0 sm:group-hover/card:opacity-100 transition-opacity duration-300 flex items-center justify-center z-25">
+                    <div
+                      className={`absolute inset-0 z-25 flex items-center justify-center transition-all duration-300 ${
+                        isTrackPlaying
+                          ? 'bg-transparent opacity-100 backdrop-blur-none'
+                          : 'bg-black/35 opacity-100 backdrop-blur-[1px] sm:opacity-0 sm:group-hover/card:opacity-100'
+                      }`}
+                    >
                       {isTrackPlaying ? (
                         <button
                           type="button"
