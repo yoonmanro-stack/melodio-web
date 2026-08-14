@@ -1731,14 +1731,14 @@ export default function JapanLandingClient() {
                   <div
                     key={preset.id}
                     onClick={() => handleSelectPreset(preset)}
-                    className={`relative w-full rounded-2xl overflow-hidden border transition-all duration-300 text-left flex flex-col justify-between group aspect-[4/3] min-h-[190px] shrink-0 cursor-pointer ${
+                    className={`relative w-full rounded-2xl overflow-hidden border transition-all duration-300 text-left flex flex-col group shrink-0 cursor-pointer ${
                       isSelected 
                         ? "border-amber-500 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.3)] scale-[1.02]" 
                         : "border-white/5 bg-zinc-900/40 hover:border-white/10 hover:bg-zinc-900/60"
                     }`}
                   >
                     {/* 1. Upper Image Thumbnail Area */}
-                    <div className="relative flex-1 w-full overflow-hidden bg-zinc-900 border-b border-white/5">
+                    <div className="relative aspect-video w-full shrink-0 overflow-hidden bg-zinc-900 border-b border-white/5">
                       <div className="absolute inset-0 z-0" style={{ backgroundColor: preset.gradient }}>
                         {cardImage && (
                           <img 
