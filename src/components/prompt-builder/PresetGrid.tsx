@@ -403,28 +403,28 @@ export default function PresetGrid({
                     onError={(e) => {
                       (e.target as HTMLImageElement).src = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'
                     }}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 filter brightness-[0.85]"
+                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.025] group-hover:saturate-[1.03]"
                     loading="lazy"
                   />
                   
                   {/* On Hover Info Overlay */}
-                  <div className="absolute inset-0 bg-black/65 backdrop-blur-[3px] opacity-0 group-hover:opacity-100 transition-opacity duration-250 flex flex-col justify-between items-start p-4 z-10">
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-250 flex flex-col justify-between items-start p-4 z-10">
                     {/* Top: Metadata items (Left-aligned, larger & brighter) */}
-                    <div className="flex flex-col gap-1.5 w-full items-start text-left">
+                    <div className="flex flex-col gap-1.5 items-start rounded-xl border border-white/70 bg-white/85 px-2.5 py-2 text-left text-zinc-900 shadow-lg backdrop-blur-sm">
                       {isCustom ? (
                         <>
-                          <div className="text-xs text-white font-mono flex items-center gap-2">
-                            <Calendar className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
+                          <div className="text-xs font-mono flex items-center gap-2">
+                            <Calendar className="w-3.5 h-3.5 text-fuchsia-600 shrink-0" />
                             <span>생성일: {dateStr}</span>
                           </div>
-                          <div className="text-xs text-white font-mono flex items-center gap-2">
-                            <Headphones className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
+                          <div className="text-xs font-mono flex items-center gap-2">
+                            <Headphones className="w-3.5 h-3.5 text-fuchsia-600 shrink-0" />
                             <span>이용횟수: {cumulative}회</span>
                           </div>
                         </>
                       ) : (
-                        <div className="text-xs text-white font-mono flex items-center gap-2">
-                          <Headphones className="w-3.5 h-3.5 text-zinc-300 shrink-0" />
+                        <div className="text-xs font-mono flex items-center gap-2">
+                          <Headphones className="w-3.5 h-3.5 text-fuchsia-600 shrink-0" />
                           <span>이용횟수: {cumulative}회</span>
                         </div>
                       )}
@@ -437,7 +437,7 @@ export default function PresetGrid({
                           e.stopPropagation()
                           onEditPreset?.(preset)
                         }}
-                        className="w-12 h-12 rounded-full bg-black/50 hover:bg-black/85 text-white/90 hover:text-white border border-white/20 flex items-center justify-center transition-all shadow-md active:scale-95"
+                        className="w-12 h-12 rounded-full bg-white/90 hover:bg-white text-zinc-800 hover:text-fuchsia-600 border border-white/80 flex items-center justify-center transition-all shadow-lg backdrop-blur-sm active:scale-95"
                         title="자세히 보기 / 수정"
                       >
                         <Maximize2 className="w-6 h-6" />

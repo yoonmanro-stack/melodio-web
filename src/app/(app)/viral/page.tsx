@@ -1606,7 +1606,7 @@ export default function ViralTrendZonePage() {
                     />
 
                     {/* Keep the cover clean until the card is hovered, focused, or playing. */}
-                    <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-15 h-32 rounded-b-2xl bg-gradient-to-t from-black/65 via-black/10 to-transparent transition-opacity duration-300 ${isTrackPlaying ? 'opacity-0' : 'opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`} />
+                    <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-15 h-28 rounded-b-2xl bg-gradient-to-t from-black/40 to-transparent transition-opacity duration-300 ${isTrackPlaying ? 'opacity-0' : 'opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`} />
 
                     <div className={`pointer-events-none absolute left-3 top-3 z-30 flex h-8 min-w-8 items-center justify-center rounded-lg border border-white/80 bg-white/75 px-2 text-sm font-black text-fuchsia-600 opacity-0 shadow-lg shadow-black/20 backdrop-blur-md transition-opacity duration-300 ${isTrackPlaying ? 'opacity-0' : 'group-hover/card:opacity-100 group-focus-within/card:opacity-100'}`}>
                       {index + 1}
@@ -1646,8 +1646,8 @@ export default function ViralTrendZonePage() {
                           <Pause className="w-4 h-4 text-white fill-current" />
                         </span>
                       ) : (
-                        <span className="w-11 h-11 rounded-full bg-black/60 border border-white/10 flex items-center justify-center cursor-pointer shadow-lg hover:scale-105 transition-transform">
-                          <Play className="w-4 h-4 text-white fill-current ml-0.5" />
+                        <span className="w-11 h-11 rounded-full bg-white/90 border border-white/80 text-zinc-900 flex items-center justify-center cursor-pointer shadow-lg backdrop-blur-sm hover:scale-105 transition-transform">
+                          <Play className="w-4 h-4 text-zinc-900 fill-current ml-0.5" />
                         </span>
                       )}
                     </button>

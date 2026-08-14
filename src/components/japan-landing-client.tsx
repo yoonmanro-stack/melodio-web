@@ -1484,7 +1484,7 @@ export default function JapanLandingClient() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `${promptText}, 3d modern visual, artistic music album cover art, premium digital art, centered composition`,
+          prompt: `${promptText}, premium Japanese music album cover art, clear luminous exposure, fresh refined colors, crisp focal subject, elegant centered composition, bright and polished visual finish`,
           size: '1:1',
           imageType: 'thumbnail',
           channelTitle: item.title || 'Melodio Track'
@@ -1730,12 +1730,12 @@ export default function JapanLandingClient() {
                           <img 
                             src={cardImage} 
                             alt="" 
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 filter brightness-[0.80] contrast-[1.05]"
+                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.025] group-hover:saturate-[1.03]"
                           />
                         )}
                       </div>
                       {/* Top Left Big Overlay Category Title */}
-                      <div className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded bg-black/60 border border-white/10 text-zinc-300 text-[9px] font-extrabold uppercase tracking-widest group-hover:text-white transition-all font-mono">
+                      <div className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded bg-white/85 border border-white/80 text-zinc-800 text-[9px] font-extrabold uppercase tracking-widest transition-all font-mono shadow-sm backdrop-blur-sm">
                         {category}
                       </div>
 
@@ -1745,7 +1745,7 @@ export default function JapanLandingClient() {
                           e.stopPropagation();
                           setEditingPreset(preset);
                         }}
-                        className="absolute top-3 right-3 z-10 p-2 rounded-lg bg-black/60 hover:bg-black/80 border border-white/10 text-zinc-400 hover:text-white transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm"
+                        className="absolute top-3 right-3 z-10 p-2 rounded-lg bg-white/90 hover:bg-white border border-white/80 text-zinc-700 hover:text-amber-600 transition-all opacity-0 group-hover:opacity-100 shadow-md backdrop-blur-sm"
                         title="상세보기"
                       >
                         <Maximize2 className="w-3.5 h-3.5" />

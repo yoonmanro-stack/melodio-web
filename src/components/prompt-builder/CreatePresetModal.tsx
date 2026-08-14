@@ -844,7 +844,7 @@ export default function CreatePresetModal({
                     <img
                       src={thumbnailUrl}
                       alt=""
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 filter brightness-[0.85]"
+                      className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.025] group-hover:saturate-[1.03]"
                       loading="lazy"
                     />
                   ) : (

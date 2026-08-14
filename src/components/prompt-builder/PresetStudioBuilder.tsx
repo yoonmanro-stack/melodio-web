@@ -1365,16 +1365,13 @@ export default function PromptBuilder({
                 />
               </AnimatePresence>
 
-              {/* 가벼운 필름/시네마 오버레이 그라디언트 */}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-black/20 pointer-events-none" />
-
               {/* 좌 측 '<' 이동 버튼 */}
               <button
                 onClick={(e) => {
                   e.stopPropagation()
                   setBannerSlideIdx((prev) => (prev - 1 + BANNER_SLIDES.length) % BANNER_SLIDES.length)
                 }}
-                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-fuchsia-600 border border-white/20 text-white flex items-center justify-center shadow-lg transition-all z-20 opacity-80 hover:opacity-100 hover:scale-110 active:scale-95"
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/85 hover:bg-white border border-white/80 text-zinc-800 hover:text-fuchsia-600 flex items-center justify-center shadow-lg backdrop-blur-sm transition-all z-20 opacity-90 hover:opacity-100 hover:scale-110 active:scale-95"
                 title="이전 이미지"
               >
                 <ChevronLeft className="w-4 h-4" />
@@ -1386,14 +1383,14 @@ export default function PromptBuilder({
                   e.stopPropagation()
                   setBannerSlideIdx((prev) => (prev + 1) % BANNER_SLIDES.length)
                 }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/60 hover:bg-fuchsia-600 border border-white/20 text-white flex items-center justify-center shadow-lg transition-all z-20 opacity-80 hover:opacity-100 hover:scale-110 active:scale-95"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-white/85 hover:bg-white border border-white/80 text-zinc-800 hover:text-fuchsia-600 flex items-center justify-center shadow-lg backdrop-blur-sm transition-all z-20 opacity-90 hover:opacity-100 hover:scale-110 active:scale-95"
                 title="다음 이미지"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
 
               {/* 하단 6개 슬라이드 도트 인디케이터 */}
-              <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 px-2.5 py-1 rounded-full bg-black/60 backdrop-blur-md border border-white/10">
+              <div className="absolute bottom-2.5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 z-20 px-2.5 py-1 rounded-full bg-white/75 backdrop-blur-sm border border-white/80 shadow-md">
                 {BANNER_SLIDES.map((_, idx) => (
                   <button
                     key={idx}
@@ -1404,7 +1401,7 @@ export default function PromptBuilder({
                     className={`h-1.5 rounded-full transition-all duration-300 ${
                       idx === bannerSlideIdx
                         ? 'w-5 bg-gradient-to-r from-fuchsia-400 to-cyan-400 shadow-[0_0_8px_rgba(217,70,239,0.8)]'
-                        : 'w-1.5 bg-white/40 hover:bg-white/70'
+                        : 'w-1.5 bg-zinc-600/50 hover:bg-zinc-700'
                     }`}
                   />
                 ))}

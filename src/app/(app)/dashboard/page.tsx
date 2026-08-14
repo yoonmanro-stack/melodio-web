@@ -753,7 +753,7 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `${promptText}, 3d modern visual, artistic music album cover art, premium digital art, centered composition`,
+          prompt: `${promptText}, premium music album cover art, clear luminous exposure, fresh refined colors, crisp focal subject, elegant centered composition, bright and polished visual finish`,
           size: '1:1',
           imageType: 'thumbnail',
           channelTitle: item.title || 'Melodio Track'
@@ -1401,7 +1401,7 @@ export default function Home() {
                             e.stopPropagation(); // 플레이어 실행 차단
                             handleGenerateCoverArt(item);
                           }}
-                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/80 hover:bg-fuchsia-600 hover:scale-105 text-white flex items-center justify-center border border-white/20 opacity-0 group-hover/row:opacity-100 transition-all z-20 shadow-md"
+                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/90 hover:bg-white hover:scale-105 text-zinc-800 hover:text-fuchsia-600 flex items-center justify-center border border-white/80 opacity-0 group-hover/row:opacity-100 transition-all z-20 shadow-md backdrop-blur-sm"
                           title="컨셉 맞춤형 AI 앨범 커버 생성"
                         >
                           <span className="text-[10px]">🪄</span>
@@ -1437,13 +1437,13 @@ export default function Home() {
                           )}
 
                           {/* 호버 시 재생 아이콘 레이어 */}
-                          <div className={`absolute inset-0 bg-black/25 flex items-center justify-center transition-opacity duration-300 ${
+                          <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${
                             playingTrackId === item.id && isTrackPlaying ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'
                           }`}>
                             {playingTrackId === item.id && isTrackPlaying ? (
-                              <Pause className="w-5 h-5 text-fuchsia-400 fill-fuchsia-400" />
+                              <Pause className="w-10 h-10 rounded-full bg-white/90 p-2.5 text-fuchsia-600 fill-current shadow-lg backdrop-blur-sm" />
                             ) : (
-                              <Play className="w-5 h-5 text-white fill-white ml-0.5" />
+                              <Play className="w-10 h-10 rounded-full bg-white/90 p-2.5 text-zinc-900 fill-current shadow-lg backdrop-blur-sm" />
                             )}
                           </div>
                         </>

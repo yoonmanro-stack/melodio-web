@@ -115,13 +115,13 @@ export default function DashboardViralCarousel({ videos, onOpenDetails }: Dashbo
                     className="absolute inset-0 z-10 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-fuchsia-400"
                   />
 
-                  <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 h-32 bg-gradient-to-t from-black/65 via-black/10 to-transparent transition-opacity duration-300 ${isPlaying ? "opacity-0" : "opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100"}`} />
+                  <div className={`pointer-events-none absolute inset-x-0 bottom-0 z-20 h-28 bg-gradient-to-t from-black/40 to-transparent transition-opacity duration-300 ${isPlaying ? "opacity-0" : "opacity-0 group-hover/card:opacity-100 group-focus-within/card:opacity-100"}`} />
 
-                  <span className={`pointer-events-none absolute left-2.5 top-2.5 z-20 rounded-full border px-2 py-1 text-[9px] font-black opacity-0 backdrop-blur transition-opacity duration-300 ${isPlaying ? "opacity-0" : "group-hover/card:opacity-100 group-focus-within/card:opacity-100"} ${video.isPublic ? "border-emerald-400/30 bg-black/60 text-emerald-300" : "border-zinc-400/30 bg-black/60 text-zinc-300"}`}>
+                  <span className={`pointer-events-none absolute left-2.5 top-2.5 z-20 rounded-full border border-white/80 bg-white/85 px-2 py-1 text-[9px] font-black text-zinc-800 opacity-0 shadow-md backdrop-blur-sm transition-opacity duration-300 ${isPlaying ? "opacity-0" : "group-hover/card:opacity-100 group-focus-within/card:opacity-100"}`}>
                     {video.isPublic ? "PUBLIC" : "PRIVATE"}
                   </span>
 
-                  <span className={`pointer-events-none absolute left-1/2 top-1/2 z-20 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/20 text-white opacity-0 shadow-xl backdrop-blur transition-all duration-300 ${isPlaying ? "bg-fuchsia-600/90 opacity-0" : "bg-black/55 group-hover/card:scale-105 group-hover/card:opacity-100 group-focus-within/card:opacity-100"}`}>
+                  <span className={`pointer-events-none absolute left-1/2 top-1/2 z-20 flex h-12 w-12 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white/80 bg-white/90 text-zinc-900 opacity-0 shadow-xl backdrop-blur-sm transition-all duration-300 ${isPlaying ? "opacity-0" : "group-hover/card:scale-105 group-hover/card:opacity-100 group-focus-within/card:opacity-100"}`}>
                     {isPlaying ? <Pause className="h-5 w-5 fill-current" /> : <Play className="ml-0.5 h-5 w-5 fill-current" />}
                   </span>
 
