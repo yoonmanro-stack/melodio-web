@@ -1113,6 +1113,16 @@ export default function JapanLandingClient() {
         alert('먼저 플레이리스트 가사를 작성해주세요!');
         return;
       }
+      if (!isInstrumental) {
+        const emptyTrackIndex = tracks.findIndex((track) =>
+          !Array.isArray(track.sections) || !track.sections.some((section: LyricsSection) => section.content?.trim())
+        );
+        if (emptyTrackIndex >= 0) {
+          setActiveTrackIdx(emptyTrackIndex);
+          alert(`${emptyTrackIndex + 1}번 곡의 가사가 비어 있습니다. 모든 곡의 가사를 확인한 후 생성해주세요.`);
+          return;
+        }
+      }
       setIsGeneratingMusic(true);
       setGenModalState('submitting');
       setGenErrorMsg("");
@@ -1166,7 +1176,10 @@ export default function JapanLandingClient() {
 
         for (let i = 0; i < tracks.length; i++) {
           const track = tracks[i];
-          const lyricsPrompt = isInstrumental ? '' : buildLyricsPrompt(track.sections);
+          const submittedSections = Array.isArray(track.sections)
+            ? track.sections.map((section: LyricsSection) => ({ ...section }))
+            : [];
+          const lyricsPrompt = isInstrumental ? '' : buildLyricsPrompt(submittedSections);
 
           const targetSection = track.sections.find((s: any) => s.type === 'chorus' && s.description?.trim())
             || track.sections.find((s: any) => s.type === 'verse' && s.description?.trim())
@@ -1236,7 +1249,7 @@ export default function JapanLandingClient() {
             body: JSON.stringify({
               ...trackPayload,
               selections: {},
-              lyricsSections: track.sections,
+              lyricsSections: submittedSections,
               presetId: selectedPresetId,
               presetName: activePreset?.name,
               sourceMenu: 'japan',
@@ -1287,7 +1300,8 @@ export default function JapanLandingClient() {
         alert("스타일 태그는 필수 입력 사항입니다!");
         return;
       }
-      if (!isInstrumental && !lyricsSections.some((section) => section.content?.trim())) {
+      const submittedLyricsSections = lyricsSections.map((section) => ({ ...section }));
+      if (!isInstrumental && !submittedLyricsSections.some((section) => section.content?.trim())) {
         alert("보컬곡을 생성하려면 먼저 가사를 작성하거나 AI 가사를 생성해주세요.");
         return;
       }
@@ -1369,7 +1383,7 @@ export default function JapanLandingClient() {
         const resolvedPayload: PromptPayload = {
           title: title,
           stylePrompt: finalSingleStylePrompt,
-          lyricsPrompt: isInstrumental ? '' : buildLyricsPrompt(lyricsSections),
+          lyricsPrompt: isInstrumental ? '' : buildLyricsPrompt(submittedLyricsSections),
           excludePrompt: excludePrompt.trim() || undefined,
           engine: resolvedEngine,
           isInstrumental,
@@ -1409,7 +1423,7 @@ export default function JapanLandingClient() {
           body: JSON.stringify({
             ...resolvedPayload,
             selections: {},
-            lyricsSections,
+            lyricsSections: submittedLyricsSections,
             presetId: selectedPresetId,
             presetName: activePreset?.name,
             sourceMenu: 'japan',

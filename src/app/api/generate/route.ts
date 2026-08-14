@@ -19,6 +19,20 @@ import { scrubConflictingVocalTags } from '@/lib/voice-dna-scrubber'
 // 제출만 하므로 긴 타임아웃 불필요 (Vercel 타임아웃 60초로 확장)
 export const maxDuration = 60;
 
+function buildLyricsPromptFromSections(sections: unknown): string {
+  if (!Array.isArray(sections)) return ''
+  return sections
+    .filter((section: any) => section && typeof section === 'object' && String(section.content || '').trim())
+    .map((section: any) => {
+      const rawType = String(section.type || 'verse')
+      const label = rawType.charAt(0).toUpperCase() + rawType.slice(1)
+      const description = String(section.description || '').trim()
+      const content = String(section.content || '').trim()
+      return `[${label}]\n${description ? `[${description}]\n` : ''}${content}`
+    })
+    .join('\n\n')
+}
+
 async function generateSongMetadata(stylePrompt: string, lyricsPrompt: string): Promise<{ title: string; description: string; tags: string }> {
   const openaiApiKey = process.env.OPENAI_API_KEY
   const pLower = stylePrompt.toLowerCase();
@@ -317,6 +331,14 @@ export async function POST(request: NextRequest) {
     const vdCode = rawBody.vdCode
     const noiseRatio = rawBody.noiseRatio
 
+    // 화면의 구조화된 가사 섹션을 서버의 단일 기준으로 사용한다. 클라이언트에서
+    // 조립한 lyricsPrompt가 비었거나 오래된 상태여도 화면에 표시된 섹션과 동일한
+    // 프롬프트를 서버에서 다시 만든다.
+    const canonicalLyricsPrompt = buildLyricsPromptFromSections(lyricsSections)
+    if (!payload.isInstrumental && canonicalLyricsPrompt) {
+      payload.lyricsPrompt = canonicalLyricsPrompt
+    }
+
     if (!payload.stylePrompt) {
       return NextResponse.json({ error: 'stylePrompt가 필요합니다' }, { status: 400 })
     }
@@ -324,7 +346,7 @@ export async function POST(request: NextRequest) {
     // 일본 BGM 보컬곡은 Suno의 임의 가사 생성을 허용하지 않는다.
     // 빈 가사로 제출하면 같은 작업의 두 후보가 서로 다른 구성으로 생성되어
     // 길이가 1분 이상 벌어지는 사례가 확인됐다.
-    if (rawBody.sourceMenu === 'japan' && !payload.isInstrumental && !payload.lyricsPrompt?.trim()) {
+    if (rawBody.sourceMenu === 'japan' && !payload.isInstrumental && !canonicalLyricsPrompt) {
       return NextResponse.json({ error: '보컬곡 가사가 비어 있습니다. 가사를 먼저 생성해주세요.' }, { status: 400 })
     }
 
