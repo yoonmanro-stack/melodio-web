@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -10,8 +10,10 @@ import {
   Fingerprint,
   Headphones,
   LockKeyhole,
+  LoaderCircle,
   Music2,
   Save,
+  Search,
   ShieldCheck,
   Sparkles,
 } from 'lucide-react'
@@ -26,6 +28,17 @@ import type { LegacyPresetChannelDraft } from '@/lib/channel-system/legacy-adapt
 
 interface ChannelBuilderProps {
   presets: Preset[]
+}
+
+type PresetSource = 'all' | 'default' | 'library' | 'japan' | 'custom'
+type ChannelPreset = Preset & { channelSource: Exclude<PresetSource, 'all'> }
+interface PresetPlaybookRow {
+  key_name: string
+  title: string
+  content: string | null
+  category: string
+  metadata: Record<string, unknown> | null
+  updated_at: string
 }
 
 const STEPS = [
@@ -50,6 +63,14 @@ const ATTENTION_OPTIONS = [
   { value: 'listening', label: '적극적 감상' },
   { value: 'immersive', label: '깊은 몰입' },
 ] as const
+
+const PRESET_SOURCE_LABELS: Array<{ value: PresetSource; label: string }> = [
+  { value: 'all', label: '전체' },
+  { value: 'default', label: '기본' },
+  { value: 'library', label: '프리셋 라이브러리' },
+  { value: 'japan', label: '일본 BGM' },
+  { value: 'custom', label: '내 프리셋' },
+]
 
 function Field({
   label,
@@ -86,7 +107,120 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
   )
   const [saved, setSaved] = useState<SavedChannelDraftResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [availablePresets, setAvailablePresets] = useState<ChannelPreset[]>(() =>
+    presets.map((preset) => ({ ...preset, channelSource: 'default' })),
+  )
+  const [presetQuery, setPresetQuery] = useState('')
+  const [presetSource, setPresetSource] = useState<PresetSource>('all')
+  const [isLoadingPresets, setIsLoadingPresets] = useState(true)
+  const [presetLoadError, setPresetLoadError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    let active = true
+
+    async function loadAvailablePresets() {
+      const customPresets: ChannelPreset[] = []
+
+      for (const storageKey of ['melodio_custom_presets', 'melodio_japan_custom_presets']) {
+        try {
+          const stored = localStorage.getItem(storageKey)
+          const parsed: unknown = stored ? JSON.parse(stored) : []
+          if (!Array.isArray(parsed)) continue
+          for (const item of parsed) {
+            if (!item || typeof item !== 'object') continue
+            const preset = item as Preset
+            if (!preset.id || !preset.name) continue
+            customPresets.push({ ...preset, channelSource: 'custom' })
+          }
+        } catch {
+          // A malformed local preset must not block the shared library.
+        }
+      }
+
+      try {
+        const { createClient } = await import('@/lib/supabase/client')
+        const supabase = createClient()
+        const { data, error: loadError } = await supabase
+          .from('curation_playbooks')
+          .select('key_name,title,content,category,metadata,updated_at')
+          .in('category', ['genre', 'curation', 'japan'])
+          .order('updated_at', { ascending: false })
+
+        if (loadError) throw loadError
+
+        const dbPresets: ChannelPreset[] = ((data ?? []) as PresetPlaybookRow[]).flatMap((row) => {
+          const metadata = row.metadata && typeof row.metadata === 'object'
+            ? row.metadata as Record<string, unknown>
+            : {}
+          const label = `${row.key_name ?? ''} ${row.title ?? ''}`
+          if (metadata.is_test === true || /(^|[\s_-])(test|demo|sample|테스트|샘플)([\s_-]|$)/i.test(label)) return []
+
+          const content = row.content ?? ''
+          const concept = content.match(/## 💡 핵심 컨셉\s*([\s\S]*?)(?=\n##|$)/)?.[1]?.trim()
+          const fallbackDescription = content
+            .split('\n')
+            .find((line) => line.trim() && !line.startsWith('#') && !line.startsWith('---'))
+            ?.trim()
+          const isJapan = row.category === 'japan'
+
+          return [{
+            id: row.key_name,
+            name: row.title,
+            desc: String(metadata.description ?? metadata.desc ?? concept ?? fallbackDescription ?? row.title),
+            emoji: String(metadata.emoji ?? (isJapan ? '🇯🇵' : '🎵')),
+            gradient: String(metadata.gradient ?? 'linear-gradient(135deg, #4338ca, #7c3aed)'),
+            selections: {},
+            customPrompt: String(metadata.studio_grade_prompt ?? metadata.suno_tags ?? metadata.tags ?? metadata.moods ?? 'lofi, relaxing, chill'),
+            lyricsTemplate: content,
+            isDb: true,
+            updated_at: row.updated_at,
+            metadata,
+            channelSource: isJapan ? 'japan' : 'library',
+          }]
+        })
+
+        const merged = new Map<string, ChannelPreset>()
+        presets.forEach((preset) => merged.set(preset.id, { ...preset, channelSource: 'default' }))
+        dbPresets.forEach((preset) => merged.set(preset.id, preset))
+        customPresets.forEach((preset) => merged.set(preset.id, preset))
+
+        if (active) {
+          setAvailablePresets([...merged.values()])
+          setPresetLoadError(null)
+        }
+      } catch {
+        if (active) {
+          const merged = new Map<string, ChannelPreset>()
+          presets.forEach((preset) => merged.set(preset.id, { ...preset, channelSource: 'default' }))
+          customPresets.forEach((preset) => merged.set(preset.id, preset))
+          setAvailablePresets([...merged.values()])
+          setPresetLoadError('프리셋 라이브러리를 불러오지 못해 기본·내 프리셋만 표시합니다.')
+        }
+      } finally {
+        if (active) setIsLoadingPresets(false)
+      }
+    }
+
+    loadAvailablePresets()
+    return () => { active = false }
+  }, [presets])
+
+  const presetCounts = useMemo(() => {
+    const counts: Record<PresetSource, number> = { all: availablePresets.length, default: 0, library: 0, japan: 0, custom: 0 }
+    availablePresets.forEach((preset) => { counts[preset.channelSource] += 1 })
+    return counts
+  }, [availablePresets])
+
+  const visiblePresets = useMemo(() => {
+    const query = presetQuery.trim().toLocaleLowerCase('ko-KR')
+    return availablePresets.filter((preset) => {
+      if (presetSource !== 'all' && preset.channelSource !== presetSource) return false
+      if (!query) return true
+      return [preset.name, preset.desc, preset.customPrompt]
+        .some((value) => String(value ?? '').toLocaleLowerCase('ko-KR').includes(query))
+    })
+  }, [availablePresets, presetQuery, presetSource])
 
   if (!draft) {
     return <div className="p-10 text-center text-zinc-400">사용 가능한 프리셋이 없습니다.</div>
@@ -134,11 +268,11 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
           Melodio Channel System
         </div>
         <h1 className="text-3xl font-semibold tracking-tight text-white sm:text-4xl">
-          오래가는 채널의 DNA를 설계하세요
+          채널의 감성 DNA를 설계하세요
         </h1>
         <p className="mt-3 text-sm leading-6 text-zinc-400 sm:text-base">
-          프리셋은 시작점입니다. 청취자가 찾아오는 이유와 변하지 않을 제작 규칙을 정하면,
-          매 에피소드는 같은 채널답지만 서로 다른 음악이 됩니다.
+          프리셋에서 시작해 청취 목적과 변하지 않을 제작 원칙을 정하세요.
+          채널의 정체성은 일관되게 유지하면서, 에피소드마다 새롭고 다양한 음악을 만들 수 있습니다.
         </p>
       </header>
 
@@ -187,22 +321,52 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
                 프리셋의 음악 스타일과 분위기를 Channel DNA 초안으로 변환합니다. 이후 단계에서
                 채널 목적과 고정 범위를 직접 다듬을 수 있습니다.
               </div>
+              <div className="mb-5 space-y-3">
+                <label className="relative block">
+                  <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-500" />
+                  <input
+                    type="search"
+                    value={presetQuery}
+                    onChange={(event) => setPresetQuery(event.target.value)}
+                    placeholder="프리셋 이름·분위기·스타일 검색"
+                    className={`${INPUT_CLASS} pl-11`}
+                  />
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {PRESET_SOURCE_LABELS.map((source) => (
+                    <button
+                      key={source.value}
+                      type="button"
+                      onClick={() => setPresetSource(source.value)}
+                      className={`rounded-full border px-3 py-1.5 text-xs transition ${presetSource === source.value ? 'border-violet-400/50 bg-violet-500/15 text-violet-100' : 'border-white/10 bg-white/[0.025] text-zinc-400 hover:border-white/20 hover:text-zinc-200'}`}
+                    >
+                      {source.label} <span className="ml-1 text-[10px] opacity-60">{presetCounts[source.value]}</span>
+                    </button>
+                  ))}
+                  {isLoadingPresets ? <span className="inline-flex items-center gap-1.5 px-2 text-xs text-zinc-500"><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> 라이브러리 불러오는 중</span> : null}
+                </div>
+                {presetLoadError ? <p className="text-xs text-amber-300/80">{presetLoadError}</p> : null}
+                {!isLoadingPresets ? <p className="text-xs text-zinc-500">총 {availablePresets.length}개 중 {visiblePresets.length}개 표시</p> : null}
+              </div>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {presets.map((preset) => {
+                {visiblePresets.map((preset) => {
                   const selected = selectedPresetId === preset.id
                   return (
                     <button
                       key={preset.id}
                       type="button"
                       onClick={() => choosePreset(preset)}
-                      className={`group relative min-h-44 overflow-hidden rounded-2xl border p-5 text-left transition ${selected ? 'border-white/40 ring-2 ring-violet-500/40' : 'border-white/8 hover:-translate-y-0.5 hover:border-white/20'}`}
-                      style={{ backgroundImage: preset.gradient }}
+                      className={`group relative min-h-44 [content-visibility:auto] [contain-intrinsic-size:176px] overflow-hidden rounded-2xl border p-5 text-left transition ${selected ? 'border-white/40 ring-2 ring-violet-500/40' : 'border-white/8 hover:-translate-y-0.5 hover:border-white/20'}`}
+                      style={{ backgroundImage: preset.gradient.startsWith('linear-gradient') ? preset.gradient : 'linear-gradient(135deg, #27272a, #18181b)' }}
                     >
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/5" />
                       <div className="relative flex h-full flex-col justify-between">
                         <div className="flex items-start justify-between gap-3">
                           <span className="text-2xl">{preset.emoji}</span>
-                          {selected ? <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-zinc-950"><Check className="h-4 w-4" /></span> : null}
+                          <div className="flex items-center gap-2">
+                            <span className="rounded-full bg-black/35 px-2 py-1 text-[10px] text-white/65">{PRESET_SOURCE_LABELS.find((source) => source.value === preset.channelSource)?.label}</span>
+                            {selected ? <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-zinc-950"><Check className="h-4 w-4" /></span> : null}
+                          </div>
                         </div>
                         <div className="mt-8">
                           <h3 className="font-semibold text-white">{preset.name}</h3>
@@ -213,6 +377,9 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
                   )
                 })}
               </div>
+              {!isLoadingPresets && visiblePresets.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 px-5 py-12 text-center text-sm text-zinc-500">검색 조건에 맞는 프리셋이 없습니다.</div>
+              ) : null}
             </div>
           ) : null}
 
