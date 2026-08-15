@@ -121,6 +121,14 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
 
     async function loadAvailablePresets() {
       const customPresets: ChannelPreset[] = []
+      const japanPresetsPromise = import('@/components/japan-landing-client').then(({ jpPresets }) =>
+        jpPresets.map((preset): ChannelPreset => ({
+          ...preset,
+          selections: {},
+          customPrompt: preset.tags,
+          channelSource: 'japan',
+        })),
+      )
 
       for (const storageKey of ['melodio_custom_presets', 'melodio_japan_custom_presets']) {
         try {
@@ -179,9 +187,11 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
             channelSource: isJapan ? 'japan' : 'library',
           }]
         })
+        const japanPresets = await japanPresetsPromise
 
         const merged = new Map<string, ChannelPreset>()
         presets.forEach((preset) => merged.set(preset.id, { ...preset, channelSource: 'default' }))
+        japanPresets.forEach((preset) => merged.set(preset.id, preset))
         dbPresets.forEach((preset) => merged.set(preset.id, preset))
         customPresets.forEach((preset) => merged.set(preset.id, preset))
 
@@ -193,6 +203,8 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
         if (active) {
           const merged = new Map<string, ChannelPreset>()
           presets.forEach((preset) => merged.set(preset.id, { ...preset, channelSource: 'default' }))
+          const japanPresets = await japanPresetsPromise.catch(() => [])
+          japanPresets.forEach((preset) => merged.set(preset.id, preset))
           customPresets.forEach((preset) => merged.set(preset.id, preset))
           setAvailablePresets([...merged.values()])
           setPresetLoadError('프리셋 라이브러리를 불러오지 못해 기본·내 프리셋만 표시합니다.')

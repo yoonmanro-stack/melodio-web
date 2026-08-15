@@ -150,7 +150,7 @@ const JP_PRESET_IMAGES = [
 
 const JAPAN_PRESETS_PER_PAGE = 14;
 
-const jpPresets = [
+export const jpPresets = [
   {
     id: "romance-pop",
     name: "80s City Pop (80s 시티팝)",
