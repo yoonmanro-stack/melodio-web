@@ -40,6 +40,7 @@ const ROLE_LABELS: Record<TrackRole, string> = {
   peak: 'Peak', release: 'Release', reprise: 'Reprise', closing: 'Closing',
 }
 const INPUT = 'w-full rounded-lg border border-white/10 bg-black/25 px-3 py-2.5 text-sm text-zinc-100 outline-none transition focus:border-violet-400/60 focus:ring-2 focus:ring-violet-500/10'
+const SELECT = `${INPUT} [color-scheme:dark] [&>option]:bg-zinc-950 [&>option]:text-zinc-100`
 
 function editable(track: TrackBlueprint): TrackReviewUpdate {
   return {
@@ -276,7 +277,7 @@ function TrackReviewCard({
       <div className="grid gap-3 lg:grid-cols-[48px_minmax(190px,1fr)_120px_82px_90px_minmax(130px,0.7fr)_auto] lg:items-end">
         <div className="pb-2 text-center font-mono text-xs text-zinc-600">{String(track.trackNumber).padStart(2, '0')}</div>
         <Label text="Song title"><input disabled={disabled} className={INPUT} value={draft.songTitle} onChange={(event) => changeDraft({ songTitle: event.target.value })} /></Label>
-        <Label text="Role"><select disabled={disabled} className={INPUT} value={draft.role} onChange={(event) => changeDraft({ role: event.target.value as TrackRole })}>{Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Label>
+        <Label text="Role"><select disabled={disabled} className={SELECT} value={draft.role} onChange={(event) => changeDraft({ role: event.target.value as TrackRole })}>{Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Label>
         <Label text="Energy"><input disabled={disabled} type="number" min={0} max={100} className={INPUT} value={draft.energy} onChange={(event) => changeDraft({ energy: Number(event.target.value) })} /></Label>
         <Label text="BPM"><input disabled={disabled} type="number" min={20} max={300} className={INPUT} value={draft.bpm} onChange={(event) => changeDraft({ bpm: Number(event.target.value) })} /></Label>
         <Label text="Lead"><input disabled={disabled} className={INPUT} value={draft.leadInstrument} onChange={(event) => changeDraft({ leadInstrument: event.target.value })} /></Label>

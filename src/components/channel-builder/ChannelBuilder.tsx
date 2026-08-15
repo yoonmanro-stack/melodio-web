@@ -72,6 +72,7 @@ function Field({
 }
 
 const INPUT_CLASS = 'w-full rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/60 focus:ring-2 focus:ring-violet-500/10'
+const SELECT_CLASS = `${INPUT_CLASS} [color-scheme:dark] [&>option]:bg-zinc-950 [&>option]:text-zinc-100`
 
 function splitTags(value: string): string[] {
   return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))]
@@ -250,7 +251,7 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
                   <input className={INPUT_CLASS} value={draft.listenerIntent.environment} onChange={(event) => setDraft((current) => current ? { ...current, listenerIntent: { ...current.listenerIntent, environment: event.target.value } } : current)} />
                 </Field>
                 <Field label="음악 주의도">
-                  <select className={INPUT_CLASS} value={draft.listenerIntent.attentionMode} onChange={(event) => setDraft((current) => current ? { ...current, listenerIntent: { ...current.listenerIntent, attentionMode: event.target.value as typeof current.listenerIntent.attentionMode } } : current)}>
+                  <select className={SELECT_CLASS} value={draft.listenerIntent.attentionMode} onChange={(event) => setDraft((current) => current ? { ...current, listenerIntent: { ...current.listenerIntent, attentionMode: event.target.value as typeof current.listenerIntent.attentionMode } } : current)}>
                     {ATTENTION_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                   </select>
                 </Field>

@@ -54,6 +54,7 @@ const ROLE_LABELS: Record<TrackRole, string> = {
 }
 
 const INPUT = 'w-full rounded-xl border border-white/10 bg-black/20 px-3.5 py-3 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-violet-400/60 focus:ring-2 focus:ring-violet-500/10'
+const SELECT = `${INPUT} [color-scheme:dark] [&>option]:bg-zinc-950 [&>option]:text-zinc-100`
 
 function vocalPercent(policy: VocalTolerance): number {
   return { none: 0, minimal: 10, allowed: 30, preferred: 50 }[policy]
@@ -306,9 +307,9 @@ export function EpisodeBuilder({ channelId }: EpisodeBuilderProps) {
               {input.tracks.map((track) => <div key={track.trackNumber} className="min-w-0 flex-1 rounded-t-sm bg-gradient-to-t from-violet-600 to-cyan-300 transition-all" style={{ height: `${Math.max(8, track.energy)}%` }} title={`${track.trackNumber}: ${track.energy}`} />)}
             </div>
             <div className="mt-5 grid gap-4 sm:grid-cols-3">
-              <Field label="최종 승인 목표"><select className={INPUT} value={input.episode.plannedTrackCount} onChange={(event) => rebuildTracks({ count: Number(event.target.value) })}><option value={2}>2곡</option><option value={10}>10곡</option><option value={20}>20곡</option><option value={30}>30곡</option><option value={40}>40곡</option></select></Field>
-              <Field label="전체 길이"><select className={INPUT} value={input.episode.targetDurationSeconds} onChange={(event) => rebuildTracks({ duration: Number(event.target.value) })}><option value={5400}>90분</option><option value={7200}>120분</option><option value={10800}>180분</option></select></Field>
-              <Field label="보컬 비율"><select className={INPUT} value={input.episode.vocalTrackPercent} onChange={(event) => rebuildTracks({ vocals: Number(event.target.value) })}><option value={0}>Instrumental only</option><option value={10}>10%</option><option value={30}>30%</option><option value={50}>50%</option></select></Field>
+              <Field label="최종 승인 목표"><select className={SELECT} value={input.episode.plannedTrackCount} onChange={(event) => rebuildTracks({ count: Number(event.target.value) })}><option value={2}>2곡</option><option value={10}>10곡</option><option value={20}>20곡</option><option value={30}>30곡</option><option value={40}>40곡</option></select></Field>
+              <Field label="전체 길이"><select className={SELECT} value={input.episode.targetDurationSeconds} onChange={(event) => rebuildTracks({ duration: Number(event.target.value) })}><option value={5400}>90분</option><option value={7200}>120분</option><option value={10800}>180분</option></select></Field>
+              <Field label="보컬 비율"><select className={SELECT} value={input.episode.vocalTrackPercent} onChange={(event) => rebuildTracks({ vocals: Number(event.target.value) })}><option value={0}>Instrumental only</option><option value={10}>10%</option><option value={30}>30%</option><option value={50}>50%</option></select></Field>
             </div>
           </section>
 
@@ -322,7 +323,7 @@ export function EpisodeBuilder({ channelId }: EpisodeBuilderProps) {
                 <article key={track.trackNumber} className="[content-visibility:auto] [contain-intrinsic-size:76px] grid gap-3 rounded-xl border border-white/8 bg-black/10 p-3 transition focus-within:border-white/20 lg:grid-cols-[44px_minmax(180px,1fr)_110px_80px_90px_minmax(130px,0.65fr)] lg:items-center">
                   <span className="text-center font-mono text-xs text-zinc-600">{String(track.trackNumber).padStart(2, '0')}</span>
                   <input aria-label={`${track.trackNumber}번 곡 제목`} className={`${INPUT} py-2.5`} value={track.songTitle} onChange={(event) => updateTrack(index, { songTitle: event.target.value })} />
-                  <select aria-label={`${track.trackNumber}번 곡 역할`} className={`${INPUT} py-2.5`} value={track.role} onChange={(event) => updateTrack(index, { role: event.target.value as TrackRole })}>{Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
+                  <select aria-label={`${track.trackNumber}번 곡 역할`} className={`${SELECT} py-2.5`} value={track.role} onChange={(event) => updateTrack(index, { role: event.target.value as TrackRole })}>{Object.entries(ROLE_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select>
                   <label className="text-[10px] text-zinc-500">ENERGY<input type="number" min={0} max={100} className={`${INPUT} mt-1 py-2`} value={track.energy} onChange={(event) => updateTrack(index, { energy: Number(event.target.value) })} /></label>
                   <label className="text-[10px] text-zinc-500">BPM<input type="number" min={20} max={300} className={`${INPUT} mt-1 py-2`} value={track.bpm} onChange={(event) => updateTrack(index, { bpm: Number(event.target.value) })} /></label>
                   <input aria-label={`${track.trackNumber}번 리드 악기`} className={`${INPUT} py-2.5`} value={track.leadInstrument} onChange={(event) => updateTrack(index, { leadInstrument: event.target.value })} />
