@@ -71,6 +71,8 @@ const PRESET_SOURCE_LABELS: Array<{ value: PresetSource; label: string }> = [
   { value: 'japan', label: '일본 BGM' },
   { value: 'custom', label: '내 프리셋' },
 ]
+const PRESETS_PER_PAGE = 18
+const PRESET_ASSET_BASE = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets'
 
 function Field({
   label,
@@ -99,6 +101,15 @@ function splitTags(value: string): string[] {
   return [...new Set(value.split(',').map((item) => item.trim()).filter(Boolean))]
 }
 
+function getPresetImage(preset: ChannelPreset): string | null {
+  if (typeof preset.cardImage === 'string' && preset.cardImage) return preset.cardImage
+  const metadata = preset.metadata && typeof preset.metadata === 'object' ? preset.metadata : {}
+  if (typeof metadata.thumbnail_url === 'string' && metadata.thumbnail_url) return metadata.thumbnail_url
+  if (Array.isArray(metadata.thumbnail_urls) && typeof metadata.thumbnail_urls[0] === 'string') return metadata.thumbnail_urls[0]
+  if (preset.channelSource === 'default') return `${PRESET_ASSET_BASE}/${preset.id}.png`
+  return null
+}
+
 export function ChannelBuilder({ presets }: ChannelBuilderProps) {
   const [step, setStep] = useState(0)
   const [selectedPresetId, setSelectedPresetId] = useState(presets[0]?.id ?? '')
@@ -112,6 +123,7 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
   )
   const [presetQuery, setPresetQuery] = useState('')
   const [presetSource, setPresetSource] = useState<PresetSource>('all')
+  const [presetPage, setPresetPage] = useState(1)
   const [isLoadingPresets, setIsLoadingPresets] = useState(true)
   const [presetLoadError, setPresetLoadError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
@@ -234,6 +246,18 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
     })
   }, [availablePresets, presetQuery, presetSource])
 
+  const totalPresetPages = Math.max(1, Math.ceil(visiblePresets.length / PRESETS_PER_PAGE))
+  const pagedPresets = useMemo(() => {
+    const safePage = Math.min(presetPage, totalPresetPages)
+    const start = (safePage - 1) * PRESETS_PER_PAGE
+    return visiblePresets.slice(start, start + PRESETS_PER_PAGE)
+  }, [presetPage, totalPresetPages, visiblePresets])
+  const presetPageNumbers = useMemo(() => {
+    const start = Math.max(1, Math.min(presetPage - 2, totalPresetPages - 4))
+    const end = Math.min(totalPresetPages, start + 4)
+    return Array.from({ length: end - start + 1 }, (_, index) => start + index)
+  }, [presetPage, totalPresetPages])
+
   if (!draft) {
     return <div className="p-10 text-center text-zinc-400">사용 가능한 프리셋이 없습니다.</div>
   }
@@ -339,7 +363,7 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
                   <input
                     type="search"
                     value={presetQuery}
-                    onChange={(event) => setPresetQuery(event.target.value)}
+                    onChange={(event) => { setPresetQuery(event.target.value); setPresetPage(1) }}
                     placeholder="프리셋 이름·분위기·스타일 검색"
                     className={`${INPUT_CLASS} pl-11`}
                   />
@@ -349,7 +373,7 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
                     <button
                       key={source.value}
                       type="button"
-                      onClick={() => setPresetSource(source.value)}
+                      onClick={() => { setPresetSource(source.value); setPresetPage(1) }}
                       className={`rounded-full border px-3 py-1.5 text-xs transition ${presetSource === source.value ? 'border-violet-400/50 bg-violet-500/15 text-violet-100' : 'border-white/10 bg-white/[0.025] text-zinc-400 hover:border-white/20 hover:text-zinc-200'}`}
                     >
                       {source.label} <span className="ml-1 text-[10px] opacity-60">{presetCounts[source.value]}</span>
@@ -358,23 +382,33 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
                   {isLoadingPresets ? <span className="inline-flex items-center gap-1.5 px-2 text-xs text-zinc-500"><LoaderCircle className="h-3.5 w-3.5 animate-spin" /> 라이브러리 불러오는 중</span> : null}
                 </div>
                 {presetLoadError ? <p className="text-xs text-amber-300/80">{presetLoadError}</p> : null}
-                {!isLoadingPresets ? <p className="text-xs text-zinc-500">총 {availablePresets.length}개 중 {visiblePresets.length}개 표시</p> : null}
+                {!isLoadingPresets ? <p className="text-xs text-zinc-500">총 {availablePresets.length}개 중 {visiblePresets.length}개 · {Math.min(presetPage, totalPresetPages)}/{totalPresetPages} 페이지</p> : null}
               </div>
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {visiblePresets.map((preset) => {
+                {pagedPresets.map((preset) => {
                   const selected = selectedPresetId === preset.id
+                  const presetImage = getPresetImage(preset)
+                  const fallbackGradient = preset.gradient.startsWith('linear-gradient') ? preset.gradient : 'linear-gradient(135deg, #27272a, #18181b)'
                   return (
                     <button
                       key={preset.id}
                       type="button"
                       onClick={() => choosePreset(preset)}
                       className={`group relative min-h-44 [content-visibility:auto] [contain-intrinsic-size:176px] overflow-hidden rounded-2xl border p-5 text-left transition ${selected ? 'border-white/40 ring-2 ring-violet-500/40' : 'border-white/8 hover:-translate-y-0.5 hover:border-white/20'}`}
-                      style={{ backgroundImage: preset.gradient.startsWith('linear-gradient') ? preset.gradient : 'linear-gradient(135deg, #27272a, #18181b)' }}
+                      style={{
+                        backgroundImage: presetImage ? `url(${JSON.stringify(presetImage)}), ${fallbackGradient}` : fallbackGradient,
+                        backgroundPosition: 'center',
+                        backgroundSize: 'cover',
+                      }}
                     >
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/5" />
                       <div className="relative flex h-full flex-col justify-between">
                         <div className="flex items-start justify-between gap-3">
-                          <span className="text-2xl">{preset.emoji}</span>
+                          <span className="grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-black/45 text-xl shadow-lg shadow-black/20 backdrop-blur-sm">
+                            {!preset.emoji || preset.emoji === '🎵'
+                              ? <Music2 className="h-5 w-5 text-white" aria-label="음악 프리셋" />
+                              : preset.emoji}
+                          </span>
                           <div className="flex items-center gap-2">
                             <span className="rounded-full bg-black/35 px-2 py-1 text-[10px] text-white/65">{PRESET_SOURCE_LABELS.find((source) => source.value === preset.channelSource)?.label}</span>
                             {selected ? <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-zinc-950"><Check className="h-4 w-4" /></span> : null}
@@ -391,6 +425,37 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
               </div>
               {!isLoadingPresets && visiblePresets.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-white/10 px-5 py-12 text-center text-sm text-zinc-500">검색 조건에 맞는 프리셋이 없습니다.</div>
+              ) : null}
+              {!isLoadingPresets && visiblePresets.length > 0 ? (
+                <nav className="mt-6 flex flex-wrap items-center justify-center gap-2" aria-label="프리셋 페이지 이동">
+                  <button
+                    type="button"
+                    disabled={presetPage <= 1}
+                    onClick={() => setPresetPage((page) => Math.max(1, page - 1))}
+                    className="inline-flex h-9 items-center gap-1 rounded-lg border border-white/10 px-3 text-xs text-zinc-300 transition hover:border-white/20 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    <ArrowLeft className="h-3.5 w-3.5" /> 이전
+                  </button>
+                  {presetPageNumbers.map((pageNumber) => (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      aria-current={pageNumber === presetPage ? 'page' : undefined}
+                      onClick={() => setPresetPage(pageNumber)}
+                      className={`grid h-9 min-w-9 place-items-center rounded-lg border px-2 text-xs transition ${pageNumber === presetPage ? 'border-violet-400/60 bg-violet-500/20 text-white' : 'border-white/10 text-zinc-400 hover:border-white/20 hover:bg-white/5 hover:text-white'}`}
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    disabled={presetPage >= totalPresetPages}
+                    onClick={() => setPresetPage((page) => Math.min(totalPresetPages, page + 1))}
+                    className="inline-flex h-9 items-center gap-1 rounded-lg border border-white/10 px-3 text-xs text-zinc-300 transition hover:border-white/20 hover:bg-white/5 disabled:cursor-not-allowed disabled:opacity-30"
+                  >
+                    다음 <ArrowRight className="h-3.5 w-3.5" />
+                  </button>
+                </nav>
               ) : null}
             </div>
           ) : null}
