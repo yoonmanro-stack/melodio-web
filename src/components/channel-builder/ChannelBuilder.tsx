@@ -403,12 +403,7 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
                     >
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/5" />
                       <div className="relative flex h-full flex-col justify-between">
-                        <div className="flex items-start justify-between gap-3">
-                          <span className="grid h-10 w-10 place-items-center rounded-full border border-white/20 bg-black/45 text-xl shadow-lg shadow-black/20 backdrop-blur-sm">
-                            {!preset.emoji || preset.emoji === '🎵'
-                              ? <Music2 className="h-5 w-5 text-white" aria-label="음악 프리셋" />
-                              : preset.emoji}
-                          </span>
+                        <div className="flex items-start justify-end gap-3">
                           <div className="flex items-center gap-2">
                             <span className="rounded-full bg-black/35 px-2 py-1 text-[10px] text-white/65">{PRESET_SOURCE_LABELS.find((source) => source.value === preset.channelSource)?.label}</span>
                             {selected ? <span className="grid h-7 w-7 place-items-center rounded-full bg-white text-zinc-950"><Check className="h-4 w-4" /></span> : null}

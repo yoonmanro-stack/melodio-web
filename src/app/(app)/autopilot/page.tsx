@@ -22,8 +22,17 @@ import {
   Download,
   Maximize2,
   Check,
-  Pin
+  Pin,
+  Music2
 } from 'lucide-react'
+
+const PresetMark = ({ emoji, compact = false }: { emoji?: string; compact?: boolean }) => (
+  emoji && emoji !== '🎵'
+    ? <span className={compact ? 'text-sm' : 'text-xl'}>{emoji}</span>
+    : <span className={`inline-grid shrink-0 place-items-center rounded-full border border-white/20 bg-white/10 ${compact ? 'h-5 w-5' : 'h-8 w-8'}`}>
+        <Music2 className={`${compact ? 'h-3 w-3' : 'h-4 w-4'} text-white`} aria-label="음악 프리셋" />
+      </span>
+)
 
 const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg 
@@ -1922,7 +1931,7 @@ function AutopilotContent() {
                     <div className="bg-white/5 p-3 rounded-xl border border-white/5 space-y-1">
                       <span className="text-zinc-500 block font-semibold">선택된 프리셋</span>
                       <span className="font-bold text-white text-xs block truncate">
-                        {allPresets.find(p => p.id === automation.audio_preset_id)?.emoji || '🎵'}{' '}
+                        <PresetMark emoji={allPresets.find(p => p.id === automation.audio_preset_id)?.emoji} compact />{' '}
                         {allPresets.find(p => p.id === automation.audio_preset_id)?.name || automation.audio_preset_id}
                       </span>
                     </div>
@@ -2491,7 +2500,7 @@ function AutopilotContent() {
                             }`}
                           >
                             <div className="flex items-start gap-2.5">
-                              <span className="text-xl">{preset.emoji || '🎵'}</span>
+                              <PresetMark emoji={preset.emoji} />
                               <div className="min-w-0">
                                 <h4 className="text-xs font-bold truncate text-white">{preset.name}</h4>
                                 <p className="text-[10px] text-zinc-400 mt-0.5 line-clamp-2 leading-snug">{preset.desc}</p>
@@ -4056,7 +4065,7 @@ function AutopilotContent() {
                       {/* 2. 일반 프리셋 */}
                       <div className="space-y-1.5">
                         <span className="text-[10px] text-zinc-500 font-bold flex items-center gap-1">
-                          🎵 일반 프리셋 (DB 동기화)
+                          <Music2 className="h-3 w-3 text-white" /> 일반 프리셋 (DB 동기화)
                         </span>
                         <select
                           value={isGeneralActive ? thumbnailPresetId : ""}
