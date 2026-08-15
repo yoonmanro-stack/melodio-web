@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import {
   ArrowLeft,
   ArrowRight,
@@ -16,8 +17,10 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  UserRoundCheck,
 } from 'lucide-react'
 import type { Preset } from '@/types'
+import { useAuth } from '@/hooks/useAuth'
 import { adaptPresetToChannelDraft } from '@/lib/channel-system/legacy-adapters'
 import {
   ChannelBuilderApiError,
@@ -73,6 +76,7 @@ const PRESET_SOURCE_LABELS: Array<{ value: PresetSource; label: string }> = [
 ]
 const PRESETS_PER_PAGE = 18
 const PRESET_ASSET_BASE = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets'
+const BETA_DRAFT_KEY = 'melodio_channel_builder_beta_draft_v1'
 
 function Field({
   label,
@@ -111,6 +115,8 @@ function getPresetImage(preset: ChannelPreset): string | null {
 }
 
 export function ChannelBuilder({ presets }: ChannelBuilderProps) {
+  const router = useRouter()
+  const { user, loading: authLoading } = useAuth()
   const [step, setStep] = useState(0)
   const [selectedPresetId, setSelectedPresetId] = useState(presets[0]?.id ?? '')
   const [draft, setDraft] = useState<LegacyPresetChannelDraft | null>(() =>
@@ -126,7 +132,32 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
   const [presetPage, setPresetPage] = useState(1)
   const [isLoadingPresets, setIsLoadingPresets] = useState(true)
   const [presetLoadError, setPresetLoadError] = useState<string | null>(null)
+  const [draftHydrated, setDraftHydrated] = useState(false)
   const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    const stored = localStorage.getItem(BETA_DRAFT_KEY)
+    queueMicrotask(() => {
+      if (stored) {
+        try {
+          const parsed = JSON.parse(stored) as { draft?: LegacyPresetChannelDraft; step?: number }
+          if (parsed.draft?.channel?.channelName) {
+            setDraft(parsed.draft)
+            setSelectedPresetId(parsed.draft.source.presetId)
+            setStep(Math.min(STEPS.length - 1, Math.max(0, parsed.step ?? 0)))
+          }
+        } catch {
+          localStorage.removeItem(BETA_DRAFT_KEY)
+        }
+      }
+      setDraftHydrated(true)
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!draftHydrated || !draft || saved) return
+    localStorage.setItem(BETA_DRAFT_KEY, JSON.stringify({ draft, step }))
+  }, [draft, draftHydrated, saved, step])
 
   useEffect(() => {
     let active = true
@@ -282,9 +313,16 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
 
   const save = () => {
     setError(null)
+    if (!user) {
+      localStorage.setItem(BETA_DRAFT_KEY, JSON.stringify({ draft, step: 3 }))
+      router.push('/login?next=%2Fchannel-builder%3Fresume%3D1')
+      return
+    }
     startTransition(async () => {
       try {
-        setSaved(await saveChannelDraft(draft))
+        const result = await saveChannelDraft(draft)
+        setSaved(result)
+        localStorage.removeItem(BETA_DRAFT_KEY)
       } catch (caught) {
         if (caught instanceof ChannelBuilderApiError) {
           const field = caught.details.field ? ` (${caught.details.field})` : ''
@@ -310,6 +348,10 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
           프리셋에서 시작해 청취 목적과 변하지 않을 제작 원칙을 정하세요.
           채널의 정체성은 일관되게 유지하면서, 에피소드마다 새롭고 다양한 음악을 만들 수 있습니다.
         </p>
+        <div className={`mt-4 inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${user ? 'border-emerald-400/20 bg-emerald-400/10 text-emerald-200' : 'border-amber-400/20 bg-amber-400/10 text-amber-200'}`}>
+          <UserRoundCheck className="h-3.5 w-3.5" />
+          {authLoading ? '로그인 확인 중' : user ? '베타 계정 연결됨 · 저장 가능' : '작성 가능 · 저장할 때 한 번 로그인'}
+        </div>
       </header>
 
       <div className="mb-8 grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -568,10 +610,13 @@ export function ChannelBuilder({ presets }: ChannelBuilderProps) {
                     <Link href={`/channel-builder/${saved.channelId}/episodes/new`} className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-emerald-300 px-3 py-2.5 text-xs font-semibold text-emerald-950 transition hover:bg-emerald-200">
                       첫 Episode 설계 <ArrowRight className="h-3.5 w-3.5" />
                     </Link>
+                    <Link href={`/autopilot?channelBlueprintId=${encodeURIComponent(saved.channelId)}`} className="mt-2 flex items-center justify-center gap-2 rounded-lg border border-emerald-300/30 bg-emerald-950/30 px-3 py-2.5 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-900/40">
+                      유튜브 오토파일럿 연결 <ArrowRight className="h-3.5 w-3.5" />
+                    </Link>
                   </div>
                 ) : (
                   <button type="button" disabled={isPending} onClick={save} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-violet-600 to-fuchsia-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-violet-900/30 transition hover:brightness-110 disabled:cursor-wait disabled:opacity-60">
-                    <Save className="h-4 w-4" />{isPending ? 'DNA 저장 중…' : 'Channel DNA 저장'}
+                    <Save className="h-4 w-4" />{isPending ? 'DNA 저장 중…' : user ? 'Channel DNA 저장' : '로그인하고 Channel DNA 저장'}
                   </button>
                 )}
                 {error ? <p role="alert" className="mt-3 rounded-lg bg-red-500/10 p-3 text-xs leading-5 text-red-300">{error}</p> : null}

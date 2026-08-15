@@ -65,6 +65,7 @@ interface AutomationSettings {
   branding_metadata?: any
   target_region?: string
   variation_strength?: string
+  channel_blueprint_id?: string | null
 }
 
 interface AutomationLog {
@@ -645,6 +646,7 @@ function getBrandingNamesFallback(region: string, namingLength: string, pr: any)
 function AutopilotContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const incomingChannelBlueprintId = searchParams.get('channelBlueprintId')
   
   // 상태 관리
   const [channel, setChannel] = useState<YoutubeChannel | null>(null)
@@ -1638,7 +1640,8 @@ function AutopilotContent() {
           monetizationLinks: [],
           brandingMetadata: {
             selectedChannelName: channel.channel_title
-          }
+          },
+          channelBlueprintId: incomingChannelBlueprintId || undefined
         })
       })
       const data = await res.json()
@@ -1720,7 +1723,8 @@ function AutopilotContent() {
             selectedChannelName,
             bannerUrls,
             profileUrls
-          }
+          },
+          channelBlueprintId: incomingChannelBlueprintId || automation?.channel_blueprint_id || undefined
         })
       })
       const data = await res.json()
@@ -1795,6 +1799,16 @@ function AutopilotContent() {
         <h1 className="text-4xl font-bold text-white mb-2">YouTube Auto-Pilot</h1>
         <p className="text-zinc-400">채널의 고유 브랜딩 기획부터 정기 음악/영상 생성 및 유튜브 자동 포스팅까지 올스톱 자율 운영 컨트롤 보드.</p>
       </header>
+
+      {incomingChannelBlueprintId ? (
+        <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/20 bg-emerald-400/[0.08] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-sm font-bold text-emerald-200">Channel DNA 연결 준비 완료</p>
+            <p className="mt-1 text-xs text-emerald-100/60">유튜브 채널과 업로드 일정을 저장하면 이 DNA를 자동화 기준으로 함께 연결합니다.</p>
+          </div>
+          <span className="max-w-full truncate rounded-lg bg-black/30 px-3 py-2 font-mono text-[10px] text-emerald-200/70">{incomingChannelBlueprintId}</span>
+        </div>
+      ) : null}
 
       {/* ─── 로딩 진행 인디케이터 (상단 미세 진행바) ─── */}
       {isLoading && (

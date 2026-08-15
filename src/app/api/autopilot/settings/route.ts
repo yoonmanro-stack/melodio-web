@@ -98,7 +98,8 @@ export async function POST(request: NextRequest) {
       shortsActive, 
       monetizationLinks,
       brandingMetadata,
-      automationType = 'standard'
+      automationType = 'standard',
+      channelBlueprintId
     } = payload
 
     if (!channelId || !audioPresetId || !uploadDays || !uploadTime) {
@@ -121,6 +122,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '유효하지 않은 유튜브 채널입니다.' }, { status: 403 })
     }
 
+    if (channelBlueprintId) {
+      const { data: ownedBlueprint, error: blueprintError } = await serviceSupabase
+        .from('channel_blueprints')
+        .select('id')
+        .eq('id', channelBlueprintId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (blueprintError) throw new Error(`Channel DNA 확인 실패: ${blueprintError.message}`)
+      if (!ownedBlueprint) {
+        return NextResponse.json({ error: '연결할 수 없는 Channel DNA입니다.' }, { status: 403 })
+      }
+    }
+
     // youtube_automations 저장
     const { data: automation, error: dbError } = await serviceSupabase
       .from('youtube_automations')
@@ -138,6 +153,10 @@ export async function POST(request: NextRequest) {
         monetization_links: monetizationLinks || [],
         branding_metadata: brandingMetadata || {},
         automation_type: automationType,
+        ...(channelBlueprintId ? {
+          channel_blueprint_id: channelBlueprintId,
+          channel_episode_strategy: { enabled: true, mode: 'beta_simple' }
+        } : {}),
         created_at: new Date().toISOString()
       }, {
         onConflict: 'channel_id'
