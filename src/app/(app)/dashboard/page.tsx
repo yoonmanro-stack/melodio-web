@@ -11,6 +11,7 @@ import {
 import { registerActiveAudio } from "@/lib/globalAudio";
 import MultiTrackPlayer from "@/components/MultiTrackPlayer";
 import DashboardViralCarousel, { type DashboardViralVideo } from "@/components/dashboard/DashboardViralCarousel";
+import DashboardChannelDnaPanel from "@/components/dashboard/DashboardChannelDnaPanel";
 
 const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg 
@@ -1222,6 +1223,8 @@ export default function Home() {
           </Link>
         </div>
       </div>
+
+      <DashboardChannelDnaPanel />
 
       <DashboardViralCarousel
         videos={dashboardViralVideos}

@@ -14,6 +14,11 @@ export async function saveChannelDraftCommand(input: unknown) {
   return service.saveChannelDraft(draft)
 }
 
+export async function listChannelSummariesCommand() {
+  const service = await getChannelBuilderService()
+  return service.listChannelSummaries()
+}
+
 export async function createDnaVersionCommand(channelId: unknown, input: unknown) {
   const validChannelId = parseUuid(channelId, 'channelId')
   const { dna, changeSummary } = parseDnaVersionInput(input)

@@ -15,8 +15,27 @@ import {
 } from './validators'
 
 type ChannelSystemClient = SupabaseClient<Database>
+type ChannelBlueprintRow = Database['public']['Tables']['channel_blueprints']['Row']
 type DnaVersionRow = Database['public']['Tables']['channel_dna_versions']['Row']
 type ListenerIntentRow = Database['public']['Tables']['listener_intent_profiles']['Row']
+
+export interface ChannelDashboardSummary {
+  id: string
+  channelName: string
+  promise: string
+  conceptPresetId: string | null
+  status: ChannelBlueprintRow['status']
+  latestDnaVersion: number
+  listenerIntent: {
+    id: string
+    name: string
+    primaryPurpose: ListenerIntentRow['primary_purpose']
+    activity: string
+    environment: string
+  } | null
+  createdAt: string
+  updatedAt: string
+}
 
 export interface SavedChannelDraft {
   channelId: string
@@ -171,6 +190,88 @@ export function createChannelBuilderService(client: ChannelSystemClient) {
   }
 
   return {
+    /** 로그인 사용자가 저장한 Channel DNA 프로젝트를 최신순으로 요약한다. */
+    async listChannelSummaries(): Promise<ChannelDashboardSummary[]> {
+      const userId = await requireAuthenticatedUser(client)
+      const { data: channels, error: channelError } = await client
+        .from('channel_blueprints')
+        .select('*')
+        .eq('user_id', userId)
+        .order('updated_at', { ascending: false })
+
+      if (channelError) {
+        throw new ChannelSystemPersistenceError(
+          `Channel DNA 목록 조회에 실패했습니다: ${channelError.message}`,
+          channelError.code,
+        )
+      }
+      if (!channels.length) return []
+
+      const channelIds = channels.map((channel) => channel.id)
+      const [dnaResult, intentResult] = await Promise.all([
+        client
+          .from('channel_dna_versions')
+          .select('channel_id, version')
+          .in('channel_id', channelIds)
+          .order('version', { ascending: false }),
+        client
+          .from('listener_intent_profiles')
+          .select('id, channel_id, name, primary_purpose, activity, environment, updated_at')
+          .in('channel_id', channelIds)
+          .order('updated_at', { ascending: false }),
+      ])
+
+      if (dnaResult.error) {
+        throw new ChannelSystemPersistenceError(
+          `Channel DNA 버전 조회에 실패했습니다: ${dnaResult.error.message}`,
+          dnaResult.error.code,
+        )
+      }
+      if (intentResult.error) {
+        throw new ChannelSystemPersistenceError(
+          `Listener Intent 조회에 실패했습니다: ${intentResult.error.message}`,
+          intentResult.error.code,
+        )
+      }
+
+      const latestVersionByChannel = new Map<string, number>()
+      for (const version of dnaResult.data) {
+        if (!latestVersionByChannel.has(version.channel_id)) {
+          latestVersionByChannel.set(version.channel_id, version.version)
+        }
+      }
+
+      const intentByChannel = new Map<string, (typeof intentResult.data)[number]>()
+      for (const intent of intentResult.data) {
+        if (!intentByChannel.has(intent.channel_id)) {
+          intentByChannel.set(intent.channel_id, intent)
+        }
+      }
+
+      return channels.map((channel) => {
+        const intent = intentByChannel.get(channel.id)
+        return {
+          id: channel.id,
+          channelName: channel.channel_name,
+          promise: channel.promise,
+          conceptPresetId: channel.concept_preset_id,
+          status: channel.status,
+          latestDnaVersion: latestVersionByChannel.get(channel.id) ?? 1,
+          listenerIntent: intent
+            ? {
+                id: intent.id,
+                name: intent.name,
+                primaryPurpose: intent.primary_purpose,
+                activity: intent.activity,
+                environment: intent.environment,
+              }
+            : null,
+          createdAt: channel.created_at,
+          updatedAt: channel.updated_at,
+        }
+      })
+    },
+
     /** 채널, DNA v1, Listener Intent를 하나의 DB 트랜잭션으로 생성한다. */
     async saveChannelDraft(draft: LegacyPresetChannelDraft): Promise<SavedChannelDraft> {
       await requireAuthenticatedUser(client)
