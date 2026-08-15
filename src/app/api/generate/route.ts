@@ -182,7 +182,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
 
   // Exclude 프롬프트 처리
   const baseStylePrompt = payload.excludePrompt?.trim()
-    ? `${payload.stylePrompt}, ${payload.excludePrompt.trim()}`
+    ? `${payload.stylePrompt}, avoid: ${payload.excludePrompt.trim()}`
     : payload.stylePrompt
 
   // Match playbooks from DB (Obsidian synced) to enrich tags ONLY if prompt is short and unmastered
@@ -343,13 +343,16 @@ async function handleLyria(payload: PromptPayload) {
 }
 
 export async function POST(request: NextRequest) {
+  let claimedQueueItemId: string | null = null
+  let sunoTaskAccepted = false
   try {
     const rawBody = await request.json()
     const payload = rawBody as PromptPayload
     const selections = rawBody.selections
-    const lyricsSections = rawBody.lyricsSections
+    let lyricsSections = rawBody.lyricsSections
     const vdCode = rawBody.vdCode
     const noiseRatio = rawBody.noiseRatio
+    const queueItemId = typeof rawBody.queueItemId === 'string' ? rawBody.queueItemId : null
 
     // 화면의 구조화된 가사 섹션을 서버의 단일 기준으로 사용한다. 클라이언트에서
     // 조립한 lyricsPrompt가 비었거나 오래된 상태여도 화면에 표시된 섹션과 동일한
@@ -382,7 +385,13 @@ export async function POST(request: NextRequest) {
     let generatedTags = '';
 
     const needTitle = !payload.title || !payload.title.trim();
-    const generated = await generateSongMetadata(payload.stylePrompt, payload.lyricsPrompt || '');
+    const generated = queueItemId
+      ? {
+          title: payload.title || 'Untitled',
+          description: 'Channel Builder에서 승인된 Episode Track Blueprint',
+          tags: payload.stylePrompt.split(',').slice(0, 4).join(', '),
+        }
+      : await generateSongMetadata(payload.stylePrompt, payload.lyricsPrompt || '');
     if (needTitle) {
       payload.title = generated.title;
     }
@@ -393,6 +402,38 @@ export async function POST(request: NextRequest) {
     // Supabase 클라이언트
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
+
+    if (queueItemId) {
+      if (!user) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
+      const { data: queueItem, error: queueError } = await supabase
+        .from('generation_queue_items')
+        .select('id,title,style_prompt,exclude_prompt,lyrics_prompt,lyrics_sections,is_instrumental,status')
+        .eq('id', queueItemId)
+        .single()
+      if (queueError || !queueItem) {
+        return NextResponse.json({ error: 'Generation Queue Item을 찾을 수 없습니다.' }, { status: 404 })
+      }
+      const canonicalMatch = queueItem.title === payload.title
+        && queueItem.style_prompt === payload.stylePrompt
+        && queueItem.exclude_prompt === (payload.excludePrompt || '')
+        && queueItem.is_instrumental === payload.isInstrumental
+      if (!canonicalMatch) {
+        return NextResponse.json({ error: '승인된 Queue 생성 패키지와 요청 내용이 일치하지 않습니다.' }, { status: 409 })
+      }
+      payload.lyricsPrompt = queueItem.lyrics_prompt
+      lyricsSections = queueItem.lyrics_sections
+      if (queueItem.status !== 'ready') {
+        return NextResponse.json({ error: '이미 제출되었거나 아직 준비되지 않은 Queue Item입니다.' }, { status: 409 })
+      }
+      const { data: claimed, error: claimError } = await supabase
+        .from('generation_queue_items')
+        .update({ status: 'submitting', error_message: null })
+        .eq('id', queueItemId).eq('status', 'ready').select('id').maybeSingle()
+      if (claimError || !claimed) {
+        return NextResponse.json({ error: '다른 요청이 이 곡을 먼저 제출했습니다.' }, { status: 409 })
+      }
+      claimedQueueItemId = queueItemId
+    }
 
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -470,6 +511,7 @@ export async function POST(request: NextRequest) {
 
     // ─── Suno: 비동기 제출 ────────────────────────────────────────────────────
     const { taskId } = await submitSunoJob(payload, matchedPlaybook)
+    sunoTaskAccepted = true
 
     // DB에 'generating' 상태로 저장 (워커가 폴링하여 완료 처리)
     // source_audio_url에 'suno:{taskId}' 형식으로 Suno task ID 저장
@@ -501,6 +543,7 @@ export async function POST(request: NextRequest) {
       isPublic: rawBody.isPublic !== undefined ? rawBody.isPublic : true,
       youtubeMainTitle: rawBody.youtubeMainTitle || null,
       tracklistText: rawBody.tracklistText || null,
+      queueItemId,
     })
 
     const trackTitle = payload.title?.trim() || payload.stylePrompt.slice(0, 60)
@@ -522,6 +565,19 @@ export async function POST(request: NextRequest) {
     if (genError) {
       console.error('[API/generate] INSERT 에러:', genError.message, genError.details)
       throw new Error(`데이터베이스 저장 실패: ${genError.message}`)
+    }
+
+    if (claimedQueueItemId && genData?.id) {
+      const { error: queueUpdateError } = await serviceSupabase
+        .from('generation_queue_items')
+        .update({
+          generation_id: genData.id,
+          status: 'generating',
+          submitted_at: new Date().toISOString(),
+          error_message: null,
+        })
+        .eq('id', claimedQueueItemId)
+      if (queueUpdateError) console.error('[API/generate] Queue 연결 실패:', queueUpdateError.message)
     }
 
     /*
@@ -551,6 +607,17 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     const message = error instanceof Error ? error.message : '알 수 없는 오류'
     console.error('[API/generate] 에러:', message)
+    if (claimedQueueItemId) {
+      try {
+        const supabase = await createClient()
+        await supabase.from('generation_queue_items').update({
+          status: sunoTaskAccepted ? 'submission_failed' : 'ready',
+          error_message: message,
+        }).eq('id', claimedQueueItemId).eq('status', 'submitting')
+      } catch (queueError) {
+        console.error('[API/generate] Queue 실패 상태 기록 오류:', queueError)
+      }
+    }
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

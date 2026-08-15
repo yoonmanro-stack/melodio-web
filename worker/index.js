@@ -13,7 +13,7 @@
 
 require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
-const { exec } = require('child_process');
+const { exec, execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -666,6 +666,33 @@ const SUNO_API_URL = process.env.SUNO_API_URL || "https://api.302.ai";
 
 let isPollingSuno = false;
 
+async function linkGenerationQueueCandidate(meta, generationId, slot, clip, quality, recommended) {
+  const queueItemId = meta?.queueItemId;
+  if (!queueItemId || !generationId || !clip?.audio_url) return;
+
+  const duration = Number.parseFloat(clip.duration);
+  const { error } = await supabase.from('generation_queue_candidates').upsert({
+    queue_item_id: queueItemId,
+    generation_id: generationId,
+    candidate_slot: slot,
+    audio_url: clip.audio_url,
+    duration_seconds: Number.isFinite(duration) ? duration : null,
+    audio_grade: quality?.grade || null,
+    clipping_count: quality?.clippingCount ?? null,
+    dissonance_score: quality?.dissonanceScore ?? null,
+    is_recommended: recommended,
+  }, { onConflict: 'queue_item_id,candidate_slot' });
+
+  if (error) {
+    log('ERROR', `[GENERATION QUEUE] 후보 ${slot} 연결 실패`, { error: error.message });
+    return;
+  }
+  await supabase.from('generation_queue_items').update({
+    status: 'awaiting_selection',
+    error_message: null,
+  }).eq('id', queueItemId).in('status', ['submitting', 'generating', 'submission_failed']);
+}
+
 async function pollSunoGenerations() {
   if (!SUNO_API_KEY) {
     return;
@@ -722,6 +749,17 @@ async function pollSunoGenerations() {
         if (anyFailed) {
           log("ERROR", `[SUNO POLL] 생성 실패 (에러 또는 URL 누락)`, { id: row.id.slice(0, 8) });
           await supabase.from("generations").update({ status: "failed" }).eq("id", row.id);
+          try {
+            const failedMeta = row.license_hash ? JSON.parse(row.license_hash) : {};
+            if (failedMeta.queueItemId) {
+              await supabase.from('generation_queue_items').update({
+                status: 'generation_failed',
+                error_message: 'Suno A/B 생성에 실패했습니다.',
+              }).eq('id', failedMeta.queueItemId).eq('status', 'generating');
+            }
+          } catch (metaError) {
+            log('WARN', '[GENERATION QUEUE] 실패 상태 연결 오류', metaError.message);
+          }
           continue;
         }
 
@@ -1075,6 +1113,8 @@ async function pollSunoGenerations() {
 
             if (upErr) {
               log("ERROR", `[SUNO POLL] 우승 곡 DB 업데이트 실패!`, { error: upErr.message });
+            } else {
+              await linkGenerationQueueCandidate(metaObj, row.id, 'A', winner.clip, winner.quality, true);
             }
           }
 
@@ -1116,7 +1156,7 @@ async function pollSunoGenerations() {
                     || (!isPlaceholderCover(row.cover_art_url) ? row.cover_art_url : null)
                     || row.cover_art_url);
 
-              const { error: insErr } = await supabase.from("generations").insert({
+              const { data: loserRow, error: insErr } = await supabase.from("generations").insert({
                 user_id: row.user_id || null,
                 title: loserTitle,
                 audio_url: loser.clip.audio_url,
@@ -1130,10 +1170,12 @@ async function pollSunoGenerations() {
                 audio_grade: loser.quality.grade,
                 retry_count: currentRetryCount,
                 cover_art_url: loserCoverUrl
-              });
+              }).select('id').single();
 
               if (insErr) {
                 log("ERROR", `[SUNO POLL] 서브 곡 INSERT 실패!`, { error: insErr.message });
+              } else {
+                await linkGenerationQueueCandidate(metaObj, loserRow?.id, 'B', loser.clip, loser.quality, false);
               }
             }
           }
@@ -1376,3 +1418,115 @@ async function processExistingPendingVideo() {
 // 시작 후 5초 대기 후 비디오 PENDING 스캔, 이후 30초마다 반복
 setTimeout(processExistingPendingVideo, 5000);
 setInterval(processExistingPendingVideo, 30000);
+
+// ─── Episode Assembly: 확정 Master 순차 병합 ────────────────────────────────
+let isProcessingAssemblies = false;
+
+function runFile(command, args) {
+  return new Promise((resolve, reject) => {
+    execFile(command, args, { maxBuffer: 10 * 1024 * 1024 }, (error, stdout, stderr) => {
+      if (error) return reject(new Error(stderr || error.message));
+      resolve(stdout);
+    });
+  });
+}
+
+function assemblyTimestamp(seconds) {
+  const total = Math.max(0, Math.floor(seconds));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const remainder = total % 60;
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(remainder).padStart(2, '0')}`
+    : `${minutes}:${String(remainder).padStart(2, '0')}`;
+}
+
+async function processEpisodeAssembly(assembly) {
+  const workDir = path.join(os.tmpdir(), `melodio-assembly-${assembly.id}`);
+  fs.mkdirSync(workDir, { recursive: true });
+  const { data: claimed } = await supabase.from('episode_assemblies').update({
+    status: 'assembling', error_message: null,
+  }).eq('id', assembly.id).eq('status', 'queued').select('id').maybeSingle();
+  if (!claimed) return;
+
+  try {
+    const { data: items, error } = await supabase.from('episode_assembly_items')
+      .select('*').eq('assembly_id', assembly.id).order('track_number');
+    if (error || !items?.length) throw new Error(error?.message || 'Assembly Track이 없습니다.');
+
+    const localPaths = [];
+    let cursor = 0;
+    const tracklist = [];
+    for (const item of items) {
+      const localPath = path.join(workDir, `track-${String(item.track_number).padStart(3, '0')}.audio`);
+      const response = await axios.get(item.audio_url, { responseType: 'stream', timeout: 120000 });
+      await pipeline(response.data, fs.createWriteStream(localPath));
+      const probe = await runFile('ffprobe', [
+        '-v', 'error', '-show_entries', 'format=duration',
+        '-of', 'default=noprint_wrappers=1:nokey=1', localPath,
+      ]);
+      const duration = Number.parseFloat(String(probe).trim());
+      if (!Number.isFinite(duration) || duration <= 0) throw new Error(`Track ${item.track_number} 길이 측정 실패`);
+      const start = cursor;
+      cursor += duration;
+      tracklist.push(`${assemblyTimestamp(start)} ${item.title}`);
+      await supabase.from('episode_assembly_items').update({
+        duration_seconds: duration,
+        start_seconds: start,
+        end_seconds: cursor,
+      }).eq('id', item.id);
+      localPaths.push(localPath);
+    }
+
+    const listPath = path.join(workDir, 'concat.txt');
+    fs.writeFileSync(listPath, localPaths.map((file) => `file '${file}'`).join('\n'));
+    const outputPath = path.join(workDir, 'episode-master.mp3');
+    await runFile('ffmpeg', [
+      '-y', '-f', 'concat', '-safe', '0', '-i', listPath,
+      '-vn', '-c:a', 'libmp3lame', '-b:a', '320k', outputPath,
+    ]);
+
+    const remotePath = `channel-episodes/${assembly.user_id}/${assembly.episode_id}/${assembly.id}.mp3`;
+    const outputBuffer = fs.readFileSync(outputPath);
+    const { error: uploadError } = await supabase.storage.from('melodio-assets').upload(
+      remotePath, outputBuffer, { contentType: 'audio/mpeg', upsert: true },
+    );
+    if (uploadError) throw new Error(`Assembly 업로드 실패: ${uploadError.message}`);
+    const outputUrl = supabase.storage.from('melodio-assets').getPublicUrl(remotePath).data.publicUrl;
+    await supabase.from('episode_assemblies').update({
+      status: 'completed',
+      total_duration_seconds: cursor,
+      tracklist_text: tracklist.join('\n'),
+      output_audio_url: outputUrl,
+      completed_at: new Date().toISOString(),
+      error_message: null,
+    }).eq('id', assembly.id);
+    await supabase.from('channel_episodes').update({ status: 'completed' }).eq('id', assembly.episode_id);
+    log('INFO', '[EPISODE ASSEMBLY] 조립 완료', { id: assembly.id, tracks: items.length, seconds: cursor });
+  } catch (error) {
+    await supabase.from('episode_assemblies').update({
+      status: 'failed', error_message: error.message,
+    }).eq('id', assembly.id);
+    log('ERROR', '[EPISODE ASSEMBLY] 조립 실패', { id: assembly.id, error: error.message });
+  } finally {
+    fs.rmSync(workDir, { recursive: true, force: true });
+  }
+}
+
+async function processQueuedEpisodeAssemblies() {
+  if (isProcessingAssemblies) return;
+  isProcessingAssemblies = true;
+  try {
+    const { data, error } = await supabase.from('episode_assemblies').select('*')
+      .eq('status', 'queued').order('created_at').limit(2);
+    if (error) throw error;
+    for (const assembly of data || []) await processEpisodeAssembly(assembly);
+  } catch (error) {
+    log('ERROR', '[EPISODE ASSEMBLY] Queue 조회 실패', error.message);
+  } finally {
+    isProcessingAssemblies = false;
+  }
+}
+
+setTimeout(processQueuedEpisodeAssemblies, 7000);
+setInterval(processQueuedEpisodeAssemblies, 15000);

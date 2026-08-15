@@ -703,7 +703,7 @@ export default function Home() {
       if (history.length === 0) {
         setIsHistoryLoading(true);
       }
-      const res = await fetch('/api/generations');
+      const res = await fetch('/api/generations?scope=dashboard');
       if (res.ok) {
         const { generations } = await res.json();
         const historyList = generations || [];

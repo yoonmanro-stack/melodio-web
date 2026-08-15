@@ -13,18 +13,17 @@ import {
   CreditCard,
   LogOut,
   X,
-  Hexagon,
   Settings,
   HelpCircle,
   Fingerprint,
   ShieldCheck,
-  Library,
   BarChart3,
   Globe,
   Radio,
   Zap,
   Mic2,
   Compass,
+  Workflow,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -35,6 +34,7 @@ const navItems = [
   { name: "Persona Lab", href: "/persona", icon: Sparkles },
   { name: "Audio Forge Pro", href: "/style-library", icon: Music4 },
   { name: "Preset Studio", href: "/audio", icon: Sparkles },
+  { name: "Channel Builder", href: "/channel-builder", icon: Workflow },
   { name: "Viral & Trend Zone", href: "/viral", icon: Zap },
   { name: "Japan BGM Forge", href: "/japan", icon: Globe },
   { name: "Longform Studio", href: "/studio", icon: Film },

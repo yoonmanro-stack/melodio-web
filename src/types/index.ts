@@ -145,3 +145,6 @@ export interface GeneratedTrack {
   coverArtUrl?: string
   createdAt: string
 }
+
+// Channel DNA -> Listener Intent -> Episode -> Track Blueprint 도메인 타입
+export * from './channel-system'

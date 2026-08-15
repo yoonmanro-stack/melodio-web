@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
+    const scope = searchParams.get('scope') === 'dashboard' ? 'dashboard' : 'public'
 
     // 현재 세션의 user_id 파악
     let loggedInUserId: string | null = null
@@ -95,10 +96,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ generation: data, sibling })
     }
 
-    const { data, error } = await serviceSupabase
+    if (scope === 'dashboard' && !loggedInUserId) {
+      return NextResponse.json({ error: '로그인이 필요합니다' }, { status: 401 })
+    }
+
+    let listQuery = serviceSupabase
       .from('generations')
       .select('*')
       .order('created_at', { ascending: false })
+    if (scope === 'dashboard') listQuery = listQuery.eq('user_id', loggedInUserId)
+    const { data, error } = await listQuery
 
     if (error) {
       console.error('[API/generations] SELECT 에러:', error.message)
@@ -108,21 +115,17 @@ export async function GET(request: NextRequest) {
     const filtered = (data || [])
       .filter(item => !item.title?.includes('VoiceDNA Demo'))
       .filter(item => {
-        // 비공개(is_public === false 또는 metadata.isPublic === false 또는 license_hash.isPublic === false) 처리:
-        // 본인(loggedInUserId === item.user_id)인 경우 본인 대시보드 조회를 위해 노출 허용.
-        // 타인이나 비로그인 방문자에게는 비공개 음원 원천 노출 차단.
+        // Dashboard는 소유자의 모든 작업을 보존한다. 공개 여부는 공개 목록에만 적용한다.
+        if (scope === 'dashboard') return true
         let metaPublic = true
         if (item.license_hash) {
           try { metaPublic = JSON.parse(item.license_hash).isPublic !== false } catch {}
         }
         const isPrivate = item.is_public === false || item.metadata?.isPublic === false || !metaPublic;
-        if (isPrivate) {
-          return loggedInUserId && item.user_id === loggedInUserId;
-        }
-        return true;
+        return !isPrivate
       })
       .map(item => {
-        if (!loggedInUserId || item.user_id !== loggedInUserId) {
+        if (scope === 'public') {
           const { user_id, email, user_email, ...rest } = item
           return rest
         }
@@ -229,6 +232,27 @@ export async function PATCH(request: NextRequest) {
 
     if (!existing || existing.user_id !== user.id) {
       return NextResponse.json({ error: '권한이 없습니다 (소유자가 아님)' }, { status: 403 })
+    }
+
+    if (is_public !== undefined) {
+      const { data: managedCandidate } = await serviceSupabase
+        .from('generation_queue_candidates')
+        .select('id,queue_item_id')
+        .eq('generation_id', id)
+        .maybeSingle()
+      if (managedCandidate) {
+        const { data: queueItem } = await serviceSupabase
+          .from('generation_queue_items')
+          .select('selected_candidate_id')
+          .eq('id', managedCandidate.queue_item_id)
+          .single()
+        const canonicalPublic = queueItem?.selected_candidate_id === managedCandidate.id
+        if (Boolean(is_public) !== canonicalPublic) {
+          return NextResponse.json({
+            error: 'Channel Builder A/B 공개 상태는 Generation Console의 Master 선택으로만 변경할 수 있습니다.',
+          }, { status: 409 })
+        }
+      }
     }
 
     const updatePayload: any = {}
