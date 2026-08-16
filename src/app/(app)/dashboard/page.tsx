@@ -10,7 +10,6 @@ import {
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
 import MultiTrackPlayer from "@/components/MultiTrackPlayer";
-import DashboardViralCarousel, { type DashboardViralVideo } from "@/components/dashboard/DashboardViralCarousel";
 
 const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg 
@@ -53,7 +52,6 @@ type Generation = {
   audio_grade?: string;
   clipping_count?: number;
   cover_art_url?: string | null;
-  video_url?: string | null;
   dissonance_score?: number;
   retry_count?: number;
 };
@@ -575,7 +573,7 @@ export default function Home() {
   const [userId, setUserId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [categoryTab, setCategoryTab] = useState<'all' | 'audio-forge' | 'style-library' | 'japan'>('all');
+  const [categoryTab, setCategoryTab] = useState<'all' | 'audio-forge' | 'style-library' | 'japan' | 'viral-cf'>('all');
   const [sortBy, setSortBy] = useState('newest');
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -753,7 +751,7 @@ export default function Home() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `${promptText}, premium music album cover art, clear luminous exposure, fresh refined colors, crisp focal subject, elegant centered composition, bright and polished visual finish`,
+          prompt: `${promptText}, 3d modern visual, artistic music album cover art, premium digital art, centered composition`,
           size: '1:1',
           imageType: 'thumbnail',
           channelTitle: item.title || 'Melodio Track'
@@ -977,29 +975,10 @@ export default function Home() {
     return 'audio-forge'; // Default
   };
 
-  const dashboardViralVideos: DashboardViralVideo[] = history
-    .filter((item) => !!item.user_id && getTrackCategory(item) === 'viral-cf')
-    .map((item) => {
-      let meta: any = {};
-      if (item.license_hash) {
-        try { meta = JSON.parse(item.license_hash); } catch { /* ignore */ }
-      }
-      return {
-        id: item.id,
-        title: item.title || 'Untitled Viral Short',
-        videoUrl: item.video_url || meta.video_url || meta.grok_video_url || meta.videoUrl || '',
-        posterUrl: item.cover_art_url || getFallbackCoverArt(item),
-        createdAt: item.created_at,
-        isPublic: meta.isPublic !== false,
-      };
-    })
-    .filter((item) => !!item.videoUrl)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
   // ─── 클라이언트 사이드 검색, 필터, 정렬 ───
-  let filtered = history
-    .filter((item) => getTrackCategory(item) !== 'viral-cf')
-    .filter(item => (item.title || 'Untitled').toLowerCase().includes(searchQuery.toLowerCase()));
+  let filtered = history.filter(item => 
+    (item.title || 'Untitled').toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   if (statusFilter !== 'all') {
     filtered = filtered.filter(item => item.status === statusFilter);
@@ -1222,14 +1201,6 @@ export default function Home() {
           </Link>
         </div>
       </div>
-
-      <DashboardViralCarousel
-        videos={dashboardViralVideos}
-        onOpenDetails={(id) => {
-          const target = history.find((item) => item.id === id);
-          if (target) setDetailItem(target);
-        }}
-      />
       
       {/* ─── Suno 스타일 곡 라이브러리 패널 (Overhaul) ─── */}
       <div className="mt-12 glass-panel p-6">
@@ -1243,7 +1214,7 @@ export default function Home() {
               </span>
             </div>
 
-            {/* 바이럴 영상은 상단 전용 그리드로 분리하고 일반 음원 메뉴만 유지 */}
+            {/* 카테고리별 분리 탭 (5대 메뉴 일치) */}
             <div className="flex items-center gap-1 bg-black/40 border border-white/5 p-1 rounded-xl w-fit flex-wrap">
               <button
                 onClick={() => { setCategoryTab('all'); setCurrentPage(1); }}
@@ -1285,6 +1256,16 @@ export default function Home() {
               >
                 <span>일본 BGM 포지</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse" />
+              </button>
+              <button
+                onClick={() => { setCategoryTab('viral-cf'); setCurrentPage(1); }}
+                className={`px-3 py-1.5 text-[11px] font-bold rounded-lg transition-all ${
+                  categoryTab === 'viral-cf'
+                    ? 'bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/20'
+                    : 'text-zinc-400 hover:text-zinc-200 border border-transparent'
+                }`}
+              >
+                바이럴 & 트렌드 존
               </button>
             </div>
           </div>
@@ -1381,9 +1362,9 @@ export default function Home() {
                     >
                       {/* 앨범 커버 이미지 또는 장르 컨셉 자동 매핑 (대안 B) 및 AI 재생성 트리거 */}
                       <FadeInImage 
-                        src={(item.cover_art_url && !item.cover_art_url.includes('unsplash.com')) ? item.cover_art_url : getFallbackCoverArt(item)}
+                        src={(item.cover_art_url && !item.cover_art_url.includes('unsplash.com')) ? item.cover_art_url : getFallbackCoverArt(item)} 
                         alt={item.title || 'Track Art'} 
-                        className="absolute inset-0 w-full h-full object-cover" 
+                        className="absolute inset-0 w-full h-full object-cover object-top" 
                       />
 
                       {generatingCovers[item.id] && (
@@ -1401,7 +1382,7 @@ export default function Home() {
                             e.stopPropagation(); // 플레이어 실행 차단
                             handleGenerateCoverArt(item);
                           }}
-                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-white/90 hover:bg-white hover:scale-105 text-zinc-800 hover:text-fuchsia-600 flex items-center justify-center border border-white/80 opacity-0 group-hover/row:opacity-100 transition-all z-20 shadow-md backdrop-blur-sm"
+                          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/80 hover:bg-fuchsia-600 hover:scale-105 text-white flex items-center justify-center border border-white/20 opacity-0 group-hover/row:opacity-100 transition-all z-20 shadow-md"
                           title="컨셉 맞춤형 AI 앨범 커버 생성"
                         >
                           <span className="text-[10px]">🪄</span>
@@ -1437,13 +1418,13 @@ export default function Home() {
                           )}
 
                           {/* 호버 시 재생 아이콘 레이어 */}
-                          <div className={`absolute inset-0 flex items-center justify-center transition-opacity duration-300 ${
+                          <div className={`absolute inset-0 bg-black/25 flex items-center justify-center transition-opacity duration-300 ${
                             playingTrackId === item.id && isTrackPlaying ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100'
                           }`}>
                             {playingTrackId === item.id && isTrackPlaying ? (
-                              <Pause className="w-10 h-10 rounded-full bg-white/90 p-2.5 text-fuchsia-600 fill-current shadow-lg backdrop-blur-sm" />
+                              <Pause className="w-5 h-5 text-fuchsia-400 fill-fuchsia-400" />
                             ) : (
-                              <Play className="w-10 h-10 rounded-full bg-white/90 p-2.5 text-zinc-900 fill-current shadow-lg backdrop-blur-sm" />
+                              <Play className="w-5 h-5 text-white fill-white ml-0.5" />
                             )}
                           </div>
                         </>
@@ -1882,36 +1863,6 @@ export default function Home() {
           }
         }
 
-        const styleText = String(meta.stylePrompt || '');
-        const selectedVocals = Array.isArray(meta.selections?.vocal)
-          ? meta.selections.vocal.filter(Boolean)
-          : [];
-        const inferredVocal = meta.isInstrumental
-          ? 'Instrumental'
-          : meta.vocal
-            || (meta.voiceDna ? `Voice DNA ${meta.voiceDna}` : '')
-            || (selectedVocals.length > 0 ? selectedVocals.join(' / ') : '')
-            || (/\b(duet|duo|male and female|mixed vocal)\b/i.test(styleText) ? 'Duet / Mixed Vocal' : '')
-            || (/\b(female|woman|girl|soprano|alto)\b/i.test(styleText) ? 'Female Vocal' : '')
-            || (/\b(male|man|boy|tenor|baritone)\b/i.test(styleText) ? 'Male Vocal' : '')
-            || (/\b(choir|choral|group vocal)\b/i.test(styleText) ? 'Choir / Group Vocal' : '')
-            || 'Vocal (기록 없음)';
-        const selectedGenres = Array.isArray(meta.selections?.genre)
-          ? meta.selections.genre.filter(Boolean)
-          : [];
-        const categoryOnlyGenre = ['healing', 'focus', 'retro', 'curation', 'genre'].includes(String(meta.genre || '').toLowerCase());
-        const inferredGenre = meta.genreLabel
-          || (selectedGenres.length > 0 ? selectedGenres.join(' / ') : '')
-          || (meta.sourceMenu === 'japan' || categoryOnlyGenre ? styleText.split(',')[0]?.trim() : '')
-          || meta.genre
-          || '기록 없음';
-        const engineLabel = meta.engine === 'suno_v5'
-          ? 'Suno'
-          : meta.engine === 'lyria3'
-            ? 'Lyria'
-            : meta.engine || '기록 없음';
-        const versionLabel = meta.sunoVersion || (meta.engine === 'lyria3' ? 'Lyria 3' : '기록 없음');
-
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setDetailItem(null)}>
             <div className="bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 p-6 space-y-4 flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
@@ -2012,25 +1963,8 @@ export default function Home() {
                       }
                     }
 
-                    // 과거 초창기 곡처럼 재현 메타데이터가 없는 경우에도 탐색 경로는 제공한다.
-                    if (!displayPresetId && !displayPresetName && !meta.stylePrompt) {
-                      return (
-                        <div className="bg-white/5 rounded-xl p-3.5 border border-white/5 flex items-center justify-between gap-4">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-zinc-400 text-[10px] font-bold uppercase tracking-wider mb-1">Legacy Track</div>
-                            <div className="text-white text-sm font-semibold">원본 프리셋 정보 없음</div>
-                            <div className="text-zinc-500 text-[10px] mt-0.5">초기 생성곡은 재현 정보가 없어 Style Library에서 유사한 프리셋을 찾을 수 있습니다.</div>
-                          </div>
-                          <Link
-                            href="/style-library"
-                            className="px-3.5 py-2 bg-cyan-600/20 hover:bg-cyan-600/40 text-cyan-300 hover:text-white border border-cyan-500/20 hover:border-cyan-500/40 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0"
-                            onClick={() => setDetailItem(null)}
-                          >
-                            <span>🪄 Style Library 이동하기</span>
-                          </Link>
-                        </div>
-                      );
-                    }
+                    // 만약 이름도 없고 스타일 프롬프트도 아예 없는 과거 초창기 곡인 경우는 렌더링하지 않음
+                    if (!displayPresetId && !displayPresetName && !meta.stylePrompt) return null;
 
                     // 2. 제작 소스 메뉴 유추 (과거 곡 폴백용)
                     let resolvedMenu = sourceMenu;
@@ -2077,8 +2011,6 @@ export default function Home() {
                       let linkUrl = `/audio?preset=${encodeURIComponent(displayPresetId)}&style=${encodeURIComponent(meta.stylePrompt || '')}&name=${encodeURIComponent(displayPresetName || '')}${meta.excludePrompt ? `&exclude=${encodeURIComponent(meta.excludePrompt)}` : ''}`;
                       if (resolvedMenu === 'viral-cf' || resolvedMenu === 'viral') {
                         linkUrl = `/viral?preset=${encodeURIComponent(displayPresetId)}`;
-                      } else if (resolvedMenu === 'japan') {
-                        linkUrl = `/japan?preset=${encodeURIComponent(displayPresetId)}&style=${encodeURIComponent(meta.stylePrompt || '')}&name=${encodeURIComponent(displayPresetName || '')}`;
                       } else if (resolvedMenu === 'style-library') {
                         linkUrl = `/audio?preset=${encodeURIComponent(displayPresetId)}&sourceMenu=style-library&style=${encodeURIComponent(meta.stylePrompt || '')}&name=${encodeURIComponent(displayPresetName || '')}${meta.excludePrompt ? `&exclude=${encodeURIComponent(meta.excludePrompt)}` : ''}`;
                       }
@@ -2103,36 +2035,19 @@ export default function Home() {
 
                     // B. 프리셋은 등록되어 있었으나 현재 삭제된 상태
                     if (displayPresetId && isDeleted) {
-                      let recoveryName = 'Audio Forge';
-                      let recoveryUrl = meta.stylePrompt
-                        ? `/audio?style=${encodeURIComponent(meta.stylePrompt)}${meta.excludePrompt ? `&exclude=${encodeURIComponent(meta.excludePrompt)}` : ''}`
-                        : '/style-library';
-                      if (resolvedMenu === 'japan') {
-                        recoveryName = '일본 BGM 포지';
-                        recoveryUrl = `/japan?style=${encodeURIComponent(meta.stylePrompt || '')}&name=${encodeURIComponent(displayPresetName || '')}`;
-                      } else if (resolvedMenu === 'style-library') {
-                        recoveryName = 'Style Library';
-                        recoveryUrl = meta.stylePrompt
-                          ? `/audio?sourceMenu=style-library&style=${encodeURIComponent(meta.stylePrompt)}&name=${encodeURIComponent(displayPresetName || '')}`
-                          : '/style-library';
-                      } else if (resolvedMenu === 'viral-cf' || resolvedMenu === 'viral') {
-                        recoveryName = 'Viral & Trend Zone';
-                        recoveryUrl = `/viral?style=${encodeURIComponent(meta.stylePrompt || '')}`;
-                      }
                       return (
-                        <div className="bg-white/5 rounded-xl p-3.5 border border-amber-500/20 bg-amber-950/5 flex items-center justify-between gap-4">
+                        <div className="bg-white/5 rounded-xl p-3.5 border border-red-500/20 bg-red-950/5 flex items-center justify-between gap-4">
                           <div className="min-w-0 flex-1">
-                            <div className="text-amber-400 text-[10px] font-bold uppercase tracking-wider mb-1">Preset Recovery</div>
-                            <div className="text-zinc-200 text-sm font-semibold truncate">{displayPresetName || displayPresetId}</div>
-                            <div className="text-amber-300/80 text-[10px] mt-0.5">원본 프리셋을 찾지 못해 저장된 스타일 프롬프트로 복원합니다.</div>
+                            <div className="text-red-400 text-[10px] font-bold uppercase tracking-wider mb-1">Applied Preset (Deleted)</div>
+                            <div className="text-zinc-400 text-sm font-semibold truncate line-through">{displayPresetName || displayPresetId}</div>
+                            <div className="text-red-400/80 text-[10px] mt-0.5">이 곡에 사용된 콘텐츠(프리셋)는 이미 삭제되어 더 이상 사용할 수 없습니다.</div>
                           </div>
-                          <Link
-                            href={recoveryUrl}
-                            className="px-3.5 py-2 bg-amber-600/20 hover:bg-amber-600/40 text-amber-300 hover:text-white border border-amber-500/20 hover:border-amber-500/40 rounded-xl text-xs font-black transition-all flex items-center gap-1.5 shrink-0"
-                            onClick={() => setDetailItem(null)}
+                          <button 
+                            disabled
+                            className="px-3.5 py-2 bg-zinc-800 text-zinc-500 border border-zinc-700/50 rounded-xl text-xs font-semibold shrink-0 cursor-not-allowed"
                           >
-                            🪄 {recoveryName} 이동하기
-                          </Link>
+                            사용 불가
+                          </button>
                         </div>
                       );
                     }
@@ -2145,12 +2060,7 @@ export default function Home() {
                       targetUrl = `/viral?style=${encodeURIComponent(meta.stylePrompt || '')}`;
                     } else if (resolvedMenu === 'style-library') {
                       menuName = "Style Library";
-                      targetUrl = meta.stylePrompt
-                        ? `/audio?sourceMenu=style-library&style=${encodeURIComponent(meta.stylePrompt)}${meta.excludePrompt ? `&exclude=${encodeURIComponent(meta.excludePrompt)}` : ''}`
-                        : `/style-library`;
-                    } else if (resolvedMenu === 'japan') {
-                      menuName = "일본 BGM 포지";
-                      targetUrl = `/japan?style=${encodeURIComponent(meta.stylePrompt || '')}`;
+                      targetUrl = `/style-library`;
                     }
 
                     return (
@@ -2331,28 +2241,18 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* 실제 생성 시 저장된 설정 정보 */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                    <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
-                      <span className="text-zinc-500">음악 엔진</span>
-                      <span className="text-white font-semibold">{engineLabel}</span>
-                    </div>
-                    <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
-                      <span className="text-zinc-500">엔진 버전</span>
-                      <span className="text-cyan-300 font-mono font-semibold">{versionLabel}</span>
-                    </div>
-                    <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
-                      <span className="text-zinc-500">선택 보컬</span>
-                      <span className="text-white font-semibold text-right">{inferredVocal}</span>
-                    </div>
-                    <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
-                      <span className="text-zinc-500">음악 장르</span>
-                      <span className="text-white font-semibold text-right">{inferredGenre}{meta.subGenre ? ` / ${meta.subGenre}` : ''}</span>
-                    </div>
-                    {meta.genre && meta.genre !== inferredGenre && (
-                      <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
-                        <span className="text-zinc-500">프리셋 카테고리</span>
-                        <span className="text-zinc-200 font-semibold capitalize">{meta.genre}</span>
+                  {/* 태그 그리드 */}
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    {meta.engine && (
+                      <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/5">
+                        <span className="text-zinc-500">Engine</span>
+                        <span className="ml-2 text-white font-mono">{meta.engine} {meta.sunoVersion || ''}</span>
+                      </div>
+                    )}
+                    {meta.genre && (
+                      <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/5">
+                        <span className="text-zinc-500">Genre</span>
+                        <span className="ml-2 text-white">{meta.genre}{meta.subGenre ? ` / ${meta.subGenre}` : ''}</span>
                       </div>
                     )}
                     {meta.bpm && (
@@ -2367,6 +2267,10 @@ export default function Home() {
                         <span className="ml-2 text-white">{meta.mood}</span>
                       </div>
                     )}
+                    <div className="bg-white/5 rounded-lg px-3 py-2 border border-white/5">
+                      <span className="text-zinc-500">Vocals</span>
+                      <span className="ml-2 text-white">{meta.isInstrumental ? '❌ Instrumental' : '✅ Vocal'}</span>
+                    </div>
                   </div>
                 </div>
               </div>

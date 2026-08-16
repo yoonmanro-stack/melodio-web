@@ -19,40 +19,6 @@ import { scrubConflictingVocalTags } from '@/lib/voice-dna-scrubber'
 // 제출만 하므로 긴 타임아웃 불필요 (Vercel 타임아웃 60초로 확장)
 export const maxDuration = 60;
 
-function buildLyricsPromptFromSections(sections: unknown): string {
-  if (!Array.isArray(sections)) return ''
-  return sections
-    .filter((section: any) => section && typeof section === 'object' && String(section.content || '').trim())
-    .map((section: any) => {
-      const rawType = String(section.type || 'verse')
-      const label = rawType.charAt(0).toUpperCase() + rawType.slice(1)
-      const description = String(section.description || '').trim()
-      const content = String(section.content || '').trim()
-      return `[${label}]\n${description ? `[${description}]\n` : ''}${content}`
-    })
-    .join('\n\n')
-}
-
-function inferVocalLabel(payload: PromptPayload, selections: any, vdCode?: string): string {
-  if (payload.isInstrumental) return 'Instrumental'
-  if (vdCode) return `Voice DNA ${vdCode}`
-  const selected = Array.isArray(selections?.vocal) ? selections.vocal.filter(Boolean) : []
-  if (selected.length > 0) return selected.join(' / ')
-
-  const style = payload.stylePrompt.toLowerCase()
-  if (/\b(duet|duo|male and female|mixed vocal)\b/.test(style)) return 'Duet / Mixed Vocal'
-  if (/\b(female|woman|girl|soprano|alto)\b/.test(style)) return 'Female Vocal'
-  if (/\b(male|man|boy|tenor|baritone)\b/.test(style)) return 'Male Vocal'
-  if (/\b(choir|choral|group vocal)\b/.test(style)) return 'Choir / Group Vocal'
-  return 'Vocal (unspecified)'
-}
-
-function inferGenreLabel(payload: PromptPayload, selections: any): string {
-  const selected = Array.isArray(selections?.genre) ? selections.genre.filter(Boolean) : []
-  if (selected.length > 0) return selected.join(' / ')
-  return payload.stylePrompt.split(',')[0]?.trim() || payload.metadata?.primaryGenre || 'Unspecified'
-}
-
 async function generateSongMetadata(stylePrompt: string, lyricsPrompt: string): Promise<{ title: string; description: string; tags: string }> {
   const openaiApiKey = process.env.OPENAI_API_KEY
   const pLower = stylePrompt.toLowerCase();
@@ -232,28 +198,53 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
     effectiveStylePrompt = `[Hyper-Realistic 24-bit 96kHz, studio master production] ${effectiveStylePrompt}`
   }
 
-  // ── [Vocal-Centric Forced Header for Viral Tracks] ───────────────────────────
-  // 보컬 묻힘 방지: 바이럴/풍자곡의 경우 최상단 고정 1순위에 보컬 최우선 강조 태그 주입
-  const isViralTrack = (payload as any).isViral || baseStylePrompt.toLowerCase().includes('viral') || baseStylePrompt.toLowerCase().includes('parody') || baseStylePrompt.toLowerCase().includes('comical') || baseStylePrompt.toLowerCase().includes('vocal-centric');
-  if (isViralTrack && !effectiveStylePrompt.toLowerCase().startsWith('vocal-centric mix')) {
-    effectiveStylePrompt = `vocal-centric mix, dry upfront vocals close to mic, minimal backing beat, crystal clear vocal delivery, ${effectiveStylePrompt}`;
+  // ── [Instrumental vs Vocal Header & Prompt Optimization] ───────────────────────
+  let finalLyricsPrompt = payload.lyricsPrompt ?? ''
+
+  if (payload.isInstrumental) {
+    // 1. 연주곡의 경우 보컬 억제/밀착 태그를 전면 제거하고 연주곡 전용 1순위 헤더 주입
+    effectiveStylePrompt = effectiveStylePrompt
+      .replace(/vocal-centric mix,?\s*/gi, '')
+      .replace(/dry upfront vocals close to mic,?\s*/gi, '')
+      .replace(/minimal backing beat,?\s*/gi, '')
+      .replace(/crystal clear vocal delivery,?\s*/gi, '')
+      .trim();
+
+    if (!effectiveStylePrompt.includes('[Full Instrumental Master')) {
+      effectiveStylePrompt = `[Full Instrumental Master, rich melodic lead, lush arrangement, dynamic progression] ${effectiveStylePrompt}`;
+    }
+
+    // 2. 가사 필드가 비어 있으면 Suno가 3분30초 기승전결 완곡으로 연주하도록 확장 전개 프롬프트 자동 삽입
+    if (!finalLyricsPrompt || !finalLyricsPrompt.trim()) {
+      finalLyricsPrompt = `[Target Duration: 3:30, Full Extended Instrumental Master]\n[Instrumental Intro]\n[Melodic Main Theme - Piano & Bass]\n[Instrumental Verse 1]\n[Rich Melodic Chorus 1]\n[Instrumental Verse 2 - Dynamic Lead Development]\n[Extended Solo & Piano Bridge]\n[Rich Melodic Chorus 2 - Full Climax]\n[Outro & Gradual Fade Out]`;
+    }
+  } else {
+    // 3. 가사 있는 보컬곡: 보컬 묻힘 방지 헤더 1순위 유지
+    const isViralTrack = (payload as any).isViral || baseStylePrompt.toLowerCase().includes('viral') || baseStylePrompt.toLowerCase().includes('parody') || baseStylePrompt.toLowerCase().includes('comical') || baseStylePrompt.toLowerCase().includes('vocal-centric');
+    if (isViralTrack && !effectiveStylePrompt.toLowerCase().startsWith('vocal-centric mix')) {
+      effectiveStylePrompt = `vocal-centric mix, dry upfront vocals close to mic, minimal backing beat, crystal clear vocal delivery, ${effectiveStylePrompt}`;
+    }
+
+    // 보컬 성별 상충 태그 정화
+    const promptLower = effectiveStylePrompt.toLowerCase()
+    const hasFemaleKeyword = /\b(female|woman|soprano|alto|lady|girl|여성)\b/i.test(promptLower)
+    const hasMaleKeyword = /\b(male|man|baritone|tenor|gentleman|boy|남성)\b/i.test(promptLower)
+
+    if (hasFemaleKeyword && !hasMaleKeyword) {
+      effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'female')
+    } else if (hasMaleKeyword && !hasFemaleKeyword) {
+      effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'male')
+    }
   }
 
-  // ── [Vocal Gender Conflict Scrubber] ──────────────────────────────────────────
-  // Viral & Trend Zone 및 Voice Lab 옵션 결합 시 성별 상충 태그 정화
-  const promptLower = effectiveStylePrompt.toLowerCase()
-  const hasFemaleKeyword = /\b(female|woman|soprano|alto|lady|girl|여성)\b/i.test(promptLower)
-  const hasMaleKeyword = /\b(male|man|baritone|tenor|gentleman|boy|남성)\b/i.test(promptLower)
-
-  if (hasFemaleKeyword && !hasMaleKeyword) {
-    effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'female')
-  } else if (hasMaleKeyword && !hasFemaleKeyword) {
-    effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'male')
+  // Suno API 1,000자 한도 엄격 준수 (태그 잘림 방지)
+  if (effectiveStylePrompt.length > 1000) {
+    effectiveStylePrompt = effectiveStylePrompt.slice(0, 1000);
   }
 
   const model = mapSunoVersionToModel(payload.sunoVersion)
 
-  console.log(`[API/generate] Suno 제출 (model: ${model})`)
+  console.log(`[API/generate] Suno 제출 (model: ${model}, isInstrumental: ${!!payload.isInstrumental})`)
 
   const submitRes = await fetch(`${apiBaseUrl}/suno/submit/music`, {
     method: 'POST',
@@ -262,11 +253,11 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      prompt: payload.lyricsPrompt ?? '',
+      prompt: finalLyricsPrompt,
       tags: effectiveStylePrompt ?? '',
       title: payload.title ?? 'Untitled',
       mv: model,
-      make_instrumental: payload.isInstrumental ?? false,
+      make_instrumental: false,
     }),
   })
 
@@ -351,23 +342,8 @@ export async function POST(request: NextRequest) {
     const vdCode = rawBody.vdCode
     const noiseRatio = rawBody.noiseRatio
 
-    // 화면의 구조화된 가사 섹션을 서버의 단일 기준으로 사용한다. 클라이언트에서
-    // 조립한 lyricsPrompt가 비었거나 오래된 상태여도 화면에 표시된 섹션과 동일한
-    // 프롬프트를 서버에서 다시 만든다.
-    const canonicalLyricsPrompt = buildLyricsPromptFromSections(lyricsSections)
-    if (!payload.isInstrumental && canonicalLyricsPrompt) {
-      payload.lyricsPrompt = canonicalLyricsPrompt
-    }
-
     if (!payload.stylePrompt) {
       return NextResponse.json({ error: 'stylePrompt가 필요합니다' }, { status: 400 })
-    }
-
-    // 일본 BGM 보컬곡은 Suno의 임의 가사 생성을 허용하지 않는다.
-    // 빈 가사로 제출하면 같은 작업의 두 후보가 서로 다른 구성으로 생성되어
-    // 길이가 1분 이상 벌어지는 사례가 확인됐다.
-    if (rawBody.sourceMenu === 'japan' && !payload.isInstrumental && !canonicalLyricsPrompt) {
-      return NextResponse.json({ error: '보컬곡 가사가 비어 있습니다. 가사를 먼저 생성해주세요.' }, { status: 400 })
     }
 
     // Apply Voice DNA Scrubber
@@ -482,13 +458,10 @@ export async function POST(request: NextRequest) {
       isInstrumental: payload.isInstrumental,
       sunoVersion: payload.sunoVersion || 'v5.5',
       genre: payload.metadata?.primaryGenre || '',
-      genreLabel: inferGenreLabel(payload, selections),
       subGenre: payload.metadata?.subGenre || '',
       bpm: payload.metadata?.bpm || '',
       mood: payload.metadata?.mood || '',
       selections: selections || {},
-      vocal: inferVocalLabel(payload, selections, vdCode),
-      voiceDna: vdCode || null,
       lyricsSections: lyricsSections || [],
       duration: rawBody.metadata?.duration || '',
       durationSeconds: rawBody.metadata?.durationSeconds || null,

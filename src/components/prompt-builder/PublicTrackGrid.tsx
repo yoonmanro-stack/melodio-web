@@ -19,7 +19,6 @@ interface PublicTrackGridProps {
   isTrackPlaying?: boolean
   onPlayTrack?: (track: any) => void
   onPauseTrack?: () => void
-  refreshSignal?: number
 }
 
 export default function PublicTrackGrid({
@@ -32,7 +31,6 @@ export default function PublicTrackGrid({
   isTrackPlaying: extIsTrackPlaying,
   onPlayTrack: extOnPlayTrack,
   onPauseTrack: extOnPauseTrack,
-  refreshSignal = 0,
 }: PublicTrackGridProps) {
   const [tracks, setTracks] = useState<any[]>(() => {
     if (typeof window !== 'undefined') {
@@ -159,7 +157,7 @@ export default function PublicTrackGrid({
 
   useEffect(() => {
     fetchPublicTracks()
-  }, [sourceMenu, refreshSignal])
+  }, [sourceMenu])
 
   // 재생 컨트롤 헬퍼
   const handleTogglePlay = (track: any) => {
@@ -484,7 +482,7 @@ export default function PublicTrackGrid({
                         <img
                           src={coverUrl}
                           alt={track.title}
-                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.025] group-hover:saturate-[1.03]"
+                          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
                           onError={(e) => {
                             (e.target as HTMLImageElement).src = getFallbackCover(track)
                           }}
@@ -496,12 +494,12 @@ export default function PublicTrackGrid({
                             e.stopPropagation();
                             handleTogglePlay(track);
                           }}
-                          className="absolute inset-0 opacity-0 group-hover/play:opacity-100 transition-opacity duration-200 flex items-center justify-center z-10"
+                          className="absolute inset-0 bg-black/40 backdrop-blur-[1px] opacity-0 group-hover/play:opacity-100 transition-opacity duration-200 flex items-center justify-center z-10"
                         >
                           {playing ? (
-                            <Pause className="w-10 h-10 rounded-full bg-white/90 p-2.5 text-fuchsia-600 fill-current shadow-lg backdrop-blur-sm" />
+                            <Pause className="w-5 h-5 text-white fill-current animate-pulse" />
                           ) : (
-                            <Play className="w-10 h-10 rounded-full bg-white/90 p-2.5 text-zinc-900 fill-current shadow-lg backdrop-blur-sm" />
+                            <Play className="w-5 h-5 text-white fill-current ml-0.5" />
                           )}
                         </div>
 
@@ -573,7 +571,7 @@ export default function PublicTrackGrid({
                       <img
                         src={coverUrl}
                         alt={track.title}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.025] group-hover:saturate-[1.03]"
+                        className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = getFallbackCover(track)
                         }}
@@ -582,12 +580,12 @@ export default function PublicTrackGrid({
                       {/* Hover Play/Pause Overlay */}
                       <div
                         onClick={() => handleTogglePlay(track)}
-                        className="absolute inset-0 opacity-0 group-hover/play:opacity-100 transition-opacity duration-200 flex items-center justify-center z-10"
+                        className="absolute inset-0 bg-black/40 backdrop-blur-[1px] opacity-0 group-hover/play:opacity-100 transition-opacity duration-200 flex items-center justify-center z-10"
                       >
                         {playing ? (
-                          <Pause className="w-10 h-10 rounded-full bg-white/90 p-2.5 text-fuchsia-600 fill-current shadow-lg backdrop-blur-sm" />
+                          <Pause className="w-5 h-5 text-white fill-current animate-pulse" />
                         ) : (
-                          <Play className="w-10 h-10 rounded-full bg-white/90 p-2.5 text-zinc-900 fill-current shadow-lg backdrop-blur-sm" />
+                          <Play className="w-5 h-5 text-white fill-current ml-0.5" />
                         )}
                       </div>
 

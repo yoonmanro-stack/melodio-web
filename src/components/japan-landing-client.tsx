@@ -148,8 +148,6 @@ const JP_PRESET_IMAGES = [
   "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png"
 ];
 
-const JAPAN_PRESETS_PER_PAGE = 14;
-
 const jpPresets = [
   {
     id: "romance-pop",
@@ -572,14 +570,6 @@ export default function JapanLandingClient() {
   const [isGeneratingMusic, setIsGeneratingMusic] = useState(false);
   const [genModalState, setGenModalState] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [genErrorMsg, setGenErrorMsg] = useState("");
-  const [generationJob, setGenerationJob] = useState<{
-    ids: string[];
-    status: 'submitting' | 'generating' | 'completed' | 'error';
-    title: string;
-    isPublic: boolean;
-    message?: string;
-  } | null>(null);
-  const [publicTracksRefreshSignal, setPublicTracksRefreshSignal] = useState(0);
   const [myTracks, setMyTracks] = useState<any[]>([]);
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
   const [detailItem, setDetailItem] = useState<any | null>(null);
@@ -732,7 +722,7 @@ export default function JapanLandingClient() {
         lyricsTemplate: p.lyricsTemplate,
         selections: {},
         metadata: {
-          cardImage: `/japan-presets/${p.id}.webp`,
+          cardImage: p.cardImage,
           category: p.category,
           defaultTitle: p.defaultTitle,
           defaultTopic: p.defaultTopic,
@@ -941,13 +931,7 @@ export default function JapanLandingClient() {
         
         if (error) throw error;
         if (data) {
-          const formatted = data
-            .filter((pb: any) => {
-              const metadata = pb.metadata || {};
-              const label = `${pb.key_name || ''} ${pb.title || ''}`;
-              return metadata.is_test !== true && !/(^|[\s_-])(test|demo|sample|테스트|샘플)([\s_-]|$)/i.test(label);
-            })
-            .map((pb: any) => {
+          const formatted = data.map((pb: any) => {
             const metadata = pb.metadata || {};
             let extractedDesc = '';
             if (pb.content) {
@@ -960,11 +944,6 @@ export default function JapanLandingClient() {
               extractedDesc = metadata.desc || pb.content.slice(0, 100);
             }
 
-            const thumbnailUrl = metadata.thumbnail_url
-              || (Array.isArray(metadata.thumbnail_urls) ? metadata.thumbnail_urls[0] : '')
-              || metadata.cardImage
-              || '';
-
             return {
               id: pb.key_name,
               name: pb.title,
@@ -973,11 +952,10 @@ export default function JapanLandingClient() {
               emoji: metadata.emoji || "🇯🇵",
               gradient: metadata.gradient || "from-[#fcb045] to-[#fd1d1d]",
               category: metadata.category || "retro",
-              cardImage: thumbnailUrl || "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
+              cardImage: metadata.cardImage || "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
               defaultTitle: metadata.defaultTitle || pb.title,
               defaultTopic: metadata.defaultTopic || extractedDesc,
-              lyricsTemplate: pb.content || "",
-              metadata
+              lyricsTemplate: pb.content || ""
             };
           });
           setDbPresets(formatted);
@@ -1099,9 +1077,6 @@ export default function JapanLandingClient() {
   };
 
   const handleGenerateMusic = async () => {
-    if (generationJob?.status === 'submitting' || generationJob?.status === 'generating') {
-      return;
-    }
     if (!user) {
       alert("음악을 생성하려면 로그인이 필요합니다. 로그인 페이지로 이동합니다.");
       window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
@@ -1113,22 +1088,10 @@ export default function JapanLandingClient() {
         alert('먼저 플레이리스트 가사를 작성해주세요!');
         return;
       }
-      if (!isInstrumental) {
-        const emptyTrackIndex = tracks.findIndex((track) =>
-          !Array.isArray(track.sections) || !track.sections.some((section: LyricsSection) => section.content?.trim())
-        );
-        if (emptyTrackIndex >= 0) {
-          setActiveTrackIdx(emptyTrackIndex);
-          alert(`${emptyTrackIndex + 1}번 곡의 가사가 비어 있습니다. 모든 곡의 가사를 확인한 후 생성해주세요.`);
-          return;
-        }
-      }
       setIsGeneratingMusic(true);
       setGenModalState('submitting');
       setGenErrorMsg("");
-      setGenerationJob({ ids: [], status: 'submitting', title: `${tracks.length}곡 플레이리스트`, isPublic });
       try {
-        const submittedIds: string[] = [];
         const resolvedEngine = engine === 'auto' ? 'suno_v5' : engine;
 
         const mergeAndClampStyle = (common: string, desc?: string): string => {
@@ -1176,10 +1139,7 @@ export default function JapanLandingClient() {
 
         for (let i = 0; i < tracks.length; i++) {
           const track = tracks[i];
-          const submittedSections = Array.isArray(track.sections)
-            ? track.sections.map((section: LyricsSection) => ({ ...section }))
-            : [];
-          const lyricsPrompt = isInstrumental ? '' : buildLyricsPrompt(submittedSections);
+          const lyricsPrompt = isInstrumental ? '' : buildLyricsPrompt(track.sections);
 
           const targetSection = track.sections.find((s: any) => s.type === 'chorus' && s.description?.trim())
             || track.sections.find((s: any) => s.type === 'verse' && s.description?.trim())
@@ -1249,7 +1209,7 @@ export default function JapanLandingClient() {
             body: JSON.stringify({
               ...trackPayload,
               selections: {},
-              lyricsSections: submittedSections,
+              lyricsSections: track.sections,
               presetId: selectedPresetId,
               presetName: activePreset?.name,
               sourceMenu: 'japan',
@@ -1259,56 +1219,31 @@ export default function JapanLandingClient() {
             }),
           });
 
-          const result = await res.json().catch(() => null);
           if (!res.ok) {
-            throw new Error(result?.error || `${i + 1}번 음원 생성에 실패했습니다.`);
+            console.error(`Failed to generate track ${i + 1}`);
           }
-          if (result?.track?.id) submittedIds.push(result.track.id);
 
           if (user) {
             await saveHistory(trackPayload, {});
           }
         }
-        setGenerationJob({
-          ids: submittedIds,
-          status: submittedIds.length > 0 ? 'generating' : 'completed',
-          title: `${tracks.length}곡 플레이리스트`,
-          isPublic,
-          message: submittedIds.length > 0 ? '워커에서 음원을 생성하고 있습니다.' : '음원 생성 요청이 완료됐습니다.',
-        });
         setGenModalState('success');
-        setPublicTracksRefreshSignal((value) => value + 1);
-        window.setTimeout(() => setPublicTracksRefreshSignal((value) => value + 1), 10_000);
-        window.setTimeout(() => setPublicTracksRefreshSignal((value) => value + 1), 30_000);
         fetchMyJpTracks();
       } catch (err: any) {
         console.error("Music gen error:", err);
         setGenErrorMsg(err.message || "오류가 발생했습니다.");
-        setGenerationJob((current) => ({
-          ids: current?.ids || [],
-          status: 'error',
-          title: current?.title || '플레이리스트',
-          isPublic: current?.isPublic ?? isPublic,
-          message: err.message || '음원 생성 중 오류가 발생했습니다.',
-        }));
         setGenModalState("error");
       } finally {
         setIsGeneratingMusic(false);
       }
     } else {
-      if (!styleTags.trim()) {
-        alert("스타일 태그는 필수 입력 사항입니다!");
-        return;
-      }
-      const submittedLyricsSections = lyricsSections.map((section) => ({ ...section }));
-      if (!isInstrumental && !submittedLyricsSections.some((section) => section.content?.trim())) {
-        alert("보컬곡을 생성하려면 먼저 가사를 작성하거나 AI 가사를 생성해주세요.");
+      if (!title || !styleTags) {
+        alert("곡 제목과 스타일 태그는 필수 입력 사항입니다!");
         return;
       }
       setIsGeneratingMusic(true);
       setGenModalState("submitting");
       setGenErrorMsg("");
-      setGenerationJob({ ids: [], status: 'submitting', title: title || activePreset?.name || '일본 BGM', isPublic });
       try {
         const resolvedEngine = engine === 'auto' ? 'suno_v5' : engine;
 
@@ -1383,7 +1318,7 @@ export default function JapanLandingClient() {
         const resolvedPayload: PromptPayload = {
           title: title,
           stylePrompt: finalSingleStylePrompt,
-          lyricsPrompt: isInstrumental ? '' : buildLyricsPrompt(submittedLyricsSections),
+          lyricsPrompt: isInstrumental ? '' : buildLyricsPrompt(lyricsSections),
           excludePrompt: excludePrompt.trim() || undefined,
           engine: resolvedEngine,
           isInstrumental,
@@ -1423,7 +1358,7 @@ export default function JapanLandingClient() {
           body: JSON.stringify({
             ...resolvedPayload,
             selections: {},
-            lyricsSections: submittedLyricsSections,
+            lyricsSections,
             presetId: selectedPresetId,
             presetName: activePreset?.name,
             sourceMenu: 'japan',
@@ -1432,81 +1367,23 @@ export default function JapanLandingClient() {
             isPublic: isPublic,
           }),
         });
-        const result = await res.json().catch(() => null);
         if (!res.ok) {
-          throw new Error(result?.error || '음원 생성에 실패했습니다.');
+          throw new Error('음원 생성에 실패했습니다.');
         }
-        const submittedId = result?.track?.id;
-        setGenerationJob({
-          ids: submittedId ? [submittedId] : [],
-          status: result?.track?.status === 'completed' || !submittedId ? 'completed' : 'generating',
-          title: result?.track?.title || title || activePreset?.name || '일본 BGM',
-          isPublic,
-          message: result?.track?.status === 'completed' ? '음원이 완성됐습니다.' : '워커에서 음원을 생성하고 있습니다.',
-        });
         if (user) {
           await saveHistory(resolvedPayload, {});
         }
         setGenModalState('success');
-        setPublicTracksRefreshSignal((value) => value + 1);
-        window.setTimeout(() => setPublicTracksRefreshSignal((value) => value + 1), 10_000);
-        window.setTimeout(() => setPublicTracksRefreshSignal((value) => value + 1), 30_000);
         fetchMyJpTracks();
       } catch (err: any) {
         console.error("Music gen error:", err);
         setGenErrorMsg(err.message || "오류가 발생했습니다.");
-        setGenerationJob((current) => ({
-          ids: current?.ids || [],
-          status: 'error',
-          title: current?.title || title || '일본 BGM',
-          isPublic: current?.isPublic ?? isPublic,
-          message: err.message || '음원 생성 중 오류가 발생했습니다.',
-        }));
         setGenModalState("error");
       } finally {
         setIsGeneratingMusic(false);
       }
     }
   };
-
-  useEffect(() => {
-    if (!generationJob || generationJob.status !== 'generating' || generationJob.ids.length === 0) return;
-
-    let cancelled = false;
-    const checkGenerationStatus = async () => {
-      try {
-        const results = await Promise.all(generationJob.ids.map(async (id) => {
-          const res = await fetch(`/api/generations?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
-          if (!res.ok) return null;
-          const data = await res.json();
-          return data.generation || null;
-        }));
-        if (cancelled) return;
-
-        const available = results.filter(Boolean);
-        if (available.some((item: any) => item.status === 'failed')) {
-          setGenerationJob((current) => current ? { ...current, status: 'error', message: '음원 생성에 실패했습니다.' } : current);
-          setGenModalState('error');
-          return;
-        }
-        if (available.length === generationJob.ids.length && available.every((item: any) => item.status === 'completed')) {
-          setGenerationJob((current) => current ? { ...current, status: 'completed', message: `${available.length}곡의 음원 생성이 완료됐습니다.` } : current);
-          setGenModalState('success');
-          setPublicTracksRefreshSignal((value) => value + 1);
-          fetchMyJpTracks();
-        }
-      } catch (error) {
-        console.error('Failed to check Japan generation status:', error);
-      }
-    };
-
-    checkGenerationStatus();
-    const intervalId = window.setInterval(checkGenerationStatus, 5_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(intervalId);
-    };
-  }, [generationJob?.ids.join(','), generationJob?.status]);
 
   const handlePlayTrack = (item: any) => {
     const el = audioRef.current;
@@ -1607,7 +1484,7 @@ export default function JapanLandingClient() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: `${promptText}, premium Japanese music album cover art, clear luminous exposure, fresh refined colors, crisp focal subject, elegant centered composition, bright and polished visual finish`,
+          prompt: `${promptText}, 3d modern visual, artistic music album cover art, premium digital art, centered composition`,
           size: '1:1',
           imageType: 'thumbnail',
           channelTitle: item.title || 'Melodio Track'
@@ -1827,9 +1704,9 @@ export default function JapanLandingClient() {
               </div>
             </div>
 
-            {/* 데스크톱 2열 × 7행, 페이지당 14개 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {filteredJpPresets.slice((jpPage - 1) * JAPAN_PRESETS_PER_PAGE, jpPage * JAPAN_PRESETS_PER_PAGE).map((preset) => {
+            {/* 2x3 격자 네모 카드 그리드 */}
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {filteredJpPresets.slice((jpPage - 1) * 27, jpPage * 27).map((preset) => {
                 const isSelected = selectedPresetId === preset.id;
                 const cardImage = (preset.metadata as any)?.cardImage || (preset.metadata as any)?.thumbnail_url || (preset as any).cardImage || (preset as any).thumbnailUrl || (preset as any).thumbnail_url;
                 const category = (preset.metadata as any)?.category || (preset as any).category || "CUSTOM BGM";
@@ -1840,25 +1717,25 @@ export default function JapanLandingClient() {
                   <div
                     key={preset.id}
                     onClick={() => handleSelectPreset(preset)}
-                    className={`relative w-full rounded-2xl overflow-hidden border transition-all duration-300 text-left flex flex-col group shrink-0 cursor-pointer ${
+                    className={`relative w-full rounded-2xl overflow-hidden border transition-all duration-300 text-left flex flex-col justify-between group aspect-[4/3] min-h-[190px] shrink-0 cursor-pointer ${
                       isSelected 
                         ? "border-amber-500 bg-amber-500/5 shadow-[0_0_15px_rgba(245,158,11,0.3)] scale-[1.02]" 
                         : "border-white/5 bg-zinc-900/40 hover:border-white/10 hover:bg-zinc-900/60"
                     }`}
                   >
                     {/* 1. Upper Image Thumbnail Area */}
-                    <div className="relative aspect-video w-full shrink-0 overflow-hidden bg-zinc-900 border-b border-white/5">
+                    <div className="relative flex-1 w-full overflow-hidden bg-zinc-900 border-b border-white/5">
                       <div className="absolute inset-0 z-0" style={{ backgroundColor: preset.gradient }}>
                         {cardImage && (
                           <img 
                             src={cardImage} 
                             alt="" 
-                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.025] group-hover:saturate-[1.03]"
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 filter brightness-[0.80] contrast-[1.05]"
                           />
                         )}
                       </div>
                       {/* Top Left Big Overlay Category Title */}
-                      <div className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded bg-white/50 text-black text-[9px] font-extrabold uppercase tracking-widest transition-all font-mono shadow-sm backdrop-blur-sm">
+                      <div className="absolute top-3 left-3 z-10 px-2 py-0.5 rounded bg-black/60 border border-white/10 text-zinc-300 text-[9px] font-extrabold uppercase tracking-widest group-hover:text-white transition-all font-mono">
                         {category}
                       </div>
 
@@ -1868,7 +1745,7 @@ export default function JapanLandingClient() {
                           e.stopPropagation();
                           setEditingPreset(preset);
                         }}
-                        className="absolute top-3 right-3 z-10 p-2 rounded-lg bg-white/90 hover:bg-white border border-white/80 text-zinc-700 hover:text-amber-600 transition-all opacity-0 group-hover:opacity-100 shadow-md backdrop-blur-sm"
+                        className="absolute top-3 right-3 z-10 p-2 rounded-lg bg-black/60 hover:bg-black/80 border border-white/10 text-zinc-400 hover:text-white transition-all opacity-0 group-hover:opacity-100 backdrop-blur-sm"
                         title="상세보기"
                       >
                         <Maximize2 className="w-3.5 h-3.5" />
@@ -1960,7 +1837,7 @@ export default function JapanLandingClient() {
               })}
             </div>
 
-            {/* Pagination Controls - 페이지당 14개 */}
+            {/* Pagination Controls - Slice 27 (Always visible) */}
             {filteredJpPresets.length > 0 && (
               <div className="flex items-center justify-center gap-1.5 pt-2">
                 <button
@@ -1970,7 +1847,7 @@ export default function JapanLandingClient() {
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                {Array.from({ length: Math.ceil(filteredJpPresets.length / JAPAN_PRESETS_PER_PAGE) }).map((_, idx) => {
+                {Array.from({ length: Math.ceil(filteredJpPresets.length / 27) }).map((_, idx) => {
                   const pageNum = idx + 1;
                   return (
                     <button
@@ -1987,8 +1864,8 @@ export default function JapanLandingClient() {
                   );
                 })}
                 <button
-                  onClick={() => setJpPage(prev => Math.min(prev + 1, Math.ceil(filteredJpPresets.length / JAPAN_PRESETS_PER_PAGE)))}
-                  disabled={jpPage === Math.ceil(filteredJpPresets.length / JAPAN_PRESETS_PER_PAGE)}
+                  onClick={() => setJpPage(prev => Math.min(prev + 1, Math.ceil(filteredJpPresets.length / 27)))}
+                  disabled={jpPage === Math.ceil(filteredJpPresets.length / 27)}
                   className="p-1 rounded bg-zinc-900/40 border border-zinc-800 text-zinc-500 hover:text-zinc-300 disabled:opacity-30 transition-all flex items-center justify-center"
                 >
                   <ChevronRight className="w-4 h-4" />
@@ -2111,7 +1988,7 @@ export default function JapanLandingClient() {
               sourceMenu="japan"
               compositorResult={{ prompt: styleTags, charCount: styleTags.length, truncatedCount: 0, maxChars: 1000 }}
               onGenerate={handleGenerateMusic}
-              isGenerating={isGeneratingMusic || generationJob?.status === 'submitting' || generationJob?.status === 'generating'}
+              isGenerating={isGeneratingMusic}
               isPlaylistMode={isPlaylistMode}
               trackCount={trackCount}
               isPro={isPro}
@@ -2165,65 +2042,9 @@ export default function JapanLandingClient() {
 
         </div>
 
-        {/* 공개 여부와 무관하게 현재 사용자의 생성 상태를 항상 표시 */}
-        {generationJob && (
-          <div className={`fixed bottom-6 right-6 z-[100] w-[min(380px,calc(100vw-3rem))] rounded-2xl border p-4 shadow-2xl backdrop-blur-xl ${
-            generationJob.status === 'completed'
-              ? 'border-emerald-400/40 bg-emerald-950/90'
-              : generationJob.status === 'error'
-                ? 'border-red-400/40 bg-red-950/90'
-                : 'border-cyan-400/40 bg-zinc-950/95'
-          }`} role="status" aria-live="polite">
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 shrink-0">
-                {generationJob.status === 'completed' ? (
-                  <Check className="h-5 w-5 text-emerald-400" />
-                ) : generationJob.status === 'error' ? (
-                  <AlertCircle className="h-5 w-5 text-red-400" />
-                ) : (
-                  <Loader2 className="h-5 w-5 animate-spin text-cyan-400" />
-                )}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <p className="truncate text-sm font-black text-white">
-                    {generationJob.status === 'submitting'
-                      ? '음원 생성 요청 접수 중'
-                      : generationJob.status === 'generating'
-                        ? '음원 생성 중'
-                        : generationJob.status === 'completed'
-                          ? '음원 생성 완료'
-                          : '음원 생성 오류'}
-                  </p>
-                  <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold ${generationJob.isPublic ? 'bg-fuchsia-500/15 text-fuchsia-300' : 'bg-zinc-700/70 text-zinc-300'}`}>
-                    {generationJob.isPublic ? '공개' : '비공개'}
-                  </span>
-                </div>
-                <p className="mt-1 truncate text-xs font-semibold text-zinc-200">{generationJob.title}</p>
-                <p className="mt-1 text-[11px] leading-relaxed text-zinc-400">
-                  {generationJob.message || (generationJob.status === 'submitting' ? '생성 서버에 요청을 전달하고 있습니다.' : '완료될 때까지 중복 생성을 방지합니다.')}
-                </p>
-                {generationJob.status === 'completed' && !generationJob.isPublic && (
-                  <p className="mt-1 text-[10px] text-emerald-300">비공개 음원은 대시보드에서 확인할 수 있습니다.</p>
-                )}
-              </div>
-              {(generationJob.status === 'completed' || generationJob.status === 'error') && (
-                <button
-                  type="button"
-                  onClick={() => setGenerationJob(null)}
-                  className="shrink-0 rounded-lg p-1 text-zinc-400 transition hover:bg-white/10 hover:text-white"
-                  aria-label="생성 상태 알림 닫기"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* J-BGM 공개 음원 목록 */}
         <section className="pt-6 border-t border-white/5">
-          <PublicTrackGrid sourceMenu="japan" itemsPerPage={16} refreshSignal={publicTracksRefreshSignal} />
+          <PublicTrackGrid sourceMenu="japan" itemsPerPage={16} />
         </section>
 
         {/* 🔮 일본 특화 나만의 프리셋 만들기/수정 모달 */}
@@ -2371,9 +2192,9 @@ export default function JapanLandingClient() {
                   <div className="flex justify-center flex-shrink-0 py-2">
                     <div className="w-48 h-48 rounded-xl overflow-hidden border border-white/10 shadow-lg relative bg-black/40">
                       <img 
-                        src={detailItem.cover_art_url || 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'}
+                        src={detailItem.cover_art_url || 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'} 
                         alt={detailItem.title || 'Track Art'} 
-                        className="w-full h-full object-cover" 
+                        className="w-full h-full object-cover object-top" 
                       />
                     </div>
                   </div>
