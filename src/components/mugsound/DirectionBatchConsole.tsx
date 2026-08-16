@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, CheckCircle2, LoaderCircle, Play, RefreshCw } from 'lucide-react'
 import type { DirectionApprovalBlueprint } from '@/data/mugsound-direction-approval-blueprints'
-import { MUGSOUND_DIRECTION_BATCH_ID, MUGSOUND_PLAYLIST_TARGET_SECONDS } from '@/lib/mugsound/direction-batch'
+import { MUGSOUND_DIRECTION_BATCH_ID } from '@/lib/mugsound/direction-batch'
 
 type GenerationMode = 'instrumental' | 'lyrics'
 
@@ -53,27 +53,14 @@ export function DirectionBatchConsole({ blueprints }: { blueprints: DirectionApp
     setSubmitted(0)
     try {
       for (const blueprint of pending) {
-        const response = await fetch('/api/generate', {
+        const response = await fetch('/api/internal/mugsound/direction-batch/submit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            title: blueprint.workingTitle,
-            stylePrompt: blueprint.stylePrompt,
-            excludePrompt: blueprint.excludePrompt,
-            lyricsPrompt: modes[blueprint.blueprintId] === 'lyrics' ? lyrics[blueprint.blueprintId].trim() : '',
-            engine: 'suno_v5',
-            sunoVersion: 'v5.5',
-            isInstrumental: modes[blueprint.blueprintId] !== 'lyrics',
-            sourceMenu: 'mugsound-supply',
-            isPublic: false,
-            mugsoundBatchId: MUGSOUND_DIRECTION_BATCH_ID,
-            mugsoundBlueprintId: blueprint.blueprintId,
-            mugsoundEpisodeId: blueprint.episodeId,
-            mugsoundPhase: blueprint.phase,
-            mugsoundTargetEnergy: blueprint.targetEnergy,
-            mugsoundTargetWarmth: blueprint.targetWarmth,
-            mugsoundBridgeDirection: blueprint.bridgeDirection,
-            metadata: { primaryGenre: 'warm minimal cafe', subGenre: blueprint.phase, bpm: String(blueprint.targetBpm), mood: blueprint.episodeId, durationSeconds: MUGSOUND_PLAYLIST_TARGET_SECONDS },
+            batchId: MUGSOUND_DIRECTION_BATCH_ID,
+            blueprintId: blueprint.blueprintId,
+            mode: modes[blueprint.blueprintId] || 'instrumental',
+            lyrics: modes[blueprint.blueprintId] === 'lyrics' ? lyrics[blueprint.blueprintId].trim() : '',
           }),
         })
         const responseText = await response.text()

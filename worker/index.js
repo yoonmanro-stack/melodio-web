@@ -678,6 +678,43 @@ const SUNO_API_KEY = process.env.SUNO_API_KEY;
 const SUNO_API_URL = process.env.SUNO_API_URL || "https://api.302.ai";
 
 let isPollingSuno = false;
+let isSubmittingMugSound = false;
+
+async function submitQueuedMugSoundGenerations() {
+  if (!SUNO_API_KEY || isSubmittingMugSound) return;
+  isSubmittingMugSound = true;
+  try {
+    const { data, error } = await supabase.from('generations')
+      .select('id,title,license_hash')
+      .eq('status', 'pending')
+      .like('license_hash', '%\"sourceMenu\":\"mugsound-supply\"%')
+      .order('created_at', { ascending: true })
+      .limit(6);
+    if (error) throw error;
+    for (const row of data || []) {
+      let metadata;
+      try { metadata = JSON.parse(row.license_hash || '{}'); } catch { metadata = null; }
+      if (!metadata) {
+        await supabase.from('generations').update({ status: 'failed', error_message: 'MugSound 메타데이터 파싱 실패' }).eq('id', row.id);
+        continue;
+      }
+      try {
+        const taskId = await submitSunoJobForRetry(metadata, row.title);
+        await supabase.from('generations').update({
+          status: 'generating',
+          source_audio_url: `suno:${taskId}`,
+        }).eq('id', row.id).eq('status', 'pending');
+        log('INFO', '[MugSound Queue] Suno 제출 완료', { id: row.id.slice(0, 8) });
+      } catch (submitError) {
+        log('ERROR', '[MugSound Queue] Suno 제출 실패', submitError.message);
+      }
+    }
+  } catch (error) {
+    log('ERROR', '[MugSound Queue] 조회 실패', error.message);
+  } finally {
+    isSubmittingMugSound = false;
+  }
+}
 
 async function linkGenerationQueueCandidate(meta, generationId, slot, clip, quality, recommended) {
   const queueItemId = meta?.queueItemId;
@@ -1245,6 +1282,8 @@ async function pollSunoGenerations() {
 
 // 10초마다 Suno generating 상태 곡 폴링
 setInterval(pollSunoGenerations, 10000);
+setInterval(submitQueuedMugSoundGenerations, 10000);
+submitQueuedMugSoundGenerations();
 log("INFO", "[SUNO POLL] Suno 폴링 스케줄러 시작 (10초 간격)");
 
 // ─── 비디오 생성 비동기 처리 함수 (Vertex AI Veo 3.1) ────────────────────────
