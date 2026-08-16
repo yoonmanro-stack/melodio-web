@@ -469,9 +469,10 @@ export async function POST(request: NextRequest) {
     }
     const serviceSupabase = createSupabaseClient(supabaseUrl, serviceRoleKey)
 
-    // 0. 장르 플레이북 매칭
+    // 0. 장르 플레이북 매칭. MugSound Blueprint는 이미 제작 프롬프트가 확정돼
+    // 있으므로 느린 RAG 조회를 건너뛰어 서버리스 제출 타임아웃을 피한다.
     let matchedPlaybook: any = null
-    try {
+    if (!isMugSoundSupply) try {
       const presetId = rawBody.presetId
       if (presetId) {
         const { getPlaybookByKey } = await import('@/lib/db/knowledge')

@@ -76,7 +76,9 @@ export function DirectionBatchConsole({ blueprints }: { blueprints: DirectionApp
             metadata: { primaryGenre: 'warm minimal cafe', subGenre: blueprint.phase, bpm: String(blueprint.targetBpm), mood: blueprint.episodeId, durationSeconds: MUGSOUND_PLAYLIST_TARGET_SECONDS },
           }),
         })
-        const body = await response.json() as { error?: string }
+        const responseText = await response.text()
+        let body: { error?: string } = {}
+        try { body = JSON.parse(responseText) as { error?: string } } catch { body = { error: responseText || '생성 서버 응답 오류' } }
         if (!response.ok && response.status !== 409) throw new Error(body.error || `${blueprint.workingTitle} 제출 실패`)
         setSubmitted((value) => value + 1)
       }
