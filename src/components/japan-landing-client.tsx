@@ -2373,7 +2373,7 @@ export default function JapanLandingClient() {
                       <img 
                         src={detailItem.cover_art_url || 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'}
                         alt={detailItem.title || 'Track Art'} 
-                        className="w-full h-full object-cover" 
+                        className="w-full h-full object-cover object-top"
                       />
                     </div>
                   </div>

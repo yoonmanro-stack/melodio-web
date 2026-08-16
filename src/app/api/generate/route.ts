@@ -236,7 +236,23 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
 
   // ── [Vocal-Centric Forced Header for Viral Tracks] ───────────────────────────
   // 보컬 묻힘 방지: 바이럴/풍자곡의 경우 최상단 고정 1순위에 보컬 최우선 강조 태그 주입
-  const isViralTrack = (payload as any).isViral || baseStylePrompt.toLowerCase().includes('viral') || baseStylePrompt.toLowerCase().includes('parody') || baseStylePrompt.toLowerCase().includes('comical') || baseStylePrompt.toLowerCase().includes('vocal-centric');
+  let finalLyricsPrompt = payload.lyricsPrompt ?? ''
+  if (payload.isInstrumental) {
+    effectiveStylePrompt = effectiveStylePrompt
+      .replace(/vocal-centric mix,?\s*/gi, '')
+      .replace(/dry upfront vocals close to mic,?\s*/gi, '')
+      .replace(/minimal backing beat,?\s*/gi, '')
+      .replace(/crystal clear vocal delivery,?\s*/gi, '')
+      .trim()
+    if (!effectiveStylePrompt.includes('[Full Instrumental Master')) {
+      effectiveStylePrompt = `[Full Instrumental Master, rich melodic lead, lush arrangement, dynamic progression] ${effectiveStylePrompt}`
+    }
+    if (!finalLyricsPrompt.trim()) {
+      finalLyricsPrompt = `[Target Duration: 3:30, Full Extended Instrumental Master]\n[Instrumental Intro]\n[Melodic Main Theme - Piano & Bass]\n[Instrumental Verse 1]\n[Rich Melodic Chorus 1]\n[Instrumental Verse 2 - Dynamic Lead Development]\n[Extended Solo & Piano Bridge]\n[Rich Melodic Chorus 2 - Full Climax]\n[Outro & Gradual Fade Out]`
+    }
+  }
+
+  const isViralTrack = !payload.isInstrumental && ((payload as any).isViral || baseStylePrompt.toLowerCase().includes('viral') || baseStylePrompt.toLowerCase().includes('parody') || baseStylePrompt.toLowerCase().includes('comical') || baseStylePrompt.toLowerCase().includes('vocal-centric'));
   if (isViralTrack && !effectiveStylePrompt.toLowerCase().startsWith('vocal-centric mix')) {
     effectiveStylePrompt = `vocal-centric mix, dry upfront vocals close to mic, minimal backing beat, crystal clear vocal delivery, ${effectiveStylePrompt}`;
   }
@@ -247,15 +263,19 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
   const hasFemaleKeyword = /\b(female|woman|soprano|alto|lady|girl|여성)\b/i.test(promptLower)
   const hasMaleKeyword = /\b(male|man|baritone|tenor|gentleman|boy|남성)\b/i.test(promptLower)
 
-  if (hasFemaleKeyword && !hasMaleKeyword) {
+  if (!payload.isInstrumental && hasFemaleKeyword && !hasMaleKeyword) {
     effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'female')
-  } else if (hasMaleKeyword && !hasFemaleKeyword) {
+  } else if (!payload.isInstrumental && hasMaleKeyword && !hasFemaleKeyword) {
     effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'male')
+  }
+
+  if (effectiveStylePrompt.length > 1000) {
+    effectiveStylePrompt = effectiveStylePrompt.slice(0, 1000)
   }
 
   const model = mapSunoVersionToModel(payload.sunoVersion)
 
-  console.log(`[API/generate] Suno 제출 (model: ${model})`)
+  console.log(`[API/generate] Suno 제출 (model: ${model}, isInstrumental: ${Boolean(payload.isInstrumental)})`)
 
   const submitRes = await fetch(`${apiBaseUrl}/suno/submit/music`, {
     method: 'POST',
@@ -264,11 +284,11 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      prompt: payload.lyricsPrompt ?? '',
+      prompt: finalLyricsPrompt,
       tags: effectiveStylePrompt ?? '',
       title: payload.title ?? 'Untitled',
       mv: model,
-      make_instrumental: payload.isInstrumental ?? false,
+      make_instrumental: false,
     }),
   })
 

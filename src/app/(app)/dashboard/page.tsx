@@ -1386,7 +1386,7 @@ export default function Home() {
                       <FadeInImage 
                         src={(item.cover_art_url && !item.cover_art_url.includes('unsplash.com')) ? item.cover_art_url : getFallbackCoverArt(item)}
                         alt={item.title || 'Track Art'} 
-                        className="absolute inset-0 w-full h-full object-cover" 
+                        className="absolute inset-0 w-full h-full object-cover object-top"
                       />
 
                       {generatingCovers[item.id] && (
@@ -1953,7 +1953,7 @@ export default function Home() {
                     <img 
                       src={detailItem.cover_art_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80'} 
                       alt={detailItem.title || 'Track Art'} 
-                      className="w-full h-full object-cover" 
+                      className="w-full h-full object-cover object-top"
                     />
                   </div>
                 </div>
