@@ -1,0 +1,59 @@
+{
+  "manifestVersion": "1.0",
+  "releaseId": "ms-ep-001",
+  "releaseVersion": 1,
+  "title": "Warm Arrival — DEVELOPMENT FIXTURE",
+  "durationSeconds": 240,
+  "currentState": "tension",
+  "targetState": "settled_warmth",
+  "primaryIntent": "dwell",
+  "supplyStatus": "draft",
+  "rightsStatus": "pending",
+  "allowedTerritories": [],
+  "validFrom": "2026-08-15T00:00:00Z",
+  "validUntil": null,
+  "visualDirection": {
+    "temperatureStart": 32,
+    "temperatureEnd": 68,
+    "motif": "steam_and_ripple",
+    "colorChipCandidates": ["#D5D8D6", "#CBBDA8", "#B7804E", "#6E4934"],
+    "textureProfile": "soft steam over subtle concentric ripples",
+    "motionCurve": "slow rise, steady center, gentle settle"
+  },
+  "tracks": [
+    {
+      "assetId": "ms-tr-0001",
+      "assetVersion": 1,
+      "title": "Development Placeholder 01",
+      "position": 1,
+      "phase": "arrival",
+      "phasePosition": 1,
+      "placement": "default",
+      "durationSeconds": 240,
+      "bpm": 72,
+      "energy": 27,
+      "warmth": 38,
+      "emotionalStart": "cool_distance",
+      "emotionalEnd": "early_warmth",
+      "vocalType": "instrumental",
+      "timbreProfile": ["soft electric piano", "muted guitar"],
+      "recommendedPreviousPhase": ["arrival"],
+      "recommendedNextPhase": ["arrival", "settle"],
+      "bridgeEligible": false,
+      "bridgeDirections": [],
+      "similarityRisk": "low",
+      "technicalQa": "pending",
+      "emotionalQa": "pending",
+      "explicitContent": false,
+      "supplyStatus": "draft",
+      "rightsStatus": "pending",
+      "transitionInSeconds": 2,
+      "transitionOutSeconds": 6,
+      "recommendedCrossfadeSeconds": 4,
+      "playbackAccess": {
+        "type": "asset_reference",
+        "reference": "melodio:development-only:ms-tr-0001:v1"
+      }
+    }
+  ]
+}

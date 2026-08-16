@@ -56,6 +56,27 @@ export type Database = {
         }
         Relationships: []
       }
+      /** 일반 사용자에게 노출되지 않는 MugSound 내부 운영 역할 */
+      mugsound_operator_roles: {
+        Row: {
+          user_id: string
+          role: 'producer' | 'qa' | 'approver'
+          granted_by: string | null
+          granted_at: string
+        }
+        Insert: {
+          user_id: string
+          role: 'producer' | 'qa' | 'approver'
+          granted_by?: string | null
+          granted_at?: string
+        }
+        Update: {
+          role?: 'producer' | 'qa' | 'approver'
+          granted_by?: string | null
+          granted_at?: string
+        }
+        Relationships: []
+      }
       /** 프롬프트 히스토리 */
       prompt_history: {
         Row: {
