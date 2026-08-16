@@ -638,6 +638,7 @@ async function submitSunoJobForRetry(metadata, title) {
 
   const submitRes = await fetch(`${apiBaseUrl}/suno/submit/music`, {
     method: 'POST',
+    signal: AbortSignal.timeout(120000),
     headers: {
       'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json',
@@ -707,6 +708,10 @@ async function submitQueuedMugSoundGenerations() {
         log('INFO', '[MugSound Queue] Suno 제출 완료', { id: row.id.slice(0, 8) });
       } catch (submitError) {
         log('ERROR', '[MugSound Queue] Suno 제출 실패', submitError.message);
+        await supabase.from('generations').update({
+          status: 'failed',
+          error_message: `Suno 제출 실패: ${submitError.message}`,
+        }).eq('id', row.id).eq('status', 'pending');
       }
     }
   } catch (error) {
