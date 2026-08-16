@@ -99,6 +99,13 @@ const SHORTFORM_MAX_TRIMMABLE_SEC = 3;
  */
 const SHORTFORM_MAX_DURATION_RETRIES = 2;
 
+// ─── MugSound 방향 승인용 플리곡 길이 정책 ───────────────────────────────────
+// 기존 Melodio의 약 3분 연주곡 생성 방식을 사용하되, Suno가 반환한 실제 길이를
+// 반드시 검사한다. A/B 두 후보가 모두 범위 안에 들어오기 전에는 완료 처리하지 않는다.
+const MUGSOUND_MIN_DURATION_SEC = 150;
+const MUGSOUND_MAX_DURATION_SEC = 270;
+const MUGSOUND_MAX_DURATION_RETRIES = 2;
+
 /**
  * 곡과 무관한 자리표시자 커버인가.
  *
@@ -615,9 +622,15 @@ async function submitSunoJobForRetry(metadata, title) {
   const apiKey = process.env.SUNO_API_KEY;
   const apiBaseUrl = process.env.SUNO_API_URL || 'https://api.302.ai';
 
-  const effectiveStylePrompt = metadata.excludePrompt?.trim()
+  let effectiveStylePrompt = metadata.excludePrompt?.trim()
     ? `${metadata.stylePrompt}, ${metadata.excludePrompt.trim()}`
     : metadata.stylePrompt;
+
+  if (metadata.sourceMenu === 'mugsound-supply' &&
+      !effectiveStylePrompt.toLowerCase().includes('fade out') &&
+      !effectiveStylePrompt.toLowerCase().includes('clean ending')) {
+    effectiveStylePrompt = `${effectiveStylePrompt}, target duration 3:15, fade out at 3:20, clean ending`;
+  }
 
   const model = mapSunoVersionToModel(metadata.sunoVersion);
 
@@ -849,6 +862,41 @@ async function pollSunoGenerations() {
           // 길이 재발행은 음질 재발행과 별도 카운터를 쓴다.
           // 같은 retry_count 를 쓰면 길이 재발행이 한도를 소진해 음질 재발행이 막힌다.
           const durationRetryCount = metaObj.duration_retry_count || 0;
+
+          const isMugSoundSupply = metaObj.sourceMenu === 'mugsound-supply';
+          const mugsoundDurations = scannedClips.map((sc) => clipSecEarly(sc.clip));
+          const hasTwoMugSoundCandidates = scannedClips.length === 2 && mugsoundDurations.every((duration) =>
+            duration !== null && duration >= MUGSOUND_MIN_DURATION_SEC && duration <= MUGSOUND_MAX_DURATION_SEC
+          );
+
+          if (isMugSoundSupply && !hasTwoMugSoundCandidates) {
+            const lens = mugsoundDurations.map((duration) => `${duration ?? '?'}s`).join(', ');
+            if (durationRetryCount < MUGSOUND_MAX_DURATION_RETRIES) {
+              log('WARN', `[MugSound 길이 미달] A/B ${lens} — 합격 ${MUGSOUND_MIN_DURATION_SEC}~${MUGSOUND_MAX_DURATION_SEC}초, 재발행 (${durationRetryCount + 1}/${MUGSOUND_MAX_DURATION_RETRIES})`);
+              try {
+                const newTaskId = await submitSunoJobForRetry(metaObj, row.title);
+                metaObj.duration_retry_count = durationRetryCount + 1;
+                metaObj.retry_reason = `mugsound_duration_out_of_spec (${lens})`;
+                await supabase.from('generations').update({
+                  source_audio_url: `suno:${newTaskId}`,
+                  status: 'generating',
+                  license_hash: JSON.stringify(metaObj)
+                }).eq('id', row.id);
+                continue;
+              } catch (retryErr) {
+                log('ERROR', '[MugSound 길이 재발행 실패]', retryErr.message);
+              }
+            }
+
+            metaObj.durationOutcome = `failed_out_of_spec (${lens})`;
+            await supabase.from('generations').update({
+              status: 'failed',
+              error_message: `MugSound A/B 길이 기준 미통과: ${lens} (허용 ${MUGSOUND_MIN_DURATION_SEC}~${MUGSOUND_MAX_DURATION_SEC}초)`,
+              license_hash: JSON.stringify(metaObj)
+            }).eq('id', row.id);
+            log('ERROR', `[MugSound 길이 최종 실패] ${lens} — 완료 처리하지 않음`);
+            continue;
+          }
 
           if (noClipUsable && durationRetryCount < SHORTFORM_MAX_DURATION_RETRIES) {
             const lens = scannedClips.map((sc) => `${clipSecEarly(sc.clip) ?? '?'}s`).join(', ');
