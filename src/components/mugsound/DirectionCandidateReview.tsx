@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Check, CircleHelp, Crown, LoaderCircle, RefreshCw, X } from 'lucide-react'
 import type { DirectionApprovalBlueprint } from '@/data/mugsound-direction-approval-blueprints'
+import { MUGSOUND_DIRECTION_LEGACY_BATCH_ID } from '@/lib/mugsound/direction-batch'
 
 type Verdict = 'pass' | 'review' | 'reject'
 
@@ -42,7 +43,7 @@ export function DirectionCandidateReview({ blueprints }: { blueprints: Direction
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    const response = await fetch('/api/internal/mugsound/direction-batch', { cache: 'no-store' })
+    const response = await fetch(`/api/internal/mugsound/direction-batch?batchId=${encodeURIComponent(MUGSOUND_DIRECTION_LEGACY_BATCH_ID)}`, { cache: 'no-store' })
     const body = await response.json() as { data?: { candidates: ReviewCandidate[] }; error?: string }
     if (!response.ok) throw new Error(body.error || '후보를 불러오지 못했습니다.')
     const next = body.data?.candidates || []

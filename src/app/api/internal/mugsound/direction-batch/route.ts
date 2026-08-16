@@ -1,8 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getMugSoundAccess } from '@/lib/mugsound/access'
+import { MUGSOUND_DIRECTION_BATCH_IDS, MUGSOUND_DIRECTION_BATCH_ID } from '@/lib/mugsound/direction-batch'
 
-const BATCH_ID = 'mugsound-direction-20260816-v1'
+function resolveBatchId(request: Request) {
+  const requested = new URL(request.url).searchParams.get('batchId')
+  return MUGSOUND_DIRECTION_BATCH_IDS.find((batchId) => batchId === requested) || MUGSOUND_DIRECTION_BATCH_ID
+}
 
 interface SupplyMetadata {
   mugsoundBatchId?: string
@@ -24,15 +28,16 @@ interface SupplyMetadata {
 
 const verdicts = new Set(['pass', 'review', 'reject'])
 
-export async function GET() {
+export async function GET(request: Request) {
   const access = await getMugSoundAccess()
   if (!access) return NextResponse.json({ error: '접근 권한이 없습니다.' }, { status: 403 })
 
+  const batchId = resolveBatchId(request)
   const client = await createClient()
   const { data, error } = await client.from('generations')
     .select('id,title,status,audio_url,audio_grade,clipping_count,dissonance_score,license_hash,created_at')
     .eq('user_id', access.userId)
-    .like('license_hash', `%\"mugsoundBatchId\":\"${BATCH_ID}\"%`)
+    .like('license_hash', `%\"mugsoundBatchId\":\"${batchId}\"%`)
     .order('created_at', { ascending: true })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -58,7 +63,7 @@ export async function GET() {
       return []
     }
   })
-  return NextResponse.json({ success: true, data: { batchId: BATCH_ID, candidates } })
+  return NextResponse.json({ success: true, data: { batchId, candidates } })
 }
 
 export async function PATCH(request: Request) {
@@ -97,7 +102,7 @@ export async function PATCH(request: Request) {
   } catch {
     return NextResponse.json({ error: '후보 메타데이터가 손상되었습니다.' }, { status: 409 })
   }
-  if (targetMetadata.mugsoundBatchId !== BATCH_ID || !targetMetadata.mugsoundBlueprintId) {
+  if (!MUGSOUND_DIRECTION_BATCH_IDS.some((batchId) => batchId === targetMetadata.mugsoundBatchId) || !targetMetadata.mugsoundBlueprintId) {
     return NextResponse.json({ error: 'MugSound 방향성 후보가 아닙니다.' }, { status: 400 })
   }
 
@@ -105,7 +110,7 @@ export async function PATCH(request: Request) {
     const { data: siblings, error: siblingsError } = await client.from('generations')
       .select('id,license_hash')
       .eq('user_id', access.userId)
-      .like('license_hash', `%\"mugsoundBatchId\":\"${BATCH_ID}\"%`)
+      .like('license_hash', `%\"mugsoundBatchId\":\"${targetMetadata.mugsoundBatchId}\"%`)
       .like('license_hash', `%\"mugsoundBlueprintId\":\"${targetMetadata.mugsoundBlueprintId}\"%`)
     if (siblingsError) return NextResponse.json({ error: siblingsError.message }, { status: 500 })
 

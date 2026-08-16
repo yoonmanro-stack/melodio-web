@@ -14,6 +14,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { GoogleAuth } from 'google-auth-library'
 import { titlePlaybooks } from '@/data/titlePlaybooks'
+import { MUGSOUND_DIRECTION_BATCH_IDS } from '@/lib/mugsound/direction-batch'
 import { scrubConflictingVocalTags } from '@/lib/voice-dna-scrubber'
 import { getMugSoundAccess } from '@/lib/mugsound/access'
 
@@ -219,10 +220,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
   // ── [Duration Control Injection] ──────────────────────────────────────────
   const isShortsTrack = (payload as any).isViral || (payload as any).isViralTrack || baseStylePrompt.toLowerCase().includes('viral') || baseStylePrompt.toLowerCase().includes('short') || baseStylePrompt.toLowerCase().includes('parody');
 
-  const isMugSoundSupply = (payload as PromptPayload & { sourceMenu?: string }).sourceMenu === 'mugsound-supply'
-  if (isMugSoundSupply) {
-    effectiveStylePrompt = `${effectiveStylePrompt}, target duration 4:00, stable arrangement, gentle fade out from 3:52, clean ending`
-  } else if (!effectiveStylePrompt.toLowerCase().includes('fade out') && !effectiveStylePrompt.toLowerCase().includes('clean ending')) {
+  if (!effectiveStylePrompt.toLowerCase().includes('fade out') && !effectiveStylePrompt.toLowerCase().includes('clean ending')) {
     if (isShortsTrack) {
       effectiveStylePrompt = `${effectiveStylePrompt}, target duration 0:28, clean 0:28 ending, abrupt finish`
     } else {
@@ -365,8 +363,11 @@ export async function POST(request: NextRequest) {
       }
       const blueprintId = typeof rawBody.mugsoundBlueprintId === 'string' ? rawBody.mugsoundBlueprintId : ''
       const batchId = typeof rawBody.mugsoundBatchId === 'string' ? rawBody.mugsoundBatchId : ''
-      if (!/^ms-bp-[a-z0-9-]{3,80}$/.test(blueprintId) || batchId !== 'mugsound-direction-20260816-v1') {
+      if (!/^ms-bp-[a-z0-9-]{3,80}$/.test(blueprintId) || !MUGSOUND_DIRECTION_BATCH_IDS.some((allowed) => allowed === batchId)) {
         return NextResponse.json({ error: 'MugSound Batch와 Blueprint 식별자가 필요합니다.' }, { status: 400 })
+      }
+      if (!payload.isInstrumental && !payload.lyricsPrompt?.trim()) {
+        return NextResponse.json({ error: '가사곡은 확정 가사가 필요합니다.' }, { status: 400 })
       }
       const client = await createClient()
       const { data: existing } = await client.from('generations').select('id,status')
@@ -577,6 +578,7 @@ export async function POST(request: NextRequest) {
       mugsoundTargetEnergy: isMugSoundSupply ? rawBody.mugsoundTargetEnergy : null,
       mugsoundTargetWarmth: isMugSoundSupply ? rawBody.mugsoundTargetWarmth : null,
       mugsoundBridgeDirection: isMugSoundSupply ? rawBody.mugsoundBridgeDirection || null : null,
+      mugsoundVocalType: isMugSoundSupply ? (payload.isInstrumental ? 'instrumental' : 'lyrics') : null,
     })
 
     const trackTitle = payload.title?.trim() || payload.stylePrompt.slice(0, 60)
