@@ -24,7 +24,6 @@ import {
   Mic2,
   Compass,
   Workflow,
-  PackageCheck,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -54,7 +53,6 @@ interface SidebarProps {
   onToggle: () => void;
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
-  showMugSoundSupply?: boolean;
 }
 
 export function SidebarToggleIcon({ isCollapsed, className }: { isCollapsed: boolean; className?: string }) {
@@ -79,7 +77,7 @@ export function SidebarToggleIcon({ isCollapsed, className }: { isCollapsed: boo
   );
 }
 
-export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileClose, showMugSoundSupply = false }: SidebarProps) {
+export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const { t } = useLanguage();
 
@@ -140,23 +138,6 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
         </div>
 
         <nav className="space-y-1">
-          {showMugSoundSupply ? (
-            <Link
-              href="/internal/mugsound"
-              onClick={onMobileClose}
-              className={clsx(
-                "mb-3 flex items-center rounded-xl border border-amber-300/15 bg-amber-300/[0.05] text-amber-200 transition-all duration-200 group hover:bg-amber-300/[0.1]",
-                !isCollapsed && "md:relative",
-                isCollapsed ? "md:justify-center md:p-3 md:h-11 md:w-11 md:mx-auto" : "md:gap-3 md:px-3 md:py-2.5",
-                "gap-3 px-3 py-2.5",
-                pathname.startsWith("/internal/mugsound") ? "shadow-[inset_2px_0_0_#fbbf24]" : ""
-              )}
-            >
-              <PackageCheck className="w-5 h-5 flex-shrink-0" />
-              <span className={clsx("font-medium text-sm flex-1", isCollapsed ? "md:hidden" : "inline-block")}>MugSound Supply</span>
-              {isCollapsed ? <div className="hidden md:block absolute left-20 scale-90 group-hover:scale-100 bg-zinc-950 text-amber-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 whitespace-nowrap z-50 shadow-2xl border border-white/10 ml-2">MugSound Supply</div> : null}
-            </Link>
-          ) : null}
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (

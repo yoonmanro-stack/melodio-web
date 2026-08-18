@@ -8,7 +8,7 @@ import { LanguageSelector } from "@/components/LanguageSelector";
 import { Menu } from "lucide-react";
 import clsx from "clsx";
 
-export function AppShell({ children, showMugSoundSupply }: { children: React.ReactNode; showMugSoundSupply: boolean }) {
+export function AppShell({ children }: { children: React.ReactNode }) {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
@@ -28,7 +28,6 @@ export function AppShell({ children, showMugSoundSupply }: { children: React.Rea
         onToggle={() => setIsCollapsed((value) => !value)}
         isMobileOpen={isMobileOpen}
         onMobileClose={() => setIsMobileOpen(false)}
-        showMugSoundSupply={showMugSoundSupply}
       />
 
       {isMobileOpen ? <div onClick={() => setIsMobileOpen(false)} className="md:hidden fixed inset-0 bg-black/60 backdrop-blur-sm z-40 transition-opacity duration-300" /> : null}
