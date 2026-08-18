@@ -1,6 +1,4 @@
-import type { CapacitorConfig } from '@capacitor/cli';
-
-const config: CapacitorConfig = {
+const config = {
   appId: 'app.melodio.pioneer',
   appName: 'Pioneer 119 Rescue',
   webDir: 'public',
