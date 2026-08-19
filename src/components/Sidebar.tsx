@@ -22,14 +22,12 @@ import {
   Radio,
   Zap,
   Mic2,
-  Compass,
   Workflow,
 } from "lucide-react";
 import clsx from "clsx";
 
 const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "HexaWave 공간 개척", href: "/pioneer", icon: Compass },
   { name: "Artist Incubator", href: "/incubator", icon: Fingerprint },
   { name: "Persona Lab", href: "/persona", icon: Sparkles },
   { name: "Audio Forge Pro", href: "/style-library", icon: Music4 },
