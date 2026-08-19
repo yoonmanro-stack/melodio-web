@@ -1,7 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient as createServerClient } from '@/lib/supabase/server'
 
 export async function POST(request: NextRequest) {
   try {
+    const authClient = await createServerClient()
+    const { data: { user } } = await authClient.auth.getUser()
+
+    if (!user) {
+      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
+    }
+
     const {
       prompt: rawPrompt,
       size = '1:1',
@@ -131,7 +139,7 @@ export async function POST(request: NextRequest) {
         }
 
         const fileName = `${channelTitle ? channelTitle.replace(/[^a-zA-Z0-9-]/g, '_') : 'preset'}_${Date.now()}_${index}`;
-        const filePath = `thumbnails/${fileName}.png`
+        const filePath = `thumbnails/${user.id}/${fileName}.png`
         const { error: uploadError } = await supabase.storage
           .from('melodio-assets')
           .upload(filePath, buffer, {
