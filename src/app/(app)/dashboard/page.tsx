@@ -194,6 +194,34 @@ const TrackDuration = ({ audioUrl, initialDuration }: { audioUrl?: string; initi
   return <span>{mins}:{secs < 10 ? '0' : ''}{secs}</span>;
 };
 
+const downloadTrack = async (item: Generation) => {
+  const downloadUrl = item.audio_url || item.source_audio_url;
+  if (!downloadUrl) return;
+
+  const response = await fetch(downloadUrl);
+  if (!response.ok) {
+    throw new Error(`Download failed (${response.status})`);
+  }
+
+  const blob = await response.blob();
+  if (blob.size === 0) {
+    throw new Error('Downloaded audio is empty');
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = `${item.title || 'melodio-track'}.mp3`;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+
+  // Safari can still be reading the Blob when click() returns. Revoking it
+  // immediately can produce an incomplete or invalid download.
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+};
+
 const isJapanTrack = (item: any) => {
   if (!item.license_hash) return false;
   try {
@@ -1598,14 +1626,7 @@ export default function Home() {
                           const dlUrl = item.audio_url || item.source_audio_url;
                           if (!dlUrl) return;
                           try {
-                            const resp = await fetch(dlUrl);
-                            const blob = await resp.blob();
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `${item.title || 'melodio-track'}.mp3`;
-                            a.click();
-                            URL.revokeObjectURL(url);
+                            await downloadTrack(item);
                           } catch {
                             window.open(dlUrl, '_blank');
                           }
@@ -1658,32 +1679,6 @@ export default function Home() {
                               <Edit3 className="w-3.5 h-3.5" />
                               <span>Edit Title</span>
                             </button>
-                            
-                            {(item.audio_url || item.source_audio_url) && (
-                              <button 
-                                onClick={async () => {
-                                  setActiveMenuId(null);
-                                  const dlUrl = item.audio_url || item.source_audio_url;
-                                  if (!dlUrl) return;
-                                  try {
-                                    const resp = await fetch(dlUrl);
-                                    const blob = await resp.blob();
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement('a');
-                                    a.href = url;
-                                    a.download = `${item.title || 'melodio-track'}.mp3`;
-                                    a.click();
-                                    URL.revokeObjectURL(url);
-                                  } catch {
-                                    window.open(dlUrl, '_blank');
-                                  }
-                                }}
-                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-xs text-zinc-300 hover:bg-white/5 hover:text-white transition-colors"
-                              >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Download Mix</span>
-                              </button>
-                            )}
                             
                             <button 
                               onClick={() => {
