@@ -592,8 +592,13 @@ export async function POST(request: NextRequest) {
       selections: selections || {},
       vocal: inferVocalLabel(payload, selections, vdCode),
       voiceDna: vdCode || null,
-      auto_voice_convert: !!(vdCode && (vdCode.includes('yoon') || vdCode.startsWith('custom') || rawBody.autoVoiceConvert)),
-      voice_model_id: (vdCode && vdCode.includes('yoon')) ? 'qr_yoon' : (rawBody.voiceModelId || 'qr_yoon'),
+      auto_voice_convert: !!(
+        rawBody.autoVoiceConvert ||
+        rawBody.activeVoice?.is100PercentSync ||
+        rawBody.activeVoice?.voice_model_id ||
+        (vdCode && (vdCode.includes('yoon') || vdCode.startsWith('custom') || vdCode.startsWith('voice-')))
+      ),
+      voice_model_id: rawBody.activeVoice?.voice_model_id || rawBody.voiceModelId || ((vdCode && vdCode.includes('yoon')) ? 'qr_yoon' : 'qr_yoon'),
       lyricsSections: lyricsSections || [],
       duration: rawBody.metadata?.duration || '',
       durationSeconds: rawBody.metadata?.durationSeconds || null,

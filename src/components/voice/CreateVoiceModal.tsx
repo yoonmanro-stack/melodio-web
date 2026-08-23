@@ -389,10 +389,11 @@ export function CreateVoiceModal() {
           physicalLayers: sliders,
         });
       } else {
+        const isUserVoice = mode === "upload" || mode === "record" || !!loadedVoiceId || finalName.includes("QR.Yoon");
         const saveName = overwrite ? finalName : (loadedVoiceId && !finalName.includes("v2") && !finalName.includes("튜닝") ? `${finalName} (v2)` : finalName);
         addVoice({
           name: saveName,
-          desc: voiceDesc || `${language} ${gender} Vocalist`,
+          desc: voiceDesc || `${language} ${gender} Vocalist (100% 육성 보컬)`,
           gender,
           language,
           tags: parsedTags.length > 0 ? parsedTags : ["Custom", gender],
@@ -400,6 +401,8 @@ export function CreateVoiceModal() {
           sourceType,
           stylePrompt,
           isFavorite: true,
+          voice_model_id: isUserVoice ? "qr_yoon" : undefined,
+          is100PercentSync: isUserVoice,
           physicalLayers: mode === "dna" || analysisData ? sliders : undefined,
         });
       }

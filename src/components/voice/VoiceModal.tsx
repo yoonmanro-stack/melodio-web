@@ -305,6 +305,11 @@ export function VoiceModal() {
                             )}
                           </div>
                         )}
+                        {(voice.is100PercentSync || voice.voice_model_id === "qr_yoon" || voice.name.includes("QR.Yoon")) && (
+                          <span className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/40 shrink-0 shadow-[0_0_10px_rgba(99,102,241,0.2)]">
+                            <Sparkles className="w-2.5 h-2.5 text-indigo-400" /> 100% 육성 RVC
+                          </span>
+                        )}
                         {isActive && (
                           <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30 shrink-0">
                             <CheckCircle2 className="w-2.5 h-2.5" /> 장착됨

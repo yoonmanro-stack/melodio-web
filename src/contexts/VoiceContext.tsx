@@ -17,6 +17,8 @@ export interface VoiceItem {
   isFavorite?: boolean;
   createdAt: string;
   avatarGradient?: string;
+  voice_model_id?: string;
+  is100PercentSync?: boolean;
   physicalLayers?: {
     pitch?: number;
     brightness?: number;
@@ -201,6 +203,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
                 isFavorite: !!v.isFavorite,
                 createdAt: v.createdAt || new Date().toISOString(),
                 avatarGradient: v.avatarGradient || (gender === "female" ? "linear-gradient(135deg, #ec4899, #8b5cf6)" : "linear-gradient(135deg, #06b6d4, #3b82f6)"),
+                voice_model_id: v.voice_model_id || (v.name?.includes("QR.Yoon") || v.name?.includes("내 목소리") ? "qr_yoon" : undefined),
+                is100PercentSync: v.is100PercentSync ?? (v.voice_model_id === "qr_yoon" || v.name?.includes("QR.Yoon")),
                 physicalLayers: v.physicalLayers,
               };
             });

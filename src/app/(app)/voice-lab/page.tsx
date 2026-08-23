@@ -331,12 +331,15 @@ export default function VoiceDnaStudio() {
     voices, 
     activeVoice, 
     setActiveVoice, 
+    addVoice,
     updateVoice, 
     deleteVoice, 
     toggleFavorite, 
     openVoiceModal, 
     openCreateModal 
   } = useVoice();
+  const [loadedVoiceId, setLoadedVoiceId] = useState<string | null>(null);
+  const [loadedVoiceAudioUrl, setLoadedVoiceAudioUrl] = useState<string | null>(null);
   const [editingCollectionVoiceId, setEditingCollectionVoiceId] = useState<string | null>(null);
   const [editingCollectionVoiceName, setEditingCollectionVoiceName] = useState("");
   // ─── State Management ──────────────────────────────────────────────────────
@@ -623,6 +626,10 @@ export default function VoiceDnaStudio() {
   };
 
   const playCurrentDesignedVoicePreview = () => {
+    if (explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW") {
+      stopExploreVoiceDemo();
+      return;
+    }
     const tempVoice = {
       code: "DESIGNER_PREVIEW",
       name: stageName || "My Design Preview",
@@ -631,6 +638,7 @@ export default function VoiceDnaStudio() {
       language: "Custom",
       tags: selectedTextures.length > 0 ? selectedTextures : ["Custom"],
       gradient: "linear-gradient(135deg, #d946ef 0%, #06b6d4 100%)",
+      audioUrl: loadedVoiceAudioUrl || undefined,
       physical_layers: {
         gender,
         age,
@@ -639,10 +647,33 @@ export default function VoiceDnaStudio() {
         chest: chestResonance,
         head: headResonance,
         weight,
-        power
+        power,
+        audio_url: loadedVoiceAudioUrl || undefined
       }
     };
     playExploreVoiceDemo(tempVoice);
+  };
+
+  const handleLoadVoiceIntoDesigner = (v: any) => {
+    setLoadedVoiceId(v.id || v.code);
+    setLoadedVoiceAudioUrl(v.audioUrl || v.audio_url || null);
+    setStageName(v.name || "Custom Voice");
+    setGender(v.gender === "male" ? "male" : "female");
+    
+    if (v.physicalLayers || v.physical_layers) {
+      const pl = v.physicalLayers || v.physical_layers;
+      if (pl.pitch !== undefined) setPitch(pl.pitch);
+      if (pl.brightness !== undefined) setBrightness(pl.brightness);
+      if (pl.chest !== undefined) setChestResonance(pl.chest);
+      if (pl.head !== undefined) setHeadResonance(pl.head);
+      if (pl.weight !== undefined || pl.power !== undefined) setPower(pl.weight ?? pl.power ?? 70);
+      if (pl.roughness !== undefined) setNoiseEntropy(pl.roughness);
+      if (pl.vibrato !== undefined) setVibrato(pl.vibrato);
+    }
+    if (v.tags && Array.isArray(v.tags) && v.tags.length > 0) {
+      setSelectedTextures(v.tags.slice(0, 2));
+    }
+    setVoiceType("default");
   };
 
   const playVoiceSyntheticDemo = (code: string) => {
@@ -1378,11 +1409,14 @@ export default function VoiceDnaStudio() {
   };
 
   // ─── Save DNA ──────────────────────────────────────────────────────────────
-  const handleSaveDna = () => {
+  const handleSaveDna = (overwrite: boolean = false) => {
     const vdCode = `VD-${Math.floor(Math.random() * 9000 + 1000)}`;
+    const finalName = stageName.trim() || `Voice DNA ${vdCode}`;
+    const saveName = overwrite ? finalName : (loadedVoiceId && !finalName.includes("v2") && !finalName.includes("튜닝") ? `${finalName} (v2)` : finalName);
+
     const newDna: VoiceDnaRecord = {
       vd_code: vdCode,
-      name: stageName,
+      name: saveName,
       physical_layers: {
         gender,
         age,
@@ -1390,8 +1424,8 @@ export default function VoiceDnaStudio() {
         brightness,
         chest: chestResonance,
         head: headResonance,
-        weight,
-        audio_url: demoAudioUrl || undefined,
+        weight: power,
+        audio_url: demoAudioUrl || loadedVoiceAudioUrl || undefined,
         audio_url_b: demoAudioUrlB || undefined
       },
       textures: selectedTextures,
@@ -1404,7 +1438,7 @@ export default function VoiceDnaStudio() {
       },
       style: selectedReverb,
       noise_entropy: noiseEntropy,
-      audio_url: demoAudioUrl || undefined,
+      audio_url: demoAudioUrl || loadedVoiceAudioUrl || undefined,
       audio_url_b: demoAudioUrlB || undefined
     };
 
@@ -1414,11 +1448,50 @@ export default function VoiceDnaStudio() {
     localStorage.setItem("custom_voice_dnas", JSON.stringify(updated));
     setLastSavedDna(vdCode);
 
+    // Sync with VoiceContext
+    if (overwrite && loadedVoiceId) {
+      updateVoice(loadedVoiceId, {
+        name: finalName,
+        gender,
+        tags: [...selectedTextures, ...selectedEmotions],
+        physicalLayers: {
+          pitch,
+          brightness,
+          chest: chestResonance,
+          head: headResonance,
+          weight: power,
+          roughness: noiseEntropy,
+          vibrato,
+        }
+      });
+    } else {
+      addVoice({
+        name: saveName,
+        desc: `${gender === 'male' ? '남성' : '여성'} 보컬 (${selectedTextures.join(', ') || 'Custom'})`,
+        gender,
+        language: 'Korean',
+        tags: [...selectedTextures, ...selectedEmotions],
+        audioUrl: demoAudioUrl || loadedVoiceAudioUrl || '',
+        sourceType: 'dna_designed',
+        stylePrompt: `${gender} vocals, pitch ${pitch}, brightness ${brightness}, chest resonance ${chestResonance}, head resonance ${headResonance}, ${selectedTextures.join(', ')}`,
+        isFavorite: true,
+        physicalLayers: {
+          pitch,
+          brightness,
+          chest: chestResonance,
+          head: headResonance,
+          weight: power,
+          roughness: noiseEntropy,
+          vibrato,
+        }
+      });
+    }
+
     // Supabase DB Sync
     if (currentUser) {
       supabase.from('voice_dnas').insert({
         vd_code: vdCode,
-        name: stageName,
+        name: saveName,
         physical_layers: {
           gender,
           age,
@@ -2647,6 +2720,79 @@ export default function VoiceDnaStudio() {
 
                 {/* Dynamic Content based on Voice Source */}
                 <AnimatePresence mode="wait">
+                  {voiceType === "default" && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="p-4 rounded-xl bg-black/40 border border-white/5 space-y-3 mb-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-fuchsia-300 flex items-center gap-1.5">
+                          <Sparkles className="w-3.5 h-3.5 text-fuchsia-400" />
+                          📂 등록된 보이스 불러와서 다듬기 (원클릭 로드)
+                        </span>
+                        <span className="text-[10px] text-zinc-500 font-mono">
+                          보유: {voices.length}개 보이스
+                        </span>
+                      </div>
+
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-2 max-h-40 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10">
+                        {voices.map((v) => {
+                          const isSelected = loadedVoiceId === v.id;
+                          return (
+                            <button
+                              key={v.id}
+                              type="button"
+                              onClick={() => handleLoadVoiceIntoDesigner(v)}
+                              className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                                isSelected
+                                  ? "bg-fuchsia-600/30 border-fuchsia-500 text-white shadow-md shadow-fuchsia-500/20"
+                                  : "bg-zinc-900/80 border-white/5 text-zinc-300 hover:border-white/20 hover:bg-zinc-800"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between w-full mb-1">
+                                <span className="text-xs font-bold truncate flex items-center gap-1">
+                                  {v.name}
+                                </span>
+                                <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
+                                  v.gender === "male" ? "bg-blue-500/20 text-blue-300" : "bg-pink-500/20 text-pink-300"
+                                }`}>
+                                  {v.gender === "male" ? "남성" : "여성"}
+                                </span>
+                              </div>
+                              <div className="text-[10px] text-zinc-400 truncate">
+                                {v.tags?.slice(0, 2).join(", ") || v.desc || "보이스"}
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {loadedVoiceId && (
+                        <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between text-xs text-emerald-300">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                            <span>
+                              <strong>[{stageName}]</strong>의 음향 DNA가 로드되었습니다. 슬라이더를 움직여 오른쪽 Voice Wheel DNA와 실시간 청음으로 변화를 확인하세요!
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setLoadedVoiceId(null);
+                              setLoadedVoiceAudioUrl(null);
+                              setStageName("Vocal Prototype Alpha");
+                            }}
+                            className="text-[10px] text-zinc-400 hover:text-white underline cursor-pointer"
+                          >
+                            초기화
+                          </button>
+                        </div>
+                      )}
+                    </motion.div>
+                  )}
+
                   {voiceType === "record" && (
                     <motion.div 
                       initial={{ opacity: 0, height: 0 }}
@@ -2817,16 +2963,41 @@ export default function VoiceDnaStudio() {
                   <h3 className="text-sm font-semibold text-white flex items-center gap-2">
                     <Sliders className="w-4 h-4 text-fuchsia-400" /> Layer 1 & 4: Voice Attributes Sliders
                   </h3>
-                  <div className="flex gap-2">
-                    {(["female", "male"] as const).map(g => (
-                      <button 
-                        key={g}
-                        onClick={() => setGender(g)}
-                        className={`px-3 py-1 rounded-md text-[10px] font-bold border transition-all ${gender === g ? "bg-fuchsia-600/20 border-fuchsia-500/40 text-fuchsia-400" : "bg-black/30 border-white/5 text-zinc-500"}`}
-                      >
-                        {g.toUpperCase()}
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-3">
+                    {/* Live Preview Button */}
+                    <button
+                      type="button"
+                      onClick={playCurrentDesignedVoicePreview}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg ${
+                        explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW"
+                          ? "bg-rose-600 text-white shadow-rose-600/30 animate-pulse"
+                          : "bg-fuchsia-600/20 hover:bg-fuchsia-600/30 border border-fuchsia-500/40 text-fuchsia-300"
+                      }`}
+                    >
+                      {explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW" ? (
+                        <>
+                          <Pause className="w-3.5 h-3.5" />
+                          <span>청음 중지</span>
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                          <span>🎧 튜닝된 톤 즉시 청음</span>
+                        </>
+                      )}
+                    </button>
+
+                    <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
+                      {(["female", "male"] as const).map(g => (
+                        <button 
+                          key={g}
+                          onClick={() => setGender(g)}
+                          className={`px-3 py-1 rounded-md text-[10px] font-bold border transition-all ${gender === g ? "bg-fuchsia-600/20 border-fuchsia-500/40 text-fuchsia-400" : "bg-black/30 border-white/5 text-zinc-500"}`}
+                        >
+                          {g.toUpperCase()}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
@@ -3517,13 +3688,34 @@ export default function VoiceDnaStudio() {
                 </div>
 
                 <div className="w-full mt-4 space-y-2">
-                  <button
-                    id="save-btn"
-                    onClick={handleSaveDna}
-                    className="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer"
-                  >
-                    <Save className="w-4 h-4" /> Save Designed Voice DNA
-                  </button>
+                  {loadedVoiceId ? (
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleSaveDna(true)}
+                        className="py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-lg cursor-pointer"
+                      >
+                        <Save className="w-4 h-4 text-emerald-400" />
+                        <span>기존 보이스에 덮어쓰기</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSaveDna(false)}
+                        className="py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer"
+                      >
+                        <Sparkles className="w-4 h-4" />
+                        <span>✨ 새 보이스로 저장 (v2)</span>
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      id="save-btn"
+                      onClick={() => handleSaveDna(false)}
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer"
+                    >
+                      <Save className="w-4 h-4" /> Save Designed Voice DNA
+                    </button>
+                  )}
                 </div>
 
               </div>
