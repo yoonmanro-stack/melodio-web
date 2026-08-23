@@ -18,7 +18,9 @@ import {
   Wand2,
   Activity,
   CheckCircle2,
-  Info
+  Info,
+  Save,
+  FolderOpen
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -84,8 +86,9 @@ interface AudioAnalysisData {
 }
 
 export function CreateVoiceModal() {
-  const { isCreateModalOpen, closeCreateModal, addVoice, openVoiceModal } = useVoice();
+  const { isCreateModalOpen, closeCreateModal, addVoice, updateVoice, voices, activeVoice, openVoiceModal } = useVoice();
   const [mode, setMode] = useState<"record" | "upload" | "dna" | "extract">("record");
+  const [loadedVoiceId, setLoadedVoiceId] = useState<string | null>(null);
 
   // 공통 폼 필드
   const [voiceName, setVoiceName] = useState("");
@@ -296,8 +299,25 @@ export function CreateVoiceModal() {
     }
   };
 
-  // --- 최종 제출 (Voice 생성 완료) ---
-  const handleCreateVoice = () => {
+  // --- 기존 보이스 불러오기 핸들러 ---
+  const handleLoadExistingVoice = (v: VoiceItem) => {
+    setLoadedVoiceId(v.id);
+    setVoiceName(v.name);
+    setVoiceDesc(v.desc || "");
+    setGender(v.gender);
+    setLanguage(v.language || "Korean");
+    setTagsInput((v.tags || []).join(", "));
+    if (v.physicalLayers) {
+      setSliders((prev) => ({
+        ...prev,
+        ...v.physicalLayers,
+      }));
+    }
+    setMode("dna");
+  };
+
+  // --- 최종 제출 (Voice 생성 / 수정 완료) ---
+  const handleSaveVoice = (overwrite: boolean = false) => {
     try {
       const finalName = voiceName.trim() || `${gender === "female" ? "Female" : "Male"} Voice #${Math.floor(Math.random() * 900 + 100)}`;
       const parsedTags = (tagsInput || "").split(",").map((t) => t.trim()).filter(Boolean);
@@ -358,20 +378,34 @@ export function CreateVoiceModal() {
           : "male vocals, warm velvety chest-dominant baritone, sweet acoustic resonance, smooth breathy vocal texture, heartfelt intimate delivery";
       }
 
-      addVoice({
-        name: finalName,
-        desc: voiceDesc || `${language} ${gender} Vocalist`,
-        gender,
-        language,
-        tags: parsedTags.length > 0 ? parsedTags : ["Custom", gender],
-        audioUrl: finalAudioUrl,
-        sourceType,
-        stylePrompt,
-        isFavorite: true,
-        physicalLayers: mode === "dna" || analysisData ? sliders : undefined,
-      });
+      if (overwrite && loadedVoiceId) {
+        updateVoice(loadedVoiceId, {
+          name: finalName,
+          desc: voiceDesc || `${language} ${gender} Vocalist`,
+          gender,
+          language,
+          tags: parsedTags.length > 0 ? parsedTags : ["Custom", gender],
+          stylePrompt,
+          physicalLayers: sliders,
+        });
+      } else {
+        const saveName = overwrite ? finalName : (loadedVoiceId && !finalName.includes("v2") && !finalName.includes("튜닝") ? `${finalName} (v2)` : finalName);
+        addVoice({
+          name: saveName,
+          desc: voiceDesc || `${language} ${gender} Vocalist`,
+          gender,
+          language,
+          tags: parsedTags.length > 0 ? parsedTags : ["Custom", gender],
+          audioUrl: finalAudioUrl,
+          sourceType,
+          stylePrompt,
+          isFavorite: true,
+          physicalLayers: mode === "dna" || analysisData ? sliders : undefined,
+        });
+      }
 
       // Reset state
+      setLoadedVoiceId(null);
       setVoiceName("");
       setVoiceDesc("");
       setUploadedFile(null);
@@ -385,7 +419,7 @@ export function CreateVoiceModal() {
         openVoiceModal();
       }
     } catch (err) {
-      console.error("Failed to create voice:", err);
+      console.error("Failed to create/update voice:", err);
       closeCreateModal();
     }
   };
@@ -657,13 +691,68 @@ export function CreateVoiceModal() {
 
           {/* Mode 3: DNA Sliders */}
           {mode === "dna" && (
-            <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 space-y-3">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-fuchsia-400 uppercase tracking-wider">
-                  12대 음색 정밀 제어 (Voice DNA)
-                </h4>
-                <Wand2 className="w-4 h-4 text-fuchsia-400" />
+            <div className="space-y-4">
+              {/* 📂 기존 등록된 내 보이스 불러와서 다듬기 카드 선택기 */}
+              <div className="p-3.5 rounded-2xl bg-fuchsia-950/20 border border-fuchsia-500/20 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-fuchsia-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-fuchsia-400" />
+                    📂 기존 등록된 보이스 불러와서 다듬기 (원클릭 로드)
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    {voices.length}개 보이스 보유
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-2 max-h-36 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-white/10">
+                  {voices.map((v) => {
+                    const isSelected = loadedVoiceId === v.id;
+                    return (
+                      <button
+                        key={v.id}
+                        type="button"
+                        onClick={() => handleLoadExistingVoice(v)}
+                        className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                          isSelected
+                            ? "bg-fuchsia-600/30 border-fuchsia-500 text-white shadow-md shadow-fuchsia-500/20"
+                            : "bg-zinc-900/80 border-white/5 text-zinc-300 hover:border-white/20 hover:bg-zinc-800"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between w-full mb-1">
+                          <span className="text-xs font-bold truncate flex items-center gap-1">
+                            {v.name}
+                          </span>
+                          <span className={`text-[9px] px-1.5 py-0.2 rounded font-semibold ${
+                            v.gender === "male" ? "bg-blue-500/20 text-blue-300" : "bg-pink-500/20 text-pink-300"
+                          }`}>
+                            {v.gender === "male" ? "남성" : "여성"}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-zinc-400 truncate">
+                          {v.tags?.slice(0, 2).join(", ") || v.desc || "커스텀 보이스"}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {loadedVoiceId && (
+                  <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-2 text-xs text-emerald-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <span>
+                      <strong>[{voiceName}]</strong>의 음향 DNA가 로드되었습니다. 아래 슬라이더로 톤을 다듬은 후 저장하세요!
+                    </span>
+                  </div>
+                )}
               </div>
+
+              <div className="p-4 rounded-2xl bg-zinc-900/60 border border-white/5 space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-fuchsia-400 uppercase tracking-wider">
+                    12대 음색 정밀 제어 (Voice DNA)
+                  </h4>
+                  <Wand2 className="w-4 h-4 text-fuchsia-400" />
+                </div>
 
               <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
@@ -757,6 +846,7 @@ export function CreateVoiceModal() {
                 </div>
               </div>
             </div>
+          </div>
           )}
 
           {/* Mode 4: Extract from My Track */}
@@ -870,13 +960,27 @@ export function CreateVoiceModal() {
           >
             취소
           </button>
-          <button
-            onClick={handleCreateVoice}
-            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 via-fuchsia-600 to-indigo-600 hover:from-rose-400 hover:to-indigo-500 text-white font-bold text-sm shadow-xl shadow-fuchsia-500/25 transition-all flex items-center gap-2 cursor-pointer"
-          >
-            <Check className="w-4 h-4 stroke-[3]" />
-            <span>보이스 저장하기</span>
-          </button>
+          
+          <div className="flex items-center gap-2">
+            {loadedVoiceId && (
+              <button
+                type="button"
+                onClick={() => handleSaveVoice(true)}
+                className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs shadow-lg transition-all flex items-center gap-1.5 cursor-pointer"
+              >
+                <Save className="w-3.5 h-3.5 text-emerald-400" />
+                <span>기존 보이스에 덮어쓰기</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => handleSaveVoice(false)}
+              className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-rose-500 via-fuchsia-600 to-indigo-600 hover:from-rose-400 hover:to-indigo-500 text-white font-bold text-sm shadow-xl shadow-fuchsia-500/25 transition-all flex items-center gap-2 cursor-pointer"
+            >
+              <Check className="w-4 h-4 stroke-[3]" />
+              <span>{loadedVoiceId ? "✨ 새 버전으로 복제 저장 (v2)" : "보이스 저장하기"}</span>
+            </button>
+          </div>
         </div>
       </motion.div>
     </div>
