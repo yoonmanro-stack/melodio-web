@@ -15,11 +15,15 @@ export async function POST(request: Request) {
     blueprintId?: unknown
     mode?: unknown
     lyrics?: unknown
+    confirmPaidGeneration?: unknown
   } | null
   const batchId = typeof body?.batchId === 'string' ? body.batchId : ''
   const blueprintId = typeof body?.blueprintId === 'string' ? body.blueprintId : ''
   const mode = body?.mode === 'lyrics' ? 'lyrics' : 'instrumental'
   const lyrics = typeof body?.lyrics === 'string' ? body.lyrics.trim() : ''
+  if (body?.confirmPaidGeneration !== true) {
+    return NextResponse.json({ error: '유료 생성 확인이 필요합니다.' }, { status: 400 })
+  }
   if (batchId !== MUGSOUND_DIRECTION_BATCH_ID || !MUGSOUND_DIRECTION_BATCH_IDS.some((allowed) => allowed === batchId)) {
     return NextResponse.json({ error: '현재 MugSound Batch가 아닙니다.' }, { status: 400 })
   }
@@ -37,6 +41,15 @@ export async function POST(request: Request) {
     .like('license_hash', `%\"mugsoundBlueprintId\":\"${blueprintId}\"%`)
     .neq('status', 'failed').limit(1)
   if (existing?.length) return NextResponse.json({ error: '이미 제출된 MugSound Blueprint입니다.' }, { status: 409 })
+
+  const { data: active } = await client.from('generations').select('id')
+    .eq('user_id', access.userId)
+    .like('license_hash', `%\"mugsoundBatchId\":\"${batchId}\"%`)
+    .in('status', ['pending', 'generating'])
+    .limit(1)
+  if (active?.length) {
+    return NextResponse.json({ error: '다른 MugSound Blueprint가 생성 중입니다. 완료 또는 실패 확인 후 다음 곡을 제출해 주세요.' }, { status: 429 })
+  }
 
   const metadata = {
     stylePrompt: blueprint.stylePrompt,

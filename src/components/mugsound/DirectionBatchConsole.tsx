@@ -17,8 +17,7 @@ interface BatchCandidate {
 export function DirectionBatchConsole({ blueprints }: { blueprints: DirectionApprovalBlueprint[] }) {
   const [candidates, setCandidates] = useState<BatchCandidate[]>([])
   const [confirmed, setConfirmed] = useState(false)
-  const [submitting, setSubmitting] = useState(false)
-  const [submitted, setSubmitted] = useState(0)
+  const [submittingId, setSubmittingId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [modes, setModes] = useState<Record<string, GenerationMode>>(() => Object.fromEntries(blueprints.map((blueprint) => [blueprint.blueprintId, 'instrumental'])))
   const [lyrics, setLyrics] = useState<Record<string, string>>({})
@@ -41,39 +40,35 @@ export function DirectionBatchConsole({ blueprints }: { blueprints: DirectionApp
   const pending = blueprints.filter((blueprint) => !submittedBlueprints.has(blueprint.blueprintId))
   const completed = candidates.filter((candidate) => candidate.status === 'completed' && candidate.audioUrl).length
 
-  const submit = async () => {
-    if (!confirmed || submitting || pending.length === 0) return
-    const missingLyrics = pending.find((blueprint) => modes[blueprint.blueprintId] === 'lyrics' && !lyrics[blueprint.blueprintId]?.trim())
-    if (missingLyrics) {
-      setError(`${missingLyrics.workingTitle}: 가사곡은 가사를 입력해야 합니다.`)
+  const submit = async (blueprint: DirectionApprovalBlueprint) => {
+    if (!confirmed || submittingId || submittedBlueprints.has(blueprint.blueprintId)) return
+    if (modes[blueprint.blueprintId] === 'lyrics' && !lyrics[blueprint.blueprintId]?.trim()) {
+      setError(`${blueprint.workingTitle}: 가사곡은 가사를 입력해야 합니다.`)
       return
     }
-    setSubmitting(true)
+    setSubmittingId(blueprint.blueprintId)
     setError(null)
-    setSubmitted(0)
     try {
-      for (const blueprint of pending) {
-        const response = await fetch('/api/internal/mugsound/direction-batch/submit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            batchId: MUGSOUND_DIRECTION_BATCH_ID,
-            blueprintId: blueprint.blueprintId,
-            mode: modes[blueprint.blueprintId] || 'instrumental',
-            lyrics: modes[blueprint.blueprintId] === 'lyrics' ? lyrics[blueprint.blueprintId].trim() : '',
-          }),
-        })
-        const responseText = await response.text()
-        let body: { error?: string } = {}
-        try { body = JSON.parse(responseText) as { error?: string } } catch { body = { error: responseText || '생성 서버 응답 오류' } }
-        if (!response.ok && response.status !== 409) throw new Error(body.error || `${blueprint.workingTitle} 제출 실패`)
-        setSubmitted((value) => value + 1)
-      }
+      const response = await fetch('/api/internal/mugsound/direction-batch/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          batchId: MUGSOUND_DIRECTION_BATCH_ID,
+          blueprintId: blueprint.blueprintId,
+          mode: modes[blueprint.blueprintId] || 'instrumental',
+          lyrics: modes[blueprint.blueprintId] === 'lyrics' ? lyrics[blueprint.blueprintId].trim() : '',
+          confirmPaidGeneration: true,
+        }),
+      })
+      const responseText = await response.text()
+      let body: { error?: string } = {}
+      try { body = JSON.parse(responseText) as { error?: string } } catch { body = { error: responseText || '생성 서버 응답 오류' } }
+      if (!response.ok && response.status !== 409) throw new Error(body.error || `${blueprint.workingTitle} 제출 실패`)
       await refresh()
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : 'Suno Batch 제출 실패')
     } finally {
-      setSubmitting(false)
+      setSubmittingId(null)
     }
   }
 
@@ -86,7 +81,7 @@ export function DirectionBatchConsole({ blueprints }: { blueprints: DirectionApp
       </div>
       <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-300/15 bg-amber-300/[0.05] p-4 text-sm text-zinc-300">
         <input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 accent-amber-300" />
-        <span><strong className="text-amber-100">Suno 유료 생성 확인</strong><span className="mt-1 block text-xs leading-5 text-zinc-500">미제출 Blueprint마다 A/B 후보 2개를 생성합니다. 중복 제출은 서버에서 차단됩니다.</span></span>
+        <span><strong className="text-amber-100">Suno 유료 생성 확인</strong><span className="mt-1 block text-xs leading-5 text-zinc-500">한 번에 Blueprint 1개만 제출하며 A/B 후보 2개를 생성합니다. 해당 작업이 끝나야 다음 Blueprint를 제출할 수 있습니다.</span></span>
       </label>
       <div className="grid gap-3 lg:grid-cols-2">
         {blueprints.map((blueprint) => {
@@ -95,17 +90,17 @@ export function DirectionBatchConsole({ blueprints }: { blueprints: DirectionApp
           return <section key={blueprint.blueprintId} className="rounded-2xl border border-white/8 bg-black/20 p-4">
             <div className="flex items-start justify-between gap-3"><div><p className="text-[10px] uppercase tracking-wider text-zinc-600">{blueprint.episodeId} · {blueprint.phase}</p><h3 className="mt-1 text-sm font-semibold text-white">{blueprint.workingTitle}</h3></div><span className="rounded-full bg-white/[0.05] px-2 py-1 text-[10px] text-zinc-500">약 3분</span></div>
             <div className="mt-3 grid grid-cols-2 rounded-xl bg-white/[0.035] p-1" role="group" aria-label={`${blueprint.workingTitle} 생성 유형`}>
-              {(['instrumental', 'lyrics'] as const).map((value) => <button key={value} type="button" disabled={submittedAlready || submitting} aria-pressed={mode === value} onClick={() => setModes((current) => ({ ...current, [blueprint.blueprintId]: value }))} className={`rounded-lg px-3 py-2 text-xs transition disabled:opacity-40 ${mode === value ? 'bg-amber-300 text-amber-950' : 'text-zinc-500 hover:text-white'}`}>{value === 'instrumental' ? '연주곡' : '가사곡'}</button>)}
+              {(['instrumental', 'lyrics'] as const).map((value) => <button key={value} type="button" disabled={submittedAlready || Boolean(submittingId)} aria-pressed={mode === value} onClick={() => setModes((current) => ({ ...current, [blueprint.blueprintId]: value }))} className={`rounded-lg px-3 py-2 text-xs transition disabled:opacity-40 ${mode === value ? 'bg-amber-300 text-amber-950' : 'text-zinc-500 hover:text-white'}`}>{value === 'instrumental' ? '연주곡' : '가사곡'}</button>)}
             </div>
-            {mode === 'lyrics' ? <label className="mt-3 block text-[11px] text-zinc-500">확정 가사<textarea disabled={submittedAlready || submitting} value={lyrics[blueprint.blueprintId] || ''} onChange={(event) => setLyrics((current) => ({ ...current, [blueprint.blueprintId]: event.target.value }))} rows={5} maxLength={5000} placeholder="Suno에 전달할 확정 가사를 입력하세요." className="mt-2 w-full resize-y rounded-xl border border-white/8 bg-black/30 p-3 text-xs leading-5 text-zinc-300 outline-none focus:border-amber-300/35 disabled:opacity-40" /></label> : <p className="mt-3 text-[11px] leading-5 text-zinc-600">보컬과 가사를 생성하지 않는 기존 Melodio 연주곡 방식입니다.</p>}
+            {mode === 'lyrics' ? <label className="mt-3 block text-[11px] text-zinc-500">확정 가사<textarea disabled={submittedAlready || Boolean(submittingId)} value={lyrics[blueprint.blueprintId] || ''} onChange={(event) => setLyrics((current) => ({ ...current, [blueprint.blueprintId]: event.target.value }))} rows={5} maxLength={5000} placeholder="Suno에 전달할 확정 가사를 입력하세요." className="mt-2 w-full resize-y rounded-xl border border-white/8 bg-black/30 p-3 text-xs leading-5 text-zinc-300 outline-none focus:border-amber-300/35 disabled:opacity-40" /></label> : <p className="mt-3 text-[11px] leading-5 text-zinc-600">보컬과 가사를 생성하지 않는 기존 Melodio 연주곡 방식입니다.</p>}
+            <button type="button" onClick={() => submit(blueprint)} disabled={!confirmed || Boolean(submittingId) || submittedAlready} className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-semibold text-amber-950 disabled:opacity-40">
+              {submittingId === blueprint.blueprintId ? <LoaderCircle className="h-4 w-4 animate-spin" /> : submittedAlready ? <CheckCircle2 className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              {submittingId === blueprint.blueprintId ? '제출 중…' : submittedAlready ? '제출됨' : '이 Blueprint A/B 생성'}
+            </button>
           </section>
         })}
       </div>
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={submit} disabled={!confirmed || submitting || pending.length === 0} className="inline-flex items-center gap-2 rounded-xl bg-amber-300 px-4 py-2.5 text-sm font-semibold text-amber-950 disabled:opacity-40">
-          {submitting ? <LoaderCircle className="h-4 w-4 animate-spin" /> : pending.length === 0 ? <CheckCircle2 className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-          {submitting ? `제출 중 ${submitted}/${pending.length}` : pending.length === 0 ? '모두 제출됨' : `남은 ${pending.length}개 제출`}
-        </button>
         <button type="button" onClick={() => refresh().catch((reason: unknown) => setError(reason instanceof Error ? reason.message : '조회 실패'))} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-400 hover:text-white"><RefreshCw className="h-4 w-4" />새로고침</button>
       </div>
       {error ? <p role="alert" className="flex items-center gap-2 text-sm text-red-300"><AlertTriangle className="h-4 w-4" />{error}</p> : null}

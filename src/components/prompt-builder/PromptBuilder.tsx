@@ -10,6 +10,7 @@ import { categories, SINGLE_SELECT_CATEGORIES } from '@/data/categories'
 import { presets } from '@/data/presets'
 import { useAuth } from '@/hooks/useAuth'
 import { useHistory } from '@/hooks/useHistory'
+import { useVoice } from '@/contexts/VoiceContext'
 import { composeStylePrompt, enforceSingleSelect, resolveRotationPrompt } from '@/lib/prompt-compositor'
 import { supabase } from '@/lib/supabase'
 import GenreSelector from './GenreSelector'
@@ -125,6 +126,14 @@ export default function PromptBuilder({
 
   const { user } = useAuth()
   const { saveHistory } = useHistory()
+  const { voices, activeVoice, setActiveVoice } = useVoice()
+
+  // activeVoice 변경 시 selectedVdCode 동기화
+  useEffect(() => {
+    if (activeVoice && selectedVdCode !== activeVoice.id) {
+      setSelectedVdCode(activeVoice.id)
+    }
+  }, [activeVoice])
 
   const [isPro, setIsPro] = useState(false)
   const [customPresets, setCustomPresets] = useState<Preset[]>([])
@@ -138,7 +147,6 @@ export default function PromptBuilder({
   const [dynamicElements, setDynamicElements] = useState<any>(null)
   const [ambienceVolume, setAmbienceVolume] = useState<number>(20)
 
-
   const isApplyingPresetRef = useRef(false)
   const appliedPresetPromptRef = useRef('')
 
@@ -151,14 +159,28 @@ export default function PromptBuilder({
     ];
     let custom: any[] = [];
     try {
-      const saved = localStorage.getItem("custom_voice_dnas");
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        custom = parsed.map((v: any) => ({ 
-          code: v.vd_code, 
-          name: `${v.name} (${v.vd_code})`,
-          gender: v.physical_layers?.gender || 'female'
+      const savedUserVoices = localStorage.getItem("melodio_user_voices");
+      if (savedUserVoices) {
+        const parsed = JSON.parse(savedUserVoices);
+        custom = parsed.map((v: any) => ({
+          code: v.id,
+          name: v.name,
+          gender: v.gender || 'female',
+          sourceType: v.sourceType
         }));
+      }
+      const savedLegacy = localStorage.getItem("custom_voice_dnas");
+      if (savedLegacy) {
+        const parsedLegacy = JSON.parse(savedLegacy);
+        parsedLegacy.forEach((v: any) => {
+          if (!custom.some(c => c.code === v.vd_code)) {
+            custom.push({ 
+              code: v.vd_code, 
+              name: `${v.name} (${v.vd_code})`,
+              gender: v.physical_layers?.gender || 'female'
+            });
+          }
+        });
       }
     } catch (e) {
       console.error(e);
@@ -400,7 +422,8 @@ export default function PromptBuilder({
     if (isSingleSelect(categoryId)) {
       setSelections((prev) => {
         const next = enforceSingleSelect(prev, categoryId, value)
-        console.log('[PromptBuilder] singleSelect selections updated:', next)
+        const composed = composeStylePrompt(next, isInstrumental)
+        setStylePrompt(composed.prompt)
         return next
       })
     } else {
@@ -410,7 +433,8 @@ export default function PromptBuilder({
           ? current.filter((v) => v !== value)
           : [...current, value]
         const updated = { ...prev, [categoryId]: next }
-        console.log('[PromptBuilder] selections updated:', updated)
+        const composed = composeStylePrompt(updated, isInstrumental)
+        setStylePrompt(composed.prompt)
         return updated
       })
     }
@@ -659,22 +683,11 @@ export default function PromptBuilder({
     setIsPublic(true)
   }
 
-  // 스마트 프롬프트 결합 엔진 사용
+  // 스마트 프롬프트 결합 엔진 사용 (글자수 및 메타데이터 계산용)
   const compositorResult = useMemo(
     () => composeStylePrompt(selections, isInstrumental),
     [selections, isInstrumental],
   )
-
-  // compositorResult가 변경되면 stylePrompt 상태 업데이트
-  useEffect(() => {
-    if (isApplyingPresetRef.current) {
-      setStylePrompt(appliedPresetPromptRef.current)
-      isApplyingPresetRef.current = false
-    } else {
-      console.log('[PromptBuilder] compositorResult.prompt changed:', compositorResult.prompt)
-      setStylePrompt(compositorResult.prompt)
-    }
-  }, [compositorResult.prompt])
 
   // 프롬프트 페이로드 계산 (실시간)
   const payload: PromptPayload | null = useMemo(() => {
@@ -873,6 +886,10 @@ export default function PromptBuilder({
             },
           }
 
+          const targetVoice = (selectedVdCode !== 'auto' ? (voices || []).find(v => v.id === selectedVdCode || (v as any).code === selectedVdCode) : null) || activeVoice
+          const targetVoicePrompt = targetVoice?.stylePrompt || undefined
+          const targetVocalGender = targetVoice?.gender || undefined
+
           const res = await fetch('/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -882,7 +899,10 @@ export default function PromptBuilder({
               lyricsSections: track.sections,
               presetId: selectedPresetId,
               presetName: selectedPresetName,
-              vdCode: selectedVdCode !== 'auto' ? selectedVdCode : undefined,
+              vdCode: selectedVdCode !== 'auto' ? selectedVdCode : (activeVoice?.id || undefined),
+              voicePrompt: targetVoicePrompt,
+              activeVoice: targetVoice || undefined,
+              vocalGender: targetVocalGender,
               sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
               isPublic: isPublic,
             }),
@@ -937,10 +957,15 @@ export default function PromptBuilder({
             language = 'en';
           }
 
+          const targetVoice = (selectedVdCode !== 'auto' ? (voices || []).find(v => v.id === selectedVdCode || (v as any).code === selectedVdCode) : null) || activeVoice
+          const targetVoicePrompt = targetVoice?.stylePrompt || undefined
+          const targetVocalGender = targetVoice?.gender || undefined
+
           const vocalGender: 'mixed' | 'female' | 'male' | 'duet' =
-            stylePrompt.toLowerCase().includes('female') ? 'female' :
-            stylePrompt.toLowerCase().includes('male') ? 'male' :
-            stylePrompt.toLowerCase().includes('duet') ? 'duet' : 'mixed';
+            targetVocalGender ||
+            (stylePrompt.toLowerCase().includes('female') ? 'female' :
+             stylePrompt.toLowerCase().includes('male') ? 'male' :
+             stylePrompt.toLowerCase().includes('duet') ? 'duet' : 'mixed');
 
           const topic = currentPreset?.desc || currentPreset?.name || '자유로운 감성곡';
 
@@ -1020,6 +1045,10 @@ export default function PromptBuilder({
             mood: selections['mood']?.[0] ?? '',
           },
         }
+
+        const targetVoice = (selectedVdCode !== 'auto' ? (voices || []).find(v => v.id === selectedVdCode || (v as any).code === selectedVdCode) : null) || activeVoice
+        const targetVoicePrompt = targetVoice?.stylePrompt || undefined
+        const targetVocalGender = targetVoice?.gender || undefined
         
         const res = await fetch('/api/generate', {
           method: 'POST',
@@ -1030,7 +1059,10 @@ export default function PromptBuilder({
             lyricsSections: finalSections,
             presetId: selectedPresetId,
             presetName: selectedPresetName,
-            vdCode: selectedVdCode !== 'auto' ? selectedVdCode : undefined,
+            vdCode: selectedVdCode !== 'auto' ? selectedVdCode : (activeVoice?.id || undefined),
+            voicePrompt: targetVoicePrompt,
+            activeVoice: targetVoice || undefined,
+            vocalGender: targetVocalGender,
             sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
             isPublic: isPublic,
           }),
@@ -1086,6 +1118,8 @@ export default function PromptBuilder({
           customPresets={customPresets}
           onCustomPresetsChange={setCustomPresets}
           sourceMenu={sourceMenu}
+          isInstrumental={isInstrumental}
+          onInstrumentalToggle={setIsInstrumental}
           lyricsBuilderNode={
             <LyricsBuilder
               isInstrumental={isInstrumental}
@@ -1631,6 +1665,8 @@ export default function PromptBuilder({
             customPresets={customPresets}
             onCustomPresetsChange={setCustomPresets}
             sourceMenu={sourceMenu}
+            isInstrumental={isInstrumental}
+            onInstrumentalToggle={setIsInstrumental}
             lyricsBuilderNode={
               <LyricsBuilder
                 isInstrumental={isInstrumental}

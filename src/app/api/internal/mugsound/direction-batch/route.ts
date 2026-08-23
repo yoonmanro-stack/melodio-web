@@ -1,7 +1,12 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { getMugSoundAccess } from '@/lib/mugsound/access'
-import { MUGSOUND_DIRECTION_BATCH_IDS, MUGSOUND_DIRECTION_BATCH_ID } from '@/lib/mugsound/direction-batch'
+import {
+  MUGSOUND_DIRECTION_BATCH_IDS,
+  MUGSOUND_DIRECTION_BATCH_ID,
+  MUGSOUND_MAX_QUALIFIED_DURATION_SECONDS,
+  MUGSOUND_MIN_QUALIFIED_DURATION_SECONDS,
+} from '@/lib/mugsound/direction-batch'
 
 function resolveBatchId(request: Request) {
   const requested = new URL(request.url).searchParams.get('batchId')
@@ -44,6 +49,12 @@ export async function GET(request: Request) {
   const candidates = (data || []).flatMap((row) => {
     try {
       const metadata = JSON.parse(row.license_hash || '{}') as SupplyMetadata
+      const durationSeconds = Number(metadata.duration) || null
+      const isQualified = row.status === 'completed'
+        && Boolean(row.audio_url)
+        && durationSeconds !== null
+        && durationSeconds >= MUGSOUND_MIN_QUALIFIED_DURATION_SECONDS
+        && durationSeconds <= MUGSOUND_MAX_QUALIFIED_DURATION_SECONDS
       return [{
         id: row.id,
         blueprintId: metadata.mugsoundBlueprintId || '',
@@ -55,7 +66,13 @@ export async function GET(request: Request) {
         audioGrade: row.audio_grade,
         clippingCount: row.clipping_count,
         dissonanceScore: row.dissonance_score,
-        durationSeconds: metadata.duration || null,
+        durationSeconds,
+        isQualified,
+        qualificationReason: isQualified
+          ? null
+          : durationSeconds === null
+            ? '실측 길이 확인 전'
+            : `${MUGSOUND_MIN_QUALIFIED_DURATION_SECONDS}~${MUGSOUND_MAX_QUALIFIED_DURATION_SECONDS}초 기준 미통과`,
         review: metadata.mugsoundReview || null,
         createdAt: row.created_at,
       }]
@@ -104,6 +121,16 @@ export async function PATCH(request: Request) {
   }
   if (!MUGSOUND_DIRECTION_BATCH_IDS.some((batchId) => batchId === targetMetadata.mugsoundBatchId) || !targetMetadata.mugsoundBlueprintId) {
     return NextResponse.json({ error: 'MugSound 방향성 후보가 아닙니다.' }, { status: 400 })
+  }
+
+  const measuredDuration = Number(targetMetadata.duration)
+  const isQualified = Number.isFinite(measuredDuration)
+    && measuredDuration >= MUGSOUND_MIN_QUALIFIED_DURATION_SECONDS
+    && measuredDuration <= MUGSOUND_MAX_QUALIFIED_DURATION_SECONDS
+  if (body.verdict === 'pass' && !isQualified) {
+    return NextResponse.json({
+      error: `실측 길이 ${Number.isFinite(measuredDuration) ? `${Math.round(measuredDuration)}초` : '미확인'}: ${MUGSOUND_MIN_QUALIFIED_DURATION_SECONDS}~${MUGSOUND_MAX_QUALIFIED_DURATION_SECONDS}초 후보만 Pass할 수 있습니다.`,
+    }, { status: 409 })
   }
 
   if (body.isPreferred) {

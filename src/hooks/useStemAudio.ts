@@ -169,7 +169,17 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
       let originalUrlsMapped: Record<StemId, string | null> = { vocals: null, drums: null, bass: null, other: null };
       let isStemSplit = false;
 
-      if (generationId) {
+      if (stemUrls && (stemUrls.vocals || stemUrls.drums || stemUrls.bass || stemUrls.other)) {
+        previewUrlsToFetch = stemUrls;
+        isStemSplit = true;
+        originalUrlsMapped = {
+          vocals: stemUrls.vocals || null,
+          drums: stemUrls.drums || null,
+          bass: stemUrls.bass || null,
+          other: stemUrls.other || null,
+        };
+        setOriginalWavUrls(originalUrlsMapped);
+      } else if (generationId) {
         try {
           // 백엔드 세션 DB 조회 (타임아웃 5초)
           const controller = new AbortController();
@@ -177,21 +187,26 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
           const { data, error } = await supabase.from('generations').select('*').eq('id', generationId).abortSignal(controller.signal).single();
           clearTimeout(timeout);
           if (data && !error && data.status === 'completed') {
-            isStemSplit = !!data.is_stem_extracted;
+            const hasStems = Boolean(
+              data.is_stem_extracted ||
+              (data.preview_vocals_url && data.preview_drums_url) ||
+              (data.stem_vocals_url && data.stem_drums_url)
+            );
+            isStemSplit = hasStems;
 
             if (isStemSplit) {
               // 스템 분리가 완료된 상태
               previewUrlsToFetch = {
-                vocals: data.preview_vocals_url,
-                drums: data.preview_drums_url,
-                bass: data.preview_bass_url,
-                other: data.preview_other_url,
+                vocals: data.preview_vocals_url || data.stem_vocals_url,
+                drums: data.preview_drums_url || data.stem_drums_url,
+                bass: data.preview_bass_url || data.stem_bass_url,
+                other: data.preview_other_url || data.stem_other_url,
               };
               originalUrlsMapped = {
-                vocals: data.stem_vocals_url,
-                drums: data.stem_drums_url,
-                bass: data.stem_bass_url,
-                other: data.stem_other_url,
+                vocals: data.stem_vocals_url || data.preview_vocals_url,
+                drums: data.stem_drums_url || data.preview_drums_url,
+                bass: data.stem_bass_url || data.preview_bass_url,
+                other: data.stem_other_url || data.preview_other_url,
               };
               setOriginalWavUrls(originalUrlsMapped);
             } else {
@@ -206,9 +221,6 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
         } catch (e) {
           console.warn('[useStemAudio] Supabase 연결 실패 → 더미 톤 폴백', e);
         }
-      } else if (stemUrls) {
-        previewUrlsToFetch = stemUrls;
-        isStemSplit = true;
       }
 
       const tasks = STEM_IDS.map(async (id) => {
@@ -261,7 +273,7 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
       ctx.close();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generationId]);
+  }, [generationId, stemUrls?.vocals, stemUrls?.drums, stemUrls?.bass, stemUrls?.other]);
 
   const allLoaded = STEM_IDS.every((id) => stemStates[id].loadState === 'ready');
 

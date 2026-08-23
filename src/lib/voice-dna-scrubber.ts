@@ -145,20 +145,24 @@ export function buildVoicePromptFromAttributes(dna: VoiceDnaRecord, customNoiseR
 }
 
 /**
- * 성별 상충 태그 정화 유틸리티
+ * 성별 상충 태그 정화 유틸리티 (한국어/영어 완전 정화)
  */
 export function scrubConflictingVocalTags(stylePrompt: string, targetGender: 'female' | 'male' | 'duet'): string {
   let cleaned = stylePrompt
 
   if (targetGender === 'female') {
-    // 남성 보컬 관련 지시어 제거
+    // 남성 및 혼성 보컬 관련 지시어 완전 제거
     cleaned = cleaned
       .replace(/\b(male|man|men|boy|baritone|tenor|gentleman)\b\s*(voice|vocals|vocal)?/gi, '')
+      .replace(/\b(duet|duo|mixed vocal|mixed vocals)\b/gi, '')
+      .replace(/(남성\s*보컬|남성|바리톤|테너|혼성\s*보컬|혼성|듀엣)/g, '')
       .replace(/,\s*,/g, ',')
   } else if (targetGender === 'male') {
-    // 여성 보컬 관련 지시어 제거
+    // 여성 및 혼성 보컬 관련 지시어 완전 제거
     cleaned = cleaned
-      .replace(/\b(female|woman|women|lady|girl|soprano|alto)\b\s*(voice|vocals|vocal)?/gi, '')
+      .replace(/\b(female|woman|women|lady|girl|soprano|alto|contralto)\b\s*(voice|vocals|vocal)?/gi, '')
+      .replace(/\b(duet|duo|mixed vocal|mixed vocals)\b/gi, '')
+      .replace(/(여성\s*보컬|여성|소프라노|알토|혼성\s*보컬|혼성|듀엣)/g, '')
       .replace(/,\s*,/g, ',')
   }
 

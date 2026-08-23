@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { AlertTriangle, Check, CircleHelp, Crown, LoaderCircle, RefreshCw, X } from 'lucide-react'
 import type { DirectionApprovalBlueprint } from '@/data/mugsound-direction-approval-blueprints'
-import { MUGSOUND_DIRECTION_LEGACY_BATCH_ID } from '@/lib/mugsound/direction-batch'
+import { MUGSOUND_DIRECTION_BATCH_ID } from '@/lib/mugsound/direction-batch'
 
 type Verdict = 'pass' | 'review' | 'reject'
 
@@ -28,6 +28,8 @@ interface ReviewCandidate {
   durationSeconds: number | null
   createdAt: string
   review: CandidateReview | null
+  isQualified: boolean
+  qualificationReason: string | null
 }
 
 const episodeLabels: Record<string, string> = {
@@ -43,7 +45,7 @@ export function DirectionCandidateReview({ blueprints }: { blueprints: Direction
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
-    const response = await fetch(`/api/internal/mugsound/direction-batch?batchId=${encodeURIComponent(MUGSOUND_DIRECTION_LEGACY_BATCH_ID)}`, { cache: 'no-store' })
+    const response = await fetch(`/api/internal/mugsound/direction-batch?batchId=${encodeURIComponent(MUGSOUND_DIRECTION_BATCH_ID)}`, { cache: 'no-store' })
     const body = await response.json() as { data?: { candidates: ReviewCandidate[] }; error?: string }
     if (!response.ok) throw new Error(body.error || '후보를 불러오지 못했습니다.')
     const next = body.data?.candidates || []
@@ -116,10 +118,11 @@ export function DirectionCandidateReview({ blueprints }: { blueprints: Direction
                 {candidate.audioUrl ? <audio className="mt-3 h-10 w-full" controls preload="none" src={candidate.audioUrl}>이 브라우저는 오디오 재생을 지원하지 않습니다.</audio> : <p className="mt-3 rounded-xl bg-white/[0.03] p-3 text-xs text-zinc-500">음원 URL을 준비 중입니다.</p>}
                 <div className="mt-2 flex flex-wrap gap-3 text-[10px] text-zinc-600"><span>{candidate.durationSeconds ? `${Math.round(candidate.durationSeconds)}초` : '길이 미상'}</span><span>Grade {candidate.audioGrade || '—'}</span><span>Clip {candidate.clippingCount ?? '—'}</span></div>
                 <div className="mt-4 grid grid-cols-3 gap-2">
-                  <VerdictButton active={verdict === 'pass'} disabled={busy} onClick={() => save(candidate, 'pass')} icon={Check} label="Pass" tone="emerald" />
+                  <VerdictButton active={verdict === 'pass'} disabled={busy || !candidate.isQualified} onClick={() => save(candidate, 'pass')} icon={Check} label="Pass" tone="emerald" />
                   <VerdictButton active={verdict === 'review'} disabled={busy} onClick={() => save(candidate, 'review', false)} icon={CircleHelp} label="Review" tone="amber" />
                   <VerdictButton active={verdict === 'reject'} disabled={busy} onClick={() => save(candidate, 'reject', false)} icon={X} label="Reject" tone="red" />
                 </div>
+                {!candidate.isQualified ? <p className="mt-3 rounded-lg bg-red-400/10 px-3 py-2 text-[11px] text-red-300">기술 합격 전 · {candidate.qualificationReason || '길이 검증 필요'}</p> : null}
                 <label className="mt-4 block text-[11px] text-zinc-500">청취 메모<textarea value={drafts[candidate.id] || ''} onChange={(event) => setDrafts((current) => ({ ...current, [candidate.id]: event.target.value }))} maxLength={1000} rows={3} placeholder="도입, 연결성, 멜로디 전경화, 종료 상태를 기록하세요." className="mt-2 w-full resize-y rounded-xl border border-white/8 bg-black/30 p-3 text-xs leading-5 text-zinc-300 outline-none focus:border-amber-300/35" /></label>
                 <div className="mt-3 flex gap-2">
                   <button type="button" disabled={busy || !verdict} onClick={() => save(candidate, verdict || 'review')} className="flex-1 rounded-xl border border-white/10 px-3 py-2 text-xs text-zinc-300 disabled:opacity-40">{busy ? <LoaderCircle className="mx-auto h-4 w-4 animate-spin" /> : '메모 저장'}</button>

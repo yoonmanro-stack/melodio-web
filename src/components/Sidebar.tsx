@@ -22,24 +22,21 @@ import {
   Radio,
   Zap,
   Mic2,
-  Compass,
   Workflow,
-  PackageCheck,
 } from "lucide-react";
 import clsx from "clsx";
 
 const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "HexaWave 공간 개척", href: "/pioneer", icon: Compass },
   { name: "Artist Incubator", href: "/incubator", icon: Fingerprint },
-  { name: "Persona Lab", href: "/persona", icon: Sparkles },
-  { name: "Audio Forge Pro", href: "/style-library", icon: Music4 },
-  { name: "Preset Studio", href: "/audio", icon: Sparkles },
+  { name: "아티스트 페르소나", href: "/persona", icon: Sparkles },
+  { name: "뮤직 스튜디오", href: "/style-library", icon: Music4 },
+  { name: "프리셋 스튜디오", href: "/audio", icon: Sparkles },
   { name: "Channel Builder", href: "/channel-builder", icon: Workflow },
   { name: "Viral & Trend Zone", href: "/viral", icon: Zap },
-  { name: "Japan BGM Forge", href: "/japan", icon: Globe },
+  { name: "일본 BGM 스튜디오", href: "/japan", icon: Globe },
   { name: "Longform Studio", href: "/studio", icon: Film },
-  { name: "VoiceDNA Studio", href: "/voice-lab", icon: Mic2 },
+  { name: "보이스 스튜디오", href: "/voice-lab", icon: Mic2 },
   { name: "YouTube Auto-Pilot", href: "/autopilot", icon: Radio },
   { name: "YouTube Analytics", href: "/analytics", icon: BarChart3 },
   { name: "IP & License Vault", href: "/vault", icon: ShieldCheck },
@@ -85,7 +82,7 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
 
   return (
     <aside className={clsx(
-      "h-screen border-r border-[rgba(255,255,255,0.05)] bg-[rgba(10,10,14,0.8)] backdrop-blur-xl flex flex-col justify-between py-6 fixed top-0 z-50 transition-all duration-300",
+      "h-screen border-r border-[rgba(255,255,255,0.05)] bg-[rgba(10,10,14,0.8)] backdrop-blur-xl flex flex-col pt-6 pb-24 fixed top-0 z-40 transition-all duration-300",
       // Desktop positioning
       "md:left-0",
       isCollapsed ? "md:w-20 md:px-2" : "md:w-64 md:px-4",
@@ -139,24 +136,7 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
           )}
         </div>
 
-        <nav className="space-y-1">
-          {showMugSoundSupply ? (
-            <Link
-              href="/internal/mugsound"
-              onClick={onMobileClose}
-              className={clsx(
-                "mb-3 flex items-center rounded-xl border border-amber-300/15 bg-amber-300/[0.05] text-amber-200 transition-all duration-200 group hover:bg-amber-300/[0.1]",
-                !isCollapsed && "md:relative",
-                isCollapsed ? "md:justify-center md:p-3 md:h-11 md:w-11 md:mx-auto" : "md:gap-3 md:px-3 md:py-2.5",
-                "gap-3 px-3 py-2.5",
-                pathname.startsWith("/internal/mugsound") ? "shadow-[inset_2px_0_0_#fbbf24]" : ""
-              )}
-            >
-              <PackageCheck className="w-5 h-5 flex-shrink-0" />
-              <span className={clsx("font-medium text-sm flex-1", isCollapsed ? "md:hidden" : "inline-block")}>MugSound Supply</span>
-              {isCollapsed ? <div className="hidden md:block absolute left-20 scale-90 group-hover:scale-100 bg-zinc-950 text-amber-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 whitespace-nowrap z-50 shadow-2xl border border-white/10 ml-2">MugSound Supply</div> : null}
-            </Link>
-          ) : null}
+        <nav className="space-y-1 pb-6">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
@@ -179,8 +159,6 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
                   {t(item.name)}
                 </span>
                 
-
-                
                 {isCollapsed && (
                   <div className="hidden md:block absolute left-20 scale-90 group-hover:scale-100 bg-zinc-950 text-zinc-200 text-xs font-semibold px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 whitespace-nowrap z-50 shadow-2xl border border-white/10 ml-2">
                     {t(item.name)}
@@ -189,30 +167,30 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
               </Link>
             );
           })}
-        </nav>
-      </div>
 
-      <div className="space-y-2 border-t border-[rgba(255,255,255,0.05)] pt-4 pr-2">
-        <Link 
-          href="/login" 
-          onClick={onMobileClose}
-          className={clsx(
-            "flex items-center transition-colors text-zinc-500 hover:text-red-400 rounded-xl group",
-            !isCollapsed && "md:relative",
-            isCollapsed ? "md:justify-center md:p-3 md:h-11 md:w-11 md:mx-auto" : "md:gap-3 md:px-4 md:py-3",
-            "gap-3 px-4 py-3"
-          )}
-        >
-          <LogOut className="w-5 h-5" />
-          <span className={clsx("font-medium text-sm", isCollapsed ? "md:hidden" : "inline-block")}>
-            {t("Log Out")}
-          </span>
-          {isCollapsed && (
-            <div className="hidden md:block absolute left-20 scale-90 group-hover:scale-100 bg-zinc-950 text-red-400 text-xs font-semibold px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 whitespace-nowrap z-50 shadow-2xl border border-white/10 ml-2">
-              {t("Log Out")}
-            </div>
-          )}
-        </Link>
+          <div className="pt-2 my-2 border-t border-white/5">
+            <Link 
+              href="/login" 
+              onClick={onMobileClose}
+              className={clsx(
+                "flex items-center transition-colors text-zinc-500 hover:text-red-400 hover:bg-white/[0.04] rounded-xl group",
+                !isCollapsed && "md:relative",
+                isCollapsed ? "md:justify-center md:p-3 md:h-11 md:w-11 md:mx-auto" : "md:gap-3 md:px-3 md:py-2.5",
+                "gap-3 px-3 py-2.5"
+              )}
+            >
+              <LogOut className="w-5 h-5 flex-shrink-0" />
+              <span className={clsx("font-medium text-sm flex-1", isCollapsed ? "md:hidden" : "inline-block")}>
+                {t("Log Out")}
+              </span>
+              {isCollapsed && (
+                <div className="hidden md:block absolute left-20 scale-90 group-hover:scale-100 bg-zinc-950 text-red-400 text-xs font-semibold px-2.5 py-1.5 rounded-lg opacity-0 group-hover:opacity-100 pointer-events-none transition-all duration-150 whitespace-nowrap z-50 shadow-2xl border border-white/10 ml-2">
+                  {t("Log Out")}
+                </div>
+              )}
+            </Link>
+          </div>
+        </nav>
       </div>
     </aside>
   );

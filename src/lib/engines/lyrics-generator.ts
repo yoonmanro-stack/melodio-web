@@ -5,6 +5,7 @@
 import type { LyricsSection, LyricsSectionType } from '@/types'
 import type { PlaylistGeneratorResult, PlaylistTrack } from '@/types/playlist'
 import { matchPlaybooksByPrompt } from '@/lib/db/knowledge'
+import { generateBoundlessCreativeVector } from '@/lib/engines/infinite-story-matrix'
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? ''
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
@@ -43,46 +44,171 @@ interface GPTLyricsSection {
  * GPT를 활용하여 단일 곡 또는 플레이리스트를 일괄 생성
  * 모델 폴백 체인: gpt-5 → gpt-4o → gpt-4o-mini
  */
-function randomizeStylePrompt(baseStyle: string): string {
-  const keys = ['A minor', 'C major', 'E minor', 'G major', 'D minor', 'F major', 'B minor', 'A major', 'E major', 'D major', 'G# minor', 'F# minor'];
-  const randomKey = keys[Math.floor(Math.random() * keys.length)];
+interface GenreThematicProfile {
+  genre: 'trot' | 'citypop' | 'joseon' | 'lofi' | 'acoustic' | 'kpop' | 'rock' | 'chanson' | 'general'
+  nameKo: string
+  thematicPillars: {
+    title: string
+    subThemes: string[]
+    sampleTitles: string[]
+    lyricsGuidance: string
+  }[]
+  personaTitleFormula: string
+  bannedCliches: string
+  randomBpm: () => number
+  instruments: string[]
+}
 
-  let bpm = 90;
-  const baseLower = baseStyle.toLowerCase();
-  if (baseLower.includes('lo-fi') || baseLower.includes('lofi') || baseLower.includes('zen') || baseLower.includes('meditation')) {
-    bpm = Math.floor(Math.random() * 15) + 70; // 70-85 BPM
-  } else if (baseLower.includes('future') || baseLower.includes('funk') || baseLower.includes('rock') || baseLower.includes('pop') || baseLower.includes('anime')) {
-    bpm = Math.floor(Math.random() * 25) + 110; // 110-135 BPM
-  } else {
-    bpm = Math.floor(Math.random() * 25) + 80; // 80-105 BPM
+export function detectGenreThematicProfile(stylePrompt: string, topic?: string, presetId?: string): GenreThematicProfile {
+  const combined = `${stylePrompt} ${topic || ''} ${presetId || ''}`.toLowerCase()
+
+  if (combined.includes('trot') || combined.includes('트로트') || combined.includes('트롯') || combined.includes('뽕짝') || combined.includes('7080') || combined.includes('성인가요')) {
+    return {
+      genre: 'trot',
+      nameKo: '정통 & 현대 트로트 / 성인가요 / 7080',
+      thematicPillars: [
+        {
+          title: '인생의 애환 & 세월의 잔',
+          subThemes: ['선술집 막걸리 한 잔', '굽이굽이 인생길과 세월의 무게', '흘러간 청춘의 아쉬움', '부모님 은혜와 주름진 손', '인생 2막의 새로운 다짐'],
+          sampleTitles: ['인생 2막 브루스', '막걸리 한 잔의 세월', '굽이진 인생 고갯길', '청춘아 어디 가니', '아버지의 지게'],
+          lyricsGuidance: '가슴을 울리는 진한 인생사, 세월의 덧없음과 다시 일어서는 중장년의 결기, 진솔하고 가슴 찡한 한국적 서정.'
+        },
+        {
+          title: '신나는 고속도로 & 축제 & 댄스 디스코',
+          subThemes: ['고속도로 휴게소 통기타 낭만', '관광버스 신바람 디스코', '전국 팔도 5일장 축제', '동창회 만남과 흥', '대박 터진 내 인생'],
+          sampleTitles: ['신바람 고속도로', '관광버스 디스코 파티', '대박 터진 내 인생', '오라버니 신바람', '팔도 유랑가'],
+          lyricsGuidance: '어깨춤이 절로 나는 경쾌한 4/4박자 뽕짝 디스코, 중독성 있는 후렴구 떼창, 흥겨운 추임새(얼쑤, 좋다, 아싸).'
+        },
+        {
+          title: '항구의 이별 & 진한 순정 & 첫사랑',
+          subThemes: ['목포/부산/여수 밤바다의 이별', '안개 낀 간이역 정거장', '못 잊을 첫사랑의 그림자', '떠나간 님을 향한 일편단심', '사나이 순정의 눈물'],
+          sampleTitles: ['목포항 밤안개', '여수 밤바다의 순정', '간이역 마지막 기차', '영영 못 잊을 사람', '사나이 눈물 한 잔'],
+          lyricsGuidance: '남진/나훈아/이미자 감성의 꺾기와 짙은 바이브레이션, 비에 젖은 부두와 기적 소리 등 시각적이고 절절한 비장미.'
+        },
+        {
+          title: '고향집 & 어머니의 손맛 & 사계절',
+          subThemes: ['고향역 완행열차', '찔레꽃 피는 시골길', '어머니의 된장찌개', '장독대에 내리는 함박눈', '추억 속의 초가집'],
+          sampleTitles: ['고향역 찔레꽃', '어머니의 된장찌개', '달빛 내리는 고향마을', '귀향길 완행열차', '가을 들녘 바람소리'],
+          lyricsGuidance: '아련한 노스탤지어, 흙냄새와 부모님의 따스한 품, 고향의 사계절 풍경을 그린 서정시 같은 가사.'
+        },
+        {
+          title: '희망찬 사이다 파이팅 & 인생 역전',
+          subThemes: ['쨍하고 해뜰날', '내 나이가 어때서 청춘이다', '세상아 덤벼라 내가 간다', '오늘 밤의 주인공', '힘내라 친구야'],
+          sampleTitles: ['쨍하고 해뜰날', '청춘은 지금부터', '세상아 덤벼라', '오늘 밤 주인공은 나야 나', '사이다 인생'],
+          lyricsGuidance: '답답한 속을 뻥 뚫어주는 사이다 같은 당당함과 에너지, 유쾌하고 호쾌한 긍정의 메시지.'
+        }
+      ],
+      personaTitleFormula: "Front-load with rich Trot situations/imagery in the FIRST 15 CHARACTERS: Dynamically blend [인생/정취 e.g. 인생 2막, 고향역, 목포항, 쨍하고 해뜰날, 선술집, 고속도로] + [감정/오브제 e.g. 막걸리 한 잔, 밤안개, 찔레꽃, 신바람 디스코, 사나이 눈물] + [장르 훅 e.g. 정통 트로트, 신나는 트롯가요, 감성 성인가요]. Examples: '🎤 인생 2막 막걸리 한 잔 | 정통 트로트', '💃 고속도로 휴게소 신바람 디스코 메들리', '🌊 목포항 밤안개 속 애절한 순정', '☀️ 쨍하고 해뜰날! 인생 역전 사이다 트롯', '🏡 고향역 어머니 생각에 눈물 짓는 밤'.",
+      bannedCliches: "🚨 CRITICAL BAN: ABSOLUTELY DO NOT write about modern office cubicles, IT developers, debugging, coding, keyboard typing, or tiny one-room studio apartments! Trot lyrics must breathe with authentic Korean life pathos, regional romance (ports, rivers, hometown stations), festive disco excitement, filial warmth, and hearty humor.",
+      randomBpm: () => (Math.random() > 0.5 ? Math.floor(Math.random() * 14) + 128 : Math.floor(Math.random() * 12) + 72),
+      instruments: [
+        'authentic Korean trot brass section and live trumpet stabs',
+        'nostalgic accordion melody and lively rhythm guitar',
+        'mournful saxophone solos and weeping electric guitar',
+        'bouncy trot bassline and punchy disco drums',
+        'traditional acoustic guitar strumming and electronic organ'
+      ]
+    }
   }
 
+  if (combined.includes('joseon') || combined.includes('조선') || combined.includes('gugak') || combined.includes('국악')) {
+    return {
+      genre: 'joseon',
+      nameKo: '조선 힙합 & 국악 퓨전 붐뱁',
+      thematicPillars: [
+        {
+          title: '달빛 아래 검무 & 호걸의 기개',
+          subThemes: ['흑도포 나그네의 여정', '달빛 아래 칼춤', '호걸의 당당한 풍모', '백성의 한과 흥을 담은 랩'],
+          sampleTitles: ['먹빛 깃발', '달빛 아래 칼춤', '한과 흥의 소리', '새벽 안개속 나그네'],
+          lyricsGuidance: '판소리식 꺾기 보컬과 묵직한 붐뱁 비트, 고전 설화와 무협적 호연지기를 담은 압도적 카리스마.'
+        }
+      ],
+      personaTitleFormula: "Blend [조선/국악 세계관 e.g. 먹빛 나그네, 달빛 검무, 태평소 울리는 밤] + [비트/장단] + [호걸의 기개]. Examples: '⚔️ 달빛 아래 칼춤 | 조선 퓨전 붐뱁', '📜 먹빛 깃발을 든 나그네의 랩'.",
+      bannedCliches: "DO NOT use modern tech/office jargon. Use historical poetic Korean imagery and energetic gugak chants.",
+      randomBpm: () => Math.floor(Math.random() * 15) + 82,
+      instruments: ['gayageum pluck and daegeum flute', 'heavy boom bap drums and epic brass stabs', 'pansori vocal chops and traditional percussion kkwaenggwari']
+    }
+  }
+
+  if (combined.includes('city') || combined.includes('시티팝') || combined.includes('synthwave') || combined.includes('1984') || combined.includes('retro')) {
+    return {
+      genre: 'citypop',
+      nameKo: '80년대 레트로 시티팝 / 신스웨이브',
+      thematicPillars: [
+        {
+          title: '네온 하이웨이 드라이브 & 미드나잇 로맨스',
+          subThemes: ['80년대 도쿄 야경 고속도로', '한밤의 공중전화와 빗속 약속', '해변 선셋 드라이브', '카세트 테이프와 플라스틱 러브'],
+          sampleTitles: ['Midnight Highway 1986', 'Neon Sunset Drive', 'Tokyo Rain Romance', 'Plastic Heartbeat'],
+          lyricsGuidance: '세련된 신디사이저와 펑키한 슬랩 베이스, 80년대 아날로그 감성의 낭만과 도시의 세련된 고독.'
+        }
+      ],
+      personaTitleFormula: "Blend [도시/시간 e.g. 1986 도쿄, 미드나잇 하이웨이] + [오브제 e.g. 네온사인, 카세트] + [무드 e.g. 낭만 드라이브, 시티팝]. Examples: '🌃 1986 도쿄 미드나잇 시티팝 드라이브', '📼 네온 불빛 아래 카세트 낭만'.",
+      bannedCliches: "Avoid contemporary smartphone/IT slang; evoke 80s analog nostalgia, neon boulevards, and tape cassettes.",
+      randomBpm: () => Math.floor(Math.random() * 18) + 110,
+      instruments: ['funky slap bassline and DX7 synth chords', 'palm-muted funky electric guitar', 'punchy 80s disco drums and shimmering reverb']
+    }
+  }
+
+  if (combined.includes('lo-fi') || combined.includes('lofi') || combined.includes('focus') || combined.includes('study') || combined.includes('chill') || combined.includes('healing')) {
+    return {
+      genre: 'lofi',
+      nameKo: '로파이 칠 & 딥 포커스 & 힐링',
+      thematicPillars: [
+        {
+          title: '비 오는 날 창가 서재 & 아늑한 몰입',
+          subThemes: ['창가에 맺힌 빗방울', '따뜻한 차 한 잔과 책장 넘기는 소리', '고요한 새벽의 사색', '골목길 고양이와 나른한 오후'],
+          sampleTitles: ['비 내리는 서재의 오후', '찻잔에 담긴 고요', '새벽 3시의 몽상', '아이스 우롱티의 여유'],
+          lyricsGuidance: '따뜻한 어쿠스틱/일렉트릭 피아노 선율, 마음을 편안하게 녹여주는 감미롭고 부드러운 노랫말.'
+        }
+      ],
+      personaTitleFormula: "Blend [시간/공간 e.g. 비 내리는 창가, 새벽 3시, 나른한 오후] + [몰입/휴식 e.g. 깊은 생각, 마음의 쉼표, 힐링 로파이]. Examples: '🍵 비 내리는 서재에서 듣는 힐링 Lofi', '🌙 생각의 스위치를 끄고 깊은 잠으로'.",
+      bannedCliches: "Do not overuse abrasive jargon; keep the mood tranquil, cozy, and poetic.",
+      randomBpm: () => Math.floor(Math.random() * 15) + 70,
+      instruments: ['warm Fender Rhodes chords', 'plucky acoustic guitar accents', 'soft vinyl crackle and mellow double bass']
+    }
+  }
+
+  // General / Default
+  return {
+    genre: 'general',
+    nameKo: '프리미엄 팝 & 인디 감성',
+    thematicPillars: [
+      {
+        title: '계절과 일상의 낭만적인 고백',
+        subThemes: ['마음 속 진솔한 이야기', '소소한 일상의 행복', '새로운 여정을 향한 설렘', '노을빛 아래 따뜻한 약속'],
+        sampleTitles: ['노을빛 언덕에서', '너에게 전하는 작은 멜로디', '바람이 불어오는 곳', '빛나는 우리들의 계절'],
+        lyricsGuidance: '듣는 이의 마음을 감싸주는 서정적이고 감미로운 멜로디와 이야기.'
+      }
+    ],
+    personaTitleFormula: "Target the core emotional context: [감성/상황] + [공간/시간] + [음악적 무드]. Examples: '🎸 노을빛 언덕에서 듣는 따스한 어쿠스틱', '✨ 마음을 어루만지는 힐링 팝 멜로디'.",
+    bannedCliches: "Avoid robotic clichés or forced corporate/office tropes unless explicitly requested.",
+    randomBpm: () => Math.floor(Math.random() * 25) + 85,
+    instruments: ['warm acoustic piano chords', 'clean electric guitar accents', 'smooth string quartet swells', 'warm bass and ambient reverb']
+  }
+}
+
+function randomizeStylePrompt(baseStyle: string, genreProfile?: GenreThematicProfile): string {
+  const profile = genreProfile || detectGenreThematicProfile(baseStyle)
+  const keys = ['A minor', 'C major', 'E minor', 'G major', 'D minor', 'F major', 'B minor', 'A major', 'E major', 'D major', 'G# minor', 'F# minor']
+  const randomKey = keys[Math.floor(Math.random() * keys.length)]
+
+  const bpm = profile.randomBpm()
+
   const textures = [
-    'vintage vinyl crackle',
-    'warm analog tape saturation',
-    'valve preamp warmth',
-    'spacious room reverb',
-    'subtle cassette tape hiss',
-    'warm hardware chorus',
-    'dreamy stereo delay'
-  ];
-  const randomTexture = textures[Math.floor(Math.random() * textures.length)];
+    'warm studio master mix',
+    'rich analog warmth',
+    'valve preamp saturation',
+    'spacious hall reverb',
+    'subtle vintage tape warmth',
+    'crystal clear acoustic separation',
+    'dynamic punchy stereo mix'
+  ]
+  const randomTexture = textures[Math.floor(Math.random() * textures.length)]
 
-  const instruments = [
-    'warm Fender Rhodes chords',
-    'plucky acoustic guitar accents',
-    'dreamy analog synth swells',
-    'DX7 style bell highlights',
-    'jazzy electric bass accents',
-    'soft shaker percussion',
-    'classic vintage synth leads',
-    'clean stratocaster plucks',
-    'smooth saxophone riffs'
-  ];
-  const randomInstrument = instruments[Math.floor(Math.random() * instruments.length)];
+  const randomInstrument = profile.instruments[Math.floor(Math.random() * profile.instruments.length)]
 
-  const suffix = `key of ${randomKey}, ${bpm} BPM, ${randomTexture}, featuring ${randomInstrument}`;
-  return `${baseStyle}, ${suffix}`.trim();
+  const suffix = `key of ${randomKey}, ${bpm} BPM, ${randomTexture}, featuring ${randomInstrument}`
+  return `${baseStyle}, ${suffix}`.trim()
 }
 
 export async function generateLyrics(
@@ -91,13 +217,16 @@ export async function generateLyrics(
   const isPlaylist = !!params.isPlaylistMode
   const trackCount = params.trackCount ?? 10
   
+  // Detect genre thematic profile
+  const genreProfile = detectGenreThematicProfile(params.stylePrompt, params.topic, params.presetId)
+
   // Randomize style tags to ensure different production results
-  const randomizedStylePrompt = randomizeStylePrompt(params.stylePrompt)
+  const randomizedStylePrompt = randomizeStylePrompt(params.stylePrompt, genreProfile)
   // Unique seed to force the LLM to write distinct lyrics and titles
   const seed = Math.random().toString(36).substring(2, 10)
 
   if (!OPENAI_API_KEY) {
-    console.log(`[Lyrics Generator] API Key 미검출로 Mock ${isPlaylist ? '플레이리스트' : '단일 가사'}를 생성합니다.`);
+    console.log(`[Lyrics Generator] API Key 미검출로 Mock ${isPlaylist ? '플레이리스트' : '단일 가사'}를 생성합니다.`)
     await new Promise((resolve) => setTimeout(resolve, 2000))
     const mockResult = isPlaylist
       ? getMockPlaylistResult(randomizedStylePrompt, params.topic, trackCount)
@@ -132,9 +261,9 @@ export async function generateLyrics(
   } else if (params.language === 'ar') {
     languageInstruction = 'Arabic'
   } else if (params.language === 'ja-en') {
-    languageInstruction = 'a mix of Japanese and English (typically Japanese verses/lines mixed naturally with catchy English hooks/phrases in the chorus or transition sections, like modern J-Pop/J-Rock)'
+    languageInstruction = 'a mix of Japanese and English'
   } else if (params.language === 'ko-en') {
-    languageInstruction = 'a mix of Korean and English (typically Korean verses/lines mixed naturally with catchy English hooks/phrases in the chorus or transition sections, like modern K-Pop)'
+    languageInstruction = 'a mix of Korean and English'
   }
 
   // Match playbooks from DB (Obsidian synced)
@@ -150,6 +279,7 @@ export async function generateLyrics(
     if (matchedPlaybook) {
       playbooks = [matchedPlaybook]
     } else {
+      const { matchPlaybooksByPrompt } = await import('@/lib/db/knowledge')
       const playbooksRes = await matchPlaybooksByPrompt(randomizedStylePrompt)
       if (playbooksRes) playbooks = playbooksRes
     }
@@ -178,20 +308,46 @@ export async function generateLyrics(
   }
 
   const systemPrompt = isPlaylist
-    ? getPlaylistSystemPrompt(randomizedStylePrompt, params.topic, trackCount, languageInstruction, params.vocalGender, playbookInstructions)
-    : getSingleSystemPrompt(randomizedStylePrompt, params.topic, languageInstruction, params.vocalGender, playbookInstructions, params.durationSeconds, params.viralMode)
+    ? getPlaylistSystemPrompt(randomizedStylePrompt, params.topic, trackCount, languageInstruction, params.vocalGender, playbookInstructions, genreProfile)
+    : getSingleSystemPrompt(randomizedStylePrompt, params.topic, languageInstruction, params.vocalGender, playbookInstructions, params.durationSeconds, params.viralMode, genreProfile)
+
+  // 🎲 무한 발산 창작 벡터 생성 (고정된 틀과 클리셰를 완전히 초월하는 자유 발산 지침)
+  const singleVector = generateBoundlessCreativeVector(genreProfile.genre, 0, seed)
+  const playlistVectors = Array.from({ length: trackCount }, (_, idx) => 
+    generateBoundlessCreativeVector(genreProfile.genre, idx, seed)
+  )
+
+  const narrativeDirective = isPlaylist
+    ? `\n\n## 🌌 1,000-SONG ABSOLUTE DIVERSITY DIRECTIVE (EVERY TRACK MUST BE A COMPLETELY UNIQUE UNIVERSE):\n` +
+      playlistVectors.map((v, idx) => 
+        `### Track ${idx + 1} Creative Vector (Entropy: ${v.uniqueEntropySeed}):\n` +
+        `- Creative Angle & Mood: ${v.perspectiveType}\n` +
+        `- Thematic Dimension: ${v.thematicDimension}\n` +
+        `- Sensory & Emotional Focus: ${v.sensoryFocus}\n` +
+        `-> INVENT an entirely new, unpredictable, and authentic human story for Track ${idx + 1}. Absolutely DO NOT repeat personas, locations, or lyric patterns across tracks!`
+      ).join('\n\n')
+    : `\n\n## 🌌 1,000-SONG RADICAL ORIGINALITY DIRECTIVE (STANDALONE MASTERPIECE):\n` +
+      `### Creative Vector (Entropy: ${singleVector.uniqueEntropySeed}):\n` +
+      `- Creative Angle & Mood: ${singleVector.perspectiveType}\n` +
+      `- Thematic Dimension: ${singleVector.thematicDimension}\n` +
+      `- Sensory Focus: ${singleVector.sensoryFocus}\n` +
+      `🚨 BOUNDLESS IMAGINATION RULE:\n` +
+      `- You have the entire universe of human life, humor, romance, struggles, philosophy, and imagination at your disposal.\n` +
+      `- INVENT a totally fresh, specific, vivid narrative with concrete tangible details and original poetic wordplay. NEVER write generic or templated lyrics!`
 
   const userPrompt = isPlaylist
     ? `Generate a full ${trackCount}-track playlist curation and song details for the style: ${randomizedStylePrompt}.
-${params.topic ? `Playlist Theme: ${params.topic}` : ''}
+${params.topic ? `Playlist Theme: ${params.topic}` : `Target Genre: ${genreProfile.nameKo}`}
 Language: ${languageInstruction}
 Vocal Target: ${params.vocalGender || 'mixed'}
-Random seed token for absolute uniqueness: ${seed}. You MUST write a completely unique, original set of lyrics and titles compared to previous calls.`
+Random seed token: ${seed}.
+${narrativeDirective}`
     : `Generate title, tags, hashtags, and structured lyrics for a single song with style: ${randomizedStylePrompt}.
-${params.topic ? `Topic/Theme: ${params.topic}` : ''}
+Target Genre: ${genreProfile.nameKo}
 Language: ${languageInstruction}
 Vocal Target: ${params.vocalGender || 'mixed'}
-Random seed token for absolute uniqueness: ${seed}. You MUST write a completely unique, original set of lyrics and titles compared to previous calls.`
+Random seed token: ${seed}.
+${narrativeDirective}`
 
   // 모델 폴백 체인 (공식 OpenAI 최신 플래그십 gpt-5.6-sol 1순위)
   const MODEL_CHAIN = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-4o', 'gpt-4o-mini']
@@ -214,7 +370,9 @@ Random seed token for absolute uniqueness: ${seed}. You MUST write a completely 
               { role: 'user', content: userPrompt },
             ],
             response_format: { type: 'json_object' },
-            temperature: 0.7,
+            temperature: 0.92,
+            presence_penalty: 0.6,
+            frequency_penalty: 0.4,
           }),
         })
 
@@ -338,8 +496,10 @@ function getSingleSystemPrompt(
   vocalGender: string = 'mixed',
   playbookInstructions?: string,
   durationSeconds?: number,
-  viralMode?: boolean
+  viralMode?: boolean,
+  genreProfile?: GenreThematicProfile
 ): string {
+  const profile = genreProfile || detectGenreThematicProfile(stylePrompt, topic)
   const targetDuration = durationSeconds || 180 // 기본 3분 (3분 ~ 3분 30초 최적화)
   const isShortForm = targetDuration <= 60
 
@@ -352,47 +512,45 @@ function getSingleSystemPrompt(
     genderInstruction = '\n- VOCAL GENDER RULE: You MUST write the song as a male and female duet. Assign duet parts in the lyrics and specify "beautiful male and female duet harmonies" or "interplay of male and female vocals" in the section "description" fields.'
   }
 
-  // Duration에 따른 가사 구조 및 분량 지시 (Short-form, Mid-form, Long-form 정밀 스케일링)
+  // Duration에 따른 가사 구조 및 분량 지시
   let durationStructureInstruction = ''
   if (targetDuration <= 15) {
     durationStructureInstruction = `
 ## 🚨 CRITICAL DURATION RULE — TARGET: ${targetDuration} SECONDS (Ultra Short-form)
 Suno AI determines song length by the amount of lyrics. You MUST generate EXACTLY this structure:
-1. Intro (type: "intro") - 1 line (NO separate intro section, vocal starts immediately, e.g. [Fast Intro] or [Shout])
-2. Hook/Chorus (type: "chorus") - 2 lines MAX (highly punchy, memorable, containing the brand name or main theme)
+1. Intro (type: "intro") - 1 line (vocal starts immediately)
+2. Hook/Chorus (type: "chorus") - 2 lines MAX
 3. Outro (type: "outro") - 1 line MAX`
   } else if (targetDuration <= 30) {
     durationStructureInstruction = `
 ## 🚨 CRITICAL DURATION & COST RULE — TARGET: 26 TO 29.5 SECONDS (STRICT 30.0s MAXIMUM LIMIT)
-Suno AI determines song length by lyrics length. To land strictly inside the 26.0s to 29.5s sweet spot (NEVER exceeding 30.0 seconds to prevent extra billing), generate this exact structure:
-1. Intro (type: "intro") - 1 short line (instant vocal start or spoken intro)
-2. Verse 1 (type: "verse") - 3 lines (describing crisis with concise Korean nouns)
-3. Chorus (type: "chorus") - 3 lines (punchy repetitive main theme)
-4. Outro (type: "outro") - 1 line (short funny finish & fade out)
+Suno AI determines song length by lyrics length. To land strictly inside the 26.0s to 29.5s sweet spot, generate this exact structure:
+1. Intro (type: "intro") - 1 short line
+2. Verse 1 (type: "verse") - 3 lines
+3. Chorus (type: "chorus") - 3 lines
+4. Outro (type: "outro") - 1 line (short fade out)
 
-Total lyrics: 8 lines. Keep total character count strictly between 220 and 255 characters so Suno composes a track finishing strictly between 26.0s and 29.5s.`
+Total lyrics: 8 lines. Keep total character count strictly between 220 and 255 characters.`
   } else if (targetDuration <= 60) {
     durationStructureInstruction = `
 ## 🚨 CRITICAL DURATION RULE — TARGET: ${targetDuration} SECONDS (Mid-form / TikTok Song)
-Suno AI determines song length by the amount of lyrics. You MUST generate EXACTLY this structure:
 1. Intro (type: "intro") - 1-2 lines
-2. Verse 1 (type: "verse") - 4 lines (scene setting)
-3. Chorus (type: "chorus") - 4 lines (main hook)
-4. Verse 2 (type: "verse") - 2-3 lines (variation)
-5. Chorus repeat (type: "chorus") - 4 lines (intensified hook)
-6. Outro (type: "outro") - 1-2 lines (use [Outro] [Fade out])
+2. Verse 1 (type: "verse") - 4 lines
+3. Chorus (type: "chorus") - 4 lines
+4. Verse 2 (type: "verse") - 2-3 lines
+5. Chorus repeat (type: "chorus") - 4 lines
+6. Outro (type: "outro") - 1-2 lines
 
 Total lyrics: 15-18 lines.`
   } else if (targetDuration <= 120) {
     durationStructureInstruction = `
 ## 🚨 CRITICAL DURATION RULE — TARGET: ${targetDuration} SECONDS (Compact 2 Minutes)
-You MUST generate EXACTLY this structure to target 2:00 to 2:30 minutes of audio:
 1. Intro (type: "intro") - 1-2 lines
 2. Verse 1 (type: "verse") - 4 lines
-3. Chorus (type: "chorus") - 4 lines (main hook)
+3. Chorus (type: "chorus") - 4 lines
 4. Verse 2 (type: "verse") - 4 lines
 5. Chorus (type: "chorus") - 4 lines
-6. Outro (type: "outro") - 1-2 lines ([Outro] [Fade out])
+6. Outro (type: "outro") - 1-2 lines
 
 Total lyrics: 14-16 lines. Do NOT add Pre-chorus or Bridge.`
   } else if (targetDuration <= 180) {
@@ -410,7 +568,6 @@ Total lyrics: 16-18 lines MAX. Do NOT add Bridge or 3rd Chorus. Keep it tight an
   } else {
     durationStructureInstruction = `
 ## 🚨 CRITICAL DURATION RULE — TARGET: ${targetDuration} SECONDS (Long-form 3:30+ Minutes)
-You MUST generate a full extended structure to fill the timeline:
 1. Intro (type: "intro") - 2 lines
 2. Verse 1 (type: "verse") - 4 lines
 3. Pre-Chorus (type: "pre-chorus") - 3 lines
@@ -418,31 +575,29 @@ You MUST generate a full extended structure to fill the timeline:
 5. Verse 2 (type: "verse") - 4 lines
 6. Pre-Chorus (type: "pre-chorus") - 3 lines
 7. Chorus (type: "chorus") - 4 lines
-8. Bridge/Guitar Solo (type: "bridge") - 4 lines (high-energy instrumental solo or vocal peak)
+8. Bridge/Solo (type: "bridge") - 4 lines
 9. Chorus (type: "chorus") - 4 lines
-10. Final Chorus (type: "chorus") - 4 lines (powerful variations/ad-libs)
-11. Outro (type: "outro") - 2 lines (long instrumental fade out)
+10. Final Chorus (type: "chorus") - 4 lines
+11. Outro (type: "outro") - 2 lines (long fade out)
 
 Total lyrics: 34-40 lines.`
   }
 
   // 가사 문학성 및 고도화 지침
   const lyricsQualityRules = `
-## 📝 LYRICS WRITING QUALITY RULES (CLICHÉ BAN & RHYTHM SHIFT):
-1. **CLICHÉ BAN (진부함 배제)**: Do NOT use abstract words to describe emotions (e.g., '슬프다', '그립다', '사랑한다', '외롭다'). Instead, use concrete visual objects, sensory details, or physical metaphors (e.g., '식어버린 커피 자국', '먼지 쌓인 노란 우산', '어스름한 가로등 아래'). Let the listener SEE the scene.
-2. **RHYTHM & MELODY SHIFT**: Create a clear stylistic contrast between sections. 
-   - **Verses** should have longer, narrative sentences that flow like a story.
-   - **Pre-Choruses** should have ascending, shorter sentences to build suspense.
-   - **Choruses** MUST have highly rhythmic, punchy, syncopated short phrases (e.g. repetitive hooks) that stick in the brain. This forces Suno AI to make a dramatic melody shift.
-3. **AI STRUCTURAL CUES**: Use Suno-optimized arrangement cues inside the "description" field of sections (e.g., '[Drop]', '[Build-up]', '[Silence]', '[Epic Chorus Drop]', '[Bridge Climax]', '[Acoustic Guitar Solo]', '[Fade Out]').`
+## 📝 LYRICS WRITING QUALITY RULES (AUTHENTIC GENRE POETRY & CONTRAST):
+1. **GENRE AUTHENTICITY**: Write with rich lyrical imagery and vocabulary authentic to ${profile.nameKo}.
+${profile.thematicPillars.map(p => `   - **${p.title}**: ${p.subThemes.join(', ')} → *${p.lyricsGuidance}*`).join('\n')}
+2. **${profile.bannedCliches}**
+3. **RHYTHM & MELODY SHIFT**:
+   - **Verses** should have narrative sentences that paint the emotional backstory.
+   - **Choruses** MUST feature highly rhythmic, punchy, syncopated repetitive hooks that immediately capture the ear.
+4. **AI STRUCTURAL CUES**: In section "description" fields, include dynamic musical cues (e.g. '[Upbeat Brass Stabs]', '[Mournful Accordion Solo]', '[Saxophone Climax]', '[Gentle Acoustic Strumming]', '[Fade Out]').`
 
-  // VLE 5.0 마스터 옵시디언 파일 직접 읽어오기
-  const vleMasterMarkdown = loadVLEMasterPrompt();
+  const vleMasterMarkdown = loadVLEMasterPrompt()
 
   let viralModeInstruction = ''
   if (viralMode) {
-    // 길이/구조 규격은 viralSongSpec 이 유일한 출처다. 여기에 초·자수·줄수를
-    // 다시 적으면 과거처럼 서로 충돌하는 규격이 생겨 곡이 붕괴한다.
     viralModeInstruction = `
 ${vleMasterMarkdown}
 
@@ -454,50 +609,40 @@ ${buildStructureDirective()}
 3. 후렴은 Memory Anchor 하나가 지배해야 하며, 그 앵커는 곡이 끝난 뒤에도 입에 남아야 한다.`
   }
 
-  // 사용자 정의 지침 및 특정 문구 필수 포함 처리
   const customUserDirectives = `
 ## 🎯 CUSTOM USER DIRECTIVES & PRECISE INCLUSION RULES:
 If the theme/topic contains specific user instructions, custom lyrics, phrases in quotes, or musical preferences:
-1. **Verbatim Phrase Inclusion**: If the user has requested to include a specific phrase or sentence (especially if enclosed in quotes like "내가 널 버릴거야~" or '내가 널 버릴거야~'), you MUST strictly and verbatim include this exact phrase/sentence inside the generated lyrics (e.g. in the chorus or verse). Do not modify the words or spelling of the quoted text.
-2. **Style & Vocal Adjustment**: If the user requests musical, vocal, or performance adjustments (e.g., "보컬을 최대한 강조해줘", "vocal focus", "clear delivery", "acoustic backing only"), you MUST strictly reflect this in the song's structural descriptions (e.g., specify "dry intimate vocals close to mic, minimal backing instrument" or "vocal-centric mix, crystal clear voice" in the sections' description fields and the overall lyricsPrompt cues).
-3. **Contextual Alignment**: Ensure the entire narrative of the song naturally revolves around or leads up to the user's custom instructions/situations.`
+1. **Verbatim Phrase Inclusion**: If the user has requested to include a specific phrase or sentence (especially if enclosed in quotes like "내가 널 버릴거야~"), you MUST strictly include this exact phrase inside the generated lyrics.
+2. **Style & Vocal Adjustment**: Reflect musical or vocal performance requests inside the section "description" fields.`
 
   if (viralMode) {
-    return `You are a legendary viral content creator and CM-song (CF) director specializing in addictive, meme-worthy, high-dopamine short-form songs for YouTube Shorts, TikTok, and corporate advertisements.
+    return `You are a legendary viral content creator and CM-song director specializing in addictive short-form songs.
 ${genderInstruction}
 ${viralModeInstruction}
 ${lyricsQualityRules}
 ${customUserDirectives}
 
-## 🚨 VOCAL CLARITY ENFORCEMENT:
-Since the humor and message of the viral parody/CF rely 100% on the lyrics, you MUST NOT specify heavy drums, walls of guitars, or loud brass. You MUST write vocal-centric descriptions for every section (e.g. 'dry upfront vocals close to mic, minimal acoustic backing', 'vocal prominent, quiet keyboard background', 'spoken-word/rap delivery, dry close-up mic').
-
-Your task: Generate an incredibly catchy, viral parody/CF song for the style: "${stylePrompt}".
-${topic ? `The theme/topic is: "${topic}".` : ''}
-
-You MUST write all lyrics in ${languageInstruction}.
+Your task: Generate an incredibly catchy viral parody/CF song for style: "${stylePrompt}".
+${topic ? `Theme/Topic: "${topic}"` : ''}
+Language: ${languageInstruction}
 
 ## JSON Schema (Strict)
 {
-  "title": "🔥 HIGH-CTR YOUTUBE SHORTS TITLE ENGINE: You MUST construct the title by applying 1 of 4 Syntactic Structural Patterns based on the topic ('${topic || stylePrompt}'): Pattern 1: [Extreme Spoiler Bracket] + Persona + Situation, Pattern 2: Persona Call + Relatable Frustration + Suffix, Pattern 3: Exact Data Number + Tragedy/Comedy + Impact, Pattern 4: Empathy Setup + Interrogative Question. Keep it punchy and under 30 characters.",
+  "title": "🔥 HIGH-CTR YOUTUBE SHORTS TITLE under 30 characters",
   "youtubeTags": "comma, separated, SEO, keywords",
-  "lyricsPrompt": "STRUCTURE CONTRACT를 그대로 채운 완성 가사. 섹션 태그는 [Spoken] [Verse] [Pre-Chorus] [Chorus] [Chorus] [Outro] 순서로 쓰고 각 섹션의 줄 수를 정확히 지킨다. 길이·템포 메타 태그([Ultra Short 20s], [Fast Tempo 140BPM] 등)는 절대 넣지 않는다 — Suno가 그것을 가사로 노래한다. 템포 지시는 스타일 프롬프트에만 존재한다.",
+  "lyricsPrompt": "STRUCTURE CONTRACT lyrics with [Spoken] [Verse] [Chorus] [Outro]",
   "sections": [
     {
       "type": "intro or verse or chorus or outro",
       "content": "lyrics text",
-      "description": "Suno musical instruction. You MUST write vocal-centric mix instructions here (e.g. 'vocal-centric mix, dry upfront voice close to mic, minimal backing beat, clear diction')."
+      "description": "Suno musical instruction"
     }
   ]
 }
-
-## CRITICAL: You MUST include the "lyricsPrompt" field with the COMPLETE lyrics as a single formatted string (with \\n line breaks) ready to copy-paste.
-## CRITICAL: 실제로 노래되는 총량은 ${VIRAL_SONG_SPEC.sungSyllablesMin}~${VIRAL_SONG_SPEC.sungSyllablesMax}음절(훅 반복 포함)이어야 Suno가 ${VIRAL_SONG_SPEC.targetSecondsMin}~${VIRAL_SONG_SPEC.targetSecondsMax}초에 마감하고 발음이 뭉개지지 않는다.
-${playbookInstructions || ''}
-`
+${playbookInstructions || ''}`
   }
 
-  return `You are a world-class, chart-topping songwriter and music producer with 15+ years of experience crafting #1 hits for major K-Pop/J-Pop artists, global indie labels, and a 1-million subscriber YouTube playlist channel. You have deep expertise in Suno AI music generation.
+  return `You are a world-class, chart-topping songwriter and music producer specializing in ${profile.nameKo} and global playlist curation. You have deep expertise in Suno AI music generation.
 ${genderInstruction}
 ${durationStructureInstruction}
 ${lyricsQualityRules}
@@ -506,18 +651,18 @@ ${customUserDirectives}
 Your task: Generate a professional-grade song package (title, SEO tags, hashtags, and structured lyrics) for the style: "${stylePrompt}".
 ${topic ? `The theme/topic is: "${topic}".` : ''}
 
-You MUST write all titles, lyrics, tags, and descriptions strictly in the requested language style: "${languageInstruction}". Do NOT write or translate them in Korean if another language is requested.
+You MUST write all titles, lyrics, tags, and descriptions strictly in the requested language style: "${languageInstruction}".
 
 ## JSON Schema (Strict)
 {
-  "title": "🎵 INFINITE DYNAMIC PERSONA TITLE FORMULA: Target the listener's core situational need and dynamic persona in the FIRST 15 CHARACTERS. Dynamically blend [Role/Career e.g. 개발자, 트레이더, 디자이너, 고시생, 작가, 자취생, 대학원생] + [Space e.g. 원룸, 24시 라운지, 독서실 1인석, 도쿄 한밤중] + [Action/Need e.g. 새벽 버그 디버깅, 마감 30분 전, 차트 분석, 딴생각 차단 초집중]. NEVER hardcode fixed categories. NEVER include duration tags like '[2시간]'. Write strictly in ${languageInstruction}.",
+  "title": "🎵 ${profile.personaTitleFormula}",
   "youtubeTags": "comma, separated, SEO, keywords, 15-20 tags",
   "snsHashtags": "#hashtag1 #hashtag2 ... (10-15 hashtags for TikTok/Instagram/Shorts)",
   "sections": [
     {
       "type": "intro or verse or pre-chorus or chorus or bridge or outro",
-      "content": "Pure lyrics text (newline separated). NO section tags like [Verse] inside.",
-      "description": "REQUIRED: Suno-optimized musical instruction (e.g., 'Soft piano intro, vinyl crackle, rain ambience', 'Male Vocal, emotional whisper building to full belt', 'Guitar Solo, reverb-drenched')"
+      "content": "Pure lyrics text (newline separated). NO section tags inside.",
+      "description": "REQUIRED: Suno-optimized musical instruction (e.g., 'Passionate male vocal, mournful saxophone intro', 'Dynamic female vocal, upbeat brass rhythm')"
     }
   ]
 }
@@ -531,8 +676,11 @@ function getPlaylistSystemPrompt(
   trackCount: number = 10, 
   languageInstruction: string = 'Korean',
   vocalGender: string = 'mixed',
-  playbookInstructions?: string
+  playbookInstructions?: string,
+  genreProfile?: GenreThematicProfile
 ): string {
+  const profile = genreProfile || detectGenreThematicProfile(stylePrompt, topic)
+
   const timelineExample = Array.from({ length: trackCount }, (_, idx) => {
     const mins = idx * 3
     const timeStr = mins < 10 ? '0' + mins + ':00' : mins + ':00'
@@ -547,41 +695,47 @@ function getPlaylistSystemPrompt(
 
   let genderMixRules = ''
   if (vocalGender === 'female') {
-    genderMixRules = '\n- VOCAL GENDER RULE: You MUST make ALL tracks in the playlist for a female vocalist. Set descriptions to "female vocal" or "intimate female vocal close to mic" and strictly avoid male descriptors.'
+    genderMixRules = '\n- VOCAL GENDER RULE: ALL tracks must be for a female vocalist.'
   } else if (vocalGender === 'male') {
-    genderMixRules = '\n- VOCAL GENDER RULE: You MUST make ALL tracks in the playlist for a male vocalist. Set descriptions to "male vocal" or "dry male vocal close-up" and strictly avoid female descriptors.'
+    genderMixRules = '\n- VOCAL GENDER RULE: ALL tracks must be for a male vocalist.'
   } else if (vocalGender === 'duet') {
-    genderMixRules = '\n- VOCAL GENDER RULE: You MUST make ALL tracks in the playlist as male and female duets. Assign duet parts in the lyrics and specify "beautiful male and female duet harmonies" or "interplay of male and female vocals" in descriptions.'
+    genderMixRules = '\n- VOCAL GENDER RULE: ALL tracks must be male and female duets.'
   } else {
-    // mixed (디폴트)
-    genderMixRules = '\n- VOCAL GENDER RULE: To make the playlist highly dynamic, you MUST alternate and mix vocal genders across tracks. Assign "female vocal" to roughly 60% of the tracks (e.g. tracks 1, 2, 4, 6, 7, 9), "male vocal" to 30% (e.g. tracks 3, 5, 8), and "male and female duet" to 10% (e.g. track 10). Explicitly state the vocal gender (e.g. "clear expressive female vocal", "warm emotional male vocal", "beautiful male and female duet") inside the "description" field of each track\'s sections.'
+    genderMixRules = '\n- VOCAL GENDER RULE: Alternate vocal genders (e.g. 60% female, 30% male, 10% duet) for a dynamic playlist listening experience.'
   }
 
-  return `You are a 1-million subscriber YouTuber who runs a global music playlist channel. Drawing on your deep expertise of generating thousands of tracks with Suno AI, you produce high-quality, professional playlist curations, 2-hour YouTube upload titles, and song details.
+  return `You are a 1-million subscriber YouTuber who runs a high-engagement music playlist channel specializing in ${profile.nameKo}.
+
 ${genderMixRules}
+
+## 🌟 PLAYLIST DIVERSITY MANDATE (${profile.nameKo}):
+To run a successful 20~40 track playlist channel, each track MUST explore a distinct thematic angle across the genre's universe:
+${profile.thematicPillars.map((p, idx) => `Pillar ${idx + 1}. **${p.title}** (Sub-themes: ${p.subThemes.join(', ')})`).join('\n')}
+
+${profile.bannedCliches}
 
 Your task is to generate a comprehensive ${trackCount}-track playlist package based on the requested style: "${stylePrompt}".
 ${topic ? `The entire playlist theme/topic is: "${topic}".` : ''}
 
-You MUST write all playlistTitles, descriptions, track titles, and lyrics strictly in the requested language style: "${languageInstruction}". Do NOT write or translate them in Korean if another language is requested.
+You MUST write all playlistTitles, descriptions, track titles, and lyrics strictly in the requested language style: "${languageInstruction}".
 
 You MUST return a JSON object matching this schema:
 {
-  "playlistTitle": "🎵 INFINITE DYNAMIC PERSONA TITLE FORMULA: Front-load the FIRST 15 CHARACTERS with a high-conversion SITUATIONAL & PERSONA HOOK. Dynamically blend [Role e.g. 개발자, 트레이더, 디자이너, 작가, 고시생, 자취생] + [Space e.g. 원룸, 24시 라운지, 독서실, 도쿄 한밤중] + [Action/Need e.g. 새벽 버그 디버깅, 마감 30분 전, 차트 분석, 딴생각 차단 초집중]. Examples: '💻 새벽 3시 디버깅할 때 듣는 몰입 BGM | Deep Lofi Beats', '🎨 마감 1시간 전 피그마와 씨름할 때 | Focus Beats', '📈 24시간 코인 차트 볼 때 멘탈 잡는 Lofi', '😴 생각의 스위치를 끄고 깊은 잠으로 | Sleep Rain'. NEVER hardcode static categories. NEVER include duration tags like '[2시간]'. Write strictly in ${languageInstruction}.",
-  "youtubeDescription": "A warm, emotional curator comment (1-2 paragraphs) welcoming listeners, followed by a tracks timeline placeholder like: '${timelineExample}' (Please assume each track is exactly 3 minutes long and auto-calculate the cumulative timestamps up to Track ${trackCount}!)",
+  "playlistTitle": "🎵 ${profile.personaTitleFormula}",
+  "youtubeDescription": "A warm, emotional curator comment (1-2 paragraphs) welcoming listeners, followed by timestamps: '${timelineExample}'",
   "youtubeTags": "combined, playlist, tags, separated, by, commas, for, SEO",
   "snsHashtags": "#hashtag1 #hashtag2 #playlist #youtube #etc",
   "tracks": [
     {
       "trackNumber": 1,
-      "title": "🎵 ELEGANT ARTISTIC TRACK TITLE FORMULA: Poetic single song title (1-4 words). NEVER use playlist hook titles or duration tags like '[2시간]'. Examples: 'Midnight Compiler (새벽의 컴파일러)', 'Coffee & Terminal', 'Bugfix Serenade', '夜の雨音', '먹빛 깃발'. Write strictly in ${languageInstruction}.",
-      "youtubeTags": "lofi, tags, for, track1",
-      "snsHashtags": "#track1 #lofi",
+      "title": "🎵 Poetic single song title (1-4 words) matching its distinct theme pillar",
+      "youtubeTags": "tags, for, track1",
+      "snsHashtags": "#track1 #genre",
       "sections": [
         {
           "type": "intro or verse or pre-chorus or chorus or bridge or outro",
           "content": "Lyrics for this section",
-          "description": "Optional detailed musical instruction, vocal cue, or instrument solo (e.g., 'Vinyl crackle', 'Male Vocal', 'Guitar Solo')"
+          "description": "Musical cue (e.g., 'Nostalgic accordion solo', 'Punchy brass drop')"
         }
       ]
     }
@@ -589,15 +743,10 @@ You MUST return a JSON object matching this schema:
 }
 
 Rules:
-1. Generate exactly ${trackCount} tracks inside the "tracks" array. Each track should have unique title and lyrics fitting the style: "${stylePrompt}".
-2. For each track, generate Intro, Verse 1, Pre-Chorus, Chorus, Verse 2, Pre-Chorus, Chorus, Bridge, Chorus, Outro sections. Make it fully completed (not placeholders).
-3. Melody Contrast: Design Verses and Chorus with different ending rhyming patterns so that the AI vocalist shifts the vocal tone and melody dramatically.
-4. Outro Control: Keep the Outro section extremely short (1-2 lines of lyrics max), and use "Fade Out" or "Instrumental Outro" in the description field to prevent ending vocal glitches/glitches.
-5. In the "youtubeDescription", calculate the timelines assuming each track is 3:00 long:
-${timelineRules}
-${trackCount > 10 ? '   - ... up to Track ' + trackCount : ''}
-6. Strictly return valid JSON. Do not wrap in markdown \`\`\`json.
-7. You MUST write all titles, lyrics, tags, and descriptions strictly in the requested language: "${languageInstruction}". (Never write in Korean if English, Japanese, or a mix is requested).
+1. Generate exactly ${trackCount} tracks inside the "tracks" array. Each track MUST have a completely UNIQUE theme, title, and lyrics from the ${profile.nameKo} pillars.
+2. For each track, generate Intro, Verse 1, Chorus, Verse 2, Chorus, Outro sections.
+3. Outro Control: Keep Outro short (1-2 lines) with "Fade Out" or "Instrumental Outro" in the description.
+4. Strictly return valid JSON.
 ${playbookInstructions || ''}
 `
 }

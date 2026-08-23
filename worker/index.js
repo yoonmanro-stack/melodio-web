@@ -104,7 +104,32 @@ const SHORTFORM_MAX_DURATION_RETRIES = 2;
 // 반드시 검사한다. A/B 두 후보가 모두 범위 안에 들어오기 전에는 완료 처리하지 않는다.
 const MUGSOUND_MIN_DURATION_SEC = 150;
 const MUGSOUND_MAX_DURATION_SEC = 270;
-const MUGSOUND_MAX_DURATION_RETRIES = 2;
+// 초기 A/B 2개 + 길이 실패 시 A/B 2개를 한 번만 추가한다.
+// generation-policy의 Blueprint당 최대 후보 4개와 일치시켜 과금을 제한한다.
+const MUGSOUND_MAX_DURATION_RETRIES = 1;
+const MUGSOUND_INSTRUMENTAL_STRUCTURE_PROMPT = `[Target Duration: 3:30, Full Extended Instrumental Master]
+[Instrumental Intro]
+[Melodic Main Theme - Piano & Bass]
+[Instrumental Verse 1]
+[Rich Melodic Chorus 1]
+[Instrumental Verse 2 - Dynamic Lead Development]
+[Extended Solo & Piano Bridge]
+[Rich Melodic Chorus 2 - Full Climax]
+[Outro & Gradual Fade Out]`;
+
+function appendMugSoundAttempt(meta, taskId, durations, outcome) {
+  const attempts = Array.isArray(meta.mugsoundAttempts) ? meta.mugsoundAttempts : [];
+  meta.mugsoundAttempts = [
+    ...attempts,
+    {
+      attempt: attempts.length + 1,
+      taskId,
+      measuredDurations: durations,
+      outcome,
+      recordedAt: new Date().toISOString(),
+    },
+  ];
+}
 
 /**
  * 곡과 무관한 자리표시자 커버인가.
@@ -462,6 +487,7 @@ async function processGeneration(row) {
       .from('generations')
       .update({
         status: 'completed',
+        is_stem_extracted: true,
         stem_vocals_url: uploadResults.original['vocals'],
         stem_bass_url: uploadResults.original['bass'],
         stem_drums_url: uploadResults.original['drums'],
@@ -488,8 +514,10 @@ async function processGeneration(row) {
       log('WARN', `임시 파일 정리 실패: ${e.message}`);
     }
     
-    // ★ 야간 모드이므로 1개 처리 완료 후 슬립
-    enterSleepMode();
+    // MAX_JOBS에 도달했을 때만 슬립
+    if (jobsProcessed >= MAX_JOBS) {
+      enterSleepMode();
+    }
   }
 }
 
@@ -623,7 +651,7 @@ async function submitSunoJobForRetry(metadata, title) {
   const apiBaseUrl = process.env.SUNO_API_URL || 'https://api.302.ai';
 
   let effectiveStylePrompt = metadata.excludePrompt?.trim()
-    ? `${metadata.stylePrompt}, ${metadata.excludePrompt.trim()}`
+    ? `${metadata.stylePrompt}, avoid: ${metadata.excludePrompt.trim()}`
     : metadata.stylePrompt;
 
   if (metadata.sourceMenu === 'mugsound-supply' &&
@@ -631,6 +659,12 @@ async function submitSunoJobForRetry(metadata, title) {
       !effectiveStylePrompt.toLowerCase().includes('clean ending')) {
     effectiveStylePrompt = `${effectiveStylePrompt}, target duration 3:15, fade out at 3:20, clean ending`;
   }
+  effectiveStylePrompt = String(effectiveStylePrompt || '').slice(0, 1000);
+
+  const isMugSoundInstrumental = metadata.sourceMenu === 'mugsound-supply' && metadata.isInstrumental === true;
+  const finalPrompt = isMugSoundInstrumental
+    ? MUGSOUND_INSTRUMENTAL_STRUCTURE_PROMPT
+    : (metadata.lyricsPrompt ?? '');
 
   const model = mapSunoVersionToModel(metadata.sunoVersion);
 
@@ -644,11 +678,13 @@ async function submitSunoJobForRetry(metadata, title) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      prompt: metadata.lyricsPrompt ?? '',
+      prompt: finalPrompt,
       tags: effectiveStylePrompt ?? '',
       title: title ?? 'Untitled',
       mv: model,
-      make_instrumental: metadata.isInstrumental ?? false,
+      // 기존 Melodio 3분 연주곡 방식과 동일하게 구조 태그를 prompt로 전달한다.
+      // make_instrumental=true는 prompt 구조를 무시해 짧은 스케치가 반복됐다.
+      make_instrumental: isMugSoundInstrumental ? false : (metadata.isInstrumental ?? false),
     }),
   });
 
@@ -913,6 +949,7 @@ async function pollSunoGenerations() {
 
           if (isMugSoundSupply && !hasTwoMugSoundCandidates) {
             const lens = mugsoundDurations.map((duration) => `${duration ?? '?'}s`).join(', ');
+            appendMugSoundAttempt(metaObj, taskId, mugsoundDurations, 'duration_out_of_spec');
             if (durationRetryCount < MUGSOUND_MAX_DURATION_RETRIES) {
               log('WARN', `[MugSound 길이 미달] A/B ${lens} — 합격 ${MUGSOUND_MIN_DURATION_SEC}~${MUGSOUND_MAX_DURATION_SEC}초, 재발행 (${durationRetryCount + 1}/${MUGSOUND_MAX_DURATION_RETRIES})`);
               try {
@@ -938,6 +975,16 @@ async function pollSunoGenerations() {
             }).eq('id', row.id);
             log('ERROR', `[MugSound 길이 최종 실패] ${lens} — 완료 처리하지 않음`);
             continue;
+          }
+
+          if (isMugSoundSupply) {
+            appendMugSoundAttempt(metaObj, taskId, mugsoundDurations, 'duration_qualified');
+            metaObj.durationQualification = {
+              status: 'qualified',
+              minimumSeconds: MUGSOUND_MIN_DURATION_SEC,
+              maximumSeconds: MUGSOUND_MAX_DURATION_SEC,
+              qualifiedAt: new Date().toISOString(),
+            };
           }
 
           if (noClipUsable && durationRetryCount < SHORTFORM_MAX_DURATION_RETRIES) {

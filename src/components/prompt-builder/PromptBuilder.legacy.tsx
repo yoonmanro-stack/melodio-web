@@ -373,7 +373,8 @@ export default function PromptBuilder({
     if (isSingleSelect(categoryId)) {
       setSelections((prev) => {
         const next = enforceSingleSelect(prev, categoryId, value)
-        console.log('[PromptBuilder] singleSelect selections updated:', next)
+        const composed = composeStylePrompt(next, isInstrumental)
+        setStylePrompt(composed.prompt)
         return next
       })
     } else {
@@ -383,7 +384,8 @@ export default function PromptBuilder({
           ? current.filter((v) => v !== value)
           : [...current, value]
         const updated = { ...prev, [categoryId]: next }
-        console.log('[PromptBuilder] selections updated:', updated)
+        const composed = composeStylePrompt(updated, isInstrumental)
+        setStylePrompt(composed.prompt)
         return updated
       })
     }
@@ -608,22 +610,11 @@ export default function PromptBuilder({
     setIsPublic(true)
   }
 
-  // 스마트 프롬프트 결합 엔진 사용
+  // 스마트 프롬프트 결합 엔진 사용 (글자수 및 메타데이터 계산용)
   const compositorResult = useMemo(
     () => composeStylePrompt(selections, isInstrumental),
     [selections, isInstrumental],
   )
-
-  // compositorResult가 변경되면 stylePrompt 상태 업데이트
-  useEffect(() => {
-    if (isApplyingPresetRef.current) {
-      setStylePrompt(appliedPresetPromptRef.current)
-      isApplyingPresetRef.current = false
-    } else {
-      console.log('[PromptBuilder] compositorResult.prompt changed:', compositorResult.prompt)
-      setStylePrompt(compositorResult.prompt)
-    }
-  }, [compositorResult.prompt])
 
   // 프롬프트 페이로드 계산 (실시간)
   const payload: PromptPayload | null = useMemo(() => {
@@ -1035,6 +1026,8 @@ export default function PromptBuilder({
           customPresets={customPresets}
           onCustomPresetsChange={setCustomPresets}
           sourceMenu={sourceMenu}
+          isInstrumental={isInstrumental}
+          onInstrumentalToggle={setIsInstrumental}
           lyricsBuilderNode={
             <LyricsBuilder
               isInstrumental={isInstrumental}
@@ -1554,6 +1547,8 @@ export default function PromptBuilder({
             customPresets={customPresets}
             onCustomPresetsChange={setCustomPresets}
             sourceMenu={sourceMenu}
+            isInstrumental={isInstrumental}
+            onInstrumentalToggle={setIsInstrumental}
             lyricsBuilderNode={
               <LyricsBuilder
                 isInstrumental={isInstrumental}

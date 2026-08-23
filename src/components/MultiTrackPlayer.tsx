@@ -1,10 +1,12 @@
 'use client';
 
 import { useCallback, useMemo, useState, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, SkipBack, Headphones, Loader2, DownloadCloud } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, SkipBack, Headphones, Loader2, DownloadCloud, Scissors, Mic } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStemAudio, type StemId } from '@/hooks/useStemAudio';
 import { supabase } from '@/lib/supabase';
+import AudioTrimmerModal from '@/components/AudioTrimmerModal';
+import { VoiceConversionModal } from '@/components/voice/VoiceConversionModal';
 
 // ─── 스템 시각 설정 (파스텔 중간톤) ──────────────────────────────────────────
 interface StemVisual {
@@ -180,6 +182,7 @@ interface MultiTrackPlayerProps {
   currentTime: number;
   duration: number;
   originalWavUrls: Record<StemId, string | null>;
+  onOpenUpload?: () => void;
   play: () => void;
   pause: () => void;
   reset: () => void;
@@ -198,6 +201,7 @@ export default function MultiTrackPlayer({
   currentTime,
   duration,
   originalWavUrls,
+  onOpenUpload,
   play,
   pause,
   reset,
@@ -213,12 +217,15 @@ export default function MultiTrackPlayer({
     clippingCount?: number;
     dissonanceScore?: number;
     coverArtUrl?: string;
+    originalAudioUrl?: string;
   }>({
     title: 'Neon Drift — Extended Mix',
     artist: 'Melodio AI · Persona #007',
   });
   // 커버 로딩 실패 시 그라데이션 자리표시자로 되돌린다
   const [coverFailed, setCoverFailed] = useState(false);
+  const [isTrimmerOpen, setIsTrimmerOpen] = useState(false);
+  const [isVoiceConversionOpen, setIsVoiceConversionOpen] = useState(false);
 
   useEffect(() => {
     if (!generationId) {
@@ -233,7 +240,7 @@ export default function MultiTrackPlayer({
       try {
         const { data, error } = await supabase
           .from('generations')
-          .select('title, id, audio_grade, clipping_count, dissonance_score, cover_art_url')
+          .select('title, id, audio_grade, clipping_count, dissonance_score, cover_art_url, audio_url, source_audio_url')
           .eq('id', generationId)
           .single();
 
@@ -245,6 +252,7 @@ export default function MultiTrackPlayer({
             clippingCount: data.clipping_count ?? undefined,
             dissonanceScore: data.dissonance_score ?? undefined,
             coverArtUrl: data.cover_art_url || undefined,
+            originalAudioUrl: data.audio_url || data.source_audio_url || undefined,
           });
         }
       } catch (err) {
@@ -253,9 +261,7 @@ export default function MultiTrackPlayer({
     };
 
     setCoverFailed(false); // 곡이 바뀌면 커버 실패 상태를 초기화한다
-    const interval = setInterval(fetchGenMeta, 4000); // 4초마다 갱신 (로딩완료/재시도 반영용)
     fetchGenMeta();
-    return () => clearInterval(interval);
   }, [generationId]);
 
   const handleDownload = (url: string | null, stemName: string) => {
@@ -290,9 +296,9 @@ export default function MultiTrackPlayer({
   return (
     <div className="glass-panel p-6 space-y-5">
       {/* ── 헤더 ── */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fuchsia-600/70 to-cyan-500/70 flex items-center justify-center">
+          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fuchsia-600/70 to-cyan-500/70 flex items-center justify-center shadow-lg shadow-fuchsia-500/20">
             <Headphones className="w-4 h-4 text-white" />
           </div>
           <div>
@@ -301,25 +307,53 @@ export default function MultiTrackPlayer({
           </div>
         </div>
 
-        <AnimatePresence mode="wait">
-          {!allLoaded ? (
-            <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="flex items-center gap-1.5 text-[11px] text-zinc-400"
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={() => setIsVoiceConversionOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/35 border border-indigo-500/40 text-xs font-semibold text-indigo-200 hover:text-white transition-all shadow-sm shadow-indigo-500/10 cursor-pointer"
+          >
+            <Mic className="w-3.5 h-3.5 text-indigo-400" />
+            <span>🎤 1:1 내 목소리 변환 (RVC)</span>
+          </button>
+
+          <button
+            onClick={() => setIsTrimmerOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-semibold text-zinc-200 hover:text-white transition-all shadow-sm hover:border-fuchsia-500/40 cursor-pointer"
+          >
+            <Scissors className="w-3.5 h-3.5 text-fuchsia-400" />
+            <span>✂️ 구간 컷 & 보컬 추출</span>
+          </button>
+
+          {onOpenUpload && (
+            <button
+              onClick={onOpenUpload}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-gradient-to-r from-fuchsia-600/20 to-cyan-500/20 hover:from-fuchsia-600/30 hover:to-cyan-500/30 border border-fuchsia-500/30 text-xs font-medium text-zinc-200 hover:text-white transition-all shadow-sm"
             >
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-fuchsia-400" />
-              <span>버퍼 로드 중 {loadedCnt}/4</span>
-            </motion.div>
-          ) : (
-            <motion.span
-              key="ready"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="text-[10px] px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium"
-            >
-              ✓ SYNCED · Ready
-            </motion.span>
+              <DownloadCloud className="w-3.5 h-3.5 text-fuchsia-400 rotate-180" />
+              <span>+ 내 오디오 업로드</span>
+            </button>
           )}
-        </AnimatePresence>
+
+          <AnimatePresence mode="wait">
+            {!allLoaded ? (
+              <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="flex items-center gap-1.5 text-[11px] text-zinc-400"
+              >
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-fuchsia-400" />
+                <span>버퍼 로드 중 {loadedCnt}/4</span>
+              </motion.div>
+            ) : (
+              <motion.span
+                key="ready"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="text-[10px] px-2 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-medium"
+              >
+                ✓ 4-Track Stems Active
+              </motion.span>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
 
       {/* ── 트랙 정보 + 전체 컨트롤 ── */}
@@ -503,6 +537,33 @@ export default function MultiTrackPlayer({
         <p className="text-[10px] text-zinc-600">🎛 Web Audio API · Hard-Sync · Solo(S) · Mute · Vol</p>
         <span className="text-[10px] text-zinc-700">Phase 11 · {generationId ? 'Live (Dual Path)' : 'Mock Tones'}</span>
       </div>
+
+      {/* ── 15~30초 구간 컷 & 보컬 추출기 모달 ── */}
+      <AudioTrimmerModal
+        isOpen={isTrimmerOpen}
+        onClose={() => setIsTrimmerOpen(false)}
+        trackTitle={trackMetadata.title}
+        stems={{
+          vocals: originalWavUrls.vocals || stemUrls?.vocals || undefined,
+          drums: originalWavUrls.drums || stemUrls?.drums || undefined,
+          bass: originalWavUrls.bass || stemUrls?.bass || undefined,
+          melody: originalWavUrls.other || stemUrls?.other || undefined,
+          original: trackMetadata.originalAudioUrl,
+        }}
+      />
+
+      {/* ── 1:1 실제 내 목소리 음성 변환 (RVC AI) 모달 ── */}
+      <VoiceConversionModal
+        isOpen={isVoiceConversionOpen}
+        onClose={() => setIsVoiceConversionOpen(false)}
+        track={generationId ? ({
+          id: generationId,
+          title: trackMetadata.title,
+          audio_url: trackMetadata.originalAudioUrl || '',
+          stem_vocals_url: originalWavUrls.vocals || stemUrls?.vocals,
+          is_stem_extracted: true,
+        } as any) : null}
+      />
     </div>
   );
 }

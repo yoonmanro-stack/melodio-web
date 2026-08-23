@@ -1,7 +1,7 @@
 "use client";
 
 import { 
-  Sparkles, Music4, Film, Info, Clock, CheckCircle2,
+  Sparkles, Music4, Film, Info, Clock, CheckCircle2, Loader2,
   Search, SlidersHorizontal, MoreVertical, Play, Pause, 
   Trash2, Edit3, Download, RefreshCw, Heart, Share2,
   ChevronLeft, ChevronRight, ListFilter, AlertCircle, X,
@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
 import MultiTrackPlayer from "@/components/MultiTrackPlayer";
+import UploadStemModal from "@/components/UploadStemModal";
 import DashboardViralCarousel, { type DashboardViralVideo } from "@/components/dashboard/DashboardViralCarousel";
 import DashboardChannelDnaPanel from "@/components/dashboard/DashboardChannelDnaPanel";
 
@@ -22,7 +23,7 @@ const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
     <path d="M23.498 6.163a3.003 3.003 0 0 0-2.11-2.108C19.524 3.545 12 3.545 12 3.545s-7.525 0-9.388.51a3.002 3.002 0 0 0-2.11 2.108C0 8.025 0 12 0 12s0 3.975.502 5.837a2.999 2.999 0 0 0 2.11 2.108c1.863.51 9.388.51 9.388.51s7.524 0 9.388-.51a3.002 3.002 0 0 0 2.11-2.108c.502-1.862.502-5.837.502-5.837s0-3.975-.502-5.837zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/>
   </svg>
 );
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
 import { useStemAudio, type StemId } from "@/hooks/useStemAudio";
 import Link from "next/link";
@@ -48,6 +49,10 @@ type Generation = {
   stem_drums_url?: string;
   stem_bass_url?: string;
   stem_other_url?: string;
+  preview_vocals_url?: string;
+  preview_drums_url?: string;
+  preview_bass_url?: string;
+  preview_other_url?: string;
   is_stem_extracted?: boolean;
   duration_mode?: string;
   license_hash?: string;
@@ -218,9 +223,37 @@ export default function Home() {
     return [];
   });
   const [activeGenId, setActiveGenId] = useState<string>('');
+  const [isUploadStemModalOpen, setIsUploadStemModalOpen] = useState(false);
+
+  // ─── 4채널 스템 분리 완료 여부 판별 헬퍼 ───
+  const isTrackStemSplit = useCallback((item: any): boolean => {
+    return Boolean(
+      item &&
+      (item.is_stem_extracted ||
+       (item.preview_vocals_url && item.preview_drums_url) ||
+       (item.stem_vocals_url && item.stem_drums_url))
+    );
+  }, []);
+
+  const activeSplitTrack = useMemo(() => {
+    return history.find(t => t.id === activeGenId && isTrackStemSplit(t)) || history.find(isTrackStemSplit);
+  }, [history, activeGenId, isTrackStemSplit]);
+
+  const stemUrls = useMemo(() => {
+    if (!activeSplitTrack) return undefined;
+    return {
+      vocals: activeSplitTrack.preview_vocals_url || activeSplitTrack.stem_vocals_url || undefined,
+      drums: activeSplitTrack.preview_drums_url || activeSplitTrack.stem_drums_url || undefined,
+      bass: activeSplitTrack.preview_bass_url || activeSplitTrack.stem_bass_url || undefined,
+      other: activeSplitTrack.preview_other_url || activeSplitTrack.stem_other_url || activeSplitTrack.audio_url || undefined,
+    };
+  }, [activeSplitTrack]);
   
   // ─── 승격된 Audio 엔진 상태 바인딩 (Stem Player용) ───
-  const audio = useStemAudio({ generationId: activeGenId });
+  const audio = useStemAudio({ 
+    generationId: activeSplitTrack?.id,
+    stemUrls,
+  });
 
   // ─── HTML5 Audio 기반 원곡 재생 ───
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -269,6 +302,8 @@ export default function Home() {
   const [allPresets, setAllPresets] = useState<any[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(() => history.length === 0);
   const [generatingCovers, setGeneratingCovers] = useState<Record<string, boolean>>({});
+  const [downloadingTrackId, setDownloadingTrackId] = useState<string | null>(null);
+  const [downloadErrorToast, setDownloadErrorToast] = useState<string | null>(null);
 
   // 0. 프리셋 로드 및 캐싱 (스타일 역추적용)
   useEffect(() => {
@@ -335,6 +370,64 @@ export default function Home() {
       }
     } catch (err) {
       console.error('Failed to copy text:', err);
+    }
+  };
+
+  // ─── 안전한 음원 다운로드 핸들러 (100바이트 깨짐 방어 & 스트리밍 프록시) ───
+  const handleDownloadTrack = async (e: React.MouseEvent, item: Generation) => {
+    e.stopPropagation();
+    const dlUrl = item.audio_url || item.source_audio_url;
+    if (!dlUrl) {
+      alert("다운로드 가능한 음원 파일이 존재하지 않습니다.");
+      return;
+    }
+
+    const rawTitle = (item.title || 'melodio-track').trim();
+    const cleanTitle = rawTitle.replace(/[\\/:*?"<>|\r\n]/g, '_');
+    const filename = `${cleanTitle}.mp3`;
+
+    setDownloadingTrackId(item.id);
+    setDownloadErrorToast(null);
+
+    try {
+      // 1단계: 안전한 서버사이드 스트리밍 다운로드 프록시 호출 (/api/download)
+      const proxyUrl = `/api/download?url=${encodeURIComponent(dlUrl)}&filename=${encodeURIComponent(filename)}`;
+      const resp = await fetch(proxyUrl);
+
+      if (!resp.ok) {
+        let errorMsg = "음원이 아직 스토리지에 동기화 중입니다. 잠시 재생 후 다시 시도해 주세요.";
+        try {
+          const errJson = await resp.json();
+          if (errJson?.error) errorMsg = errJson.error;
+        } catch {}
+        setDownloadErrorToast(errorMsg);
+        setTimeout(() => setDownloadErrorToast(null), 4500);
+        return;
+      }
+
+      const blob = await resp.blob();
+
+      // 2단계: 100바이트 에러 텍스트 다운로드 방어막 (1KB 미만 검증)
+      if (blob.size < 1024) {
+        setDownloadErrorToast("음원 파일이 아직 온전히 준비되지 않았습니다. 잠시 재생 후 다시 시도해 주세요.");
+        setTimeout(() => setDownloadErrorToast(null), 4500);
+        return;
+      }
+
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err: any) {
+      console.error('[Dashboard/Download] 에러 발생:', err);
+      // 3단계: 네트워크 장애 시 최후의 수단 직접 새 창 열기
+      window.open(dlUrl, '_blank');
+    } finally {
+      setDownloadingTrackId(null);
     }
   };
 
@@ -450,9 +543,11 @@ export default function Home() {
       setPlayingTrack(item);
     }
 
-    // Stem Player도 해당 트랙으로 세팅 (하단 분석용)
-    setActiveGenId(item.id);
-  }, [playingTrackId, isTrackPlaying, audio, sendRetentionLog]);
+    // Stem Player는 4채널 스템 분리 완료된 곡일 때만 활성 트랙으로 교체 바인딩
+    if (isTrackStemSplit(item)) {
+      setActiveGenId(item.id);
+    }
+  }, [playingTrackId, isTrackPlaying, audio, sendRetentionLog, isTrackStemSplit]);
 
   // Refs 동기화
   useEffect(() => {
@@ -466,6 +561,24 @@ export default function Home() {
   useEffect(() => {
     playingTrackIdRef.current = playingTrackId;
   }, [playingTrackId]);
+
+  // 스템 분리 중인 최근 트랙이 있을 때만 4초 간격 자동 폴링 (완료 시 즉시 최신 상태 반영)
+  useEffect(() => {
+    const now = Date.now();
+    const hasRecentPending = history.some(t => {
+      const isPending = (t.status === 'pending' || t.status === 'processing') && !isTrackStemSplit(t);
+      if (!isPending) return false;
+      const created = new Date(t.created_at || '').getTime();
+      return isNaN(created) || (now - created) < 10 * 60 * 1000;
+    });
+    if (!hasRecentPending) return;
+
+    const timer = setInterval(() => {
+      fetchHistory();
+    }, 4000);
+
+    return () => clearInterval(timer);
+  }, [history, isTrackStemSplit]);
 
   const playNext = useCallback((isAutoPlay = false) => {
     const list = filteredRef.current;
@@ -712,8 +825,11 @@ export default function Home() {
         try {
           localStorage.setItem('melodio_cached_generations', JSON.stringify(historyList));
         } catch {}
-        if (historyList.length > 0 && !activeGenId) {
-          setActiveGenId(historyList[0].id);
+        const splitTracks = historyList.filter(isTrackStemSplit);
+        if (splitTracks.length > 0) {
+          if (!activeGenId || !splitTracks.some((t: any) => t.id === activeGenId)) {
+            setActiveGenId(splitTracks[0].id);
+          }
         }
         // 좋아요 초기값 동기화
         const initialLikes: Record<string, boolean> = {};
@@ -934,18 +1050,22 @@ export default function Home() {
       return;
     }
 
-    const { error } = await supabase
-      .from('generations')
-      .update({ 
-        status: 'pending',
-        is_stem_extracted: false
-      })
-      .eq('id', id);
+    try {
+      const resp = await fetch('/api/generations/split-stems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generationId: id }),
+      });
+      const data = await resp.json();
 
-    if (error) {
-      alert('스템 분리 요청 실패: ' + error.message);
-    } else {
-      alert('스템 분리(보컬/드럼/베이스 분리) 작업이 시작되었습니다. 완료될 때까지 약 1분간 기다려주세요.');
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || '스템 분리 요청 실패');
+      }
+
+      alert('4채널 스템 분리(보컬/드럼/베이스/멜로디) 작업이 시작되었습니다. 완료되면 하단 Stem Player에 자동으로 활성화됩니다. (약 1분 소요)');
+      fetchHistory();
+    } catch (err: any) {
+      alert('스템 분리 요청 실패: ' + err.message);
     }
   };
 
@@ -1593,27 +1713,18 @@ export default function Home() {
                     {/* Download 버튼 (완료 시에만 노출) */}
                     {item.status === 'completed' && (item.audio_url || item.source_audio_url) && (
                       <button 
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          const dlUrl = item.audio_url || item.source_audio_url;
-                          if (!dlUrl) return;
-                          try {
-                            const resp = await fetch(dlUrl);
-                            const blob = await resp.blob();
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `${item.title || 'melodio-track'}.mp3`;
-                            a.click();
-                            URL.revokeObjectURL(url);
-                          } catch {
-                            window.open(dlUrl, '_blank');
-                          }
-                        }}
-                        className="flex items-center gap-1 bg-white/5 border border-white/5 hover:border-cyan-500/30 hover:bg-cyan-500/5 text-zinc-300 hover:text-white px-2.5 py-1.5 md:px-3.5 md:py-2 rounded-xl text-[11px] md:text-xs font-semibold transition-all"
+                        onClick={(e) => handleDownloadTrack(e, item)}
+                        disabled={downloadingTrackId === item.id}
+                        className={`flex items-center gap-1 bg-white/5 border border-white/5 hover:border-cyan-500/30 hover:bg-cyan-500/5 text-zinc-300 hover:text-white px-2.5 py-1.5 md:px-3.5 md:py-2 rounded-xl text-[11px] md:text-xs font-semibold transition-all ${
+                          downloadingTrackId === item.id ? 'opacity-60 cursor-not-allowed' : ''
+                        }`}
                       >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Download</span>
+                        {downloadingTrackId === item.id ? (
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                        ) : (
+                          <Download className="w-3.5 h-3.5" />
+                        )}
+                        <span>{downloadingTrackId === item.id ? 'Downloading...' : 'Download'}</span>
                       </button>
                     )}
 
@@ -1661,27 +1772,19 @@ export default function Home() {
                             
                             {(item.audio_url || item.source_audio_url) && (
                               <button 
-                                onClick={async () => {
+                                onClick={(e) => {
                                   setActiveMenuId(null);
-                                  const dlUrl = item.audio_url || item.source_audio_url;
-                                  if (!dlUrl) return;
-                                  try {
-                                    const resp = await fetch(dlUrl);
-                                    const blob = await resp.blob();
-                                    const url = URL.createObjectURL(blob);
-                                    const a = document.createElement('a');
-                                    a.href = url;
-                                    a.download = `${item.title || 'melodio-track'}.mp3`;
-                                    a.click();
-                                    URL.revokeObjectURL(url);
-                                  } catch {
-                                    window.open(dlUrl, '_blank');
-                                  }
+                                  handleDownloadTrack(e, item);
                                 }}
+                                disabled={downloadingTrackId === item.id}
                                 className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-xs text-zinc-300 hover:bg-white/5 hover:text-white transition-colors"
                               >
-                                <Download className="w-3.5 h-3.5" />
-                                <span>Download Mix</span>
+                                {downloadingTrackId === item.id ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
+                                ) : (
+                                  <Download className="w-3.5 h-3.5" />
+                                )}
+                                <span>{downloadingTrackId === item.id ? 'Downloading...' : 'Download Mix'}</span>
                               </button>
                             )}
                             
@@ -1775,40 +1878,78 @@ export default function Home() {
       
       {/* ── 멀티트랙 스템 플레이어 ── */}
       <div className="mt-8">
-        {activeGenId ? (
-          <MultiTrackPlayer 
-            generationId={activeGenId} 
-            stemStates={audio.stemStates}
-            allLoaded={audio.allLoaded}
-            isPlaying={audio.isPlaying}
-            currentTime={audio.currentTime}
-            duration={audio.duration}
-            originalWavUrls={audio.originalWavUrls}
-            play={audio.play}
-            pause={audio.pause}
-            reset={audio.reset}
-            seek={audio.seek}
-            toggleMute={audio.toggleMute}
-            toggleSolo={audio.toggleSolo}
-            setVolume={audio.setVolume}
-          />
-        ) : (
-          <MultiTrackPlayer 
-            stemStates={audio.stemStates}
-            allLoaded={audio.allLoaded}
-            isPlaying={audio.isPlaying}
-            currentTime={audio.currentTime}
-            duration={audio.duration}
-            originalWavUrls={audio.originalWavUrls}
-            play={audio.play}
-            pause={audio.pause}
-            reset={audio.reset}
-            seek={audio.seek}
-            toggleMute={audio.toggleMute}
-            toggleSolo={audio.toggleSolo}
-            setVolume={audio.setVolume}
-          />
-        )}
+        {(() => {
+          const activeSplitTrack = history.find(t => t.id === activeGenId && isTrackStemSplit(t)) || history.find(isTrackStemSplit);
+          const processingTrack = history.find(t => (t.status === 'pending' || t.status === 'processing') && !isTrackStemSplit(t));
+
+          if (activeSplitTrack) {
+            return (
+              <MultiTrackPlayer 
+                generationId={activeSplitTrack.id} 
+                stemStates={audio.stemStates}
+                allLoaded={audio.allLoaded}
+                isPlaying={audio.isPlaying}
+                currentTime={audio.currentTime}
+                duration={audio.duration}
+                originalWavUrls={audio.originalWavUrls}
+                onOpenUpload={() => setIsUploadStemModalOpen(true)}
+                play={audio.play}
+                pause={audio.pause}
+                reset={audio.reset}
+                seek={audio.seek}
+                toggleMute={audio.toggleMute}
+                toggleSolo={audio.toggleSolo}
+                setVolume={audio.setVolume}
+              />
+            );
+          }
+
+          if (processingTrack) {
+            return (
+              <div className="glass-panel p-8 text-center space-y-4 border border-cyan-500/30 bg-gradient-to-b from-cyan-950/25 via-zinc-950/40 to-zinc-950 shadow-2xl relative overflow-hidden">
+                <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-cyan-600/30 to-fuchsia-600/30 border border-cyan-500/40 flex items-center justify-center shadow-lg shadow-cyan-500/20">
+                  <Loader2 className="w-7 h-7 text-cyan-400 animate-spin" />
+                </div>
+                <div className="max-w-md mx-auto space-y-2">
+                  <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-bold">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>AI 4채널 스템 분리 연산 중</span>
+                  </div>
+                  <h3 className="text-base font-bold text-white tracking-wide">
+                    '{processingTrack.title}' 분리 작업이 진행 중입니다
+                  </h3>
+                  <p className="text-xs text-zinc-400 leading-relaxed">
+                    맥미니 로컬 AI(Demucs)가 보컬, 드럼, 베이스, 멜로디 4개 트랙을 초고음질로 분리하고 있습니다. (약 30~60초 소요)<br />
+                    작업이 완료되면 4-Track Stem Player가 자동으로 활성화됩니다!
+                  </p>
+                </div>
+              </div>
+            );
+          }
+
+          return (
+            <div className="glass-panel p-8 text-center space-y-4 border border-fuchsia-500/20 bg-gradient-to-b from-fuchsia-950/20 via-zinc-950/40 to-zinc-950">
+              <div className="w-14 h-14 mx-auto rounded-2xl bg-gradient-to-br from-fuchsia-600/20 to-cyan-500/20 border border-fuchsia-500/30 flex items-center justify-center shadow-lg shadow-fuchsia-500/10">
+                <Music4 className="w-7 h-7 text-fuchsia-400" />
+              </div>
+              <div className="max-w-md mx-auto space-y-1.5">
+                <h3 className="text-base font-bold text-white">4-Track Stem Player</h3>
+                <p className="text-xs text-zinc-400 leading-relaxed">
+                  아직 4채널 스템 분리된 트랙이 없습니다. 목록에서 원하는 곡의 <span className="text-fuchsia-400 font-semibold">[Split Stems]</span> 버튼을 누르거나, 소장 중인 MP3/WAV 파일을 직접 업로드하여 보컬/드럼/베이스를 분리해 보세요!
+                </p>
+              </div>
+              <div className="flex justify-center gap-3 pt-2">
+                <button
+                  onClick={() => setIsUploadStemModalOpen(true)}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 hover:from-fuchsia-500 hover:to-cyan-400 text-white text-xs font-bold shadow-lg shadow-fuchsia-500/20 transition-all hover:scale-[1.02]"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  <span>+ 내 오디오 파일 업로드 & 스템 분리</span>
+                </button>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Alert banner replacing Insights*/}
@@ -2244,9 +2385,7 @@ export default function Home() {
 
                                 {hasVideo ? (
                                   <a
-                                    href={vUrl}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
+                                    href={`/api/download?url=${encodeURIComponent(vUrl)}&filename=${encodeURIComponent(`melodio_short_${detailItem.title || 'video'}.mp4`)}`}
                                     download={`melodio_short_${detailItem.title || 'video'}.mp4`}
                                     className="px-3 py-1.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(217,70,239,0.3)] active:scale-95 shrink-0"
                                   >
@@ -2523,7 +2662,7 @@ export default function Home() {
         const coverUrl = currentDashboardTrack.cover_art_url || getFallbackCoverArt(currentDashboardTrack);
 
         return (
-          <div className="fixed bottom-0 left-0 md:left-64 right-0 z-50 bg-zinc-950/95 border-t border-white/10 backdrop-blur-xl px-6 py-3 shadow-2xl flex items-center justify-between">
+          <div className="fixed bottom-0 left-0 right-0 w-full z-[100] bg-[#0c0d12]/95 border-t border-white/10 backdrop-blur-2xl px-4 md:px-8 py-3 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] flex items-center justify-between">
             {/* Left Metadata & Artwork */}
             <div className="flex items-center gap-3.5 min-w-[240px] max-w-[320px] shrink-0">
               <div className="w-12 h-12 rounded-lg overflow-hidden bg-zinc-900 shrink-0 border border-white/10 shadow-md relative">
@@ -2724,6 +2863,31 @@ export default function Home() {
           </div>
         );
       })()}
+
+      {/* 다운로드 안내 및 동기화 알림 플로팅 토스트 */}
+      <AnimatePresence>
+        {downloadErrorToast && (
+          <motion.div 
+            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 15, scale: 0.95 }}
+            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 bg-amber-400 text-zinc-950 px-4 py-3 rounded-2xl shadow-2xl font-bold text-xs border border-amber-300 backdrop-blur-md"
+          >
+            <AlertCircle className="w-4 h-4 shrink-0 text-zinc-950" />
+            <span>{downloadErrorToast}</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 외부 음원 업로드 & 스템 분리 모달 */}
+      <UploadStemModal
+        isOpen={isUploadStemModalOpen}
+        onClose={() => setIsUploadStemModalOpen(false)}
+        onSuccess={(genId) => {
+          fetchHistory();
+          setActiveGenId(genId);
+        }}
+      />
     </div>
   );
 }

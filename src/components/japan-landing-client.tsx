@@ -1569,19 +1569,22 @@ export default function JapanLandingClient() {
       return;
     }
 
-    const { error } = await supabase
-      .from('generations')
-      .update({ 
-        status: 'pending',
-        is_stem_extracted: false
-      })
-      .eq('id', id);
+    try {
+      const resp = await fetch('/api/generations/split-stems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ generationId: id }),
+      });
+      const data = await resp.json();
 
-    if (error) {
-      alert('스템 분리 요청 실패: ' + error.message);
-    } else {
+      if (!resp.ok || !data.success) {
+        throw new Error(data.error || '스템 분리 요청 실패');
+      }
+
       alert('스템 분리 작업이 시작되었습니다. 완료될 때까지 잠시 기다려주세요.');
       fetchMyJpTracks();
+    } catch (err: any) {
+      alert('스템 분리 요청 실패: ' + err.message);
     }
   };
 
@@ -1735,7 +1738,7 @@ export default function JapanLandingClient() {
         {/* 헤더 — 통일된 표준 브랜드 헤더 */}
         <header className="mb-8 border-b border-white/10 pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
-            <h1 className="text-4xl font-bold text-white mb-2">Japan BGM Forge</h1>
+            <h1 className="text-4xl font-bold text-white mb-2">일본 BGM 스튜디오</h1>
             <p className="text-zinc-400">일본 감성(City Pop, J-Lofi, Midnight Jazz) BGM 채널 특화 가사/음원 생성 및 라이브러리 제어 센터</p>
           </div>
           <Link 
@@ -2109,6 +2112,8 @@ export default function JapanLandingClient() {
               isPublic={isPublic}
               onPublicToggle={setIsPublic}
               sourceMenu="japan"
+              isInstrumental={isInstrumental}
+              onInstrumentalToggle={setIsInstrumental}
               compositorResult={{ prompt: styleTags, charCount: styleTags.length, truncatedCount: 0, maxChars: 1000 }}
               onGenerate={handleGenerateMusic}
               isGenerating={isGeneratingMusic || generationJob?.status === 'submitting' || generationJob?.status === 'generating'}

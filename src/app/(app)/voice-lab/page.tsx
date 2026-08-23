@@ -4,15 +4,15 @@ import { useState, useEffect, useRef } from "react";
 import { 
   Mic2, Sparkles, Sliders, Disc, ShieldCheck, 
   Play, Pause, Upload, Layers, Volume2, Info, 
-  Activity, Check, HelpCircle, Save, Database,
-  ArrowRight, RefreshCw, Heart, Music, CheckCircle,
-  HelpCircle as QuestionIcon, ArrowLeft, VolumeX,
-  Search, Plus, X, ChevronRight, ChevronLeft, Trash2, Edit2, Zap, Link
+  Activity, Check, HelpCircle, HelpCircle as QuestionIcon, Save, Database,
+  ArrowRight, ArrowLeft, RefreshCw, Heart, Music, CheckCircle, VolumeX,
+  Search, Plus, X, ChevronRight, ChevronLeft, Trash2, Edit2, Zap, Link, FileCode2, CheckCircle2
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { defaultSystemVoices, buildVoicePromptFromAttributes, VoiceDnaRecord } from "@/lib/voice-dna-scrubber";
 import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/contexts/LanguageContext";
+import { useVoice } from "@/contexts/VoiceContext";
 import { DEMO_LYRICS } from "@/data/demo-lyrics";
 
 type VoiceType = "default" | "record" | "upload" | "blend";
@@ -31,7 +31,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'female', age: 'young', pitch: 80, brightness: 85, chest: 40, head: 80 },
     textures: ['Crystal', 'Breathy'],
     emotions: ['Dreamy', 'Hopeful'],
-    gradient: 'linear-gradient(135deg, #f43f5e, #fb923c)'
+    gradient: 'linear-gradient(135deg, #f43f5e, #fb923c)',
+    audioUrl: '/assets/voices/vd-1004.mp3'
   },
   {
     code: 'VD-3802',
@@ -46,7 +47,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'male', age: 'mature', pitch: 35, brightness: 45, chest: 85, head: 30 },
     textures: ['Smoky', 'Velvet'],
     emotions: ['Lonely', 'Dark'],
-    gradient: 'linear-gradient(135deg, #3b82f6, #14b8a6)'
+    gradient: 'linear-gradient(135deg, #3b82f6, #14b8a6)',
+    audioUrl: '/assets/voices/vd-3802.mp3'
   },
   {
     code: 'VD-7705',
@@ -61,7 +63,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'female', age: 'childish', pitch: 90, brightness: 95, chest: 20, head: 90 },
     textures: ['Silky', 'Clean'],
     emotions: ['Passionate', 'Happy'],
-    gradient: 'linear-gradient(135deg, #ec4899, #f43f5e)'
+    gradient: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+    audioUrl: '/assets/voices/vd-7705.mp3'
   },
   {
     code: 'VD-2001',
@@ -76,7 +79,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'female', age: 'young', pitch: 65, brightness: 70, chest: 60, head: 50 },
     textures: ['Warm', 'Airy'],
     emotions: ['Sad', 'Calm'],
-    gradient: 'linear-gradient(135deg, #a855f7, #ec4899)'
+    gradient: 'linear-gradient(135deg, #a855f7, #ec4899)',
+    audioUrl: '/assets/voices/vd-2001.mp3'
   },
   {
     code: 'VD-2002',
@@ -91,7 +95,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'male', age: 'mature', pitch: 38, brightness: 50, chest: 90, head: 40 },
     textures: ['Smoky', 'Gravelly'],
     emotions: ['Passionate', 'Aggressive'],
-    gradient: 'linear-gradient(135deg, #f59e0b, #eab308)'
+    gradient: 'linear-gradient(135deg, #f59e0b, #eab308)',
+    audioUrl: '/assets/voices/vd-2002.mp3'
   },
   {
     code: 'VD-2003',
@@ -106,7 +111,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'male', age: 'young', pitch: 55, brightness: 60, chest: 70, head: 60 },
     textures: ['Velvet', 'Warm'],
     emotions: ['Lonely', 'Dreamy'],
-    gradient: 'linear-gradient(135deg, #6366f1, #3b82f6)'
+    gradient: 'linear-gradient(135deg, #6366f1, #3b82f6)',
+    audioUrl: '/assets/voices/vd-2003.mp3'
   },
   {
     code: 'VD-2004',
@@ -121,7 +127,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'female', age: 'mature', pitch: 70, brightness: 60, chest: 50, head: 70 },
     textures: ['Metallic', 'Whispering'],
     emotions: ['Dark', 'Cold'],
-    gradient: 'linear-gradient(135deg, #10b981, #06b6d4)'
+    gradient: 'linear-gradient(135deg, #10b981, #06b6d4)',
+    audioUrl: '/assets/voices/vd-2004.mp3'
   },
   {
     code: 'VD-2005',
@@ -136,7 +143,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'male', age: 'mature', pitch: 30, brightness: 40, chest: 80, head: 30 },
     textures: ['Warm', 'Dry'],
     emotions: ['Calm', 'Lethargic'],
-    gradient: 'linear-gradient(135deg, #84cc16, #10b981)'
+    gradient: 'linear-gradient(135deg, #84cc16, #10b981)',
+    audioUrl: '/assets/voices/vd-2005.mp3'
   },
   {
     code: 'VD-2006',
@@ -151,7 +159,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'female', age: 'young', pitch: 60, brightness: 65, chest: 70, head: 55 },
     textures: ['Warm', 'Silky'],
     emotions: ['Sad', 'Calm'],
-    gradient: 'linear-gradient(135deg, #06b6d4, #3b82f6)'
+    gradient: 'linear-gradient(135deg, #06b6d4, #3b82f6)',
+    audioUrl: '/assets/voices/vd-2006.mp3'
   },
   {
     code: 'VD-2007',
@@ -166,7 +175,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'male', age: 'young', pitch: 58, brightness: 75, chest: 50, head: 65 },
     textures: ['Clean', 'Airy'],
     emotions: ['Hopeful', 'Happy'],
-    gradient: 'linear-gradient(135deg, #f43f5e, #a855f7)'
+    gradient: 'linear-gradient(135deg, #f43f5e, #a855f7)',
+    audioUrl: '/assets/voices/vd-2007.mp3'
   },
   {
     code: 'VD-2008',
@@ -181,7 +191,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'female', age: 'young', pitch: 78, brightness: 80, chest: 45, head: 75 },
     textures: ['Crystal', 'Airy'],
     emotions: ['Happy', 'Hopeful'],
-    gradient: 'linear-gradient(135deg, #fb923c, #ec4899)'
+    gradient: 'linear-gradient(135deg, #fb923c, #ec4899)',
+    audioUrl: '/assets/voices/vd-2008.mp3'
   },
   {
     code: 'VD-2009',
@@ -196,7 +207,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'male', age: 'mature', pitch: 36, brightness: 52, chest: 80, head: 35 },
     textures: ['Smoky', 'Warm'],
     emotions: ['Passionate', 'Aggressive'],
-    gradient: 'linear-gradient(135deg, #ef4444, #f59e0b)'
+    gradient: 'linear-gradient(135deg, #ef4444, #f59e0b)',
+    audioUrl: '/assets/voices/vd-2009.mp3'
   },
   {
     code: 'VD-2010',
@@ -211,7 +223,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'female', age: 'young', pitch: 72, brightness: 58, chest: 60, head: 68 },
     textures: ['Breathy', 'Smoky'],
     emotions: ['Sad', 'Lonely'],
-    gradient: 'linear-gradient(135deg, #a855f7, #6366f1)'
+    gradient: 'linear-gradient(135deg, #a855f7, #6366f1)',
+    audioUrl: '/assets/voices/vd-2010.mp3'
   },
   {
     code: 'VD-2011',
@@ -226,7 +239,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'male', age: 'young', pitch: 57, brightness: 64, chest: 65, head: 58 },
     textures: ['Velvet', 'Clean'],
     emotions: ['Dreamy', 'Calm'],
-    gradient: 'linear-gradient(135deg, #14b8a6, #84cc16)'
+    gradient: 'linear-gradient(135deg, #14b8a6, #84cc16)',
+    audioUrl: '/assets/voices/vd-2011.mp3'
   },
   {
     code: 'VD-2012',
@@ -241,7 +255,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'female', age: 'mature', pitch: 48, brightness: 50, chest: 80, head: 45 },
     textures: ['Smoky', 'Gravelly'],
     emotions: ['Passionate', 'Lonely'],
-    gradient: 'linear-gradient(135deg, #f43f5e, #fb7185)'
+    gradient: 'linear-gradient(135deg, #f43f5e, #fb7185)',
+    audioUrl: '/assets/voices/vd-2012.mp3'
   },
   {
     code: 'VD-2013',
@@ -256,7 +271,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'male', age: 'childish', pitch: 70, brightness: 80, chest: 30, head: 80 },
     textures: ['Clean', 'Silky'],
     emotions: ['Happy', 'Hopeful'],
-    gradient: 'linear-gradient(135deg, #06b6d4, #10b981)'
+    gradient: 'linear-gradient(135deg, #06b6d4, #10b981)',
+    audioUrl: '/assets/voices/vd-2013.mp3'
   },
   {
     code: 'VD-2014',
@@ -271,7 +287,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'male', age: 'mature', pitch: 32, brightness: 45, chest: 82, head: 32 },
     textures: ['Warm', 'Dry'],
     emotions: ['Calm', 'Hopeful'],
-    gradient: 'linear-gradient(135deg, #6b7280, #374151)'
+    gradient: 'linear-gradient(135deg, #6b7280, #374151)',
+    audioUrl: '/assets/voices/vd-2014.mp3'
   },
   {
     code: 'VD-2015',
@@ -286,7 +303,8 @@ const EXPLORE_VOICES = [
     physical_layers: { gender: 'female', age: 'mature', pitch: 85, brightness: 90, chest: 35, head: 90 },
     textures: ['Crystal', 'Metallic'],
     emotions: ['Passionate', 'Hopeful'],
-    gradient: 'linear-gradient(135deg, #e0f2fe, #38bdf8)'
+    gradient: 'linear-gradient(135deg, #e0f2fe, #38bdf8)',
+    audioUrl: '/assets/voices/vd-2015.mp3'
   }
 ];
 
@@ -309,6 +327,18 @@ const DEMO_AUDIO_TRACKS: Record<"female" | "male", Record<"ballad" | "pop" | "rn
 
 export default function VoiceDnaStudio() {
   const { language } = useLanguage();
+  const { 
+    voices, 
+    activeVoice, 
+    setActiveVoice, 
+    updateVoice, 
+    deleteVoice, 
+    toggleFavorite, 
+    openVoiceModal, 
+    openCreateModal 
+  } = useVoice();
+  const [editingCollectionVoiceId, setEditingCollectionVoiceId] = useState<string | null>(null);
+  const [editingCollectionVoiceName, setEditingCollectionVoiceName] = useState("");
   // ─── State Management ──────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<"explore" | "design" | "collections" | "decoder">("explore");
   const [voiceType, setVoiceType] = useState<VoiceType>("default");
@@ -459,9 +489,10 @@ export default function VoiceDnaStudio() {
     stopExploreVoiceDemo();
     
     // Check if the voice record has a saved real Audio URL
-    const realAudioUrl = voice.audio_url || voice.physical_layers?.audio_url;
+    const realAudioUrl = voice.audioUrl || voice.audio_url || voice.physical_layers?.audio_url;
+    const voiceKey = voice.id || voice.code;
     if (realAudioUrl) {
-      setExplorePlayingVoiceId(voice.code);
+      setExplorePlayingVoiceId(voiceKey);
       setExplorePlaying(true);
       setExploreProgress(0);
 
@@ -1296,22 +1327,54 @@ export default function VoiceDnaStudio() {
     }
   };
 
-  // ─── DNA Extraction Simulation ─────────────────────────────────────────────
-  const triggerDnaExtraction = () => {
+  // ─── Real AI Audio DNA Extraction ─────────────────────────────────────────────
+  const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
+
+  const triggerDnaExtraction = async (fileToAnalyze?: File) => {
+    const targetFile = fileToAnalyze || uploadedFile;
+    if (!targetFile) return;
     setIsAnalyzing(true);
-    setTimeout(() => {
-      setPitch(Math.floor(Math.random() * 40) + 40);
-      setBrightness(Math.floor(Math.random() * 30) + 50);
-      setChestResonance(Math.floor(Math.random() * 50) + 30);
-      setHeadResonance(Math.floor(Math.random() * 40) + 50);
-      setWeight(Math.floor(Math.random() * 40) + 40);
-      setPower(Math.floor(Math.random() * 30) + 60);
-      
-      setSelectedTextures(["Velvet", "Breathy"].slice(0, Math.floor(Math.random() * 2) + 1));
-      setSelectedEmotions(["Lonely", "Calm"].slice(0, Math.floor(Math.random() * 2) + 1));
-      
+    setAnalysisSummary(null);
+    try {
+      const fd = new FormData();
+      fd.append("file", targetFile);
+      // Auto-detect gender instead of forcing previous state
+      fd.append("pitch", String(pitch));
+      fd.append("brightness", String(brightness));
+
+      const res = await fetch("/api/voice/analyze-audio", {
+        method: "POST",
+        body: fd,
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.analysis) {
+          const a = data.analysis;
+          setGender(a.gender);
+          if (a.physicalLayers) {
+            setPitch(a.physicalLayers.pitch || (a.gender === 'male' ? 45 : 75));
+            setBrightness(a.physicalLayers.brightness || brightness);
+            setChestResonance(a.physicalLayers.chest || (a.gender === 'male' ? 75 : 45));
+            setHeadResonance(a.physicalLayers.head || (a.gender === 'female' ? 70 : 50));
+            setVibrato(a.physicalLayers.vibrato || vibrato);
+          }
+          if (a.tags && a.tags.length > 0) {
+            setSelectedTextures(a.tags.slice(0, 3));
+          }
+          const rangeLabel = a.vocalRange || (a.gender === 'male' ? 'Baritone/Tenor' : 'Soprano');
+          setAnalysisSummary(`AI 분석 완료: ${a.gender === 'male' ? '남성' : '여성'} ${rangeLabel} (${a.timbre || 'Warm'}) - ${a.summary || '음향 주파수 DNA 추출 완료'}`);
+          if (!stageName || stageName.startsWith('Custom') || stageName.startsWith('Voice')) {
+            const baseFileName = targetFile.name.replace(/\.[^/.]+$/, "");
+            setStageName(baseFileName || `보컬 (${rangeLabel})`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Failed real DNA extraction:", err);
+    } finally {
       setIsAnalyzing(false);
-    }, 2500);
+    }
   };
 
   // ─── Save DNA ──────────────────────────────────────────────────────────────
@@ -1790,8 +1853,8 @@ export default function VoiceDnaStudio() {
       {/* ─── Header (통일된 표준 브랜드 헤더) ──────────────────────────────────────────────────────────── */}
       <header className="mb-8 border-b border-white/10 pb-6 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">VoiceDNA Studio</h1>
-          <p className="text-zinc-400 text-sm">인격(Person)이 아닌 음향 특징(Attribute)을 합성하여 Virtual Artist의 고유 목소리를 코딩합니다.</p>
+          <h1 className="text-4xl font-bold text-white mb-2">보이스 스튜디오</h1>
+          <p className="text-zinc-400 text-sm">원하는 목소리를 등록하고 조절하여 일관된 보컬 목소리를 만들고 관리합니다.</p>
         </div>
 
         {/* Action controls */}
@@ -1822,14 +1885,58 @@ export default function VoiceDnaStudio() {
         </div>
       </header>
 
+      {/* ─── Suno Style Voice Hub Hero ────────────────────────────────────────────── */}
+      <section className="mb-6 rounded-3xl p-6 bg-gradient-to-r from-rose-950/40 via-purple-950/30 to-zinc-900/90 border border-rose-500/30 shadow-[0_0_35px_rgba(244,63,94,0.15)] flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1.5">
+              <Sparkles className="w-3.5 h-3.5 text-rose-400" />
+              AI 보컬 & 가수 스튜디오
+            </span>
+            <span className="px-2 py-0.5 rounded-full bg-fuchsia-500/10 text-fuchsia-300 text-[10px] font-semibold border border-fuchsia-500/20">
+              플리 전속 가수 관리
+            </span>
+          </div>
+          <h2 className="text-2xl font-black text-white tracking-tight">
+            내 플레이리스트 전속 가수를 만들고 관리하세요
+          </h2>
+          <p className="text-xs text-zinc-300 max-w-xl leading-relaxed">
+            원하는 목소리를 등록해 두면, 모든 작곡 화면에서 같은 가수의 목소리로 일관된 플리 곡을 계속 만들 수 있습니다.
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <button
+            onClick={openCreateModal}
+            className="px-5 py-3 rounded-2xl bg-gradient-to-r from-rose-500 via-fuchsia-600 to-indigo-600 hover:from-rose-400 hover:to-indigo-500 text-white font-bold text-sm shadow-xl shadow-rose-500/25 transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>새 보이스 만들기</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("collections")}
+            className="px-5 py-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-800 border border-white/10 hover:border-white/20 text-white font-semibold text-sm transition-all flex items-center gap-2 cursor-pointer"
+          >
+            <Sparkles className="w-4 h-4 text-purple-400" />
+            <span>내 보이스 보기</span>
+            {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length > 0 && (
+              <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-xs text-purple-300 font-bold border border-purple-500/30">
+                {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length}
+              </span>
+            )}
+          </button>
+        </div>
+      </section>
+
       {/* ─── 5. 1초 완성 퀵스타트 템플릿 섹션 (초보자 최우선 개선) ───────────────── */}
       <section className="mb-6 bg-zinc-950/40 border border-white/5 rounded-2xl p-4">
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-fuchsia-400 animate-pulse" /> 1초 퀵스타트 템플릿
+            <Sparkles className="w-4 h-4 text-fuchsia-400 animate-pulse" /> 1초 완성 인기 템플릿
           </h3>
           <p className="text-[10px] text-zinc-500 mt-1 font-medium">
-            ※ 아래 템플릿 선택 시 'Voice DNA Designer' 메뉴에서 원하는 보컬 보이스 디자인 하기
+            ※ 마음에 드는 스타일을 고르면 '톤 맞춤 조절' 탭으로 바로 이동하여 맞춤 튜닝됩니다.
           </p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -2190,28 +2297,36 @@ export default function VoiceDnaStudio() {
       <div className="flex gap-2 mb-6 border-b border-white/5 pb-2 overflow-x-auto no-scrollbar shrink-0">
         <button 
           onClick={() => setActiveTab("explore")}
-          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all shrink-0 ${activeTab === "explore" ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" : "text-zinc-400 hover:text-zinc-200"}`}
+          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${activeTab === "explore" ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
         >
-          Explore Voices
+          <Search className="w-3.5 h-3.5" />
+          <span>보이스 탐색</span>
         </button>
         <button 
           onClick={() => setActiveTab("design")}
-          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all shrink-0 ${activeTab === "design" ? "bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20" : "text-zinc-400 hover:text-zinc-200"}`}
+          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${activeTab === "design" ? "bg-fuchsia-500/10 text-fuchsia-400 border border-fuchsia-500/20 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
         >
-          Voice DNA Designer
+          <Sliders className="w-3.5 h-3.5" />
+          <span>톤 맞춤 조절</span>
         </button>
         <button 
           onClick={() => setActiveTab("collections")}
-          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all shrink-0 flex items-center gap-1.5 ${activeTab === "collections" ? "bg-purple-500/10 text-purple-400 border border-purple-500/20" : "text-zinc-400 hover:text-zinc-200"}`}
+          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${activeTab === "collections" ? "bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
         >
-          <Heart className="w-3.5 h-3.5 fill-rose-500 text-rose-500 shrink-0 animate-pulse" />
-          <span>Voice Collections</span>
+          <Sparkles className="w-3.5 h-3.5 fill-purple-400 text-purple-400 shrink-0" />
+          <span>내 보이스</span>
+          {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length > 0 && (
+            <span className="px-1.5 py-0.2 rounded-full bg-purple-500/20 text-[10px] text-purple-300 font-bold border border-purple-500/30">
+              {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length}
+            </span>
+          )}
         </button>
         <button 
           onClick={() => setActiveTab("decoder")}
-          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all shrink-0 ${activeTab === "decoder" ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20" : "text-zinc-400 hover:text-zinc-200"}`}
+          className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${activeTab === "decoder" ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
         >
-          DNA Decoder & Debugger
+          <FileCode2 className="w-3.5 h-3.5" />
+          <span>코드 공유·복원</span>
         </button>
       </div>
 
@@ -2232,13 +2347,13 @@ export default function VoiceDnaStudio() {
                     type="text"
                     value={expSearchQuery}
                     onChange={(e) => setExpSearchQuery(e.target.value)}
-                    placeholder="보이스 이름, 설명, 태그 검색..."
+                    placeholder="보이스 이름, 스타일, 설명 검색..."
                     className="w-full bg-black/40 border border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-cyan-500/50 transition-colors"
                   />
                   {expSearchQuery && (
                     <button
                       onClick={() => setExpSearchQuery("")}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
                     >
                       <X className="w-4 h-4" />
                     </button>
@@ -2250,12 +2365,12 @@ export default function VoiceDnaStudio() {
                     <select
                       value={expLanguage}
                       onChange={(e) => setExpLanguage(e.target.value)}
-                      className="px-3 py-2.5 rounded-xl text-xs bg-black/40 border border-white/5 text-zinc-300 focus:outline-none focus:border-cyan-500"
+                      className="px-3 py-2.5 rounded-xl text-xs bg-black/40 border border-white/5 text-zinc-300 focus:outline-none focus:border-cyan-500 cursor-pointer"
                     >
-                      <option value="all">모든 언어 (All Languages)</option>
-                      <option value="Korean">한국어 (Korean)</option>
-                      <option value="English">영어 (English)</option>
-                      <option value="Japanese">일본어 (Japanese)</option>
+                      <option value="all">모든 언어</option>
+                      <option value="Korean">한국어</option>
+                      <option value="English">영어</option>
+                      <option value="Japanese">일본어</option>
                     </select>
                   </div>
                   
@@ -2263,11 +2378,11 @@ export default function VoiceDnaStudio() {
                     <select
                       value={expGender}
                       onChange={(e) => setExpGender(e.target.value)}
-                      className="px-3 py-2.5 rounded-xl text-xs bg-black/40 border border-white/5 text-zinc-300 focus:outline-none focus:border-cyan-500"
+                      className="px-3 py-2.5 rounded-xl text-xs bg-black/40 border border-white/5 text-zinc-300 focus:outline-none focus:border-cyan-500 cursor-pointer"
                     >
-                      <option value="all">모든 성별 (All Genders)</option>
-                      <option value="female">여성 보컬 (Female)</option>
-                      <option value="male">남성 보컬 (Male)</option>
+                      <option value="all">모든 성별</option>
+                      <option value="female">여성 보컬</option>
+                      <option value="male">남성 보컬</option>
                     </select>
                   </div>
                 </div>
@@ -2322,15 +2437,15 @@ export default function VoiceDnaStudio() {
                   const filtered = EXPLORE_VOICES.filter((voice) => {
                     if (expSearchQuery) {
                       const q = expSearchQuery.toLowerCase();
-                      const matchesName = voice.name.toLowerCase().includes(q);
-                      const matchesDesc = voice.desc.toLowerCase().includes(q);
-                      const matchesTags = voice.tags.some(t => t.toLowerCase().includes(q));
+                      const matchesName = (voice.name || '').toLowerCase().includes(q);
+                      const matchesDesc = (voice.desc || '').toLowerCase().includes(q);
+                      const matchesTags = (voice.tags || []).some(t => t.toLowerCase().includes(q));
                       if (!matchesName && !matchesDesc && !matchesTags) return false;
                     }
                     if (expLanguage !== 'all' && voice.language !== expLanguage) return false;
                     if (expGender !== 'all' && voice.gender !== expGender) return false;
                     if (expSelectedTags.length > 0) {
-                      const hasAllTags = expSelectedTags.every(t => voice.tags.includes(t));
+                      const hasAllTags = expSelectedTags.every(t => (voice.tags || []).includes(t));
                       if (!hasAllTags) return false;
                     }
                     return true;
@@ -2396,7 +2511,7 @@ export default function VoiceDnaStudio() {
                               
                               {/* Tags list - only on sm+ to prevent squishing on narrow mobile screens */}
                               <div className="hidden sm:flex flex-wrap gap-1 mt-1">
-                                {voice.tags.slice(0, 3).map(t => (
+                                {(voice.tags || []).slice(0, 3).map(t => (
                                   <span key={t} className="px-1.5 py-0.2 rounded bg-black/40 text-[9px] text-zinc-500 border border-white/5">{t}</span>
                                 ))}
                               </div>
@@ -2507,22 +2622,22 @@ export default function VoiceDnaStudio() {
               {/* Box 1: Voice Source Selector */}
               <div id="source-selector" className="glass-panel p-6">
                 <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                  <Database className="w-4 h-4 text-fuchsia-400" /> Voice Source 입력 방식
+                  <Database className="w-4 h-4 text-fuchsia-400" /> 보이스 생성 방식
                 </h3>
 
                 <div className="grid grid-cols-4 gap-2 mb-4">
                   {(
                     [
-                      { id: "default", label: "Default AI", desc: "순수 속성 합성" },
-                      { id: "record", label: "Record Voice", desc: "즉석 마이크 녹음" },
-                      { id: "upload", label: "Upload Audio", desc: "음성 파일 업로드" },
-                      { id: "blend", label: "Voice Blend", desc: "기존 DNA 융합" }
+                      { id: "default", label: "기본 톤 조절", desc: "슬라이더로 직접 조절" },
+                      { id: "record", label: "마이크 녹음", desc: "직접 말하거나 노래" },
+                      { id: "upload", label: "파일 올리기", desc: "mp3/wav 파일 업로드" },
+                      { id: "blend", label: "보이스 합성", desc: "두 목소리 섞기" }
                     ] as const
                   ).map(t => (
                     <button
                       key={t.id}
                       onClick={() => setVoiceType(t.id)}
-                      className={`p-3 rounded-xl border text-left transition-all ${voiceType === t.id ? "bg-fuchsia-600/10 border-fuchsia-500/50 text-fuchsia-300" : "bg-black/20 border-white/5 text-zinc-400 hover:bg-white/5"}`}
+                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${voiceType === t.id ? "bg-fuchsia-600/10 border-fuchsia-500/50 text-fuchsia-300" : "bg-black/20 border-white/5 text-zinc-400 hover:bg-white/5"}`}
                     >
                       <div className="text-xs font-bold mb-0.5">{t.label}</div>
                       <div className="text-[9px] text-zinc-500 leading-tight">{t.desc}</div>
@@ -2540,34 +2655,34 @@ export default function VoiceDnaStudio() {
                       className="p-4 rounded-xl bg-black/40 border border-white/5 space-y-3"
                     >
                       <div className="flex justify-between items-center">
-                        <span className="text-xs text-zinc-400">마이크를 활성화하고 5초 이상 문장을 낭독해주세요.</span>
+                        <span className="text-xs text-zinc-400">마이크를 켜고 5초 이상 편안하게 말씀해 주세요.</span>
                         <span className="text-xs font-mono text-fuchsia-400">{recordingSeconds}s / 15s</span>
                       </div>
                       
                       <div className="flex gap-3 items-center">
                         <button
                           onClick={isRecording ? stopRecording : startRecording}
-                          className={`px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all ${isRecording ? "bg-red-600 text-white animate-pulse" : "bg-fuchsia-600 hover:bg-fuchsia-500 text-white"}`}
+                          className={`px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${isRecording ? "bg-red-600 text-white animate-pulse" : "bg-fuchsia-600 hover:bg-fuchsia-500 text-white"}`}
                         >
                           <Mic2 className="w-4 h-4" />
-                          {isRecording ? "Recording Stop" : "Start Live Record"}
+                          {isRecording ? "녹음 중지" : "녹음 시작"}
                         </button>
 
                         {recordedBlob && !isRecording && (
                           <button
-                            onClick={triggerDnaExtraction}
+                            onClick={() => triggerDnaExtraction()}
                             disabled={isAnalyzing}
-                            className="px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-800 text-white text-xs font-semibold flex items-center gap-2 transition-all"
+                            className="px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-800 text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
                           >
                             {isAnalyzing ? (
                               <>
                                 <RefreshCw className="w-4 h-4 animate-spin" />
-                                Analyzing DNA...
+                                목소리 톤 분석 중...
                               </>
                             ) : (
                               <>
                                 <Sparkles className="w-4 h-4" />
-                                Extract Voice DNA Attributes
+                                목소리 톤 자동 분석
                               </>
                             )}
                           </button>
@@ -2588,33 +2703,52 @@ export default function VoiceDnaStudio() {
                           type="file" 
                           accept="audio/*"
                           onChange={(e) => {
-                            if (e.target.files?.[0]) {
-                              setUploadedFile(e.target.files[0]);
+                            const f = e.target.files?.[0];
+                            if (f) {
+                              setUploadedFile(f);
+                              triggerDnaExtraction(f);
                             }
                           }}
                           className="absolute inset-0 opacity-0 cursor-pointer"
                         />
                         <Upload className="w-6 h-6 text-zinc-500 mx-auto mb-2" />
                         <span className="text-[11px] text-zinc-400 block font-medium">
-                          {uploadedFile ? uploadedFile.name : "WAV, MP3 음성 파일을 이곳에 드래그하거나 클릭하여 로드 (최대 10MB)"}
+                          {uploadedFile ? `선택된 파일: ${uploadedFile.name}` : "WAV, MP3 음성 파일을 이곳에 드래그하거나 클릭하여 로드 (최대 10MB)"}
                         </span>
                       </div>
 
+                      {isAnalyzing && (
+                        <div className="p-3 rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/30 flex items-center gap-2.5 text-xs text-fuchsia-200">
+                          <RefreshCw className="w-4 h-4 animate-spin text-fuchsia-400 shrink-0" />
+                          <span>AI 음향 DNA 정밀 분석 중 (Whisper + GPT 주파수/성종 분석)...</span>
+                        </div>
+                      )}
+
+                      {analysisSummary && !isAnalyzing && (
+                        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-200 space-y-1">
+                          <div className="font-bold flex items-center gap-1.5">
+                            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>{analysisSummary}</span>
+                          </div>
+                          <p className="text-[11px] text-zinc-400">성별, 기음 피치, 흉성/두성 공명 슬라이더가 목소리 특성에 맞게 자동 조정되었습니다.</p>
+                        </div>
+                      )}
+
                       {uploadedFile && (
                         <button
-                          onClick={triggerDnaExtraction}
+                          onClick={() => triggerDnaExtraction()}
                           disabled={isAnalyzing}
-                          className="w-full py-2.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 disabled:bg-zinc-800 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all"
+                          className="w-full py-2.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 disabled:bg-zinc-800 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
                         >
                           {isAnalyzing ? (
                             <>
                               <RefreshCw className="w-4 h-4 animate-spin" />
-                              Deconstructing Voice Print...
+                              AI 음향 DNA 재분석 중...
                             </>
                           ) : (
                             <>
                               <Sparkles className="w-4 h-4" />
-                              Extract Attributes from Uploaded File
+                              음성 파일 AI 재분석하기
                             </>
                           )}
                         </button>
@@ -3399,35 +3533,282 @@ export default function VoiceDnaStudio() {
           </div>
         )}
 
-        {/* TAB 2: COLLECTIONS */}
-        {/* TAB 2: COLLECTIONS */}
+        {/* TAB 2: COLLECTIONS (My Collections) */}
         {activeTab === "collections" && (() => {
+          const userCreatedVoices = (voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default');
           const signatureCodes = ['VD-1004', 'VD-3802', 'VD-7705'];
           const signatureVoices = signatureCodes.map(code => EXPLORE_VOICES.find(ev => ev.code === code)).filter(Boolean);
-
-          const favVoices = customVoices.filter(v => EXPLORE_VOICES.some(ev => ev.code === v.vd_code));
-          const userDesignedVoices = customVoices.filter(v => !EXPLORE_VOICES.some(ev => ev.code === v.vd_code));
-
-          // Pagination Logic for Favorites
-          const favItemsPerPage = 10;
-          const totalFavPages = Math.ceil(favVoices.length / favItemsPerPage);
-          const safeFavPage = Math.min(favPage, Math.max(1, totalFavPages));
-          const paginatedFav = favVoices.slice((safeFavPage - 1) * favItemsPerPage, safeFavPage * favItemsPerPage);
-
-          // Pagination Logic for Custom Designed Voices
-          const customItemsPerPage = 10;
-          const totalCustomPages = Math.ceil(userDesignedVoices.length / customItemsPerPage);
-          const safeCustomPage = Math.min(customPage, Math.max(1, totalCustomPages));
-          const paginatedCustom = userDesignedVoices.slice((safeCustomPage - 1) * customItemsPerPage, safeCustomPage * customItemsPerPage);
+          const favVoices = (voices || []).filter(v => v && v.isFavorite);
 
           return (
-            <div className="space-y-6 animate-in fade-in duration-300">
-              
-              {/* Section 1: Signature System Presets */}
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-3 flex items-center gap-1.5">
+            <div className="space-y-8 animate-in fade-in duration-300">
+              {/* Section 1: My Created Voices (내가 만든 보이스) */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <span className="w-1.5 h-4 bg-purple-500 rounded-full" />
+                      내가 만든 보이스
+                      <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono font-bold">
+                        {userCreatedVoices.length}
+                      </span>
+                    </h3>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      직접 녹음하거나 파일로 등록한 나만의 보이스 목록입니다.
+                    </p>
+                  </div>
+                  <button
+                    onClick={openCreateModal}
+                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-xs font-bold transition-all shadow-lg shadow-fuchsia-600/20 flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>새 보이스 만들기</span>
+                  </button>
+                </div>
+
+                {userCreatedVoices.length === 0 ? (
+                  <div className="py-12 px-6 text-center rounded-2xl border border-dashed border-purple-500/20 bg-purple-950/10 flex flex-col items-center justify-center gap-3">
+                    <div className="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                      <Mic2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-white">아직 등록된 보이스가 없습니다</h4>
+                      <p className="text-xs text-zinc-400 mt-1 max-w-sm">
+                        녹음이나 파일 등록으로 나만의 보이스를 만들어 보세요.
+                      </p>
+                    </div>
+                    <button
+                      onClick={openCreateModal}
+                      className="mt-2 px-4 py-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>첫 보이스 만들기 (녹음 / 파일)</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {userCreatedVoices.map((voice) => {
+                      if (!voice) return null;
+                      const isPlaying = explorePlayingVoiceId === voice.id && explorePlaying;
+                      const isEquipped = activeVoice?.id === voice.id;
+
+                      const getSourceBadge = () => {
+                        switch (voice.sourceType) {
+                          case 'recorded':
+                            return { label: '🎤 마이크 녹음', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20' };
+                          case 'uploaded':
+                            return { label: '📁 파일 등록', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' };
+                          case 'dna_designed':
+                            return { label: '🎛️ 톤 조절', color: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20' };
+                          case 'extracted':
+                            return { label: '🎵 곡에서 추출', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
+                          default:
+                            return { label: '✨ 직접 제작', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' };
+                        }
+                      };
+                      const badge = getSourceBadge();
+
+                      return (
+                        <div
+                          key={voice.id}
+                          className={`glass-panel p-4 rounded-2xl border transition-all duration-300 flex flex-col justify-between gap-3 relative overflow-hidden group ${
+                            isEquipped
+                              ? 'border-fuchsia-500/50 bg-fuchsia-950/20 shadow-[0_0_20px_rgba(217,70,239,0.15)]'
+                              : 'hover:border-white/20'
+                          }`}
+                        >
+                          {/* Header: Source Badge & Action Icons */}
+                          <div className="flex items-center justify-between">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full border font-bold ${badge.color}`}>
+                              {badge.label}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => toggleFavorite(voice.id)}
+                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                  voice.isFavorite
+                                    ? 'text-amber-400 bg-amber-400/10'
+                                    : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
+                                }`}
+                                title={voice.isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                              >
+                                <Heart className={`w-3.5 h-3.5 ${voice.isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
+                              </button>
+                              <button
+                                onClick={() => {
+                                  if (confirm(`'${voice.name}' 보이스를 삭제하시겠습니까?`)) {
+                                    deleteVoice(voice.id);
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                                title="삭제하기"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          {/* Main Row: Avatar & Name/Details */}
+                          <div className="flex items-start gap-3">
+                            <div
+                              className="relative w-12 h-12 rounded-2xl shrink-0 border border-white/10 shadow-md flex items-center justify-center overflow-hidden cursor-pointer group/avatar"
+                              style={{ background: voice.avatarGradient || 'linear-gradient(135deg, #a855f7, #ec4899)' }}
+                              onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
+                            >
+                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center hover:bg-black/60 transition-colors">
+                                {isPlaying ? (
+                                  <Pause className="w-4 h-4 fill-white text-white" />
+                                ) : (
+                                  <Play className="w-4 h-4 fill-white text-white ml-0.5" />
+                                )}
+                              </div>
+                              {isPlaying && (
+                                <span className="absolute bottom-1 flex items-end gap-[1.5px] h-2.5">
+                                  <span className="w-[2px] bg-white animate-[eq_0.8s_ease-in-out_infinite]" />
+                                  <span className="w-[2px] bg-white animate-[eq_0.5s_ease-in-out_infinite_0.2s]" />
+                                  <span className="w-[2px] bg-white animate-[eq_0.7s_ease-in-out_infinite_0.4s]" />
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              {editingCollectionVoiceId === voice.id ? (
+                                <div className="flex items-center gap-1">
+                                  <input
+                                    type="text"
+                                    value={editingCollectionVoiceName}
+                                    onChange={(e) => setEditingCollectionVoiceName(e.target.value)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') {
+                                        if (editingCollectionVoiceName.trim()) {
+                                          updateVoice(voice.id, { name: editingCollectionVoiceName.trim() });
+                                        }
+                                        setEditingCollectionVoiceId(null);
+                                      } else if (e.key === 'Escape') {
+                                        setEditingCollectionVoiceId(null);
+                                      }
+                                    }}
+                                    autoFocus
+                                    className="px-2 py-0.5 rounded-lg bg-black/80 border border-fuchsia-500 text-xs font-bold text-white focus:outline-none w-full"
+                                  />
+                                  <button
+                                    onClick={() => {
+                                      if (editingCollectionVoiceName.trim()) {
+                                        updateVoice(voice.id, { name: editingCollectionVoiceName.trim() });
+                                      }
+                                      setEditingCollectionVoiceId(null);
+                                    }}
+                                    className="p-1 rounded bg-fuchsia-600 text-white hover:bg-fuchsia-500 cursor-pointer"
+                                    title="저장"
+                                  >
+                                    <Check className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingCollectionVoiceId(null)}
+                                    className="p-1 rounded bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
+                                    title="취소"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-1.5 group/title">
+                                  <h4 className="text-sm font-bold text-white truncate">{voice.name}</h4>
+                                  <button
+                                    onClick={() => {
+                                      setEditingCollectionVoiceId(voice.id);
+                                      setEditingCollectionVoiceName(voice.name);
+                                    }}
+                                    className="opacity-0 group-hover/title:opacity-100 p-0.5 text-zinc-400 hover:text-fuchsia-400 transition-opacity cursor-pointer"
+                                    title="이름 수정"
+                                  >
+                                    <Edit2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              )}
+
+                              <p className="text-[11px] text-zinc-400 line-clamp-2 mt-0.5 leading-snug" title={voice.desc || voice.stylePrompt}>
+                                {voice.desc || voice.stylePrompt}
+                              </p>
+
+                              {/* Tags */}
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {(voice.tags || []).slice(0, 3).map((tag, idx) => (
+                                  <span
+                                    key={idx}
+                                    className="text-[9px] px-1.5 py-0.5 rounded bg-white/5 text-zinc-400 border border-white/5"
+                                  >
+                                    #{tag}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Footer Actions: Equip for Generation */}
+                          <div className="flex items-center gap-2 pt-1 border-t border-white/5">
+                            <button
+                              type="button"
+                              onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
+                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
+                                isPlaying
+                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
+                                  : 'bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10'
+                              }`}
+                              title={isPlaying ? "재생 멈추기" : "미리듣기"}
+                            >
+                              {isPlaying ? (
+                                <>
+                                  <Pause className="w-3.5 h-3.5 fill-rose-400 text-rose-400" />
+                                  <span>중지</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Play className="w-3.5 h-3.5 fill-zinc-300 text-zinc-300 ml-0.5" />
+                                  <span>듣기</span>
+                                </>
+                              )}
+                            </button>
+
+                            <button
+                              onClick={() => {
+                                if (isEquipped) {
+                                  setActiveVoice(null);
+                                } else {
+                                  setActiveVoice(voice);
+                                }
+                              }}
+                              className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                                isEquipped
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30'
+                                  : 'bg-white/5 hover:bg-fuchsia-600/20 text-zinc-300 hover:text-fuchsia-300 border border-white/10 hover:border-fuchsia-500/40'
+                              }`}
+                            >
+                              {isEquipped ? (
+                                <>
+                                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                                  <span>✓ 선택됨 (작곡 대기)</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Zap className="w-3.5 h-3.5 text-fuchsia-400" />
+                                  <span>이 보이스로 작곡하기</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Section 2: Signature System Presets */}
+              <div className="pt-4 border-t border-white/5">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 flex items-center gap-1.5">
                   <span className="w-1 h-3.5 bg-fuchsia-500 rounded-full" />
-                  Signature System Presets (Hall of Voices)
+                  추천 보이스
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {signatureVoices.map(voice => {
@@ -3447,7 +3828,7 @@ export default function VoiceDnaStudio() {
                           <button
                             onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
                             className="w-7 h-7 rounded-full bg-white/5 hover:bg-fuchsia-500/20 border border-white/10 flex items-center justify-center text-fuchsia-400 hover:text-fuchsia-300 transition-all cursor-pointer shadow"
-                            title="귀로 목소리 들어보기"
+                            title="목소리 들어보기"
                           >
                             {isPlaying ? (
                               <VolumeX className="w-3.5 h-3.5" />
@@ -3485,9 +3866,9 @@ export default function VoiceDnaStudio() {
                         {/* Load DNA Action Button */}
                         <button 
                           onClick={() => loadPresetToSliders(defaultSystemVoices[voice.code as keyof typeof defaultSystemVoices])}
-                          className="w-full py-2 rounded-lg bg-white/5 hover:bg-fuchsia-500/20 text-fuchsia-300 text-[11px] font-bold transition-all border border-white/5 hover:border-fuchsia-500/40"
+                          className="w-full py-2 rounded-lg bg-white/5 hover:bg-fuchsia-500/20 text-fuchsia-300 text-[11px] font-bold transition-all border border-white/5 hover:border-fuchsia-500/40 cursor-pointer"
                         >
-                          Load DNA Attributes
+                          이 톤 가져와서 수정하기
                         </button>
                       </div>
                     );
@@ -3495,302 +3876,86 @@ export default function VoiceDnaStudio() {
                 </div>
               </div>
 
-              {/* Section 2: Favorited Voices */}
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-3 flex items-center gap-1.5">
-                  <span className="w-1 h-3.5 bg-rose-500 rounded-full animate-pulse" />
-                  My Favorites (즐겨찾기 보관함)
+              {/* Section 3: Favorited Voices */}
+              <div className="pt-4 border-t border-white/5">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 flex items-center gap-1.5">
+                  <span className="w-1 h-3.5 bg-rose-500 rounded-full" />
+                  찜한 보이스
                 </h3>
                 {favVoices.length === 0 ? (
                   <div className="py-8 text-center rounded-xl border border-dashed border-zinc-800 bg-black/10">
                     <Heart className="w-6 h-6 text-zinc-600 mx-auto mb-2" />
-                    <span className="text-[11px] text-zinc-500 block">즐겨찾기 추가한 보이스가 없습니다. Explore Voices에서 하트를 눌러보세요.</span>
+                    <span className="text-[11px] text-zinc-500 block">찜한 보이스가 없습니다. 마음에 드는 보이스의 하트를 눌러보세요.</span>
                   </div>
                 ) : (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {paginatedFav.map(fav => {
-                        const voice = EXPLORE_VOICES.find(ev => ev.code === fav.vd_code);
-                        if (!voice) return null;
-                        const isPlaying = explorePlayingVoiceId === voice.code && explorePlaying;
-
-                        return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {favVoices.map(voice => {
+                      const isPlaying = explorePlayingVoiceId === voice.id && explorePlaying;
+                      return (
+                        <div 
+                          key={voice.id} 
+                          className="glass-panel p-3 px-4 hover:border-rose-500/20 transition-all duration-300 group flex items-center gap-3 relative overflow-hidden animate-in fade-in duration-200"
+                        >
                           <div 
-                            key={fav.vd_code} 
-                            className="glass-panel p-3 px-4 hover:border-rose-500/20 transition-all duration-300 group flex items-center gap-3 relative overflow-hidden animate-in fade-in duration-200"
+                            className="relative w-11 h-11 shrink-0 rounded-full overflow-hidden flex items-center justify-center border border-white/10 transition-transform group-hover:scale-105 cursor-pointer shadow-md"
+                            style={{ background: voice.avatarGradient || 'linear-gradient(135deg, #ec4899, #8b5cf6)' }}
+                            onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
                           >
-                            {/* Avatar & Play/Pause Trigger - Circular Color Orb */}
-                            <div 
-                              className="relative w-11 h-11 shrink-0 rounded-full overflow-hidden flex items-center justify-center border border-white/10 transition-transform group-hover:scale-105 cursor-pointer shadow-md"
-                              style={{ background: voice.gradient }}
-                              onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
-                            >
-                              {/* Play Overlay */}
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                {isPlaying ? (
-                                  <Pause className="w-3.5 h-3.5 fill-white text-white" />
-                                ) : (
-                                  <Play className="w-3.5 h-3.5 fill-white text-white ml-0.5" />
-                                )}
-                              </div>
-
-                              {isPlaying && (
-                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                  <span className="flex gap-0.5 items-end justify-center w-5 h-5">
-                                    <span className="w-0.5 h-2 bg-white rounded-full animate-[bounce_0.6s_infinite]" />
-                                    <span className="w-0.5 h-3 bg-white rounded-full animate-[bounce_0.6s_infinite_0.15s]" />
-                                    <span className="w-0.5 h-1.5 bg-white rounded-full animate-[bounce_0.6s_infinite_0.3s]" />
-                                  </span>
-                                </div>
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                              {isPlaying ? (
+                                <Pause className="w-3.5 h-3.5 fill-white text-white" />
+                              ) : (
+                                <Play className="w-3.5 h-3.5 fill-white text-white ml-0.5" />
                               )}
                             </div>
-
-                            {/* Details - Layout matching main explore card */}
-                            <div className="flex-1 min-w-0 pr-6">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-base leading-none shrink-0" title={voice.language}>{voice.flag}</span>
-                                <h4 className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors truncate leading-tight">
-                                  {voice.name}
-                                </h4>
-                                <span className="text-[9px] text-zinc-500 font-medium truncate">
-                                  ({voice.language})
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-zinc-400 leading-tight mt-0.5 truncate">
-                                {voice.desc}
-                              </p>
-                              
-                              {/* Tags list */}
-                              <div className="flex flex-wrap gap-1 mt-1">
-                                {voice.tags.slice(0, 3).map(t => (
-                                  <span key={t} className="px-1.5 py-0.2 rounded bg-black/40 text-[9px] text-zinc-500 border border-white/5">{t}</span>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Action Buttons on the Right */}
-                            <div className="flex flex-col items-end justify-between self-stretch py-0.5 z-10 shrink-0">
-                              <button
-                                onClick={() => {
-                                  const updated = customVoices.filter(v => v.vd_code !== fav.vd_code);
-                                  setCustomVoices(updated);
-                                  localStorage.setItem("custom_voice_dnas", JSON.stringify(updated));
-                                }}
-                                className="text-zinc-500 hover:text-red-400 transition-colors p-1"
-                                title="즐겨찾기 해제"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                              
-                              <button 
-                                onClick={() => loadPresetToSliders(defaultSystemVoices[voice.code as keyof typeof defaultSystemVoices] || fav)}
-                                className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-[10px] text-zinc-300 font-bold transition-all"
-                              >
-                                Apply
-                              </button>
-                            </div>
                           </div>
-                        );
-                      })}
-                    </div>
 
-                    {/* Pagination Controls for Favorites */}
-                    {totalFavPages > 1 && (
-                      <div className="flex items-center justify-center gap-2 mt-4 select-none">
-                        <button
-                          onClick={() => setFavPage(p => Math.max(1, p - 1))}
-                          disabled={safeFavPage === 1}
-                          className="p-1.5 rounded-lg bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <span className="text-xs text-zinc-500 font-mono">
-                          {safeFavPage} / {totalFavPages}
-                        </span>
-                        <button
-                          onClick={() => setFavPage(p => Math.min(totalFavPages, p + 1))}
-                          disabled={safeFavPage === totalFavPages}
-                          className="p-1.5 rounded-lg bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
+                          <div className="flex-1 min-w-0 pr-4">
+                            <h4 className="text-xs font-bold text-white truncate leading-tight">
+                              {voice.name}
+                            </h4>
+                            <p className="text-[10px] text-zinc-400 leading-tight mt-0.5 truncate">
+                              {voice.desc || voice.stylePrompt}
+                            </p>
+                          </div>
 
-              {/* Section 3: Custom Designed Voices */}
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-500 mb-3 flex items-center gap-1.5">
-                  <span className="w-1 h-3.5 bg-cyan-500 rounded-full" />
-                  Custom Designed Voices (나의 설계 보이스)
-                </h3>
-                {userDesignedVoices.length === 0 ? (
-                  <div className="py-8 text-center rounded-xl border border-dashed border-zinc-800 bg-black/10">
-                    <Sliders className="w-6 h-6 text-zinc-600 mx-auto mb-2" />
-                    <span className="text-[11px] text-zinc-500 block">설계하여 저장한 커스텀 보이스 DNA가 없습니다. 첫번째 탭에서 만들어 보세요.</span>
-                  </div>
-                ) : (
-                  <>
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                      {paginatedCustom.map(v => {
-                        // Generate a unique gradient background for the custom designed voice based on its code number
-                        const numericId = parseInt(v.vd_code.replace(/\D/g, '')) || 0;
-                        const hue1 = (numericId * 17) % 360;
-                        const hue2 = (hue1 + 120) % 360;
-                        const customGradient = `linear-gradient(135deg, hsl(${hue1}, 70%, 50%), hsl(${hue2}, 70%, 40%))`;
-
-                        return (
-                          <div 
-                            key={v.vd_code} 
-                            className="glass-panel p-3.5 hover:border-cyan-500/20 transition-all duration-300 flex flex-col justify-between gap-3 relative overflow-hidden"
-                          >
-                            {/* Header: Code & Delete Icon */}
-                            <div className="flex justify-between items-center">
-                              <span className="px-2 py-0.5 rounded bg-cyan-500/10 border border-cyan-500/20 text-[9px] text-cyan-400 font-bold font-mono tracking-wider">
-                                {v.vd_code}
-                              </span>
-                              <button
-                                onClick={() => {
-                                  const updated = customVoices.filter(item => item.vd_code !== v.vd_code);
-                                  setCustomVoices(updated);
-                                  localStorage.setItem("custom_voice_dnas", JSON.stringify(updated));
-                                }}
-                                className="text-zinc-500 hover:text-red-400 transition-colors p-1"
-                                title="삭제하기"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            </div>
-
-                            {/* Info Row: Generated Gradient Avatar & Custom Profile Details */}
-                            {(() => {
-                              const isPlaying = explorePlayingVoiceId === v.vd_code && explorePlaying;
-                              return (
-                                <div className="flex items-center gap-2.5">
-                                  <div 
-                                    className="relative w-9 h-9 rounded-full border border-white/10 shrink-0 shadow-inner flex items-center justify-center text-[10px] text-white font-bold select-none cursor-pointer overflow-hidden group/avatar transition-transform hover:scale-105"
-                                    style={{ background: customGradient }}
-                                    onClick={() => {
-                                      const voiceObj = { code: v.vd_code, physical_layers: v.physical_layers };
-                                      isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voiceObj);
-                                    }}
-                                  >
-                                    {/* Hover Play/Pause Overlay */}
-                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/avatar:opacity-100 flex items-center justify-center transition-opacity">
-                                      {isPlaying ? (
-                                        <Pause className="w-3.5 h-3.5 text-white fill-white" />
-                                      ) : (
-                                        <Play className="w-3.5 h-3.5 text-white fill-white ml-0.5" />
-                                      )}
-                                    </div>
-
-                                    {isPlaying ? (
-                                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                        <span className="flex gap-[1.5px] items-end justify-center w-5 h-5 mb-[1.5px]">
-                                          <span className="w-[1.5px] bg-white rounded-full animate-[eq_0.8s_ease-in-out_infinite]" />
-                                          <span className="w-[1.5px] bg-white rounded-full animate-[eq_0.5s_ease-in-out_infinite_0.2s]" />
-                                          <span className="w-[1.5px] bg-white rounded-full animate-[eq_0.7s_ease-in-out_infinite_0.4s]" />
-                                        </span>
-                                      </div>
-                                    ) : (
-                                      <span className="group-hover/avatar:opacity-0 transition-opacity">
-                                        {v.name.slice(0, 2).toUpperCase()}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="min-w-0 flex-1">
-                                    <div className="flex items-center gap-1.5">
-                                      {editingVoiceCode === v.vd_code ? (
-                                        <input
-                                          type="text"
-                                          value={editingVoiceName}
-                                          onChange={(e) => setEditingVoiceName(e.target.value)}
-                                          onKeyDown={(e) => {
-                                            if (e.key === "Enter") saveVoiceName(v.vd_code, editingVoiceName);
-                                            if (e.key === "Escape") setEditingVoiceCode(null);
-                                          }}
-                                          onBlur={() => saveVoiceName(v.vd_code, editingVoiceName)}
-                                          autoFocus
-                                          className="bg-zinc-800 border border-cyan-500/50 rounded px-1 py-0.5 text-[10px] text-white focus:outline-none w-20"
-                                        />
-                                      ) : (
-                                        <div className="flex items-center gap-1 min-w-0 max-w-[80px] sm:max-w-[100px]">
-                                          <h4 className="text-xs font-bold text-white truncate">{v.name}</h4>
-                                          <button
-                                            onClick={() => {
-                                              setEditingVoiceCode(v.vd_code);
-                                              setEditingVoiceName(v.name);
-                                            }}
-                                            className="text-zinc-400 hover:text-cyan-400 p-0.5 cursor-pointer shrink-0 ml-0.5 transition-colors"
-                                            title="이름 수정"
-                                          >
-                                            <Edit2 className="w-3 h-3" />
-                                          </button>
-                                        </div>
-                                      )}
-                                      <span className="px-1 py-0.2 rounded bg-zinc-800 text-[8px] text-zinc-400 uppercase font-bold tracking-wide shrink-0">
-                                        {v.physical_layers.gender === 'female' ? '여성' : '남성'}
-                                      </span>
-                                    </div>
-                                    <p className="text-[9px] text-zinc-500 truncate mt-0.5">
-                                      {v.style || 'Custom Reverb'} • Pitch {v.physical_layers.pitch}%
-                                    </p>
-                                  </div>
-                                </div>
-                              );
-                            })()}
-
-                            {/* Texture Tags Row (tightly spaced) */}
-                            {v.textures && v.textures.length > 0 && (
-                              <div className="flex flex-wrap gap-1">
-                                {v.textures.slice(0, 3).map(t => (
-                                  <span key={t} className="px-1.5 py-0.5 rounded bg-black/40 border border-white/5 text-[8px] text-zinc-400 leading-none">
-                                    {t}
-                                  </span>
-                                ))}
-                              </div>
-                            )}
-
-                            {/* Load Profile Button */}
+                          <div className="flex items-center gap-1.5 shrink-0">
                             <button
-                              onClick={() => loadPresetToSliders(v)}
-                              className="w-full py-1.5 rounded bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-[10px] text-white font-bold transition-all"
+                              type="button"
+                              onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
+                              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
+                                isPlaying
+                                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
+                                  : 'bg-white/5 text-zinc-400 border-white/10 hover:text-white hover:bg-white/10'
+                              }`}
+                              title={isPlaying ? "재생 멈추기" : "미리듣기"}
                             >
-                              Load Profile
+                              {isPlaying ? (
+                                <Pause className="w-3.5 h-3.5 fill-rose-400 text-rose-400" />
+                              ) : (
+                                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
+                              )}
+                            </button>
+                            <button
+                              onClick={() => toggleFavorite(voice.id)}
+                              className="text-amber-400 hover:text-amber-300 p-1.5 cursor-pointer"
+                              title="즐겨찾기 해제"
+                            >
+                              <Heart className="w-4 h-4 fill-amber-400" />
+                            </button>
+                            <button
+                              onClick={() => setActiveVoice(voice)}
+                              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-[10px] text-zinc-300 font-bold transition-all cursor-pointer"
+                            >
+                              장착
                             </button>
                           </div>
-                        );
-                      })}
-                    </div>
-
-                    {/* Pagination Controls for Custom Designed Voices */}
-                    {totalCustomPages > 1 && (
-                      <div className="flex items-center justify-center gap-2 mt-4 select-none">
-                        <button
-                          onClick={() => setCustomPage(p => Math.max(1, p - 1))}
-                          disabled={safeCustomPage === 1}
-                          className="p-1.5 rounded-lg bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                        >
-                          <ChevronLeft className="w-4 h-4" />
-                        </button>
-                        <span className="text-xs text-zinc-500 font-mono">
-                          {safeCustomPage} / {totalCustomPages}
-                        </span>
-                        <button
-                          onClick={() => setCustomPage(p => Math.min(totalCustomPages, p + 1))}
-                          disabled={safeCustomPage === totalCustomPages}
-                          className="p-1.5 rounded-lg bg-zinc-900 border border-white/5 text-zinc-400 hover:text-white disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                        >
-                          <ChevronRight className="w-4 h-4" />
-                        </button>
-                      </div>
-                    )}
-                  </>
+                        </div>
+                      );
+                    })}
+                  </div>
                 )}
               </div>
-
             </div>
           );
         })()}
@@ -3802,28 +3967,28 @@ export default function VoiceDnaStudio() {
             {/* Decoder Input Console */}
             <div className="lg:col-span-4 glass-panel p-6 space-y-4">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Database className="w-4 h-4 text-cyan-400" /> DNA Decoder Console
+                <Database className="w-4 h-4 text-cyan-400" /> 보이스 코드 복원
               </h3>
               
               <p className="text-zinc-400 text-xs leading-relaxed">
-                임포트된 Voice DNA 코드(예: `VD-1004`)를 기재하여, 해당 목소리의 물리 공명 특성 및 프롬프트 인코딩 값을 판독해냅니다.
+                공유받은 보이스 코드(예: `VD-1004`)를 입력하여 해당 목소리 톤을 바로 불러옵니다.
               </p>
 
               <div className="space-y-2">
-                <label className="block text-[11px] text-zinc-500 font-medium uppercase">Enter VD Code</label>
+                <label className="block text-[11px] text-zinc-400 font-medium">보이스 코드 입력</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={decodeInput}
                     onChange={e => setDecodeInput(e.target.value.toUpperCase())}
-                    placeholder="e.g. VD-1004"
+                    placeholder="예: VD-1004"
                     className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-3 text-sm text-white font-mono outline-none focus:border-cyan-500/50"
                   />
                   <button
                     onClick={handleDecode}
-                    className="px-5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-all shadow-lg shadow-cyan-600/10"
+                    className="px-5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold transition-all shadow-lg shadow-cyan-600/10 cursor-pointer"
                   >
-                    Decode
+                    불러오기
                   </button>
                 </div>
                 {decodeError && <p className="text-[10px] text-red-400 font-medium">{decodeError}</p>}
@@ -3966,18 +4131,34 @@ export default function VoiceDnaStudio() {
       {/* Bottom Audio Player Bar */}
       {explorePlayingVoiceId && (() => {
         let voice = EXPLORE_VOICES.find(v => v.code === explorePlayingVoiceId);
+        if (!voice && voices) {
+          const vContext = voices.find(v => v.id === explorePlayingVoiceId || v.name === explorePlayingVoiceId);
+          if (vContext) {
+            voice = {
+              code: vContext.id,
+              name: vContext.name,
+              desc: vContext.desc || vContext.stylePrompt || '등록된 내 보이스',
+              flag: '🎤',
+              language: '내 보이스',
+              tags: vContext.tags || ['Custom'],
+              gradient: vContext.avatarGradient || 'linear-gradient(135deg, #a855f7, #ec4899)',
+              audioUrl: vContext.audioUrl,
+              physical_layers: { gender: vContext.gender || 'female' }
+            } as any;
+          }
+        }
         if (!voice && customVoices) {
           const customVoice = customVoices.find(v => v.vd_code === explorePlayingVoiceId);
           if (customVoice) {
             voice = {
               code: customVoice.vd_code,
-              name: customVoice.name,
-              desc: `${customVoice.physical_layers.gender === 'female' ? 'Female' : 'Male'} Custom Voice • Style: ${customVoice.style || 'Studio Reverb'}`,
+              name: customVoice.name || "Custom Voice",
+              desc: `${customVoice.physical_layers?.gender === 'female' ? 'Female' : 'Male'} Custom Voice • Style: ${customVoice.style || 'Studio Reverb'}`,
               flag: '👤',
               language: 'Custom',
               tags: customVoice.textures || ['Custom'],
-              gradient: `linear-gradient(135deg, hsl(${(parseInt(customVoice.vd_code.replace(/\D/g, '')) * 17) % 360}, 70%, 50%), hsl(${(parseInt(customVoice.vd_code.replace(/\D/g, '')) * 17 + 120) % 360}, 70%, 40%))`,
-              physical_layers: customVoice.physical_layers
+              gradient: `linear-gradient(135deg, hsl(${(parseInt((customVoice.vd_code || "").replace(/\D/g, '') || '0') * 17) % 360}, 70%, 50%), hsl(${(parseInt((customVoice.vd_code || "").replace(/\D/g, '') || '0') * 17 + 120) % 360}, 70%, 40%))`,
+              physical_layers: customVoice.physical_layers || { gender: 'female', pitch: 50 }
             } as any;
           } else if (explorePlayingVoiceId === "DESIGNER_PREVIEW") {
             voice = {
@@ -4005,13 +4186,13 @@ export default function VoiceDnaStudio() {
         const isFav = customVoices.some(v => v.vd_code === voice.code);
 
         return (
-          <div className="fixed bottom-0 left-0 md:left-64 right-0 z-50 bg-[#0d0a0a]/98 border-t border-white/10 backdrop-blur-xl px-4 md:px-8 py-3.5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-2xl animate-in slide-in-from-bottom duration-350">
+          <div className="fixed bottom-0 left-0 right-0 w-full z-[100] bg-[#0c0d12]/98 border-t border-white/10 backdrop-blur-2xl px-4 md:px-8 py-3.5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] animate-in slide-in-from-bottom duration-350">
             {/* Left: Info Section */}
             <div className="flex items-center gap-3.5 w-full md:w-auto md:max-w-md shrink-0">
               {/* Circle Avatar with Equalizer */}
               <div 
                 className="relative w-11 h-11 rounded-full border border-white/10 shrink-0 shadow-md flex items-center justify-center overflow-hidden"
-                style={{ background: voice.gradient }}
+                style={{ background: voice.gradient || 'linear-gradient(135deg, #ec4899, #8b5cf6)' }}
               >
                 {explorePlaying && (
                   <span className="flex items-end gap-[2px] h-3.5 mb-[2px]">
@@ -4024,15 +4205,15 @@ export default function VoiceDnaStudio() {
               {/* Text Details matching the Voice Card exactly */}
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[14px] leading-none select-none">{voice.flag}</span>
+                  <span className="text-[14px] leading-none select-none">{voice.flag || '🎤'}</span>
                   <span className="text-sm font-bold text-white truncate leading-snug">{voice.name}</span>
-                  <span className="text-xs text-zinc-400">({voice.language})</span>
+                  <span className="text-xs text-zinc-400">({voice.language || 'Voice'})</span>
                 </div>
                 <p className="text-xs text-zinc-300 truncate mt-0.5 max-w-[280px]">
                   {voice.desc}
                 </p>
                 <div className="hidden md:flex items-center gap-1 mt-1 flex-wrap">
-                  {voice.tags.slice(0, 3).map((tag: string) => (
+                  {(voice.tags || []).slice(0, 3).map((tag: string) => (
                     <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700/50 text-zinc-400 leading-none select-none">
                       {tag}
                     </span>
@@ -4133,16 +4314,18 @@ export default function VoiceDnaStudio() {
                     const newDna: VoiceDnaRecord = {
                       vd_code: voice.code,
                       name: voice.name,
-                      physical_layers: voice.physical_layers as any,
-                      textures: voice.textures,
-                      emotions: voice.emotions,
-                      style: voice.category,
+                      physical_layers: (voice.physical_layers || { gender: 'female', age: 'young', pitch: 50, brightness: 50, chest: 50, head: 50, weight: 50, power: 50 }) as any,
+                      textures: voice.textures || [],
+                      emotions: voice.emotions || [],
+                      style: voice.category || "Studio Reverb",
                       noise_entropy: 15
                     };
                     updated = [...customVoices, newDna];
                   }
                   setCustomVoices(updated);
-                  localStorage.setItem("custom_voice_dnas", JSON.stringify(updated));
+                  try {
+                    localStorage.setItem("custom_voice_dnas", JSON.stringify(updated));
+                  } catch {}
                 }}
                 className={`px-3 py-2 rounded-xl border text-[10px] font-bold transition-all flex items-center gap-1.5 ${
                   isFav 

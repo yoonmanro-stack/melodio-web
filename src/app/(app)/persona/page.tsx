@@ -1,11 +1,38 @@
-import { MessageSquare, Library, Plus } from "lucide-react";
+import Link from "next/link";
+import { MessageSquare, Library, Plus, Sparkles, Mic2, ArrowRight } from "lucide-react";
 
 export default function PersonaLab() {
   return (
     <div className="max-w-6xl mx-auto pt-4 h-full flex flex-col">
+      {/* Suno Evolution Notice Banner */}
+      <div className="mb-6 p-4 rounded-2xl bg-gradient-to-r from-rose-950/40 via-fuchsia-950/40 to-purple-950/30 border border-fuchsia-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg shadow-fuchsia-500/10">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-rose-500 to-fuchsia-600 flex items-center justify-center text-white shrink-0 shadow-md">
+            <Mic2 className="w-5 h-5" />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-bold text-white">Personas는 이제 Voices예요</h2>
+              <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-[10px] font-black text-white uppercase">Suno Upgrade</span>
+            </div>
+            <p className="text-xs text-zinc-300 mt-0.5">
+              가상 아티스트의 목소리를 직접 녹음하거나 업로드하여 일관된 AI 아티스트 보이스를 관리하세요.
+            </p>
+          </div>
+        </div>
+
+        <Link
+          href="/voice-lab"
+          className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-fuchsia-600 hover:from-rose-400 hover:to-fuchsia-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-md shadow-rose-500/20"
+        >
+          <span>보이스 스튜디오 열기</span>
+          <ArrowRight className="w-3.5 h-3.5" />
+        </Link>
+      </div>
+
       <header className="mb-8">
-        <h1 className="text-4xl font-bold text-white mb-2">Persona Lab</h1>
-        <p className="text-zinc-400">Design your Virtual Artist's identity, genre, and storytelling universe.</p>
+        <h1 className="text-4xl font-bold text-white mb-2">아티스트 페르소나</h1>
+        <p className="text-zinc-400">가상 아티스트의 정체성, 장르 및 스토리텔링 세계관을 기획하고 관리합니다.</p>
       </header>
 
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 min-h-[500px]">

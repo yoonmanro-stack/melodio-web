@@ -39,6 +39,20 @@ export const genreCategory: GenreCategory = {
       ],
     },
     {
+      id: 'trot',
+      label: 'Trot / 성인가요',
+      tags: [
+        { label: '정통 트로트', value: 'Traditional Korean Trot', level: 1 },
+        { label: '신나는 댄스 트롯', value: 'Modern Dance Trot', level: 1 },
+        { label: '고속도로 디스코 메들리', value: 'Highway Disco Trot Medley', level: 2 },
+        { label: '감성 포크 트롯', value: 'Acoustic Folk Trot', level: 2 },
+        { label: '세미 트로트', value: 'Semi-Trot', level: 2 },
+        { label: '록 트로트 퓨전', value: 'Rock Trot Fusion', level: 2 },
+        { label: '7080 성인가요', value: 'Adult Contemporary 7080', level: 3 },
+        { label: '애절한 뽕짝 발라드', value: 'Nostalgic Trot Ballad', level: 3 },
+      ],
+    },
+    {
       id: 'kpop',
       label: 'K-Pop',
       tags: [
@@ -191,8 +205,12 @@ export const distrokidGenreMap: Record<string, string> = {
   'Ambient': 'New Age',
   'Meditation Music': 'New Age',
   'Folk': 'Folk',
-  'Country': 'Country',
-  'Reggae': 'Reggae',
-  'Latin': 'Latin',
-  'Blues': 'Blues',
+  'Traditional Korean Trot': 'World',
+  'Modern Dance Trot': 'Dance/Electronic',
+  'Highway Disco Trot Medley': 'Dance/Electronic',
+  'Acoustic Folk Trot': 'Folk',
+  'Semi-Trot': 'Pop',
+  'Rock Trot Fusion': 'Rock',
+  'Adult Contemporary 7080': 'Pop',
+  'Nostalgic Trot Ballad': 'World',
 }

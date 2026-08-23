@@ -2683,7 +2683,7 @@ export default function ViralTrendZonePage() {
             initial={{ y: 80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
-            className="fixed bottom-0 left-0 md:left-64 right-0 z-50 bg-zinc-950/95 border-t border-white/10 backdrop-blur-xl px-6 py-3 shadow-2xl flex items-center justify-between"
+            className="fixed bottom-0 left-0 right-0 w-full z-[100] bg-[#0c0d12]/95 border-t border-white/10 backdrop-blur-2xl px-4 md:px-8 py-3 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] flex items-center justify-between"
           >
             {/* Track Info (Left) */}
             <div className="flex items-center gap-3.5 min-w-[240px] max-w-[320px] shrink-0">

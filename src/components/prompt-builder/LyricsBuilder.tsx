@@ -1,11 +1,12 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { 
   FileText, Music, Sparkles, Wand2, Globe, Mic, Shuffle, AlertCircle, 
   Play, Zap, Flame, GitMerge, Moon, Copy, Check, Info, ListMusic, Tag, PlayCircle,
-  PenTool, Users, User, X
+  PenTool, Users, User, X, Plus, Star, Mic2
 } from 'lucide-react'
+import { useVoice } from '@/contexts/VoiceContext'
 import type { LyricsSection, LyricsSectionType } from '@/types'
 import type { PlaylistTrack } from '@/types/playlist'
 
@@ -48,7 +49,7 @@ interface LyricsBuilderProps {
   // Voice DNA
   selectedVdCode?: string
   onSelectedVdCodeChange?: (code: string) => void
-  vdOptions?: { code: string; name: string; gender?: string }[]
+  vdOptions?: { code: string; name: string; gender?: string; sourceType?: string }[]
 }
 
 const SECTION_LABELS: Record<LyricsSectionType, { label: string; icon: React.ComponentType<any>; color: string }> = {
@@ -106,12 +107,38 @@ export default function LyricsBuilder({
   const [autoTopic, setAutoTopic] = useState(true) // 주제 자동생성 토글 (기본: ON)
   const [isVdDropdownOpen, setIsVdDropdownOpen] = useState(false)
 
+  const { voices, activeVoice, setActiveVoice, openCreateModal } = useVoice()
+
+  // Suno VoiceContext의 전체 보이스 목록과 vdOptions 병합
+  const mergedVdOptions = useMemo(() => {
+    const fromContext = (voices || []).filter(Boolean).map((v) => ({
+      code: v.id || '',
+      name: v.name || 'Voice',
+      gender: v.gender || 'female',
+      desc: v.desc || '',
+      sourceType: v.sourceType || 'default',
+      isFavorite: !!v.isFavorite,
+    }))
+    const existing = new Set(fromContext.map((o) => o.code))
+    const legacyExtras = (vdOptions || []).filter((o) => !existing.has(o.code))
+    return [...fromContext, ...legacyExtras]
+  }, [voices, vdOptions])
+
   // 성별 필터링된 보이스 DNA 옵션
-  const filteredVdOptions = vdOptions.filter(opt => {
-    if (vocalGender === 'female') return opt.gender === 'female';
-    if (vocalGender === 'male') return opt.gender === 'male';
-    return true;
-  });
+  const filteredVdOptions = useMemo(() => {
+    return mergedVdOptions.filter(opt => {
+      if (vocalGender === 'female') return opt.gender === 'female'
+      if (vocalGender === 'male') return opt.gender === 'male'
+      return true
+    })
+  }, [mergedVdOptions, vocalGender])
+
+  // activeVoice가 변경되었을 때 selectedVdCode 자동 동기화
+  useEffect(() => {
+    if (activeVoice && selectedVdCode !== activeVoice.id) {
+      onSelectedVdCodeChange?.(activeVoice.id)
+    }
+  }, [activeVoice])
 
   // 복사 피드백 상태
   const [copiedYT, setCopiedYT] = useState(false)
@@ -192,6 +219,8 @@ export default function LyricsBuilder({
     }
     setIsGenerating(true)
     try {
+      const resolvedVocalGender = (selectedVdCode !== 'auto' ? mergedVdOptions.find(o => o.code === selectedVdCode)?.gender : undefined) || activeVoice?.gender || vocalGender
+
       const response = await fetch('/api/lyrics/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -201,7 +230,7 @@ export default function LyricsBuilder({
           language,
           isPlaylistMode,
           trackCount,
-          vocalGender,
+          vocalGender: resolvedVocalGender,
           presetId,
         }),
       })
@@ -284,29 +313,24 @@ export default function LyricsBuilder({
               )
             })}
           </div>
-
-          {/* 인스트루멘탈 */}
-          <div className="flex items-center gap-2 border-l border-melodio-border/30 pl-4">
-            <span className="text-xs text-melodio-muted">연주곡</span>
-            <button
-              onClick={() => onInstrumentalToggle(!isInstrumental)}
-              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out ${
-                isInstrumental ? 'bg-melodio-accent' : 'bg-melodio-border'
-              }`}
-            >
-              <span
-                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  isInstrumental ? 'translate-x-4' : 'translate-x-0'
-                }`}
-              />
-            </button>
-          </div>
         </div>
       </div>
 
       {isInstrumental ? (
-        <div className="flex items-center justify-center py-10 text-melodio-muted text-sm border-2 border-dashed border-melodio-border/20 rounded-xl">
-          <Music className="w-4 h-4 text-zinc-400 mr-2 shrink-0 animate-pulse" /> 인스트루멘탈 모드 활성화됨 — 가사 없이 순수 연주곡으로 생성합니다
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-4 rounded-xl bg-purple-950/20 border border-purple-500/30 shadow-inner">
+          <div className="flex items-center gap-2.5 text-xs text-purple-200">
+            <Music className="w-4 h-4 text-purple-400 shrink-0 animate-pulse" />
+            <span><strong>연주곡(Instrumental) 모드</strong>가 활성화되어 가사 없이 순수 악기 연주로 생성됩니다.</span>
+          </div>
+          {onInstrumentalToggle && (
+            <button
+              type="button"
+              onClick={() => onInstrumentalToggle(false)}
+              className="text-[11px] text-fuchsia-400 hover:text-fuchsia-200 font-semibold px-2.5 py-1 rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/30 hover:bg-fuchsia-500/20 transition-all shrink-0"
+            >
+              보컬곡으로 전환
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -418,7 +442,7 @@ export default function LyricsBuilder({
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-1">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] text-melodio-muted font-medium flex items-center gap-1.5">
-                    <Globe className="w-3 h-3 text-zinc-400 shrink-0" /> 가사 언어 (Lyrics Language)
+                    <Globe className="w-3 h-3 text-zinc-400 shrink-0" /> 가사 언어
                   </label>
                   <select
                     value={language}
@@ -445,7 +469,7 @@ export default function LyricsBuilder({
 
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] text-melodio-muted font-medium flex items-center gap-1.5">
-                    <Mic className="w-3 h-3 text-zinc-400 shrink-0" /> 보컬 스타일 (Vocal Style)
+                    <Mic className="w-3 h-3 text-zinc-400 shrink-0" /> 보컬 스타일
                   </label>
                   <select
                     value={vocalGender}
@@ -473,27 +497,27 @@ export default function LyricsBuilder({
                   }`}>
                     <Mic className={`w-3 h-3 shrink-0 ${
                       vocalGender === 'mixed' || vocalGender === 'duet' ? 'text-zinc-500' : 'text-cyan-400'
-                    }`} /> 가상 보이스 (Voice DNA)
+                    }`} /> 보이스 선택
                   </label>
                   <div className="relative">
                     <button
                       type="button"
                       disabled={vocalGender === 'mixed' || vocalGender === 'duet'}
                       onClick={() => setIsVdDropdownOpen(!isVdDropdownOpen)}
-                      className={`w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded-lg border text-sm font-sans transition-all text-left ${
+                      className={`w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded-lg border text-sm font-sans transition-all text-left cursor-pointer ${
                         vocalGender === 'mixed' || vocalGender === 'duet'
                           ? 'border-zinc-800 bg-zinc-950/20 text-zinc-500 cursor-not-allowed'
                           : selectedVdCode !== 'auto'
-                          ? 'border-cyan-500 bg-cyan-500/20 text-cyan-200'
+                          ? 'border-cyan-500 bg-cyan-500/20 text-cyan-200 shadow-sm shadow-cyan-500/10'
                           : 'border-melodio-border bg-black/40 text-melodio-muted hover:border-cyan-500/50'
                       }`}
                     >
                       <span className="truncate">
                         {vocalGender === 'mixed' || vocalGender === 'duet'
-                          ? 'Auto (듀엣/랜덤 사용 불가)'
+                          ? '자동 (듀엣/랜덤 사용 불가)'
                           : selectedVdCode === 'auto'
-                          ? 'Auto (기본 기획 음색)'
-                          : vdOptions?.find(o => o.code === selectedVdCode)?.name || selectedVdCode}
+                          ? '자동 (기본 음색)'
+                          : filteredVdOptions.find(o => o.code === selectedVdCode)?.name || mergedVdOptions.find(o => o.code === selectedVdCode)?.name || (activeVoice?.id === selectedVdCode ? activeVoice.name : selectedVdCode)}
                       </span>
                       {vocalGender !== 'mixed' && vocalGender !== 'duet' && (
                         <span className="text-[9px] opacity-70">▼</span>
@@ -506,32 +530,93 @@ export default function LyricsBuilder({
                           className="fixed inset-0 z-40"
                           onClick={() => setIsVdDropdownOpen(false)}
                         />
-                        <div className="absolute right-0 mt-1 w-full bg-[#1a1515] border border-zinc-800 rounded-lg shadow-2xl z-50 py-1 text-xs max-h-48 overflow-y-auto">
+                        <div className="absolute right-0 mt-1 w-full bg-[#18151f] border border-zinc-700/80 rounded-xl shadow-2xl z-50 py-1.5 text-xs max-h-64 overflow-y-auto">
+                          {/* 1. Auto 기본 */}
                           <button
                             type="button"
                             onClick={() => {
                               onSelectedVdCodeChange?.('auto');
+                              setActiveVoice(null);
                               setIsVdDropdownOpen(false);
                             }}
-                            className="w-full text-left px-3 py-2 hover:bg-cyan-500/15 hover:text-cyan-300 flex items-center justify-between text-zinc-300 border-b border-white/5"
+                            className={`w-full text-left px-3 py-2 hover:bg-cyan-500/15 hover:text-cyan-300 flex items-center justify-between transition-colors border-b border-white/5 cursor-pointer ${
+                              selectedVdCode === 'auto' ? 'text-cyan-300 font-bold bg-cyan-500/10' : 'text-zinc-300'
+                            }`}
                           >
-                            <span>Auto (기본 기획 음색)</span>
-                            {selectedVdCode === 'auto' && <span className="text-cyan-400">✓</span>}
+                            <span>자동 (기본 음색)</span>
+                            {selectedVdCode === 'auto' && <span className="text-cyan-400 font-bold">✓</span>}
                           </button>
-                          {filteredVdOptions.map((opt) => (
+
+                          {/* 2. 내 보이스 */}
+                          {filteredVdOptions.some(o => o.sourceType && o.sourceType !== 'default') && (
+                            <div className="pt-2 pb-1 border-b border-white/5">
+                              <div className="px-3 pb-1 text-[10px] font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1">
+                                <Sparkles className="w-2.5 h-2.5" />
+                                <span>내 보이스</span>
+                              </div>
+                              {filteredVdOptions.filter(o => o.sourceType && o.sourceType !== 'default').map((opt) => (
+                                <button
+                                  key={opt.code}
+                                  type="button"
+                                  onClick={() => {
+                                    onSelectedVdCodeChange?.(opt.code);
+                                    const v = voices.find(item => item.id === opt.code);
+                                    if (v) setActiveVoice(v);
+                                    setIsVdDropdownOpen(false);
+                                  }}
+                                  className={`w-full text-left px-3 py-1.5 hover:bg-rose-500/15 hover:text-rose-200 flex items-center justify-between transition-colors cursor-pointer ${
+                                    selectedVdCode === opt.code ? 'text-rose-300 font-bold bg-rose-500/10' : 'text-zinc-300'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-1.5 truncate">
+                                    <Mic2 className="w-3 h-3 text-rose-400 shrink-0" />
+                                    <span className="truncate">{opt.name}</span>
+                                  </div>
+                                  {selectedVdCode === opt.code && <span className="text-rose-400 font-bold">✓</span>}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* 3. 시스템 추천 보이스 */}
+                          <div className="pt-1 pb-1">
+                            <div className="px-3 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
+                              추천 보이스
+                            </div>
+                            {filteredVdOptions.filter(o => !o.sourceType || o.sourceType === 'default').map((opt) => (
+                              <button
+                                key={opt.code}
+                                type="button"
+                                onClick={() => {
+                                  onSelectedVdCodeChange?.(opt.code);
+                                  const v = voices.find(item => item.id === opt.code);
+                                  if (v) setActiveVoice(v);
+                                  setIsVdDropdownOpen(false);
+                                }}
+                                className={`w-full text-left px-3 py-1.5 hover:bg-cyan-500/15 hover:text-cyan-300 flex items-center justify-between transition-colors cursor-pointer ${
+                                  selectedVdCode === opt.code ? 'text-cyan-300 font-bold bg-cyan-500/10' : 'text-zinc-300'
+                                }`}
+                              >
+                                <span className="truncate">{opt.name}</span>
+                                {selectedVdCode === opt.code && <span className="text-cyan-400 font-bold">✓</span>}
+                              </button>
+                            ))}
+                          </div>
+
+                          {/* 4. Voice 만들기 원클릭 마법사 버튼 */}
+                          <div className="p-1.5 border-t border-white/10 bg-black/40">
                             <button
-                              key={opt.code}
                               type="button"
                               onClick={() => {
-                                onSelectedVdCodeChange?.(opt.code);
                                 setIsVdDropdownOpen(false);
+                                openCreateModal();
                               }}
-                              className="w-full text-left px-3 py-2 hover:bg-cyan-500/15 hover:text-cyan-300 flex items-center justify-between text-zinc-300"
+                              className="w-full py-1.5 px-2 rounded-lg bg-gradient-to-r from-rose-500/20 to-fuchsia-500/20 hover:from-rose-500/30 hover:to-fuchsia-500/30 border border-rose-500/30 text-rose-200 font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
                             >
-                              <span className="truncate">{opt.name}</span>
-                              {selectedVdCode === opt.code && <span className="text-cyan-400">✓</span>}
+                              <Plus className="w-3.5 h-3.5" />
+                              <span>새 보이스 만들기</span>
                             </button>
-                          ))}
+                          </div>
                         </div>
                       </>
                     )}

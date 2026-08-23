@@ -17,7 +17,7 @@ export const getMugSoundAccess = cache(async (): Promise<MugSoundAccess | null> 
   const { data: userData, error: userError } = await client.auth.getUser()
   if (userError || !userData.user) return null
 
-  const { data: assignments, error: roleError } = await client
+  const { data: assignments, error: roleError } = await (client as any)
     .from('mugsound_operator_roles')
     .select('role')
     .eq('user_id', userData.user.id)
@@ -26,7 +26,7 @@ export const getMugSoundAccess = cache(async (): Promise<MugSoundAccess | null> 
   return {
     userId: userData.user.id,
     email: userData.user.email || '',
-    roles: assignments.map((assignment) => assignment.role),
+    roles: (assignments as any[]).map((assignment) => assignment.role as MugSoundOperatorRole),
   }
 })
 

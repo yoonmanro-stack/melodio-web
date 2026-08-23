@@ -4,6 +4,7 @@ import { useState } from 'react'
 import type { PromptPayload } from '@/types'
 import type { CompositorResult } from '@/lib/prompt-compositor'
 import { Lock, Sparkles, Sliders, CheckCircle2 } from 'lucide-react'
+import { ActiveVoiceBadge } from '@/components/voice/ActiveVoiceBadge'
 
 interface PromptOutputProps {
   payload: PromptPayload | null
@@ -31,6 +32,8 @@ interface PromptOutputProps {
   onAsmrToggle?: (val: boolean) => void
   ambientFoley?: string
   sourceMenu?: string
+  isInstrumental?: boolean
+  onInstrumentalToggle?: (val: boolean) => void
 }
 
 /** 프롬프트 출력 패널 — Style / Exclude / Lyrics + AI 최적화 + 공개 토글 */
@@ -60,6 +63,8 @@ export default function PromptOutput({
   onAsmrToggle,
   ambientFoley = '',
   sourceMenu,
+  isInstrumental,
+  onInstrumentalToggle,
 }: PromptOutputProps) {
   const [copiedStyle, setCopiedStyle] = useState(false)
   const [copiedLyrics, setCopiedLyrics] = useState(false)
@@ -176,10 +181,63 @@ export default function PromptOutput({
     <div className="sticky top-6 flex flex-col gap-4">
       {/* Style 프롬프트 (직접 입력/붙여넣기 가능) */}
       <div id="style-prompt-section" className="section-card">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
-            Style Prompt
-          </span>
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider">
+              Style Prompt
+            </span>
+
+            {/* 2개 라디오 버튼 그룹: 보컬곡 (기본) vs 연주곡 */}
+            {onInstrumentalToggle !== undefined && (
+              <div className="inline-flex items-center bg-zinc-950/90 p-1 rounded-xl border border-zinc-800/80 shadow-inner">
+                {/* 1. 보컬곡 라디오 */}
+                <button
+                  type="button"
+                  onClick={() => isInstrumental && onInstrumentalToggle(false)}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    !isInstrumental
+                      ? 'bg-gradient-to-r from-fuchsia-600 to-purple-600 text-white shadow-md shadow-fuchsia-500/25 border border-fuchsia-400/30'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
+                  }`}
+                  title="가사 및 보컬이 포함된 노래를 생성합니다"
+                >
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full border flex items-center justify-center transition-all ${
+                      !isInstrumental
+                        ? 'border-white bg-white'
+                        : 'border-zinc-500 bg-transparent'
+                    }`}
+                  >
+                    {!isInstrumental && <span className="w-1 h-1 rounded-full bg-purple-700" />}
+                  </span>
+                  <span>보컬곡</span>
+                </button>
+
+                {/* 2. 연주곡 라디오 */}
+                <button
+                  type="button"
+                  onClick={() => !isInstrumental && onInstrumentalToggle(true)}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-bold transition-all ${
+                    isInstrumental
+                      ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md shadow-purple-500/25 border border-purple-400/30'
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-850'
+                  }`}
+                  title="가사 없이 악기 연주(BGM)로만 생성합니다"
+                >
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full border flex items-center justify-center transition-all ${
+                      isInstrumental
+                        ? 'border-white bg-white'
+                        : 'border-zinc-500 bg-transparent'
+                    }`}
+                  >
+                    {isInstrumental && <span className="w-1 h-1 rounded-full bg-indigo-700" />}
+                  </span>
+                  <span>연주곡</span>
+                </button>
+              </div>
+            )}
+          </div>
           <div className="flex items-center gap-3">
             {/* 글자 수 카운터 */}
             <span className={`text-[10px] font-mono ${charCountColor}`}>

@@ -139,5 +139,53 @@ export const presets: Preset[] = [
     gradient: 'linear-gradient(135deg, #ef4444, #8b5cf6)',
     selections: {},
     customPrompt: 'Joseon hip hop, gugak fusion rap, traditional Korean instruments, gayageum pluck, daegeum flute, heavy boom bap beat, epic brass, raw expressive rap, East Asian scale, key of E minor, 85 BPM, spacious room reverb, featuring warm Fender Rhodes chords, [High-fidelity studio mastering, professional grade audio], key of A major, 102 BPM, subtle cassette tape hiss, featuring smooth saxophone riffs, 혼성 보컬, 판소리식 꺾기와 멜로딕 훅, 웅장한 브라스 스탭'
+  },
+  {
+    id: 'traditional-trot-master',
+    category: 'retro',
+    emoji: '🎤',
+    name: '인생 2막, 막걸리 한 잔과 정통 트로트',
+    name_ko: '인생 2막, 막걸리 한 잔과 정통 트로트',
+    name_en: 'Life Chapter 2: Traditional Korean Trot & Pathos',
+    name_ja: '人生第2幕、マッコリ一杯と正統派トロット',
+    desc: '굽이진 인생길과 세월의 애환을 노래하는 구슬픈 색소폰과 아코디언, 가슴을 울리는 진한 정통 트로트',
+    desc_ko: '굽이진 인생길과 세월의 애환을 노래하는 구슬픈 색소폰과 아코디언, 가슴을 울리는 진한 정통 트로트',
+    desc_en: 'Soulful traditional Korean trot evoking life pathos and nostalgia, featuring weeping saxophone and accordion.',
+    desc_ja: '人生の哀歓を歌い上げる、哀愁漂うサックスとアコーディオンが響く正統派トロット。',
+    gradient: 'linear-gradient(135deg, #f59e0b, #d97706)',
+    selections: {},
+    customPrompt: 'Traditional Korean Trot, passionate emotional male or female vocal, deep trot vibrato and vocal ornamentation, mournful saxophone solo, nostalgic accordion melody, weeping electric guitar, warm acoustic rhythm guitar, orchestral strings, 72 BPM, slow 4/4 time signature, authentic studio master mix'
+  },
+  {
+    id: 'highway-disco-trot',
+    category: 'dance',
+    emoji: '💃',
+    name: '고속도로 휴게소, 신바람 디스코 트롯 메들리',
+    name_ko: '고속도로 휴게소, 신바람 디스코 트롯 메들리',
+    name_en: 'Highway Disco Trot: High-Energy Nonstop Party',
+    name_ja: '高速道路ディスコ・トロット・メドレー',
+    desc: '관광버스와 고속도로를 들썩이게 만드는 화려한 브라스와 팡파르, 어깨춤이 절로 나는 신바람 디스코 뽕짝',
+    desc_ko: '관광버스와 고속도로를 들썩이게 만드는 화려한 브라스와 팡파르, 어깨춤이 절로 나는 신바람 디스코 뽕짝',
+    desc_en: 'High-energy highway disco trot medley with punchy brass fanfares, bouncy synth bass, and infectious dance grooves.',
+    desc_ja: '華やかなブラスとシンセベースが躍動する、ノリノリの高速道路ディスコ・トロット。',
+    gradient: 'linear-gradient(135deg, #ec4899, #f43f5e)',
+    selections: {},
+    customPrompt: 'Modern Korean Dance Trot, high-energy highway disco medley, upbeat brass section fanfares, punchy disco drums, bouncy electronic synth bass, catchy singalong hook, lively rhythm guitar, bright charismatic vocal, 136 BPM, celebratory party energy'
+  },
+  {
+    id: 'acoustic-folk-trot',
+    category: 'healing',
+    emoji: '🍂',
+    name: '고향역 밤안개, 감성 포크 성인가요',
+    name_ko: '고향역 밤안개, 감성 포크 성인가요',
+    name_en: 'Hometown Station: Acoustic Folk Trot & Nostalgia',
+    name_ja: '故郷の駅の夜霧、感性フォーク・トロット',
+    desc: '고향집 어머니와 밤안개 낀 간이역의 추억을 그리는 따스한 통기타와 하모니카 선율의 감성 트롯',
+    desc_ko: '고향집 어머니와 밤안개 낀 간이역의 추억을 그리는 따스한 통기타와 하모니카 선율의 감성 트롯',
+    desc_en: 'Warm acoustic folk trot with intimate nylon guitar arpeggios, nostalgic harmonica, and heartfelt adult contemporary vocals.',
+    desc_ja: '温かなアコースティックギターとハーモニカが紡ぐ、故郷の哀愁と母への想いを描いた感性トロット。',
+    gradient: 'linear-gradient(135deg, #10b981, #059669)',
+    selections: {},
+    customPrompt: 'Acoustic Folk Trot, warm adult contemporary, gentle nylon acoustic guitar fingerpicking, nostalgic harmonica fills, mellow upright bass, soft grand piano, warm intimate vocal, reflective and heartfelt, 78 BPM, pristine studio clarity'
   }
 ]

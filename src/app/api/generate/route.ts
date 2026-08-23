@@ -258,15 +258,28 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
   }
 
   // ── [Vocal Gender Conflict Scrubber] ──────────────────────────────────────────
-  // Viral & Trend Zone 및 Voice Lab 옵션 결합 시 성별 상충 태그 정화
-  const promptLower = effectiveStylePrompt.toLowerCase()
-  const hasFemaleKeyword = /\b(female|woman|soprano|alto|lady|girl|여성)\b/i.test(promptLower)
-  const hasMaleKeyword = /\b(male|man|baritone|tenor|gentleman|boy|남성)\b/i.test(promptLower)
+  // Viral & Trend Zone 및 Voice Lab 옵션 결합 시 성별 상충 태그 정화 및 보컬 고정
+  if (!payload.isInstrumental) {
+    const explicitGender = (payload as any).vocalGender || ((payload as any).activeVoice?.gender) || (
+      Array.isArray((payload.metadata as any)?.vocal) ? ((payload.metadata as any).vocal.includes('Male') ? 'male' : (payload.metadata as any).vocal.includes('Female') ? 'female' : undefined) : undefined
+    )
+    const promptLower = effectiveStylePrompt.toLowerCase()
+    const hasFemaleKeyword = /\b(female|woman|soprano|alto|lady|girl|여성)\b/i.test(promptLower)
+    const hasMaleKeyword = /\b(male|man|baritone|tenor|gentleman|boy|남성)\b/i.test(promptLower)
 
-  if (!payload.isInstrumental && hasFemaleKeyword && !hasMaleKeyword) {
-    effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'female')
-  } else if (!payload.isInstrumental && hasMaleKeyword && !hasFemaleKeyword) {
-    effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'male')
+    const resolvedGender = explicitGender || (hasMaleKeyword && !hasFemaleKeyword ? 'male' : hasFemaleKeyword && !hasMaleKeyword ? 'female' : undefined)
+
+    if (resolvedGender === 'male') {
+      effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'male')
+      if (!effectiveStylePrompt.toLowerCase().includes('male vocal') && !effectiveStylePrompt.toLowerCase().includes('baritone') && !effectiveStylePrompt.toLowerCase().includes('tenor')) {
+        effectiveStylePrompt = `male vocals, ${effectiveStylePrompt}`
+      }
+    } else if (resolvedGender === 'female') {
+      effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'female')
+      if (!effectiveStylePrompt.toLowerCase().includes('female vocal') && !effectiveStylePrompt.toLowerCase().includes('soprano') && !effectiveStylePrompt.toLowerCase().includes('alto')) {
+        effectiveStylePrompt = `female vocals, ${effectiveStylePrompt}`
+      }
+    }
   }
 
   if (effectiveStylePrompt.length > 1000) {
@@ -420,8 +433,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '보컬곡 가사가 비어 있습니다. 가사를 먼저 생성해주세요.' }, { status: 400 })
     }
 
-    // Apply Voice DNA Scrubber
-    if (vdCode) {
+    // Apply Voice Prompt / Voice DNA
+    const rawVoicePrompt = rawBody.voicePrompt || (rawBody.activeVoice?.stylePrompt)
+    const rawVocalGender = rawBody.vocalGender || rawBody.activeVoice?.gender
+    const { scrubConflictingVocalTags } = await import('@/lib/voice-dna-scrubber')
+
+    let detectedTargetGender: 'male' | 'female' | 'duet' | undefined = undefined
+    if (rawVocalGender === 'male' || rawVocalGender === 'female' || rawVocalGender === 'duet') {
+      detectedTargetGender = rawVocalGender
+    } else if (rawVoicePrompt) {
+      const lower = rawVoicePrompt.toLowerCase()
+      if (lower.includes('male') && !lower.includes('female')) detectedTargetGender = 'male'
+      else if (lower.includes('female')) detectedTargetGender = 'female'
+      else if (lower.includes('duet')) detectedTargetGender = 'duet'
+    }
+
+    if (rawVoicePrompt && typeof rawVoicePrompt === 'string' && rawVoicePrompt.trim()) {
+      let cleanedStyle = payload.stylePrompt
+      if (detectedTargetGender && detectedTargetGender !== 'duet') {
+        cleanedStyle = scrubConflictingVocalTags(cleanedStyle, detectedTargetGender)
+      }
+      const parts = cleanedStyle.split(',')
+      const genre = parts[0]?.trim() || ''
+      const remainder = parts.slice(1).map((p: string) => p.trim()).filter(Boolean).join(', ')
+      if (genre) {
+        payload.stylePrompt = `${genre}, ${rawVoicePrompt.trim()}${remainder ? `, ${remainder}` : ''}`
+      } else {
+        payload.stylePrompt = `${rawVoicePrompt.trim()}, ${cleanedStyle}`
+      }
+      console.log(`[API/generate] Direct Voice Prompt applied: "${rawVoicePrompt.trim()}", Final stylePrompt: "${payload.stylePrompt}"`)
+    } else if (vdCode) {
       const { scrubAndComposeVoiceDna } = await import('@/lib/voice-dna-scrubber')
       const scrubbed = await scrubAndComposeVoiceDna(payload.stylePrompt, vdCode, noiseRatio)
       console.log(`[API/generate] Voice DNA applied: "${vdCode}", Original stylePrompt: "${payload.stylePrompt}", Scrubbed: "${scrubbed}"`)
@@ -452,7 +493,7 @@ export async function POST(request: NextRequest) {
 
     if (queueItemId) {
       if (!user) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
-      const { data: queueItem, error: queueError } = await supabase
+      const { data: queueItem, error: queueError } = await (supabase as any)
         .from('generation_queue_items')
         .select('id,title,style_prompt,exclude_prompt,lyrics_prompt,lyrics_sections,is_instrumental,status')
         .eq('id', queueItemId)
@@ -460,19 +501,20 @@ export async function POST(request: NextRequest) {
       if (queueError || !queueItem) {
         return NextResponse.json({ error: 'Generation Queue Item을 찾을 수 없습니다.' }, { status: 404 })
       }
-      const canonicalMatch = queueItem.title === payload.title
-        && queueItem.style_prompt === payload.stylePrompt
-        && queueItem.exclude_prompt === (payload.excludePrompt || '')
-        && queueItem.is_instrumental === payload.isInstrumental
+      const queueItemData = queueItem as any
+      const canonicalMatch = queueItemData.title === payload.title
+        && queueItemData.style_prompt === payload.stylePrompt
+        && queueItemData.exclude_prompt === (payload.excludePrompt || '')
+        && queueItemData.is_instrumental === payload.isInstrumental
       if (!canonicalMatch) {
         return NextResponse.json({ error: '승인된 Queue 생성 패키지와 요청 내용이 일치하지 않습니다.' }, { status: 409 })
       }
-      payload.lyricsPrompt = queueItem.lyrics_prompt
-      lyricsSections = queueItem.lyrics_sections
-      if (queueItem.status !== 'ready') {
+      payload.lyricsPrompt = queueItemData.lyrics_prompt
+      lyricsSections = queueItemData.lyrics_sections
+      if (queueItemData.status !== 'ready') {
         return NextResponse.json({ error: '이미 제출되었거나 아직 준비되지 않은 Queue Item입니다.' }, { status: 409 })
       }
-      const { data: claimed, error: claimError } = await supabase
+      const { data: claimed, error: claimError } = await (supabase as any)
         .from('generation_queue_items')
         .update({ status: 'submitting', error_message: null })
         .eq('id', queueItemId).eq('status', 'ready').select('id').maybeSingle()
@@ -624,7 +666,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (claimedQueueItemId && genData?.id) {
-      const { error: queueUpdateError } = await serviceSupabase
+      const { error: queueUpdateError } = await (serviceSupabase as any)
         .from('generation_queue_items')
         .update({
           generation_id: genData.id,
@@ -666,7 +708,7 @@ export async function POST(request: NextRequest) {
     if (claimedQueueItemId) {
       try {
         const supabase = await createClient()
-        await supabase.from('generation_queue_items').update({
+        await (supabase as any).from('generation_queue_items').update({
           status: sunoTaskAccepted ? 'submission_failed' : 'ready',
           error_message: message,
         }).eq('id', claimedQueueItemId).eq('status', 'submitting')

@@ -175,16 +175,40 @@ function getAutoMatchedTagsForGenre(genre: string): string[] {
     ];
   }
 
-  if (g.includes('trot')) {
+  if (g.includes('trot') || g.includes('트로트') || g.includes('뽕짝') || g.includes('성인가요')) {
+    if (g.includes('disco') || g.includes('dance') || g.includes('highway') || g.includes('디스코') || g.includes('고속도로') || g.includes('신나는')) {
+      return [
+        'Modern Dance Trot',
+        'Highway Disco Brass Fanfare',
+        'Bouncy Electronic Synth Bass',
+        'Catchy Upbeat Rhythm Guitar',
+        '134-142 BPM, Fast & Festive',
+        'Celebratory Festival Sound',
+        'Singalong Hook Energy',
+        'Studio Quality, Punchy Mix'
+      ];
+    }
+    if (g.includes('folk') || g.includes('acoustic') || g.includes('포크') || g.includes('통기타') || g.includes('감성')) {
+      return [
+        'Acoustic Folk Trot',
+        'Warm Nylon Guitar Fingerpicking',
+        'Nostalgic Harmonica Melody',
+        'Mellow Upright Bass',
+        '72-82 BPM, Slow & Heartfelt',
+        'Intimate Studio Acoustics',
+        'Warm Adult Contemporary Vibe',
+        'Emotional Vocal Resonance'
+      ];
+    }
     return [
-      'Traditional Trot Brass Section',
-      'Accordion Chords',
-      'Rhythmic Percussion Pulse',
-      'Bright Synth Lead',
-      '115-125 BPM, Moderately Fast',
-      'Live Recording, Concert Feel',
-      'Energetic Festival Vibe',
-      'Studio Quality, Clean Mix'
+      'Traditional Korean Trot',
+      'Mournful Saxophone Solo',
+      'Nostalgic Accordion Melody',
+      'Deep Trot Vocal Vibrato',
+      'Slow 4/4 Ballad Beat, 72-85 BPM',
+      'Orchestral Strings Swells',
+      'Authentic Life Pathos',
+      'High-Fidelity Studio Mastering'
     ];
   }
 
@@ -687,7 +711,7 @@ export default function AudioForgeProPage() {
     <div className="max-w-6xl mx-auto pt-4 pb-24 px-4 sm:px-6">
       {/* Header — 통일된 표준 브랜드 헤더 */}
       <header className="mb-8 border-b border-white/10 pb-6">
-        <h1 className="text-4xl font-bold text-white mb-2">Audio Forge Pro</h1>
+        <h1 className="text-4xl font-bold text-white mb-2">뮤직 스튜디오</h1>
         <p className="text-zinc-400">전문가 및 프로듀서를 위한 수제 AI 음악 스튜디오 — 201개 장르, 12종 세부 조율 파라미터 콕핏 및 Studio-Grade AI 프로듀서 브리프 생성 엔진 탑재.</p>
       </header>
 
@@ -979,7 +1003,7 @@ export default function AudioForgeProPage() {
             initial={{ y: 80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
-            className="fixed bottom-0 left-0 md:left-64 right-0 z-50 bg-zinc-950/95 border-t border-white/10 backdrop-blur-md px-6 py-4 flex items-center justify-between shadow-2xl"
+            className="fixed bottom-0 left-0 right-0 w-full z-[100] bg-[#0c0d12]/95 border-t border-white/10 backdrop-blur-2xl px-4 md:px-8 py-3 flex items-center justify-between shadow-[0_-10px_30px_rgba(0,0,0,0.8)]"
           >
             <div className="flex items-center gap-3 w-1/4 min-w-0">
               <div className="w-11 h-11 rounded-lg overflow-hidden shrink-0 bg-zinc-900 border border-white/10 flex items-center justify-center">

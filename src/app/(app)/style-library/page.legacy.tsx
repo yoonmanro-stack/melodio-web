@@ -2591,7 +2591,7 @@ export default function StyleLibraryPage() {
             initial={{ y: 80, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
             exit={{ y: 80, opacity: 0 }}
-            className="fixed bottom-0 left-0 md:left-64 right-0 z-50 bg-zinc-950/90 border-t border-white/10 backdrop-blur-md px-6 py-4 flex items-center justify-between"
+            className="fixed bottom-0 left-0 right-0 w-full z-[100] bg-[#0c0d12]/95 border-t border-white/10 backdrop-blur-2xl px-4 md:px-8 py-3 flex items-center justify-between shadow-[0_-10px_30px_rgba(0,0,0,0.8)]"
           >
             {/* Track Info (Left) */}
             {(() => {
