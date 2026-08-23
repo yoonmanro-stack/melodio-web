@@ -592,6 +592,8 @@ export async function POST(request: NextRequest) {
       selections: selections || {},
       vocal: inferVocalLabel(payload, selections, vdCode),
       voiceDna: vdCode || null,
+      auto_voice_convert: !!(vdCode && (vdCode.includes('yoon') || vdCode.startsWith('custom') || rawBody.autoVoiceConvert)),
+      voice_model_id: (vdCode && vdCode.includes('yoon')) ? 'qr_yoon' : (rawBody.voiceModelId || 'qr_yoon'),
       lyricsSections: lyricsSections || [],
       duration: rawBody.metadata?.duration || '',
       durationSeconds: rawBody.metadata?.durationSeconds || null,

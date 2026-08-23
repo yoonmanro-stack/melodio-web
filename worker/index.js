@@ -1206,6 +1206,21 @@ async function pollSunoGenerations() {
               log("ERROR", `[SUNO POLL] 우승 곡 DB 업데이트 실패!`, { error: upErr.message });
             } else {
               await linkGenerationQueueCandidate(metaObj, row.id, 'A', winner.clip, winner.quality, true);
+
+              // 🎤 [AUTO RVC] 마이 보이스(커스텀 보이스)가 지정되어 있으면 즉시 자동으로 스템 분리 및 1:1 보이스 변환 파이프라인 가동!
+              const isAutoVoice = metaObj.auto_voice_convert === true || (metaObj.voiceDna && (String(metaObj.voiceDna).includes('yoon') || String(metaObj.voiceDna).startsWith('custom')));
+
+              if (isAutoVoice && winner.clip.audio_url && typeof processGeneration === 'function') {
+                log("INFO", `[AUTO RVC] 🎤 마이 보이스 자동 1:1 음성 변환 & 마스터 리믹스 파이프라인 즉시 가동!`, { id: row.id.slice(0, 8) });
+                processGeneration({
+                  id: row.id,
+                  audio_url: winner.clip.audio_url,
+                  user_id: row.user_id,
+                  voice_conversion_status: 'pending',
+                  voice_model_id: metaObj.voice_model_id || 'qr_yoon',
+                  pitch_shift: metaObj.pitch_shift || 0,
+                }).catch((err) => log("ERROR", "[AUTO RVC] 백그라운드 자동 보이스 변환 실패:", err.message));
+              }
             }
           }
 
