@@ -14,9 +14,7 @@ import { createClient } from '@/lib/supabase/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { GoogleAuth } from 'google-auth-library'
 import { titlePlaybooks } from '@/data/titlePlaybooks'
-import { MUGSOUND_DIRECTION_BATCH_IDS } from '@/lib/mugsound/direction-batch'
 import { scrubConflictingVocalTags } from '@/lib/voice-dna-scrubber'
-import { getMugSoundAccess } from '@/lib/mugsound/access'
 
 // 제출만 하므로 긴 타임아웃 불필요 (Vercel 타임아웃 60초로 확장)
 export const maxDuration = 60;
@@ -388,32 +386,6 @@ export async function POST(request: NextRequest) {
     const vdCode = rawBody.vdCode
     const noiseRatio = rawBody.noiseRatio
     const queueItemId = typeof rawBody.queueItemId === 'string' ? rawBody.queueItemId : null
-    const isMugSoundSupply = rawBody.sourceMenu === 'mugsound-supply'
-    if (isMugSoundSupply) {
-      const access = await getMugSoundAccess()
-      if (!access?.roles.includes('producer') && !access?.roles.includes('approver')) {
-        return NextResponse.json({ error: 'MugSound 제작 권한이 필요합니다.' }, { status: 403 })
-      }
-      const blueprintId = typeof rawBody.mugsoundBlueprintId === 'string' ? rawBody.mugsoundBlueprintId : ''
-      const batchId = typeof rawBody.mugsoundBatchId === 'string' ? rawBody.mugsoundBatchId : ''
-      if (!/^ms-bp-[a-z0-9-]{3,80}$/.test(blueprintId) || !MUGSOUND_DIRECTION_BATCH_IDS.some((allowed) => allowed === batchId)) {
-        return NextResponse.json({ error: 'MugSound Batch와 Blueprint 식별자가 필요합니다.' }, { status: 400 })
-      }
-      if (!payload.isInstrumental && !payload.lyricsPrompt?.trim()) {
-        return NextResponse.json({ error: '가사곡은 확정 가사가 필요합니다.' }, { status: 400 })
-      }
-      const client = await createClient()
-      const { data: existing } = await client.from('generations').select('id,status')
-        .eq('user_id', access.userId)
-        .like('license_hash', `%\"mugsoundBatchId\":\"${batchId}\"%`)
-        .like('license_hash', `%\"mugsoundBlueprintId\":\"${blueprintId}\"%`)
-        .neq('status', 'failed').limit(1)
-      if (existing?.length) {
-        return NextResponse.json({ error: '이미 제출된 MugSound Blueprint입니다.' }, { status: 409 })
-      }
-      ;(payload as PromptPayload & { sourceMenu?: string }).sourceMenu = rawBody.sourceMenu
-    }
-
     // 화면의 구조화된 가사 섹션을 서버의 단일 기준으로 사용한다. 클라이언트에서
     // 조립한 lyricsPrompt가 비었거나 오래된 상태여도 화면에 표시된 섹션과 동일한
     // 프롬프트를 서버에서 다시 만든다.
@@ -473,7 +445,7 @@ export async function POST(request: NextRequest) {
     let generatedTags = '';
 
     const needTitle = !payload.title || !payload.title.trim();
-    const generated = queueItemId || isMugSoundSupply
+    const generated = queueItemId
       ? {
           title: payload.title || 'Untitled',
           description: 'Channel Builder에서 승인된 Episode Track Blueprint',
@@ -531,10 +503,9 @@ export async function POST(request: NextRequest) {
     }
     const serviceSupabase = createSupabaseClient(supabaseUrl, serviceRoleKey)
 
-    // 0. 장르 플레이북 매칭. MugSound Blueprint는 이미 제작 프롬프트가 확정돼
-    // 있으므로 느린 RAG 조회를 건너뛰어 서버리스 제출 타임아웃을 피한다.
+    // 0. 장르 플레이북 매칭
     let matchedPlaybook: any = null
-    if (!isMugSoundSupply) try {
+    try {
       const presetId = rawBody.presetId
       if (presetId) {
         const { getPlaybookByKey } = await import('@/lib/db/knowledge')
@@ -634,14 +605,6 @@ export async function POST(request: NextRequest) {
       youtubeMainTitle: rawBody.youtubeMainTitle || null,
       tracklistText: rawBody.tracklistText || null,
       queueItemId,
-      mugsoundBatchId: isMugSoundSupply ? rawBody.mugsoundBatchId : null,
-      mugsoundBlueprintId: isMugSoundSupply ? rawBody.mugsoundBlueprintId : null,
-      mugsoundEpisodeId: isMugSoundSupply ? rawBody.mugsoundEpisodeId : null,
-      mugsoundPhase: isMugSoundSupply ? rawBody.mugsoundPhase : null,
-      mugsoundTargetEnergy: isMugSoundSupply ? rawBody.mugsoundTargetEnergy : null,
-      mugsoundTargetWarmth: isMugSoundSupply ? rawBody.mugsoundTargetWarmth : null,
-      mugsoundBridgeDirection: isMugSoundSupply ? rawBody.mugsoundBridgeDirection || null : null,
-      mugsoundVocalType: isMugSoundSupply ? (payload.isInstrumental ? 'instrumental' : 'lyrics') : null,
     })
 
     const trackTitle = payload.title?.trim() || payload.stylePrompt.slice(0, 60)

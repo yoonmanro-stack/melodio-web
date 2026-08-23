@@ -51,7 +51,6 @@ interface SidebarProps {
   onToggle: () => void;
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
-  showMugSoundSupply?: boolean;
 }
 
 export function SidebarToggleIcon({ isCollapsed, className }: { isCollapsed: boolean; className?: string }) {
@@ -76,7 +75,7 @@ export function SidebarToggleIcon({ isCollapsed, className }: { isCollapsed: boo
   );
 }
 
-export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileClose, showMugSoundSupply = false }: SidebarProps) {
+export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileClose }: SidebarProps) {
   const pathname = usePathname();
   const { t } = useLanguage();
 

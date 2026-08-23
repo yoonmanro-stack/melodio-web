@@ -199,6 +199,34 @@ const TrackDuration = ({ audioUrl, initialDuration }: { audioUrl?: string; initi
   return <span>{mins}:{secs < 10 ? '0' : ''}{secs}</span>;
 };
 
+const downloadTrack = async (item: Generation) => {
+  const downloadUrl = item.audio_url || item.source_audio_url;
+  if (!downloadUrl) return;
+
+  const response = await fetch(downloadUrl);
+  if (!response.ok) {
+    throw new Error(`Download failed (${response.status})`);
+  }
+
+  const blob = await response.blob();
+  if (blob.size === 0) {
+    throw new Error('Downloaded audio is empty');
+  }
+
+  const objectUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = objectUrl;
+  anchor.download = `${item.title || 'melodio-track'}.mp3`;
+  anchor.style.display = 'none';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+
+  // Safari can still be reading the Blob when click() returns. Revoking it
+  // immediately can produce an incomplete or invalid download.
+  window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+};
+
 const isJapanTrack = (item: any) => {
   if (!item.license_hash) return false;
   try {
@@ -1787,7 +1815,6 @@ export default function Home() {
                                 <span>{downloadingTrackId === item.id ? 'Downloading...' : 'Download Mix'}</span>
                               </button>
                             )}
-                            
                             <button 
                               onClick={() => {
                                 setSharingTrack(item);

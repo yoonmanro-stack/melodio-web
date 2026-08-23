@@ -238,12 +238,12 @@ export default function HelpCenter() {
       
       <div className="mt-8 text-center flex flex-col items-center">
         <p className="text-zinc-500 mb-4 text-sm">해결되지 않은 질문이 있으신가요?</p>
-        <button 
-          onClick={() => alert("고객 지원 센터에 문의 티켓이 생성되었습니다. 담당자가 순차적으로 확인 후 메일로 답변해 드립니다.")}
+        <a
+          href="mailto:support@melodio.app?subject=Melodio%20고객%20지원%20문의"
           className="px-6 py-3 rounded-xl border border-white/10 hover:bg-white/5 text-white font-medium text-sm flex items-center gap-2 transition-all hover:scale-105 active:scale-95"
         >
-          <MessageSquare className="w-4 h-4 text-fuchsia-400" /> 고객 지원 문의 접수하기
-        </button>
+          <MessageSquare className="w-4 h-4 text-fuchsia-400" /> support@melodio.app에 이메일 보내기
+        </a>
       </div>
     </div>
   );
