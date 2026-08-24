@@ -481,23 +481,53 @@ export default function VoiceDnaStudio() {
   const liveDspFilterRef = useRef<{
     lowShelf?: BiquadFilterNode;
     highShelf?: BiquadFilterNode;
+    peakFilter?: BiquadFilterNode;
     sourceElement?: HTMLAudioElement;
     ctx?: AudioContext;
   } | null>(null);
 
-  // 실시간 슬라이더 조정 시 재생 중인 오디오 DSP 필터 즉각 갱신
+  // 실시간 슬라이더 값 동기화 ref (재생 루프에서 매 음표마다 즉각 참조)
+  const slidersLiveRef = useRef({
+    pitch: 65,
+    brightness: 70,
+    chestResonance: 50,
+    headResonance: 60,
+    power: 70,
+    gender: "female" as "female" | "male"
+  });
+
+  useEffect(() => {
+    slidersLiveRef.current = {
+      pitch,
+      brightness,
+      chestResonance,
+      headResonance,
+      power,
+      gender
+    };
+  }, [pitch, brightness, chestResonance, headResonance, power, gender]);
+
+  // 실시간 슬라이더 드래그 시 재생 중인 오디오 DSP 필터 & 피치 즉각 갱신 (0ms 지연)
   useEffect(() => {
     if (liveDspFilterRef.current && liveDspFilterRef.current.ctx) {
-      const { lowShelf, highShelf, sourceElement, ctx } = liveDspFilterRef.current;
+      const { lowShelf, highShelf, peakFilter, sourceElement, ctx } = liveDspFilterRef.current;
       const t = ctx.currentTime;
       if (lowShelf) {
-        lowShelf.gain.setTargetAtTime((chestResonance - 50) * 0.45, t, 0.04);
+        // 흉성 공명 (200Hz Low-Shelf: -24dB ~ +24dB 초강력 부스트/컷)
+        lowShelf.gain.setTargetAtTime((chestResonance - 50) * 0.48, t, 0.02);
       }
       if (highShelf) {
-        highShelf.gain.setTargetAtTime(((headResonance + brightness) / 2 - 50) * 0.45, t, 0.04);
+        // 두성 & 밝기 (3000Hz High-Shelf: -24dB ~ +24dB 시원한 고음역 개방)
+        highShelf.gain.setTargetAtTime(((headResonance + brightness) / 2 - 50) * 0.48, t, 0.02);
+      }
+      if (peakFilter) {
+        // 가창 출력 파워 (1400Hz Peaking Filter: 보컬 중심 배음 증폭)
+        peakFilter.gain.setTargetAtTime((power - 50) * 0.3, t, 0.02);
       }
       if (sourceElement) {
-        sourceElement.playbackRate = Math.max(0.7, Math.min(1.4, 1.0 + (pitch - 50) * 0.006));
+        // 피치 변조 (0: 0.6배속 굵은 저음, 50: 1.0배속 원음, 100: 1.7배속 높은 고음)
+        const rate = Math.pow(2, (pitch - 50) / 40);
+        sourceElement.playbackRate = Math.max(0.55, Math.min(1.85, rate));
       }
     }
   }, [pitch, brightness, chestResonance, headResonance, power]);
@@ -513,7 +543,7 @@ export default function VoiceDnaStudio() {
   const playExploreVoiceDemo = (voice: any) => {
     stopExploreVoiceDemo();
     
-    // Check if the voice record has a saved real Audio URL
+    // 1. 실제 오디오 파일이 등록되어 있는 경우 (실제 음원 + 실시간 DSP 필터)
     const realAudioUrl = voice.audioUrl || voice.audio_url || voice.physical_layers?.audio_url;
     const voiceKey = voice.id || voice.code;
     if (realAudioUrl) {
@@ -523,7 +553,8 @@ export default function VoiceDnaStudio() {
 
       const audio = new Audio(realAudioUrl);
       audio.crossOrigin = "anonymous";
-      audio.playbackRate = Math.max(0.7, Math.min(1.4, 1.0 + (pitch - 50) * 0.006));
+      const initialRate = Math.pow(2, (pitch - 50) / 40);
+      audio.playbackRate = Math.max(0.55, Math.min(1.85, initialRate));
       exploreAudioRef.current = audio;
 
       try {
@@ -535,30 +566,40 @@ export default function VoiceDnaStudio() {
           ctx.resume();
         }
         const source = ctx.createMediaElementSource(audio);
+        
+        // 흉성 저음 필터 (200Hz Low-Shelf)
         const lowShelf = ctx.createBiquadFilter();
         lowShelf.type = "lowshelf";
-        lowShelf.frequency.setValueAtTime(250, ctx.currentTime);
-        lowShelf.gain.setValueAtTime((chestResonance - 50) * 0.45, ctx.currentTime);
+        lowShelf.frequency.setValueAtTime(200, ctx.currentTime);
+        lowShelf.gain.setValueAtTime((chestResonance - 50) * 0.48, ctx.currentTime);
 
+        // 두성 & 밝기 고음 필터 (3000Hz High-Shelf)
         const highShelf = ctx.createBiquadFilter();
         highShelf.type = "highshelf";
-        highShelf.frequency.setValueAtTime(3200, ctx.currentTime);
-        highShelf.gain.setValueAtTime(((headResonance + brightness) / 2 - 50) * 0.45, ctx.currentTime);
+        highShelf.frequency.setValueAtTime(3000, ctx.currentTime);
+        highShelf.gain.setValueAtTime(((headResonance + brightness) / 2 - 50) * 0.48, ctx.currentTime);
+
+        // 가창 출력 미드 필터 (1400Hz Peaking)
+        const peakFilter = ctx.createBiquadFilter();
+        peakFilter.type = "peaking";
+        peakFilter.frequency.setValueAtTime(1400, ctx.currentTime);
+        peakFilter.Q.setValueAtTime(1.2, ctx.currentTime);
+        peakFilter.gain.setValueAtTime((power - 50) * 0.3, ctx.currentTime);
 
         const masterGain = ctx.createGain();
-        masterGain.gain.setValueAtTime(0.9, ctx.currentTime);
+        masterGain.gain.setValueAtTime(0.95, ctx.currentTime);
 
         source.connect(lowShelf);
         lowShelf.connect(highShelf);
-        highShelf.connect(masterGain);
+        highShelf.connect(peakFilter);
+        peakFilter.connect(masterGain);
         masterGain.connect(ctx.destination);
 
-        liveDspFilterRef.current = { lowShelf, highShelf, sourceElement: audio, ctx };
+        liveDspFilterRef.current = { lowShelf, highShelf, peakFilter, sourceElement: audio, ctx };
       } catch (dspErr) {
-        console.warn("Web Audio DSP routing fallback:", dspErr);
+        console.warn("Web Audio DSP routing fallback to direct playback:", dspErr);
       }
 
-      // Update progress as it plays
       audio.ontimeupdate = () => {
         if (audio.duration) {
           const percent = (audio.currentTime / audio.duration) * 100;
@@ -582,6 +623,7 @@ export default function VoiceDnaStudio() {
       return;
     }
 
+    // 2. 가상 음성 합성 엔진 (실시간 슬라이더 변화 100% 즉시 반영)
     if (!audioCtxRef.current) {
       audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     }
@@ -596,55 +638,66 @@ export default function VoiceDnaStudio() {
 
     const dest = ctx.destination;
     const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.08, ctx.currentTime);
+    masterGain.gain.setValueAtTime(0.12, ctx.currentTime);
+
+    // Dynamic Filter Node
+    const dynamicFilter = ctx.createBiquadFilter();
+    dynamicFilter.type = "lowpass";
+    dynamicFilter.frequency.setValueAtTime(1500, ctx.currentTime);
+
+    // Chest Bass Booster
+    const lowShelfNode = ctx.createBiquadFilter();
+    lowShelfNode.type = "lowshelf";
+    lowShelfNode.frequency.setValueAtTime(220, ctx.currentTime);
+    lowShelfNode.gain.setValueAtTime((chestResonance - 50) * 0.48, ctx.currentTime);
+
+    dynamicFilter.connect(lowShelfNode);
+    lowShelfNode.connect(masterGain);
     masterGain.connect(dest);
 
-    // Extract attributes dynamically to synthesize physical characteristics in real-time!
-    const pitchVal = voice.physical_layers?.pitch !== undefined ? voice.physical_layers.pitch : 50;
-    const brightnessVal = voice.physical_layers?.brightness !== undefined ? voice.physical_layers.brightness : 50;
-    const powerVal = voice.physical_layers?.power !== undefined ? voice.physical_layers.power : 50;
-    const genderVal = voice.physical_layers?.gender || 'female';
+    liveDspFilterRef.current = { lowShelf: lowShelfNode, ctx };
 
-    const pitchMultiplier = 0.65 + (pitchVal / 100) * 0.8;
-    const cutoffFreq = 400 + (brightnessVal / 100) * 2600;
-    const isFemale = genderVal === 'female' || genderVal === 'duet';
-
-    const filter = ctx.createBiquadFilter();
-    filter.type = "lowpass";
-    filter.frequency.setValueAtTime(cutoffFreq, ctx.currentTime);
-    filter.connect(masterGain);
-
-    const baseFreq = (isFemale ? 330 : 110) * pitchMultiplier;
-    const chord = [1.0, 1.25, 1.5, 1.875, 2.0, 2.5, 3.0, 3.75]; // Major chord ratios
-
+    const chord = [1.0, 1.25, 1.5, 1.875, 2.0, 2.5, 3.0, 3.75]; // 도-미-솔-시 아르페지오
     let noteIdx = 0;
     
-    // Play a nice rhythmic chord arpeggio loop!
+    // 매 음표마다 실시간 슬라이더 값을 직접 읽어서 피치 및 배음 즉시 변경!
     const intervalId = setInterval(() => {
       if (!audioCtxRef.current) return;
       const t = audioCtxRef.current.currentTime;
       const osc = audioCtxRef.current.createOscillator();
       const gainNode = ctx.createGain();
 
-      osc.type = isFemale ? 'sine' : 'triangle';
-      const freq = baseFreq * chord[noteIdx % chord.length];
-      osc.frequency.setValueAtTime(freq, t);
+      const live = slidersLiveRef.current;
+      const isFemaleVocal = live.gender === 'female';
+      
+      // 슬라이더 피치 비율 (0: -1.5옥타브 저음 ~ 100: +1.5옥타브 초고음)
+      const pitchRatio = Math.pow(2, (live.pitch - 50) / 30);
+      const baseFundamental = (isFemaleVocal ? 330 : 120) * pitchRatio;
+      const noteFreq = baseFundamental * chord[noteIdx % chord.length];
 
-      // Vibrato
+      // 밝기 & 두성에 따른 실시간 컷오프 주파수 (250Hz ~ 9000Hz)
+      const dynamicCutoff = Math.max(250, Math.min(10000, 300 + (live.brightness / 100) * 4500 + (live.headResonance / 100) * 3500));
+      dynamicFilter.frequency.setTargetAtTime(dynamicCutoff, t, 0.03);
+      lowShelfNode.gain.setTargetAtTime((live.chestResonance - 50) * 0.48, t, 0.03);
+
+      osc.type = isFemaleVocal ? 'sine' : 'triangle';
+      osc.frequency.setValueAtTime(noteFreq, t);
+
+      // Vibrato LFO
       const lfo = audioCtxRef.current.createOscillator();
       const lfoGain = audioCtxRef.current.createGain();
-      lfo.frequency.value = 5.8;
-      lfoGain.gain.value = freq * (0.005 + (powerVal / 100) * 0.025);
+      lfo.frequency.value = 5.6;
+      lfoGain.gain.value = noteFreq * (0.008 + (live.power / 100) * 0.03);
       lfo.connect(lfoGain);
       lfoGain.connect(osc.frequency);
 
-      // Attack / Decay
+      // Attack / Release
       gainNode.gain.setValueAtTime(0, t);
-      gainNode.gain.linearRampToValueAtTime(0.08, t + 0.15);
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, t + 0.95);
+      gainNode.gain.linearRampToValueAtTime(0.12, t + 0.08);
+      gainNode.gain.exponentialRampToValueAtTime(0.0001, t + 0.65);
 
       osc.connect(gainNode);
-      gainNode.connect(filter);
+      gainNode.connect(dynamicFilter);
       
       lfo.start(t);
       osc.start(t);
@@ -659,11 +712,12 @@ export default function VoiceDnaStudio() {
           clearInterval(intervalId);
           setExplorePlaying(false);
           setExplorePlayingVoiceId(null);
+          liveDspFilterRef.current = null;
           return 0;
         }
-        return prev + 6.67; // ~15 seconds total
+        return prev + 4.5;
       });
-    }, 1000);
+    }, 700);
 
     (window as any).exploreIntervalId = intervalId;
   };
