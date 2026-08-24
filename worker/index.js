@@ -28,6 +28,9 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 // demucs/ffmpeg 없는 환경에서도 전체 파이프라인 논리 증명 가능 (행동강령 3조)
 const MOCK_MODE = process.env.MOCK_MODE === 'true';
+// 실제 음성 복제 엔진이 검증되어 명시적으로 활성화되기 전까지 자동 변환은 fail-closed 한다.
+// 일반 Demucs 스템 분리 작업은 이 플래그와 무관하게 계속 동작한다.
+const VOICE_CLONING_ENABLED = process.env.VOICE_CLONING_ENABLED === 'true';
 
 // ─── 숏폼(바이럴) 길이 정책 ────────────────────────────────────────────────────
 // Suno 제출 API(/suno/submit/music)에는 duration 파라미터가 없다. 스타일
@@ -1210,7 +1213,11 @@ async function pollSunoGenerations() {
               // 🎤 [AUTO RVC] 마이 보이스(커스텀 보이스)가 지정되어 있으면 즉시 자동으로 스템 분리 및 1:1 보이스 변환 파이프라인 가동!
               const isAutoVoice = metaObj.auto_voice_convert === true || (metaObj.voiceDna && (String(metaObj.voiceDna).includes('yoon') || String(metaObj.voiceDna).startsWith('custom')));
 
-              if (isAutoVoice && winner.clip.audio_url && typeof processGeneration === 'function') {
+              if (!VOICE_CLONING_ENABLED && isAutoVoice) {
+                log("INFO", `[AUTO RVC] 음성 복제 기능 비활성화 — 자동 변환 건너뜀`, { id: row.id.slice(0, 8) });
+              }
+
+              if (VOICE_CLONING_ENABLED && isAutoVoice && winner.clip.audio_url && typeof processGeneration === 'function') {
                 log("INFO", `[AUTO RVC] 🎤 마이 보이스 자동 1:1 음성 변환 & 마스터 리믹스 파이프라인 즉시 가동!`, { id: row.id.slice(0, 8) });
                 processGeneration({
                   id: row.id,

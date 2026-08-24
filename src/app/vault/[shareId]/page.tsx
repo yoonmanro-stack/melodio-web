@@ -56,9 +56,9 @@ const SHOWCASE_STATIC_TRACKS_MAP: Record<string, any> = {
   "showcase-classical": { title: "Serenade of Spring", genre: "Classical", audioUrl: "https://file.302.ai/gpt/imgs/20260721/6b6b16e458a284549c23450e69b74b75.mp3", thumbnailUrl: AI_COVER_PRESETS[5] },
   "showcase-hiphop": { title: "Concrete Jungle", genre: "Hip Hop", audioUrl: "https://file.302.ai/gpt/imgs/20260721/c50d906c878145a1abcf9a9acd87c6af.mp3", thumbnailUrl: AI_COVER_PRESETS[3] },
 
-  // Voice Lab Demos
-  "VD-1004": { title: "Aria Voice Demo", genre: "Soprano Vocal", audioUrl: "https://file.302.ai/gpt/imgs/20260721/846366722c5740689ce76d827b7f8083.mp3", thumbnailUrl: AI_COVER_PRESETS[4] },
-  "VD-2001": { title: "Kenji Voice Demo", genre: "J-Pop Vocal", audioUrl: "https://file.302.ai/gpt/imgs/20260721/a09182e8758936a6da62992dc14b5d40.mp3", thumbnailUrl: AI_COVER_PRESETS[1] }
+  // Prompt-based vocal tone style demos (internal VD IDs are retained)
+  "VD-1004": { title: "Aria 보컬 음색 스타일 데모", genre: "보컬 음색 스타일 (프롬프트 기반)", audioUrl: "https://file.302.ai/gpt/imgs/20260721/846366722c5740689ce76d827b7f8083.mp3", thumbnailUrl: AI_COVER_PRESETS[4] },
+  "VD-2001": { title: "Kenji 보컬 음색 스타일 데모", genre: "보컬 음색 스타일 (프롬프트 기반)", audioUrl: "https://file.302.ai/gpt/imgs/20260721/a09182e8758936a6da62992dc14b5d40.mp3", thumbnailUrl: AI_COVER_PRESETS[1] }
 };
 
 async function getGenerationByPrefix(shareId: string) {

@@ -107,7 +107,7 @@ export default function LyricsBuilder({
   const [autoTopic, setAutoTopic] = useState(true) // 주제 자동생성 토글 (기본: ON)
   const [isVdDropdownOpen, setIsVdDropdownOpen] = useState(false)
 
-  const { voices, activeVoice, setActiveVoice, openCreateModal } = useVoice()
+  const { voices, activeVoice, setActiveVoice } = useVoice()
 
   // Suno VoiceContext의 전체 보이스 목록과 vdOptions 병합
   const mergedVdOptions = useMemo(() => {
@@ -497,7 +497,7 @@ export default function LyricsBuilder({
                   }`}>
                     <Mic className={`w-3 h-3 shrink-0 ${
                       vocalGender === 'mixed' || vocalGender === 'duet' ? 'text-zinc-500' : 'text-cyan-400'
-                    }`} /> 보이스 선택
+                    }`} /> 보컬 음색 스타일
                   </label>
                   <div className="relative">
                     <button
@@ -547,12 +547,12 @@ export default function LyricsBuilder({
                             {selectedVdCode === 'auto' && <span className="text-cyan-400 font-bold">✓</span>}
                           </button>
 
-                          {/* 2. 내 보이스 */}
+                          {/* 2. 내가 저장한 음색 스타일 */}
                           {filteredVdOptions.some(o => o.sourceType && o.sourceType !== 'default') && (
                             <div className="pt-2 pb-1 border-b border-white/5">
                               <div className="px-3 pb-1 text-[10px] font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1">
                                 <Sparkles className="w-2.5 h-2.5" />
-                                <span>내 보이스</span>
+                                <span>내 음색 스타일</span>
                               </div>
                               {filteredVdOptions.filter(o => o.sourceType && o.sourceType !== 'default').map((opt) => (
                                 <button
@@ -578,10 +578,10 @@ export default function LyricsBuilder({
                             </div>
                           )}
 
-                          {/* 3. 시스템 추천 보이스 */}
+                          {/* 3. 시스템 추천 음색 스타일 */}
                           <div className="pt-1 pb-1">
                             <div className="px-3 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                              추천 보이스
+                              추천 음색 스타일
                             </div>
                             {filteredVdOptions.filter(o => !o.sourceType || o.sourceType === 'default').map((opt) => (
                               <button
@@ -603,18 +603,16 @@ export default function LyricsBuilder({
                             ))}
                           </div>
 
-                          {/* 4. Voice 만들기 원클릭 마법사 버튼 */}
+                          {/* 실제 목소리 등록은 준비 중 */}
                           <div className="p-1.5 border-t border-white/10 bg-black/40">
                             <button
                               type="button"
-                              onClick={() => {
-                                setIsVdDropdownOpen(false);
-                                openCreateModal();
-                              }}
-                              className="w-full py-1.5 px-2 rounded-lg bg-gradient-to-r from-rose-500/20 to-fuchsia-500/20 hover:from-rose-500/30 hover:to-fuchsia-500/30 border border-rose-500/30 text-rose-200 font-semibold flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                              disabled
+                              title="목소리 녹음·업로드 등록 기능은 준비 중입니다."
+                              className="w-full py-1.5 px-2 rounded-lg bg-white/5 border border-white/10 text-zinc-500 font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed"
                             >
                               <Plus className="w-3.5 h-3.5" />
-                              <span>새 보이스 만들기</span>
+                              <span>목소리 등록 · 준비 중</span>
                             </button>
                           </div>
                         </div>

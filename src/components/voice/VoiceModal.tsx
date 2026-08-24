@@ -3,10 +3,10 @@
 import React, { useState, useRef, useEffect } from "react";
 import { 
   X, Search, Plus, Play, Pause, Star, Trash2, 
-  Sparkles, Mic2, LayoutGrid, List, CheckCircle2, ChevronRight, Zap, Edit2, Check
+  Sparkles, Mic2, LayoutGrid, List, CheckCircle2, ChevronRight, Edit2, Check
 } from "lucide-react";
 import { useVoice, VoiceItem } from "@/contexts/VoiceContext";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 
 export function VoiceModal() {
   const {
@@ -15,7 +15,6 @@ export function VoiceModal() {
     favorites,
     isVoiceModalOpen,
     closeVoiceModal,
-    openCreateModal,
     setActiveVoice,
     updateVoice,
     deleteVoice,
@@ -29,8 +28,6 @@ export function VoiceModal() {
   const [editingVoiceId, setEditingVoiceId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
-
-  if (!isVoiceModalOpen) return null;
 
   // 탭 및 검색어 필터링
   const sourceList = tab === "my" ? (voices || []) : (favorites || []);
@@ -48,13 +45,10 @@ export function VoiceModal() {
     );
   });
 
-  // Modal close or unmount cleanup
+  // Unmount cleanup for the preview audio element.
   useEffect(() => {
-    if (!isVoiceModalOpen && audioRef.current) {
-      audioRef.current.pause();
-      setPlayingId(null);
-    }
-  }, [isVoiceModalOpen]);
+    return () => audioRef.current?.pause();
+  }, []);
 
   const handleStopAudio = () => {
     if (audioRef.current) {
@@ -62,6 +56,11 @@ export function VoiceModal() {
       audioRef.current.currentTime = 0;
     }
     setPlayingId(null);
+  };
+
+  const handleClose = () => {
+    handleStopAudio();
+    closeVoiceModal();
   };
 
   const handlePlayToggle = (voice: VoiceItem) => {
@@ -99,6 +98,8 @@ export function VoiceModal() {
     closeVoiceModal();
   };
 
+  if (!isVoiceModalOpen) return null;
+
   return (
     <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
       <motion.div
@@ -111,10 +112,10 @@ export function VoiceModal() {
         {/* Header */}
         <div className="flex items-center justify-between px-6 pt-6 pb-4 border-b border-white/5">
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-white tracking-tight">보이스 선택</h2>
+            <h2 className="text-xl font-bold text-white tracking-tight">보컬 음색 스타일 선택</h2>
           </div>
           <button
-            onClick={closeVoiceModal}
+            onClick={handleClose}
             className="w-8 h-8 rounded-full bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
           >
             <X className="w-4 h-4" />
@@ -127,7 +128,7 @@ export function VoiceModal() {
             <Sparkles className="w-3.5 h-3.5" />
           </div>
           <div className="text-xs text-zinc-300">
-            <span className="font-semibold text-fuchsia-300">선택한 보이스로 일관된 목소리의 노래를 만듭니다.</span>
+            <span className="font-semibold text-fuchsia-300">선택한 음색 특성을 음악 생성 프롬프트에 반영합니다.</span>
           </div>
         </div>
 
@@ -143,7 +144,7 @@ export function VoiceModal() {
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              내 보이스 ({voices.length})
+              전체 음색 스타일 ({voices.length})
             </button>
             <button
               onClick={() => setTab("favorites")}
@@ -153,7 +154,7 @@ export function VoiceModal() {
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              찜한 보이스 ({favorites.length})
+              찜한 스타일 ({favorites.length})
             </button>
           </div>
 
@@ -171,7 +172,7 @@ export function VoiceModal() {
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
               <input
                 type="text"
-                placeholder="보이스 이름 검색..."
+                placeholder="음색 스타일 이름 검색..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-zinc-900 border border-white/5 rounded-xl pl-10 pr-4 py-2 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-fuchsia-500/50 transition-colors"
@@ -180,26 +181,27 @@ export function VoiceModal() {
           </div>
         </div>
 
-        {/* Hero CTA: 새 보이스 만들기 */}
+        {/* 실제 목소리 등록은 준비 중 */}
         <div className="px-6 mt-3">
           <button
-            onClick={() => {
-              openCreateModal();
-            }}
-            className="w-full relative group overflow-hidden rounded-2xl p-4 flex items-center justify-between border border-rose-500/40 bg-gradient-to-r from-rose-950/40 via-red-950/20 to-zinc-900/80 shadow-[0_0_25px_rgba(244,63,94,0.15)] hover:shadow-[0_0_35px_rgba(244,63,94,0.3)] transition-all text-left cursor-pointer"
+            type="button"
+            disabled
+            title="목소리 녹음·업로드 등록 기능은 준비 중입니다."
+            className="w-full relative overflow-hidden rounded-2xl p-4 flex items-center justify-between border border-white/10 bg-zinc-900/60 text-left opacity-70 cursor-not-allowed"
           >
             <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-rose-500 to-orange-500 flex items-center justify-center text-white shadow-lg shrink-0">
+              <div className="w-11 h-11 rounded-2xl bg-white/5 flex items-center justify-center text-zinc-500 shrink-0">
                 <Plus className="w-6 h-6 stroke-[2.5]" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-white text-base">새 보이스 만들기</span>
+                  <span className="font-bold text-zinc-300 text-base">목소리 등록</span>
+                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/20">준비 중</span>
                 </div>
-                <p className="text-xs text-zinc-400 mt-0.5">목소리를 녹음하거나 파일로 등록하세요</p>
+                <p className="text-xs text-zinc-500 mt-0.5">녹음·업로드 기반 실제 목소리 등록은 아직 사용할 수 없습니다.</p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 text-zinc-400 group-hover:text-white group-hover:translate-x-0.5 transition-all" />
+            <ChevronRight className="w-5 h-5 text-zinc-600" />
           </button>
         </div>
 
@@ -210,9 +212,9 @@ export function VoiceModal() {
               <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center text-zinc-600 mb-3">
                 <Mic2 className="w-7 h-7" />
               </div>
-              <h4 className="text-base font-bold text-zinc-300">등록된 보이스가 없습니다</h4>
+              <h4 className="text-base font-bold text-zinc-300">저장된 음색 스타일이 없습니다</h4>
               <p className="text-xs text-zinc-500 max-w-xs mt-1 leading-relaxed">
-                새 보이스를 만들어 일관된 목소리의 노래를 작곡해 보세요.
+                추천 음색 스타일을 선택하거나 스타일 설계 화면에서 새 프리셋을 저장해 보세요.
               </p>
             </div>
           ) : (
@@ -305,14 +307,9 @@ export function VoiceModal() {
                             )}
                           </div>
                         )}
-                        {(voice.is100PercentSync || voice.voice_model_id === "qr_yoon" || voice.name.includes("QR.Yoon")) && (
-                          <span className="flex items-center gap-1 text-[9px] px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 font-bold border border-indigo-500/40 shrink-0 shadow-[0_0_10px_rgba(99,102,241,0.2)]">
-                            <Sparkles className="w-2.5 h-2.5 text-indigo-400" /> 100% 육성 RVC
-                          </span>
-                        )}
                         {isActive && (
                           <span className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold border border-emerald-500/30 shrink-0">
-                            <CheckCircle2 className="w-2.5 h-2.5" /> 장착됨
+                            <CheckCircle2 className="w-2.5 h-2.5" /> 적용됨
                           </span>
                         )}
                       </div>
@@ -350,7 +347,7 @@ export function VoiceModal() {
                       <button
                         onClick={() => deleteVoice(voice.id)}
                         className="p-2 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
-                        title="보이스 삭제"
+                        title="음색 스타일 삭제"
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -364,7 +361,7 @@ export function VoiceModal() {
                           : "bg-fuchsia-600 hover:bg-fuchsia-500 text-white shadow-md shadow-fuchsia-600/30"
                       }`}
                     >
-                      {isActive ? "선택 해제" : "선택하기"}
+                      {isActive ? "선택 해제" : "스타일 선택"}
                     </button>
                   </div>
                 </div>
@@ -375,9 +372,9 @@ export function VoiceModal() {
 
         {/* Footer info */}
         <div className="px-6 py-3 border-t border-white/5 bg-zinc-950/50 flex items-center justify-between text-xs text-zinc-500">
-          <span>선택한 보이스로 노래가 작곡됩니다.</span>
+          <span>선택한 보컬 음색 스타일이 생성 프롬프트에 반영됩니다.</span>
           <button
-            onClick={closeVoiceModal}
+            onClick={handleClose}
             className="text-zinc-400 hover:text-white font-medium cursor-pointer"
           >
             닫기

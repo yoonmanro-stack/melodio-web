@@ -6,7 +6,6 @@ import { useState } from "react";
 export default function ArtistIncubator() {
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9">("9:16");
   const [voiceType, setVoiceType] = useState<"default" | "reference" | "upload" | "blend">("default");
-  const [refTrackId, setRefTrackId] = useState("");
   const [blendRatio, setBlendRatio] = useState(50);
   const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
 
@@ -61,34 +60,42 @@ export default function ArtistIncubator() {
             </div>
           </div>
 
-          {/* Vocal DNA / AI Voice Panel */}
+          {/* Prompt-based vocal tone style panel */}
           <div className="glass-panel p-6 flex flex-col gap-4">
             <div className="flex items-center gap-2 mb-2 border-b border-white/10 pb-3">
               <Sparkles className="w-5 h-5 text-fuchsia-400" />
-              <h2 className="text-xl font-semibold text-white">Vocal DNA / AI Voice</h2>
+              <div>
+                <h2 className="text-xl font-semibold text-white">보컬 음색 스타일</h2>
+                <p className="mt-0.5 text-[10px] text-zinc-500">프롬프트 기반 · 실제 목소리 복제 기능이 아닙니다.</p>
+              </div>
             </div>
             
             <div className="space-y-4">
               {/* Voice Generation Type Selector */}
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-2">Voice Type</label>
+                <label className="block text-xs font-medium text-zinc-400 mb-2">음색 스타일 입력 방식</label>
                 <div className="grid grid-cols-2 gap-1.5 p-1 bg-black/50 border border-white/5 rounded-lg text-[10px] font-semibold">
                   {(
                     [
-                      { id: 'default', label: 'Default AI' },
-                      { id: 'reference', label: 'Ref Track' },
-                      { id: 'upload', label: 'Private Upload' },
-                      { id: 'blend', label: 'Voice Blend' }
+                      { id: 'default', label: '기본 스타일', disabled: false },
+                      { id: 'reference', label: '참조 음원 · 준비 중', disabled: true },
+                      { id: 'upload', label: '음성 업로드 · 준비 중', disabled: true },
+                      { id: 'blend', label: '스타일 혼합', disabled: false }
                     ] as const
                   ).map((t) => (
                     <button
                       key={t.id}
                       type="button"
-                      onClick={() => setVoiceType(t.id)}
+                      disabled={t.disabled}
+                      onClick={() => {
+                        if (!t.disabled) setVoiceType(t.id)
+                      }}
                       className={`py-1.5 px-2 rounded-md transition-all ${
                         voiceType === t.id
                           ? 'bg-fuchsia-600/30 text-fuchsia-300 border border-fuchsia-500/20 font-bold'
-                          : 'text-zinc-500 hover:text-zinc-300'
+                          : t.disabled
+                            ? 'cursor-not-allowed text-zinc-600 opacity-70'
+                            : 'text-zinc-500 hover:text-zinc-300'
                       }`}
                     >
                       {t.label}
@@ -97,46 +104,25 @@ export default function ArtistIncubator() {
                 </div>
               </div>
 
-              {/* Dynamic Inputs based on Selection */}
-              {voiceType === 'reference' && (
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-zinc-400">Reference Track ID / URL</label>
-                  <input 
-                    type="text" 
-                    value={refTrackId}
-                    onChange={(e) => setRefTrackId(e.target.value)}
-                    placeholder="e.g. CBD38BE7" 
-                    className="w-full bg-black/50 border border-white/10 rounded-xl py-3 px-4 text-xs text-white focus:border-fuchsia-500 outline-none transition-colors" 
-                  />
-                  <p className="text-[9px] text-zinc-500 leading-tight">Suno 공개 곡 URL 또는 트랙 ID를 입력하여 음색 지문을 추출합니다.</p>
-                </div>
-              )}
-
-              {voiceType === 'upload' && (
-                <div className="space-y-2">
-                  <label className="block text-xs font-medium text-zinc-400">Private Voice File (.wav, .mp3)</label>
-                  <div className="border border-dashed border-zinc-700 bg-black/30 rounded-xl p-4 text-center cursor-pointer hover:border-fuchsia-500 transition-colors">
-                    <span className="text-[10px] text-zinc-500 block">Drag & drop or Click to upload (Max 10MB)</span>
-                  </div>
-                  <p className="text-[9px] text-zinc-500 leading-tight">타인이 접근할 수 없는 대표님 계정만의 독점 음성 데이터를 업로드합니다.</p>
-                </div>
-              )}
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-[10px] leading-relaxed text-zinc-400">
+                실제 목소리 등록·녹음·업로드는 <span className="font-bold text-amber-300">준비 중</span>입니다. 현재는 보컬 특성을 텍스트 프롬프트로 설계합니다.
+              </div>
 
               {voiceType === 'blend' && (
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">Voice A ID (e.g. CBD38BE7)</label>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">음색 스타일 A 코드 (예: VD-1004)</label>
                     <input 
                       type="text" 
-                      placeholder="Track ID A" 
+                      placeholder="VD-1004"
                       className="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-4 text-xs text-white focus:border-fuchsia-500 outline-none transition-colors" 
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">Voice B ID</label>
+                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">음색 스타일 B 코드</label>
                     <input 
                       type="text" 
-                      placeholder="Track ID B" 
+                      placeholder="VD-3802"
                       className="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-4 text-xs text-white focus:border-fuchsia-500 outline-none transition-colors" 
                     />
                   </div>
@@ -159,7 +145,7 @@ export default function ArtistIncubator() {
 
               {/* Vocal Traits Tag Selection */}
               <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-2">Vocal Traits</label>
+                <label className="block text-xs font-medium text-zinc-400 mb-2">보컬 음색 특성 (프롬프트 태그)</label>
                 <div className="flex flex-wrap gap-1">
                   {['Whispered', 'Airy', 'Heavy Vibrato', 'Falsetto', 'Dry Mix', 'Warm tone'].map((tag) => {
                     const isSelected = selectedTraits.includes(tag);

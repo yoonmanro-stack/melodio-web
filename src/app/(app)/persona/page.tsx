@@ -12,11 +12,11 @@ export default function PersonaLab() {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-sm font-bold text-white">Personas는 이제 Voices예요</h2>
-              <span className="px-1.5 py-0.5 rounded-full bg-rose-500 text-[10px] font-black text-white uppercase">Suno Upgrade</span>
+              <h2 className="text-sm font-bold text-white">Voice DNA는 보컬 음색 스타일이에요</h2>
+              <span className="px-1.5 py-0.5 rounded-full bg-fuchsia-500/20 text-[10px] font-black text-fuchsia-200 border border-fuchsia-400/30">프롬프트 기반</span>
             </div>
             <p className="text-xs text-zinc-300 mt-0.5">
-              가상 아티스트의 목소리를 직접 녹음하거나 업로드하여 일관된 AI 아티스트 보이스를 관리하세요.
+              음색 특성을 프롬프트로 설계하고 관리합니다. 실제 목소리 녹음·업로드·등록 기능은 준비 중입니다.
             </p>
           </div>
         </div>
@@ -25,7 +25,7 @@ export default function PersonaLab() {
           href="/voice-lab"
           className="px-4 py-2 rounded-xl bg-gradient-to-r from-rose-500 to-fuchsia-600 hover:from-rose-400 hover:to-fuchsia-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 shadow-md shadow-rose-500/20"
         >
-          <span>보이스 스튜디오 열기</span>
+          <span>보컬 음색 스타일 열기</span>
           <ArrowRight className="w-3.5 h-3.5" />
         </Link>
       </div>

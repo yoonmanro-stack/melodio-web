@@ -1,12 +1,11 @@
 'use client';
 
 import { useCallback, useMemo, useState, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, SkipBack, Headphones, Loader2, DownloadCloud, Scissors, Mic } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, SkipBack, Headphones, Loader2, DownloadCloud, Scissors } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStemAudio, type StemId } from '@/hooks/useStemAudio';
 import { supabase } from '@/lib/supabase';
 import AudioTrimmerModal from '@/components/AudioTrimmerModal';
-import { VoiceConversionModal } from '@/components/voice/VoiceConversionModal';
 
 // ─── 스템 시각 설정 (파스텔 중간톤) ──────────────────────────────────────────
 interface StemVisual {
@@ -225,7 +224,6 @@ export default function MultiTrackPlayer({
   // 커버 로딩 실패 시 그라데이션 자리표시자로 되돌린다
   const [coverFailed, setCoverFailed] = useState(false);
   const [isTrimmerOpen, setIsTrimmerOpen] = useState(false);
-  const [isVoiceConversionOpen, setIsVoiceConversionOpen] = useState(false);
 
   useEffect(() => {
     if (!generationId) {
@@ -309,11 +307,15 @@ export default function MultiTrackPlayer({
 
         <div className="flex items-center gap-2.5">
           <button
-            onClick={() => setIsVoiceConversionOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600/25 hover:bg-indigo-600/35 border border-indigo-500/40 text-xs font-semibold text-indigo-200 hover:text-white transition-all shadow-sm shadow-indigo-500/10 cursor-pointer"
+            type="button"
+            disabled
+            title="실제 목소리 변환 기능은 준비 중입니다."
+            className="flex cursor-not-allowed items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-semibold text-zinc-500 opacity-70"
           >
-            <Mic className="w-3.5 h-3.5 text-indigo-400" />
-            <span>🎤 1:1 내 목소리 변환 (RVC)</span>
+            <span>1:1 내 목소리 변환</span>
+            <span className="rounded-full bg-amber-500/10 px-1.5 py-0.5 text-[9px] font-bold text-amber-300">
+              준비 중
+            </span>
           </button>
 
           <button
@@ -552,18 +554,6 @@ export default function MultiTrackPlayer({
         }}
       />
 
-      {/* ── 1:1 실제 내 목소리 음성 변환 (RVC AI) 모달 ── */}
-      <VoiceConversionModal
-        isOpen={isVoiceConversionOpen}
-        onClose={() => setIsVoiceConversionOpen(false)}
-        track={generationId ? ({
-          id: generationId,
-          title: trackMetadata.title,
-          audio_url: trackMetadata.originalAudioUrl || '',
-          stem_vocals_url: originalWavUrls.vocals || stemUrls?.vocals,
-          is_stem_extracted: true,
-        } as any) : null}
-      />
     </div>
   );
 }

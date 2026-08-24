@@ -22,6 +22,19 @@ interface PublicTrackGridProps {
   refreshSignal?: number
 }
 
+const getVocalDisplayLabel = (meta: any): string => {
+  const styleCode = String(meta?.vocalToneStyleCode || meta?.voiceDna || '').trim()
+  const storedLabel = String(meta?.vocal || meta?.selections?.vocal?.[0] || 'No Vocal').trim()
+  const legacyMatch = storedLabel.match(/^(?:Voice DNA|보컬 음색 스타일)\s*(.*)$/i)
+  const code = styleCode || legacyMatch?.[1]?.replace(/^\(프롬프트 기반\)\s*[·-]?\s*/, '').trim() || ''
+
+  if (styleCode || legacyMatch) {
+    return `보컬 음색 스타일 (프롬프트 기반)${code ? ` · ${code}` : ''}`
+  }
+
+  return storedLabel
+}
+
 export default function PublicTrackGrid({
   sourceMenu,
   itemsPerPage = 16,
@@ -353,7 +366,7 @@ export default function PublicTrackGrid({
       try {
         const meta = JSON.parse(track.license_hash)
         genre = meta.genre || 'BGM'
-        vocal = meta.vocal || (meta.selections?.vocal?.[0]) || 'No Vocal'
+        vocal = getVocalDisplayLabel(meta)
       } catch {
         // ignore
       }
@@ -462,7 +475,7 @@ export default function PublicTrackGrid({
                     try {
                       const meta = JSON.parse(track.license_hash)
                       genre = meta.genre || 'BGM'
-                      vocal = meta.vocal || (meta.selections?.vocal?.[0]) || 'No Vocal'
+                      vocal = getVocalDisplayLabel(meta)
                       tags = meta.stylePrompt || ''
                     } catch {
                       // ignore
@@ -551,7 +564,7 @@ export default function PublicTrackGrid({
                   try {
                     const meta = JSON.parse(track.license_hash)
                     genre = meta.genre || 'BGM'
-                    vocal = meta.vocal || (meta.selections?.vocal?.[0]) || 'No Vocal'
+                    vocal = getVocalDisplayLabel(meta)
                     tags = meta.stylePrompt || ''
                   } catch {
                     // ignore

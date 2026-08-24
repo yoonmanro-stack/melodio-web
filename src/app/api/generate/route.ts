@@ -35,7 +35,7 @@ function buildLyricsPromptFromSections(sections: unknown): string {
 
 function inferVocalLabel(payload: PromptPayload, selections: any, vdCode?: string): string {
   if (payload.isInstrumental) return 'Instrumental'
-  if (vdCode) return `Voice DNA ${vdCode}`
+  if (vdCode) return `보컬 음색 스타일 ${vdCode}`
   const selected = Array.isArray(selections?.vocal) ? selections.vocal.filter(Boolean) : []
   if (selected.length > 0) return selected.join(' / ')
 
@@ -577,6 +577,13 @@ export async function POST(request: NextRequest) {
     // DB에 'generating' 상태로 저장 (워커가 폴링하여 완료 처리)
     // source_audio_url에 'suno:{taskId}' 형식으로 Suno task ID 저장
     // duration_mode에 메타데이터 JSON 저장 (스타일프롬프트, 가사, 엔진 등)
+    // 실제 음성 등록·변환 기능은 준비 중이다. 기존 스타일 코드는 프롬프트
+    // 합성에만 사용하며, Mac mini의 과거 자동 변환 조건(yoon/custom)이
+    // 오작동하지 않도록 해당 값은 voiceDna 필드에 전달하지 않는다.
+    const storedVoiceStyleCode = typeof vdCode === 'string' && !/(?:yoon|^custom)/i.test(vdCode)
+      ? vdCode
+      : null
+
     const metadata = JSON.stringify({
       stylePrompt: payload.stylePrompt,
       lyricsPrompt: payload.lyricsPrompt || '',
@@ -591,14 +598,11 @@ export async function POST(request: NextRequest) {
       mood: payload.metadata?.mood || '',
       selections: selections || {},
       vocal: inferVocalLabel(payload, selections, vdCode),
-      voiceDna: vdCode || null,
-      auto_voice_convert: !!(
-        rawBody.autoVoiceConvert ||
-        rawBody.activeVoice?.is100PercentSync ||
-        rawBody.activeVoice?.voice_model_id ||
-        (vdCode && (vdCode.includes('yoon') || vdCode.startsWith('custom') || vdCode.startsWith('voice-')))
-      ),
-      voice_model_id: rawBody.activeVoice?.voice_model_id || rawBody.voiceModelId || ((vdCode && vdCode.includes('yoon')) ? 'qr_yoon' : 'qr_yoon'),
+      voiceDna: storedVoiceStyleCode,
+      vocalToneStyleCode: vdCode || null,
+      voiceFeatureMode: 'prompt_style_only',
+      auto_voice_convert: false,
+      voice_model_id: null,
       lyricsSections: lyricsSections || [],
       duration: rawBody.metadata?.duration || '',
       durationSeconds: rawBody.metadata?.durationSeconds || null,

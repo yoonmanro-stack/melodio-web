@@ -134,34 +134,36 @@ interface VoiceContextProps {
 
 const VoiceContext = createContext<VoiceContextProps | undefined>(undefined);
 
+// Helper to persist only custom voice-style metadata safely.
+// Module scope keeps the localStorage migration stable across provider renders.
+function persistCustomVoices(allVoices: VoiceItem[]) {
+  try {
+    const customOnly = (allVoices || [])
+      .filter((v) => v && typeof v === "object" && v.sourceType !== "default")
+      .map((v) => ({
+        ...v,
+        // 음성 복제 엔진이 준비되기 전에는 재실행 트리거가 될 수 있는 필드를 저장하지 않는다.
+        audioUrl: "",
+        audioUrlB: undefined,
+        voice_model_id: undefined,
+        is100PercentSync: false,
+        tags: Array.isArray(v.tags) ? v.tags : [],
+        stylePrompt: v.stylePrompt || "",
+        name: v.name || "보컬 음색 스타일",
+        desc: v.desc || "보컬 음색 스타일",
+        gender: v.gender || "female",
+      }));
+    localStorage.setItem("melodio_user_voices", JSON.stringify(customOnly));
+  } catch (err) {
+    console.warn("Failed to persist user voices to localStorage", err);
+  }
+}
+
 export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [voices, setVoices] = useState<VoiceItem[]>(INITIAL_SYSTEM_VOICES);
   const [activeVoice, setActiveVoiceState] = useState<VoiceItem | null>(null);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-
-  // Helper to persist only custom voices safely
-  const persistCustomVoices = (allVoices: VoiceItem[]) => {
-    try {
-      const customOnly = (allVoices || [])
-        .filter((v) => v && typeof v === "object" && v.sourceType !== "default")
-        .map((v) => {
-          // If audioUrl is huge base64 > 300KB, remove raw data to prevent storage quota crash
-          const audioUrl = v.audioUrl && v.audioUrl.startsWith("data:") && v.audioUrl.length > 300000 ? "" : v.audioUrl || "";
-          return {
-            ...v,
-            audioUrl,
-            tags: Array.isArray(v.tags) ? v.tags : [],
-            stylePrompt: v.stylePrompt || "",
-            name: v.name || "My Voice",
-            gender: v.gender || "female",
-          };
-        });
-      localStorage.setItem("melodio_user_voices", JSON.stringify(customOnly));
-    } catch (err) {
-      console.warn("Failed to persist user voices to localStorage", err);
-    }
-  };
 
   // 로컬스토리지 복원
   useEffect(() => {
@@ -176,14 +178,10 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
               const gender = v.gender === "male" || v.gender === "female" || v.gender === "duet" ? v.gender : "female";
               const prompt = typeof v.stylePrompt === "string" ? v.stylePrompt : "";
               const tags = Array.isArray(v.tags) ? v.tags : ["Custom", gender];
+              const genderLabel = gender === "female" ? "여성" : gender === "male" ? "남성" : "듀엣";
               
               let stylePrompt = prompt;
-              if (
-                !prompt ||
-                prompt.includes("custom uploaded vocal profile") ||
-                prompt.includes("organic recorded acoustic timbre") ||
-                prompt.length < 40
-              ) {
+              if (!prompt.trim()) {
                 stylePrompt = gender === "female"
                   ? "female vocals, crystalline soprano highs, pure bell-like vocal clarity, delicate emotional high notes, warm acoustic resonance, intimate close-mic delivery, subtle elegant vibrato, dry up-front vocal-centric mix"
                   : "male vocals, warm velvety chest-dominant baritone, sweet acoustic resonance, smooth breathy vocal texture, heartfelt intimate delivery, rich low-end harmonics, crystal clear vocal-centric mastering";
@@ -191,24 +189,26 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
 
               return {
                 id: v.id || `voice-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-                name: v.name || `${gender === "female" ? "Female" : "Male"} Voice`,
-                desc: v.desc || "Custom Voice",
+                name: v.name || `${genderLabel} 보컬 음색 스타일`,
+                desc: v.desc || "보컬 음색 스타일",
                 gender,
                 language: v.language || "Korean",
                 category: v.category || "Singing/Music",
                 tags,
-                audioUrl: v.audioUrl || "",
+                audioUrl: "",
+                audioUrlB: undefined,
                 sourceType: v.sourceType || "uploaded",
                 stylePrompt,
                 isFavorite: !!v.isFavorite,
                 createdAt: v.createdAt || new Date().toISOString(),
                 avatarGradient: v.avatarGradient || (gender === "female" ? "linear-gradient(135deg, #ec4899, #8b5cf6)" : "linear-gradient(135deg, #06b6d4, #3b82f6)"),
-                voice_model_id: v.voice_model_id || (v.name?.includes("QR.Yoon") || v.name?.includes("내 목소리") ? "qr_yoon" : undefined),
-                is100PercentSync: v.is100PercentSync ?? (v.voice_model_id === "qr_yoon" || v.name?.includes("QR.Yoon")),
+                voice_model_id: undefined,
+                is100PercentSync: false,
                 physicalLayers: v.physicalLayers,
               };
             });
           setVoices([...INITIAL_SYSTEM_VOICES, ...customOnly]);
+          persistCustomVoices(customOnly);
         }
       }
 
@@ -251,10 +251,15 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     const gender = voiceData.gender || "female";
     const newVoice: VoiceItem = {
       ...voiceData,
+      // 등록 UI가 다시 연결되더라도 실제 음성/모델 실행 정보는 컨텍스트에 유입시키지 않는다.
+      audioUrl: "",
+      audioUrlB: undefined,
+      voice_model_id: undefined,
+      is100PercentSync: false,
       id: `voice-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
       createdAt: new Date().toISOString(),
       gender,
-      name: voiceData.name || "My Custom Voice",
+      name: voiceData.name || "보컬 음색 스타일",
       tags: Array.isArray(voiceData.tags) ? voiceData.tags : ["Custom", gender],
       stylePrompt: voiceData.stylePrompt || (gender === "female" ? "female vocals, crystalline soprano highs" : "male vocals, warm baritone"),
       avatarGradient: voiceData.avatarGradient || (gender === "female" ? "linear-gradient(135deg, #ec4899, #8b5cf6)" : "linear-gradient(135deg, #06b6d4, #3b82f6)"),
@@ -271,13 +276,20 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateVoice = (id: string, updates: Partial<VoiceItem>) => {
+    const safeUpdates: Partial<VoiceItem> = {
+      ...updates,
+      audioUrl: "",
+      audioUrlB: undefined,
+      voice_model_id: undefined,
+      is100PercentSync: false,
+    };
     setVoices((prev) => {
-      const updated = prev.map((v) => (v && v.id === id ? { ...v, ...updates } : v));
+      const updated = prev.map((v) => (v && v.id === id ? { ...v, ...safeUpdates } : v));
       persistCustomVoices(updated);
       return updated;
     });
     if (activeVoice?.id === id) {
-      setActiveVoiceState((prev) => (prev ? { ...prev, ...updates } : null));
+      setActiveVoiceState((prev) => (prev ? { ...prev, ...safeUpdates } : null));
     }
   };
 

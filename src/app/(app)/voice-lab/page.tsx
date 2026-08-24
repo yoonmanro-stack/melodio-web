@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from "react";
 import { 
   Mic2, Sparkles, Sliders, Disc, ShieldCheck, 
-  Play, Pause, Upload, Layers, Volume2, Info, 
+  Play, Pause, Layers, Volume2, Info,
   Activity, Check, HelpCircle, HelpCircle as QuestionIcon, Save, Database,
   ArrowRight, ArrowLeft, RefreshCw, Heart, Music, CheckCircle, VolumeX,
   Search, Plus, X, ChevronRight, ChevronLeft, Trash2, Edit2, Zap, Link, FileCode2, CheckCircle2
@@ -16,6 +16,18 @@ import { useVoice } from "@/contexts/VoiceContext";
 import { DEMO_LYRICS } from "@/data/demo-lyrics";
 
 type VoiceType = "default" | "record" | "upload" | "blend";
+
+const VOICE_SOURCE_OPTIONS: ReadonlyArray<{
+  id: VoiceType;
+  label: string;
+  desc: string;
+  disabled: boolean;
+}> = [
+  { id: "default", label: "속성으로 설계", desc: "프롬프트 기반 음색 스타일", disabled: false },
+  { id: "record", label: "목소리 녹음", desc: "준비 중", disabled: true },
+  { id: "upload", label: "음성 업로드", desc: "준비 중", disabled: true },
+  { id: "blend", label: "스타일 혼합", desc: "기존 음색 스타일 조합", disabled: false },
+];
 
 const EXPLORE_VOICES = [
   {
@@ -334,9 +346,8 @@ export default function VoiceDnaStudio() {
     addVoice,
     updateVoice, 
     deleteVoice, 
-    toggleFavorite, 
-    openVoiceModal, 
-    openCreateModal 
+    toggleFavorite,
+    openVoiceModal,
   } = useVoice();
   const [loadedVoiceId, setLoadedVoiceId] = useState<string | null>(null);
   const [loadedVoiceAudioUrl, setLoadedVoiceAudioUrl] = useState<string | null>(null);
@@ -384,29 +395,19 @@ export default function VoiceDnaStudio() {
   const [selectedEmotions, setSelectedEmotions] = useState<string[]>(["Dreamy"]);
   const [selectedReverb, setSelectedReverb] = useState<string>("Studio");
 
-  // Custom Cloned Voices DB
+  // Custom vocal tone style presets (legacy storage key kept for compatibility)
   const [customVoices, setCustomVoices] = useState<VoiceDnaRecord[]>([]);
   const [lastSavedDna, setLastSavedDna] = useState<string | null>(null);
 
-  // Audio Recording
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-  const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordTimerRef = useRef<NodeJS.Timeout | null>(null);
   const demoAudioRef = useRef<HTMLAudioElement | null>(null);
   const demoTimersRef = useRef<NodeJS.Timeout[]>([]);
   const demoAudioCtxRef = useRef<AudioContext | null>(null);
   const demoSynthIntervalRef = useRef<any>(null);
 
-  // File Upload
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-
   // Voice Blend Source and Ratio States
   const [blendSourceA, setBlendSourceA] = useState<string>("VD-1004");
   const [blendSourceB, setBlendSourceB] = useState<string>("VD-3802");
   const [blendRatio, setBlendRatio] = useState<number>(50);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // Radar chart tooltip state
   const [hoveredAttr, setHoveredAttr] = useState<{
@@ -448,8 +449,8 @@ export default function VoiceDnaStudio() {
 
   const tutorialSteps = [
     {
-      title: "1단계: Voice Source (입력 방식 선택)",
-      description: "목소리의 시작점을 결정합니다. 기본 내장 AI 휠 조작 외에도 본인의 목소리 녹음, 음성 파일 업로드 또는 기존 Voice DNA간의 융합 믹스 중에서 자유롭게 선택할 수 있습니다.",
+      title: "1단계: 보컬 음색 스타일 입력 방식",
+      description: "속성 슬라이더로 프롬프트 기반 음색 스타일을 설계하거나 기존 스타일을 혼합합니다. 실제 목소리 녹음·업로드 등록은 준비 중입니다.",
       target: "source-selector"
     },
     {
@@ -459,7 +460,7 @@ export default function VoiceDnaStudio() {
     },
     {
       title: "3단계: Advanced Sliders (물리 및 가중치 제어)",
-      description: "피치(음높이)와 노이즈 저감(Noise Entropy)을 미세 조종합니다. 특히 노이즈 필터는 Suno AI 고유 톤 복제를 막고 기계적인 쇳소리를 정밀 억제합니다.",
+      description: "피치(음높이)와 표현 다양성(Noise Entropy)을 조절합니다. 이 값은 오디오에 필터를 거는 것이 아니라 생성 프롬프트의 보컬 질감과 변화 폭을 정합니다.",
       target: "sliders-box"
     },
     {
@@ -1276,7 +1277,7 @@ export default function VoiceDnaStudio() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: `VoiceDNA Demo (${selectedGenre})`,
+          title: `Vocal Tone Style Demo (${selectedGenre})`,
           stylePrompt: stylePrompt,
           lyricsPrompt: lyrics,
           engine: 'suno_v5',
@@ -1427,104 +1428,10 @@ export default function VoiceDnaStudio() {
     }
   };
 
-  // ─── Recording Logic ───────────────────────────────────────────────────────
-  const startRecording = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      
-      const chunks: BlobPart[] = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunks.push(e.data);
-      };
-
-      recorder.onstop = () => {
-        const blob = new Blob(chunks, { type: "audio/webm" });
-        setRecordedBlob(blob);
-        stream.getTracks().forEach(track => track.stop());
-      };
-
-      recorder.start();
-      setIsRecording(true);
-      setRecordingSeconds(0);
-
-      recordTimerRef.current = setInterval(() => {
-        setRecordingSeconds(prev => {
-          if (prev >= 15) { // Max 15s
-            stopRecording();
-            return 15;
-          }
-          return prev + 1;
-        });
-      }, 1000);
-    } catch (e) {
-      alert("마이크 사용 권한을 확인해주세요.");
-    }
-  };
-
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
-    }
-  };
-
-  // ─── Real AI Audio DNA Extraction ─────────────────────────────────────────────
-  const [analysisSummary, setAnalysisSummary] = useState<string | null>(null);
-
-  const triggerDnaExtraction = async (fileToAnalyze?: File) => {
-    const targetFile = fileToAnalyze || uploadedFile;
-    if (!targetFile) return;
-    setIsAnalyzing(true);
-    setAnalysisSummary(null);
-    try {
-      const fd = new FormData();
-      fd.append("file", targetFile);
-      // Auto-detect gender instead of forcing previous state
-      fd.append("pitch", String(pitch));
-      fd.append("brightness", String(brightness));
-
-      const res = await fetch("/api/voice/analyze-audio", {
-        method: "POST",
-        body: fd,
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.success && data.analysis) {
-          const a = data.analysis;
-          setGender(a.gender);
-          if (a.physicalLayers) {
-            setPitch(a.physicalLayers.pitch || (a.gender === 'male' ? 45 : 75));
-            setBrightness(a.physicalLayers.brightness || brightness);
-            setChestResonance(a.physicalLayers.chest || (a.gender === 'male' ? 75 : 45));
-            setHeadResonance(a.physicalLayers.head || (a.gender === 'female' ? 70 : 50));
-            setVibrato(a.physicalLayers.vibrato || vibrato);
-          }
-          if (a.tags && a.tags.length > 0) {
-            setSelectedTextures(a.tags.slice(0, 3));
-          }
-          const rangeLabel = a.vocalRange || (a.gender === 'male' ? 'Baritone/Tenor' : 'Soprano');
-          setAnalysisSummary(`AI 분석 완료: ${a.gender === 'male' ? '남성' : '여성'} ${rangeLabel} (${a.timbre || 'Warm'}) - ${a.summary || '음향 주파수 DNA 추출 완료'}`);
-          if (!stageName || stageName.startsWith('Custom') || stageName.startsWith('Voice')) {
-            const baseFileName = targetFile.name.replace(/\.[^/.]+$/, "");
-            setStageName(baseFileName || `보컬 (${rangeLabel})`);
-          }
-        }
-      }
-    } catch (err) {
-      console.error("Failed real DNA extraction:", err);
-    } finally {
-      setIsAnalyzing(false);
-    }
-  };
-
   // ─── Save DNA ──────────────────────────────────────────────────────────────
   const handleSaveDna = (overwrite: boolean = false) => {
     const vdCode = `VD-${Math.floor(Math.random() * 9000 + 1000)}`;
-    const finalName = stageName.trim() || `Voice DNA ${vdCode}`;
+    const finalName = stageName.trim() || `보컬 음색 스타일 ${vdCode}`;
     const saveName = overwrite ? finalName : (loadedVoiceId && !finalName.includes("v2") && !finalName.includes("튜닝") ? `${finalName} (v2)` : finalName);
 
     const newDna: VoiceDnaRecord = {
@@ -1674,7 +1581,7 @@ export default function VoiceDnaStudio() {
         compiledTags: tags
       });
     } else {
-      setDecodeError("유효하지 않은 Voice DNA 코드입니다. (예: VD-1004)");
+      setDecodeError("유효하지 않은 보컬 음색 스타일 코드입니다. (예: VD-1004)");
     }
   };
 
@@ -1871,23 +1778,23 @@ export default function VoiceDnaStudio() {
       } else {
         const fallbackSinger = {
           name: singerQuery,
-          conceptName: `${singerQuery} Concept Tone`,
-          gender: Math.random() > 0.5 ? "female" : "male",
-          age: Math.random() > 0.5 ? "young" : "mature",
-          pitch: Math.floor(Math.random() * 40) + 40,
-          brightness: Math.floor(Math.random() * 40) + 45,
-          chestResonance: Math.floor(Math.random() * 50) + 35,
-          headResonance: Math.floor(Math.random() * 40) + 45,
-          weight: Math.floor(Math.random() * 40) + 45,
-          power: Math.floor(Math.random() * 30) + 60,
-          dynamics: Math.floor(Math.random() * 30) + 55,
-          vibrato: Math.floor(Math.random() * 40) + 45,
-          groove: Math.floor(Math.random() * 40) + 50,
-          noiseEntropy: Math.floor(Math.random() * 15) + 10,
-          textures: [TEXTURES[Math.floor(Math.random() * TEXTURES.length)], TEXTURES[Math.floor(Math.random() * TEXTURES.length)]].filter(Boolean),
-          emotions: [EMOTIONS[Math.floor(Math.random() * EMOTIONS.length)], EMOTIONS[Math.floor(Math.random() * EMOTIONS.length)]].filter(Boolean),
-          style: REVERBS[Math.floor(Math.random() * REVERBS.length)],
-          desc: `가수 ${singerQuery}님의 시그니처 배음과 성대 특성을 추출 복원해낸 AI 시뮬레이션 보컬 특성`
+          conceptName: `${singerQuery} Reference Style`,
+          gender: "female",
+          age: "young",
+          pitch: 62,
+          brightness: 64,
+          chestResonance: 58,
+          headResonance: 62,
+          weight: 55,
+          power: 68,
+          dynamics: 64,
+          vibrato: 55,
+          groove: 58,
+          noiseEntropy: 15,
+          textures: ["Warm", "Smooth"],
+          emotions: ["Calm", "Hopeful"],
+          style: "Studio",
+          desc: "등록된 참고 데이터가 없어 특정 인물과 무관한 일반 보컬 음색 스타일을 제안합니다. 실제 목소리 분석이나 복제 결과가 아닙니다."
         };
         setAnalyzedSinger(fallbackSinger);
         setCustomSingerName(fallbackSinger.conceptName);
@@ -2039,8 +1946,8 @@ export default function VoiceDnaStudio() {
       {/* ─── Header (통일된 표준 브랜드 헤더) ──────────────────────────────────────────────────────────── */}
       <header className="mb-8 border-b border-white/10 pb-6 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
-          <h1 className="text-4xl font-bold text-white mb-2">보이스 스튜디오</h1>
-          <p className="text-zinc-400 text-sm">원하는 목소리를 등록하고 조절하여 일관된 보컬 목소리를 만들고 관리합니다.</p>
+          <h1 className="text-4xl font-bold text-white mb-2">보컬 음색 스타일 스튜디오</h1>
+          <p className="text-zinc-400 text-sm">보컬 특성을 프롬프트 스타일로 설계하고 저장합니다. 실제 목소리 등록·복제 기능은 준비 중입니다.</p>
         </div>
 
         {/* Action controls */}
@@ -2077,27 +1984,28 @@ export default function VoiceDnaStudio() {
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold flex items-center gap-1.5">
               <Sparkles className="w-3.5 h-3.5 text-rose-400" />
-              AI 보컬 & 가수 스튜디오
+              보컬 음색 스타일
             </span>
             <span className="px-2 py-0.5 rounded-full bg-fuchsia-500/10 text-fuchsia-300 text-[10px] font-semibold border border-fuchsia-500/20">
-              플리 전속 가수 관리
+              프롬프트 기반
             </span>
           </div>
           <h2 className="text-2xl font-black text-white tracking-tight">
-            내 플레이리스트 전속 가수를 만들고 관리하세요
+            곡에 어울리는 보컬의 음색 방향을 설계하세요
           </h2>
           <p className="text-xs text-zinc-300 max-w-xl leading-relaxed">
-            원하는 목소리를 등록해 두면, 모든 작곡 화면에서 같은 가수의 목소리로 일관된 플리 곡을 계속 만들 수 있습니다.
+            피치·밝기·질감·감정 같은 속성을 생성 프롬프트에 반영합니다. 특정 인물의 목소리를 등록하거나 그대로 복제하는 기능은 아닙니다.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           <button
-            onClick={openCreateModal}
-            className="px-5 py-3 rounded-2xl bg-gradient-to-r from-rose-500 via-fuchsia-600 to-indigo-600 hover:from-rose-400 hover:to-indigo-500 text-white font-bold text-sm shadow-xl shadow-rose-500/25 transition-all flex items-center gap-2 cursor-pointer"
+            type="button"
+            disabled
+            className="px-5 py-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 text-amber-200/70 font-bold text-sm transition-all flex items-center gap-2 cursor-not-allowed"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
-            <span>새 보이스 만들기</span>
+            <span>목소리 등록 · 준비 중</span>
           </button>
 
           <button
@@ -2105,7 +2013,7 @@ export default function VoiceDnaStudio() {
             className="px-5 py-3 rounded-2xl bg-zinc-900/90 hover:bg-zinc-800 border border-white/10 hover:border-white/20 text-white font-semibold text-sm transition-all flex items-center gap-2 cursor-pointer"
           >
             <Sparkles className="w-4 h-4 text-purple-400" />
-            <span>내 보이스 보기</span>
+            <span>내 음색 스타일 보기</span>
             {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-xs text-purple-300 font-bold border border-purple-500/30">
                 {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length}
@@ -2296,10 +2204,10 @@ export default function VoiceDnaStudio() {
         </div>
       </section>
 
-      {/* ─── 6. 유명 가수 음색 분석 검색기 (초우선 연동 추가) ───────────────── */}
+      {/* ─── 6. 공개 설명 기반 보컬 음색 참고 스타일 ───────────────── */}
       <section className="mb-6 bg-zinc-950/40 border border-white/5 rounded-2xl p-5">
         <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-          <Database className="w-4 h-4 text-cyan-400" /> 유명 가수 시그니처 음색 분석 & 즐겨찾기
+          <Database className="w-4 h-4 text-cyan-400" /> 공개 설명 기반 보컬 음색 참고 스타일
         </h3>
 
         <div className="flex gap-2 mb-4">
@@ -2321,19 +2229,19 @@ export default function VoiceDnaStudio() {
             {isSearchingSinger ? (
               <>
                 <RefreshCw className="w-4 h-4 animate-spin" />
-                분석 중...
+                검색 중...
               </>
             ) : (
               <>
                 <Sparkles className="w-4 h-4" />
-                음색 모델 분석
+                참고 스타일 찾기
               </>
             )}
           </button>
         </div>
 
         <p className="text-[11px] text-zinc-500 leading-normal mb-4">
-          ℹ️ <b>음향 특징 기반 분석 고지 (Legal Safety Disclaimer)</b>: 본 검색 시스템은 특정 가수의 목소리나 음원을 직접 복제하여 도용하지 않습니다. 사용자의 편의를 위해 가수가 가진 고유의 <b>음향적 공명(Resonance), 음색 질감(Textures), 표현 다이내믹스(Dynamics)</b>의 특징 비율을 AI 분석 가이드라인으로 변환하여, 브랜드 상표권 및 저작권에 무해한 순수 물리적 음향 서술자(Acoustic Descriptors) 기반 프롬프트를 발급합니다.
+          ℹ️ 이 검색은 저장된 공개 설명을 프롬프트 속성으로 불러오는 참고 도구입니다. 음원이나 실제 목소리를 분석·추출·복제하지 않으며, 검색 결과가 없으면 특정 인물과 무관한 일반 스타일을 제안합니다.
         </p>
 
         {/* Scan Result Card */}
@@ -2365,12 +2273,12 @@ export default function VoiceDnaStudio() {
 
                 {/* Editable Voice Name Input (English Only recommendation) */}
                 <div className="pt-3 space-y-1">
-                  <label className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider block">나만의 보이스 명 설정 (English Name for easy recall)</label>
+                  <label className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider block">음색 스타일 이름 (English Name for easy recall)</label>
                   <input
                     type="text"
                     value={customSingerName}
                     onChange={(e) => setCustomSingerName(e.target.value.replace(/[^a-zA-Z0-9\s-_()]/g, ''))} // Filter to English / basic symbols
-                    placeholder="Enter custom voice name in English"
+                    placeholder="Enter a vocal style name in English"
                     className="w-full bg-black/60 border border-cyan-500/30 rounded-xl px-3 py-2 text-xs text-white outline-none focus:border-cyan-400/80"
                   />
                   <span className="text-[9px] text-zinc-500 block">※ 음원 생성 시 쉽게 구분할 수 있도록 직관적인 영문명을 입력하세요.</span>
@@ -2399,7 +2307,7 @@ export default function VoiceDnaStudio() {
                   }}
                   className="w-full py-2 rounded-lg bg-fuchsia-600/20 hover:bg-fuchsia-600/30 text-fuchsia-300 text-[11px] font-bold border border-fuchsia-500/30 transition-all text-center cursor-pointer shadow-[0_0_12px_rgba(217,70,239,0.05)]"
                 >
-                  보이스 디자인 후 음원 듣기
+                  음색 스타일 조절 후 음원 듣기
                 </button>
                 <div className="text-[9px] text-center text-zinc-500 py-0.5">ℹ️ 저장 시 지정한 이름으로 보관함에 즐겨찾기됩니다.</div>
                 <button
@@ -2486,7 +2394,7 @@ export default function VoiceDnaStudio() {
           className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${activeTab === "explore" ? "bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
         >
           <Search className="w-3.5 h-3.5" />
-          <span>보이스 탐색</span>
+          <span>음색 스타일 탐색</span>
         </button>
         <button 
           onClick={() => setActiveTab("design")}
@@ -2500,7 +2408,7 @@ export default function VoiceDnaStudio() {
           className={`px-4 py-2 text-sm font-semibold rounded-lg transition-all shrink-0 flex items-center gap-1.5 cursor-pointer ${activeTab === "collections" ? "bg-purple-500/10 text-purple-400 border border-purple-500/20 shadow-sm" : "text-zinc-400 hover:text-zinc-200"}`}
         >
           <Sparkles className="w-3.5 h-3.5 fill-purple-400 text-purple-400 shrink-0" />
-          <span>내 보이스</span>
+          <span>내 음색 스타일</span>
           {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length > 0 && (
             <span className="px-1.5 py-0.2 rounded-full bg-purple-500/20 text-[10px] text-purple-300 font-bold border border-purple-500/30">
               {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length}
@@ -2533,7 +2441,7 @@ export default function VoiceDnaStudio() {
                     type="text"
                     value={expSearchQuery}
                     onChange={(e) => setExpSearchQuery(e.target.value)}
-                    placeholder="보이스 이름, 스타일, 설명 검색..."
+                    placeholder="음색 스타일 이름, 태그, 설명 검색..."
                     className="w-full bg-black/40 border border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-cyan-500/50 transition-colors"
                   />
                   {expSearchQuery && (
@@ -2808,28 +2716,42 @@ export default function VoiceDnaStudio() {
               {/* Box 1: Voice Source Selector */}
               <div id="source-selector" className="glass-panel p-6">
                 <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
-                  <Database className="w-4 h-4 text-fuchsia-400" /> 보이스 생성 방식
+                  <Database className="w-4 h-4 text-fuchsia-400" /> 보컬 음색 스타일 입력 방식
                 </h3>
 
                 <div className="grid grid-cols-4 gap-2 mb-4">
-                  {(
-                    [
-                      { id: "default", label: "기본 톤 조절", desc: "슬라이더로 직접 조절" },
-                      { id: "record", label: "마이크 녹음", desc: "직접 말하거나 노래" },
-                      { id: "upload", label: "파일 올리기", desc: "mp3/wav 파일 업로드" },
-                      { id: "blend", label: "보이스 합성", desc: "두 목소리 섞기" }
-                    ] as const
-                  ).map(t => (
+                  {VOICE_SOURCE_OPTIONS.map(t => (
                     <button
                       key={t.id}
-                      onClick={() => setVoiceType(t.id)}
-                      className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${voiceType === t.id ? "bg-fuchsia-600/10 border-fuchsia-500/50 text-fuchsia-300" : "bg-black/20 border-white/5 text-zinc-400 hover:bg-white/5"}`}
+                      type="button"
+                      disabled={t.disabled}
+                      onClick={() => {
+                        if (!t.disabled) setVoiceType(t.id);
+                      }}
+                      className={`p-3 rounded-xl border text-left transition-all ${
+                        t.disabled
+                          ? "cursor-not-allowed border-white/5 bg-black/10 text-zinc-600 opacity-70"
+                          : voiceType === t.id
+                            ? "cursor-pointer bg-fuchsia-600/10 border-fuchsia-500/50 text-fuchsia-300"
+                            : "cursor-pointer bg-black/20 border-white/5 text-zinc-400 hover:bg-white/5"
+                      }`}
                     >
-                      <div className="text-xs font-bold mb-0.5">{t.label}</div>
+                      <div className="flex items-center justify-between gap-1 text-xs font-bold mb-0.5">
+                        <span>{t.label}</span>
+                        {t.disabled && (
+                          <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-1.5 py-0.5 text-[8px] text-amber-300">
+                            준비 중
+                          </span>
+                        )}
+                      </div>
                       <div className="text-[9px] text-zinc-500 leading-tight">{t.desc}</div>
                     </button>
                   ))}
                 </div>
+
+                <p className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[10px] leading-relaxed text-amber-200/80">
+                  목소리 녹음·음성 업로드·실제 보컬 복제는 준비 중이며, 현재는 마이크나 파일에 접근하지 않습니다. 아래 기능은 생성 프롬프트에 반영할 보컬 음색 스타일을 설계합니다.
+                </p>
 
                 {/* Dynamic Content based on Voice Source */}
                 <AnimatePresence mode="wait">
@@ -2843,10 +2765,10 @@ export default function VoiceDnaStudio() {
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-fuchsia-300 flex items-center gap-1.5">
                           <Sparkles className="w-3.5 h-3.5 text-fuchsia-400" />
-                          📂 등록된 보이스 불러와서 다듬기 (원클릭 로드)
+                          📂 저장된 음색 스타일 불러와서 다듬기
                         </span>
                         <span className="text-[10px] text-zinc-500 font-mono">
-                          보유: {voices.length}개 보이스
+                          보유: {voices.length}개 스타일
                         </span>
                       </div>
 
@@ -2875,7 +2797,7 @@ export default function VoiceDnaStudio() {
                                 </span>
                               </div>
                               <div className="text-[10px] text-zinc-400 truncate">
-                                {v.tags?.slice(0, 2).join(", ") || v.desc || "보이스"}
+                                {v.tags?.slice(0, 2).join(", ") || v.desc || "음색 스타일"}
                               </div>
                             </button>
                           );
@@ -2887,7 +2809,7 @@ export default function VoiceDnaStudio() {
                           <div className="flex items-center gap-2">
                             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                             <span>
-                              <strong>[{stageName}]</strong>의 음향 DNA가 로드되었습니다. 슬라이더를 움직여 오른쪽 Voice Wheel DNA와 실시간 청음으로 변화를 확인하세요!
+                              <strong>[{stageName}]</strong> 음색 스타일을 불러왔습니다. 슬라이더를 움직여 프롬프트 속성을 조정하고 미리듣기로 방향을 확인하세요.
                             </span>
                           </div>
                           <button
@@ -2906,115 +2828,6 @@ export default function VoiceDnaStudio() {
                     </motion.div>
                   )}
 
-                  {voiceType === "record" && (
-                    <motion.div 
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="p-4 rounded-xl bg-black/40 border border-white/5 space-y-3"
-                    >
-                      <div className="flex justify-between items-center">
-                        <span className="text-xs text-zinc-400">마이크를 켜고 5초 이상 편안하게 말씀해 주세요.</span>
-                        <span className="text-xs font-mono text-fuchsia-400">{recordingSeconds}s / 15s</span>
-                      </div>
-                      
-                      <div className="flex gap-3 items-center">
-                        <button
-                          onClick={isRecording ? stopRecording : startRecording}
-                          className={`px-4 py-2.5 rounded-lg text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer ${isRecording ? "bg-red-600 text-white animate-pulse" : "bg-fuchsia-600 hover:bg-fuchsia-500 text-white"}`}
-                        >
-                          <Mic2 className="w-4 h-4" />
-                          {isRecording ? "녹음 중지" : "녹음 시작"}
-                        </button>
-
-                        {recordedBlob && !isRecording && (
-                          <button
-                            onClick={() => triggerDnaExtraction()}
-                            disabled={isAnalyzing}
-                            className="px-4 py-2.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 disabled:bg-zinc-800 text-white text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer"
-                          >
-                            {isAnalyzing ? (
-                              <>
-                                <RefreshCw className="w-4 h-4 animate-spin" />
-                                목소리 톤 분석 중...
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="w-4 h-4" />
-                                목소리 톤 자동 분석
-                              </>
-                            )}
-                          </button>
-                        )}
-                      </div>
-                    </motion.div>
-                  )}
-
-                  {voiceType === "upload" && (
-                    <motion.div 
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: "auto" }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="p-4 rounded-xl bg-black/40 border border-white/5 space-y-3"
-                    >
-                      <div className="border border-dashed border-zinc-700 hover:border-fuchsia-500 bg-black/20 rounded-lg p-5 text-center cursor-pointer transition-colors relative">
-                        <input 
-                          type="file" 
-                          accept="audio/*"
-                          onChange={(e) => {
-                            const f = e.target.files?.[0];
-                            if (f) {
-                              setUploadedFile(f);
-                              triggerDnaExtraction(f);
-                            }
-                          }}
-                          className="absolute inset-0 opacity-0 cursor-pointer"
-                        />
-                        <Upload className="w-6 h-6 text-zinc-500 mx-auto mb-2" />
-                        <span className="text-[11px] text-zinc-400 block font-medium">
-                          {uploadedFile ? `선택된 파일: ${uploadedFile.name}` : "WAV, MP3 음성 파일을 이곳에 드래그하거나 클릭하여 로드 (최대 10MB)"}
-                        </span>
-                      </div>
-
-                      {isAnalyzing && (
-                        <div className="p-3 rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/30 flex items-center gap-2.5 text-xs text-fuchsia-200">
-                          <RefreshCw className="w-4 h-4 animate-spin text-fuchsia-400 shrink-0" />
-                          <span>AI 음향 DNA 정밀 분석 중 (Whisper + GPT 주파수/성종 분석)...</span>
-                        </div>
-                      )}
-
-                      {analysisSummary && !isAnalyzing && (
-                        <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-200 space-y-1">
-                          <div className="font-bold flex items-center gap-1.5">
-                            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-                            <span>{analysisSummary}</span>
-                          </div>
-                          <p className="text-[11px] text-zinc-400">성별, 기음 피치, 흉성/두성 공명 슬라이더가 목소리 특성에 맞게 자동 조정되었습니다.</p>
-                        </div>
-                      )}
-
-                      {uploadedFile && (
-                        <button
-                          onClick={() => triggerDnaExtraction()}
-                          disabled={isAnalyzing}
-                          className="w-full py-2.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 disabled:bg-zinc-800 text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer"
-                        >
-                          {isAnalyzing ? (
-                            <>
-                              <RefreshCw className="w-4 h-4 animate-spin" />
-                              AI 음향 DNA 재분석 중...
-                            </>
-                          ) : (
-                            <>
-                              <Sparkles className="w-4 h-4" />
-                              음성 파일 AI 재분석하기
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </motion.div>
-                  )}
-
                   {voiceType === "blend" && (
                     <motion.div 
                       initial={{ opacity: 0, height: 0 }}
@@ -3024,7 +2837,7 @@ export default function VoiceDnaStudio() {
                     >
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-[11px] text-zinc-400 mb-1.5 font-medium">Acoustic A Source (VSC)</label>
+                          <label className="block text-[11px] text-zinc-400 mb-1.5 font-medium">음색 스타일 A</label>
                           <select 
                             value={blendSourceA} 
                             onChange={e => setBlendSourceA(e.target.value)}
@@ -3036,7 +2849,7 @@ export default function VoiceDnaStudio() {
                           </select>
                         </div>
                         <div>
-                          <label className="block text-[11px] text-zinc-400 mb-1.5 font-medium">Acoustic B Source (VSC)</label>
+                          <label className="block text-[11px] text-zinc-400 mb-1.5 font-medium">음색 스타일 B</label>
                           <select 
                             value={blendSourceB} 
                             onChange={e => setBlendSourceB(e.target.value)}
@@ -3050,8 +2863,8 @@ export default function VoiceDnaStudio() {
                       </div>
                       <div className="space-y-1">
                         <div className="flex justify-between text-[10px] text-zinc-400 font-mono">
-                          <span>Voice A Ratio: {100 - blendRatio}%</span>
-                          <span>Voice B Ratio: {blendRatio}%</span>
+                          <span>스타일 A: {100 - blendRatio}%</span>
+                          <span>스타일 B: {blendRatio}%</span>
                         </div>
                         <input 
                            type="range" 
@@ -3253,7 +3066,7 @@ export default function VoiceDnaStudio() {
                         <div className="relative group inline-block">
                           <HelpCircle className="w-3.5 h-3.5 text-zinc-500 hover:text-zinc-300 cursor-pointer transition-colors" />
                           <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-52 p-2 bg-zinc-950/95 border border-white/10 text-[10px] text-zinc-300 rounded-lg shadow-xl opacity-0 scale-95 pointer-events-none group-hover:opacity-100 group-hover:scale-100 transition-all duration-150 z-50 text-center font-normal leading-normal">
-                            AI 특유의 기계음과 노이즈를 억제하여 더 자연스럽고 부드러운 목소리로 정제합니다.
+                            생성 프롬프트에서 보컬 질감의 거칠기와 표현 변화 폭을 조절합니다. 실제 오디오 노이즈 제거 필터는 아닙니다.
                             <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-1 border-4 border-transparent border-t-zinc-950" />
                           </div>
                         </div>
@@ -3572,7 +3385,7 @@ export default function VoiceDnaStudio() {
                       Layer 6: Demo Singing Preview Cockpit (데모 가창 청음기)
                     </h4>
                     <p className="text-[10px] text-zinc-500">
-                      설계된 보이스 DNA 속성으로 AI가 실제 노래하는 15초 샘플 음원을 생성합니다. (Suno AI 엔진 사용, 약 1~2분 소요)
+                      설계한 보컬 음색 스타일을 프롬프트에 반영해 샘플 음원을 생성합니다. 특정 목소리를 복제하는 기능은 아닙니다. (약 1~2분 소요)
                     </p>
                   </div>
 
@@ -3629,7 +3442,7 @@ export default function VoiceDnaStudio() {
                         <div className="flex items-center justify-between text-[10px]">
                           <span className="text-fuchsia-400 font-bold flex items-center gap-1.5">
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            {demoGenerateStep === 0 && "Voice DNA → Suno 프롬프트 변환 중..."}
+                            {demoGenerateStep === 0 && "보컬 음색 스타일 → 생성 프롬프트 변환 중..."}
                             {demoGenerateStep === 1 && "AI 엔진에 음원 생성 요청 제출 완료"}
                             {demoGenerateStep === 2 && "AI가 보컬 노래를 생성하는 중... (약 1~2분 소요)"}
                           </span>
@@ -3751,7 +3564,7 @@ export default function VoiceDnaStudio() {
                               선택된 곡: Version {selectedVocalVersion}
                             </span>
                             <span className="text-zinc-500 font-medium">
-                              Suno AI V5.5 Pro
+                              AI 음원 생성 엔진
                             </span>
                           </div>
                           
@@ -3767,7 +3580,7 @@ export default function VoiceDnaStudio() {
                         <div className="flex items-center justify-between text-[9px] text-zinc-500 px-1 pt-0.5">
                           <span className="flex items-center gap-1">
                             <CheckCircle className="w-3 h-3 text-emerald-400" />
-                            보이스 DNA 기반 AI 보컬 음원 생성 완료
+                            보컬 음색 스타일 프롬프트 기반 음원 생성 완료
                           </span>
                           <button 
                             onClick={handleGenerateDemo}
@@ -3797,14 +3610,14 @@ export default function VoiceDnaStudio() {
                         onClick={() => handleSaveDna(true)}
                         className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs flex items-center justify-center transition-all shadow-lg cursor-pointer whitespace-nowrap"
                       >
-                        기존 보이스에 덮어쓰기
+                        기존 음색 스타일에 덮어쓰기
                       </button>
                       <button
                         type="button"
                         onClick={() => handleSaveDna(false)}
                         className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer whitespace-nowrap"
                       >
-                        새 보이스로 저장 (v2)
+                        새 음색 스타일로 저장 (v2)
                       </button>
                     </div>
                   ) : (
@@ -3813,7 +3626,7 @@ export default function VoiceDnaStudio() {
                       onClick={() => handleSaveDna(false)}
                       className="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer whitespace-nowrap"
                     >
-                      보이스 DNA 저장
+                      보컬 음색 스타일 저장
                     </button>
                   )}
                 </div>
@@ -3834,27 +3647,28 @@ export default function VoiceDnaStudio() {
 
           return (
             <div className="space-y-8 animate-in fade-in duration-300">
-              {/* Section 1: My Created Voices (내가 만든 보이스) */}
+              {/* Section 1: My saved vocal tone styles */}
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-bold text-white flex items-center gap-2">
                       <span className="w-1.5 h-4 bg-purple-500 rounded-full" />
-                      내가 만든 보이스
+                      내가 만든 보컬 음색 스타일
                       <span className="text-xs px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/20 font-mono font-bold">
                         {userCreatedVoices.length}
                       </span>
                     </h3>
                     <p className="text-xs text-zinc-400 mt-0.5">
-                      직접 녹음하거나 파일로 등록한 나만의 보이스 목록입니다.
+                      프롬프트 속성으로 설계해 저장한 보컬 음색 스타일 목록입니다.
                     </p>
                   </div>
                   <button
-                    onClick={openCreateModal}
-                    className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-xs font-bold transition-all shadow-lg shadow-fuchsia-600/20 flex items-center gap-1.5 cursor-pointer"
+                    type="button"
+                    disabled
+                    className="px-3.5 py-1.5 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-200/60 text-xs font-bold transition-all flex items-center gap-1.5 cursor-not-allowed"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>새 보이스 만들기</span>
+                    <span>목소리 등록 준비 중</span>
                   </button>
                 </div>
 
@@ -3864,17 +3678,18 @@ export default function VoiceDnaStudio() {
                       <Mic2 className="w-6 h-6" />
                     </div>
                     <div>
-                      <h4 className="text-sm font-bold text-white">아직 등록된 보이스가 없습니다</h4>
+                      <h4 className="text-sm font-bold text-white">아직 저장된 음색 스타일이 없습니다</h4>
                       <p className="text-xs text-zinc-400 mt-1 max-w-sm">
-                        녹음이나 파일 등록으로 나만의 보이스를 만들어 보세요.
+                        톤 맞춤 조절에서 보컬 특성을 설계하고 스타일로 저장해 보세요.
                       </p>
                     </div>
                     <button
-                      onClick={openCreateModal}
-                      className="mt-2 px-4 py-2 rounded-xl bg-fuchsia-600 hover:bg-fuchsia-500 text-white text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                      type="button"
+                      disabled
+                      className="mt-2 px-4 py-2 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-200/60 text-xs font-bold transition-all flex items-center gap-1.5 cursor-not-allowed"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>첫 보이스 만들기 (녹음 / 파일)</span>
+                      <span>목소리 녹음·업로드 준비 중</span>
                     </button>
                   </div>
                 ) : (
@@ -3887,13 +3702,13 @@ export default function VoiceDnaStudio() {
                       const getSourceBadge = () => {
                         switch (voice.sourceType) {
                           case 'recorded':
-                            return { label: '🎤 마이크 녹음', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20' };
+                            return { label: '🎤 이전 녹음 기반 스타일', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20' };
                           case 'uploaded':
-                            return { label: '📁 파일 등록', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' };
+                            return { label: '📁 이전 파일 기반 스타일', color: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20' };
                           case 'dna_designed':
                             return { label: '🎛️ 톤 조절', color: 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20' };
                           case 'extracted':
-                            return { label: '🎵 곡에서 추출', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
+                            return { label: '🎵 이전 곡 기반 스타일', color: 'bg-amber-500/10 text-amber-400 border-amber-500/20' };
                           default:
                             return { label: '✨ 직접 제작', color: 'bg-purple-500/10 text-purple-400 border-purple-500/20' };
                         }
@@ -3928,7 +3743,7 @@ export default function VoiceDnaStudio() {
                               </button>
                               <button
                                 onClick={() => {
-                                  if (confirm(`'${voice.name}' 보이스를 삭제하시겠습니까?`)) {
+                                  if (confirm(`'${voice.name}' 음색 스타일을 삭제하시겠습니까?`)) {
                                     deleteVoice(voice.id);
                                   }
                                 }}
@@ -4084,7 +3899,7 @@ export default function VoiceDnaStudio() {
                               ) : (
                                 <>
                                   <Zap className="w-3.5 h-3.5 text-fuchsia-400" />
-                                  <span>이 보이스로 작곡하기</span>
+                                  <span>이 음색 스타일로 작곡하기</span>
                                 </>
                               )}
                             </button>
@@ -4100,7 +3915,7 @@ export default function VoiceDnaStudio() {
               <div className="pt-4 border-t border-white/5">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 flex items-center gap-1.5">
                   <span className="w-1 h-3.5 bg-fuchsia-500 rounded-full" />
-                  추천 보이스
+                  추천 보컬 음색 스타일
                 </h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                   {signatureVoices.map(voice => {
@@ -4172,12 +3987,12 @@ export default function VoiceDnaStudio() {
               <div className="pt-4 border-t border-white/5">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 flex items-center gap-1.5">
                   <span className="w-1 h-3.5 bg-rose-500 rounded-full" />
-                  찜한 보이스
+                  찜한 음색 스타일
                 </h3>
                 {favVoices.length === 0 ? (
                   <div className="py-8 text-center rounded-xl border border-dashed border-zinc-800 bg-black/10">
                     <Heart className="w-6 h-6 text-zinc-600 mx-auto mb-2" />
-                    <span className="text-[11px] text-zinc-500 block">찜한 보이스가 없습니다. 마음에 드는 보이스의 하트를 눌러보세요.</span>
+                    <span className="text-[11px] text-zinc-500 block">찜한 음색 스타일이 없습니다. 마음에 드는 스타일의 하트를 눌러보세요.</span>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -4259,15 +4074,15 @@ export default function VoiceDnaStudio() {
             {/* Decoder Input Console */}
             <div className="lg:col-span-4 glass-panel p-6 space-y-4">
               <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-                <Database className="w-4 h-4 text-cyan-400" /> 보이스 코드 복원
+                <Database className="w-4 h-4 text-cyan-400" /> 보컬 음색 스타일 코드 불러오기
               </h3>
               
               <p className="text-zinc-400 text-xs leading-relaxed">
-                공유받은 보이스 코드(예: `VD-1004`)를 입력하여 해당 목소리 톤을 바로 불러옵니다.
+                공유받은 내부 스타일 코드(예: `VD-1004`)를 입력하여 보컬 음색 프롬프트 속성을 불러옵니다.
               </p>
 
               <div className="space-y-2">
-                <label className="block text-[11px] text-zinc-400 font-medium">보이스 코드 입력</label>
+                <label className="block text-[11px] text-zinc-400 font-medium">음색 스타일 코드 입력</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
@@ -4392,9 +4207,9 @@ export default function VoiceDnaStudio() {
             <div className="flex items-start gap-2.5">
               <CheckCircle className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
               <div>
-                <h5 className="text-xs font-bold text-emerald-400">보이스 DNA 저장 완료!</h5>
+                <h5 className="text-xs font-bold text-emerald-400">보컬 음색 스타일 저장 완료!</h5>
                 <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
-                  설계하신 보이스가 성공적으로 저장되었습니다.<br />
+                  설계한 보컬 음색 스타일이 성공적으로 저장되었습니다.<br />
                   코드: <strong className="font-mono text-white">{lastSavedDna}</strong>
                 </p>
               </div>
@@ -4429,9 +4244,9 @@ export default function VoiceDnaStudio() {
             voice = {
               code: vContext.id,
               name: vContext.name,
-              desc: vContext.desc || vContext.stylePrompt || '등록된 내 보이스',
+              desc: vContext.desc || vContext.stylePrompt || '저장된 보컬 음색 스타일',
               flag: '🎤',
-              language: '내 보이스',
+              language: '내 음색 스타일',
               tags: vContext.tags || ['Custom'],
               gradient: vContext.avatarGradient || 'linear-gradient(135deg, #a855f7, #ec4899)',
               audioUrl: vContext.audioUrl,

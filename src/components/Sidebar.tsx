@@ -36,7 +36,7 @@ const navItems = [
   { name: "Viral & Trend Zone", href: "/viral", icon: Zap },
   { name: "일본 BGM 스튜디오", href: "/japan", icon: Globe },
   { name: "Longform Studio", href: "/studio", icon: Film },
-  { name: "보이스 스튜디오", href: "/voice-lab", icon: Mic2 },
+  { name: "VoiceDNA Studio", href: "/voice-lab", icon: Mic2 },
   { name: "YouTube Auto-Pilot", href: "/autopilot", icon: Radio },
   { name: "YouTube Analytics", href: "/analytics", icon: BarChart3 },
   { name: "IP & License Vault", href: "/vault", icon: ShieldCheck },

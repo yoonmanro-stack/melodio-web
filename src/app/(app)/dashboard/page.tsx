@@ -37,6 +37,19 @@ function formatTime(sec: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function formatVocalToneStyleLabel(value: unknown, styleCode?: unknown): string {
+  const rawLabel = String(value || '').trim();
+  const rawCode = String(styleCode || '').trim();
+  const legacyMatch = rawLabel.match(/^(?:Voice DNA|보컬 음색 스타일)\s*(.*)$/i);
+  const code = rawCode || legacyMatch?.[1]?.replace(/^\(프롬프트 기반\)\s*[·-]?\s*/, '').trim() || '';
+
+  if (rawCode || legacyMatch) {
+    return `보컬 음색 스타일 (프롬프트 기반)${code ? ` · ${code}` : ''}`;
+  }
+
+  return rawLabel;
+}
+
 type Generation = {
   id: string;
   status: string;
@@ -2057,16 +2070,20 @@ export default function Home() {
         const selectedVocals = Array.isArray(meta.selections?.vocal)
           ? meta.selections.vocal.filter(Boolean)
           : [];
-        const inferredVocal = meta.isInstrumental
-          ? 'Instrumental'
-          : meta.vocal
-            || (meta.voiceDna ? `Voice DNA ${meta.voiceDna}` : '')
-            || (selectedVocals.length > 0 ? selectedVocals.join(' / ') : '')
-            || (/\b(duet|duo|male and female|mixed vocal)\b/i.test(styleText) ? 'Duet / Mixed Vocal' : '')
-            || (/\b(female|woman|girl|soprano|alto)\b/i.test(styleText) ? 'Female Vocal' : '')
-            || (/\b(male|man|boy|tenor|baritone)\b/i.test(styleText) ? 'Male Vocal' : '')
-            || (/\b(choir|choral|group vocal)\b/i.test(styleText) ? 'Choir / Group Vocal' : '')
-            || 'Vocal (기록 없음)';
+        const storedVoiceStyleCode = meta.isInstrumental ? '' : (meta.vocalToneStyleCode || meta.voiceDna);
+        const inferredVocal = formatVocalToneStyleLabel(
+          meta.isInstrumental
+            ? 'Instrumental'
+            : meta.vocal
+              || (storedVoiceStyleCode ? `보컬 음색 스타일 ${storedVoiceStyleCode}` : '')
+              || (selectedVocals.length > 0 ? selectedVocals.join(' / ') : '')
+              || (/\b(duet|duo|male and female|mixed vocal)\b/i.test(styleText) ? 'Duet / Mixed Vocal' : '')
+              || (/\b(female|woman|girl|soprano|alto)\b/i.test(styleText) ? 'Female Vocal' : '')
+              || (/\b(male|man|boy|tenor|baritone)\b/i.test(styleText) ? 'Male Vocal' : '')
+              || (/\b(choir|choral|group vocal)\b/i.test(styleText) ? 'Choir / Group Vocal' : '')
+              || 'Vocal (기록 없음)',
+          storedVoiceStyleCode,
+        );
         const selectedGenres = Array.isArray(meta.selections?.genre)
           ? meta.selections.genre.filter(Boolean)
           : [];
@@ -2511,7 +2528,7 @@ export default function Home() {
                       <span className="text-cyan-300 font-mono font-semibold">{versionLabel}</span>
                     </div>
                     <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">
-                      <span className="text-zinc-500">선택 보컬</span>
+                      <span className="text-zinc-500">선택 보컬 / 음색 스타일</span>
                       <span className="text-white font-semibold text-right">{inferredVocal}</span>
                     </div>
                     <div className="bg-white/5 rounded-lg px-3 py-2.5 border border-white/5 flex items-center justify-between gap-3">

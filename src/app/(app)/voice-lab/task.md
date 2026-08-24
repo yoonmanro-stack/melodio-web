@@ -1,11 +1,13 @@
-- [x] Rename Sidebar menu name to VoiceDNA Studio (`src/components/Sidebar.tsx`)
-- [x] Create `public.voice_dnas` database schema migration (`migrations/20260720_create_voice_dnas.sql`)
-- [x] Create `voice-dna-scrubber.ts` prompt compositor utility (`src/lib/voice-dna-scrubber.ts`)
-- [x] Update music generation API route to apply Voice DNA scrubber (`src/app/api/generate/route.ts`)
-- [x] Create VoiceDNA Studio page with wheel, sliders, collections, and record/upload features (`src/app/(app)/voice-lab/page.tsx`)
-- [ ] Add Beginner Guide / Interactive Tour UI step panels in `src/app/(app)/voice-lab/page.tsx`
-- [ ] Add 1-click Quick Start Template Cards in `src/app/(app)/voice-lab/page.tsx`
-- [ ] Integrate Sound Demo Player & animated CSS Equalizer bars in `src/app/(app)/voice-lab/page.tsx`
-- [ ] Run build to verify TypeScript compiler
-- [ ] Deploy to Mac Mini & PM2 restart
-- [ ] Deploy to Vercel production
+# 보컬 음색 스타일 스튜디오
+
+- [x] `voice_dnas` 내부 스키마와 `VD-*` 코드는 하위 호환을 위해 유지
+- [x] 기존 Voice DNA를 프롬프트 기반 **보컬 음색 스타일**로 사용자 안내 정리
+- [x] 속성 슬라이더·스타일 혼합·저장·선택·샘플 생성 유지
+- [x] 목소리 녹음·음성 업로드·목소리 등록 UI를 `준비 중`으로 비활성화
+- [x] 마이크 접근, 파일 선택, 음성 분석 API 실행 경로 제거
+- [x] 실제 보컬 변환 API와 자동 변환 메타데이터를 실패-폐쇄 처리
+- [x] 특정 인물 검색은 저장된 공개 설명 기반 참고 스타일임을 명시
+- [ ] 검증된 음성 처리 공급자와 동의·보관·삭제 정책이 준비된 뒤 등록 기능 재검토
+
+현재 기능은 특정 인물의 목소리 등록·학습·복제가 아니다. 피치, 밝기, 질감,
+감정 같은 보컬 특성을 음악 생성 프롬프트에 반영하는 스타일 프리셋이다.

@@ -1549,10 +1549,10 @@ export default function PromptBuilder({
                     <div className="section-card border border-cyan-500/20 bg-cyan-950/5 flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 animate-fade-in">
                       <div>
                         <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5 mb-1">
-                          <Mic2 className="w-3.5 h-3.5" /> VoiceDNA™ 실시간 합성 (보이스 커스텀)
+                          <Mic2 className="w-3.5 h-3.5" /> 보컬 음색 스타일
                         </h4>
                         <p className="text-[10px] text-zinc-400 leading-normal">
-                          보관함에서 설계 및 즐겨찾기한 가칭 보이스 DNA 프로필을 음향 가이드라인으로 주입합니다.
+                          선택한 음색 특성을 프롬프트용 보컬 스타일 가이드로 반영합니다. 특정 목소리를 복제하거나 1:1로 변환하지 않습니다.
                         </p>
                       </div>
 
@@ -1566,7 +1566,7 @@ export default function PromptBuilder({
                               : 'border-zinc-700 bg-black/40 text-zinc-400 hover:border-cyan-500/50'
                           }`}
                         >
-                          <span>🎤 보이스: {selectedVdCode === 'auto' ? 'Auto (기본 기획 음색)' : vdOptions.find(o => o.code === selectedVdCode)?.name || selectedVdCode}</span>
+                          <span>음색 스타일: {selectedVdCode === 'auto' ? 'Auto (기본 음색)' : vdOptions.find(o => o.code === selectedVdCode)?.name || selectedVdCode}</span>
                           <span className="text-[9px] opacity-70">▼</span>
                         </button>
 
@@ -1585,7 +1585,7 @@ export default function PromptBuilder({
                                 }}
                                 className="w-full text-left px-3 py-2 hover:bg-cyan-500/15 hover:text-cyan-300 flex items-center justify-between text-zinc-300 border-b border-white/5"
                               >
-                                <span>Auto (기본 기획 음색)</span>
+                                <span>Auto (기본 음색)</span>
                                 {selectedVdCode === 'auto' && <span className="text-cyan-400">✓</span>}
                               </button>
                               {vdOptions.map((opt) => (
