@@ -474,11 +474,33 @@ export default function VoiceDnaStudio() {
     }
   ];
 
-  // ─── 2. Web Audio API를 활용한 음색 데모 합성 엔진 (WOW Point) ────────────────
   const [playingDemoId, setPlayingDemoId] = useState<string | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const oscillatorsRef = useRef<any[]>([]);
   const exploreAudioRef = useRef<HTMLAudioElement | null>(null);
+  const liveDspFilterRef = useRef<{
+    lowShelf?: BiquadFilterNode;
+    highShelf?: BiquadFilterNode;
+    sourceElement?: HTMLAudioElement;
+    ctx?: AudioContext;
+  } | null>(null);
+
+  // 실시간 슬라이더 조정 시 재생 중인 오디오 DSP 필터 즉각 갱신
+  useEffect(() => {
+    if (liveDspFilterRef.current && liveDspFilterRef.current.ctx) {
+      const { lowShelf, highShelf, sourceElement, ctx } = liveDspFilterRef.current;
+      const t = ctx.currentTime;
+      if (lowShelf) {
+        lowShelf.gain.setTargetAtTime((chestResonance - 50) * 0.45, t, 0.04);
+      }
+      if (highShelf) {
+        highShelf.gain.setTargetAtTime(((headResonance + brightness) / 2 - 50) * 0.45, t, 0.04);
+      }
+      if (sourceElement) {
+        sourceElement.playbackRate = Math.max(0.7, Math.min(1.4, 1.0 + (pitch - 50) * 0.006));
+      }
+    }
+  }, [pitch, brightness, chestResonance, headResonance, power]);
 
   const stopAllSynthesis = () => {
     oscillatorsRef.current.forEach(osc => {
@@ -500,8 +522,42 @@ export default function VoiceDnaStudio() {
       setExploreProgress(0);
 
       const audio = new Audio(realAudioUrl);
+      audio.crossOrigin = "anonymous";
+      audio.playbackRate = Math.max(0.7, Math.min(1.4, 1.0 + (pitch - 50) * 0.006));
       exploreAudioRef.current = audio;
-      
+
+      try {
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        const ctx = audioCtxRef.current;
+        if (ctx.state === 'suspended') {
+          ctx.resume();
+        }
+        const source = ctx.createMediaElementSource(audio);
+        const lowShelf = ctx.createBiquadFilter();
+        lowShelf.type = "lowshelf";
+        lowShelf.frequency.setValueAtTime(250, ctx.currentTime);
+        lowShelf.gain.setValueAtTime((chestResonance - 50) * 0.45, ctx.currentTime);
+
+        const highShelf = ctx.createBiquadFilter();
+        highShelf.type = "highshelf";
+        highShelf.frequency.setValueAtTime(3200, ctx.currentTime);
+        highShelf.gain.setValueAtTime(((headResonance + brightness) / 2 - 50) * 0.45, ctx.currentTime);
+
+        const masterGain = ctx.createGain();
+        masterGain.gain.setValueAtTime(0.9, ctx.currentTime);
+
+        source.connect(lowShelf);
+        lowShelf.connect(highShelf);
+        highShelf.connect(masterGain);
+        masterGain.connect(ctx.destination);
+
+        liveDspFilterRef.current = { lowShelf, highShelf, sourceElement: audio, ctx };
+      } catch (dspErr) {
+        console.warn("Web Audio DSP routing fallback:", dspErr);
+      }
+
       // Update progress as it plays
       audio.ontimeupdate = () => {
         if (audio.duration) {
@@ -514,12 +570,14 @@ export default function VoiceDnaStudio() {
         setExplorePlaying(false);
         setExplorePlayingVoiceId(null);
         setExploreProgress(0);
+        liveDspFilterRef.current = null;
       };
 
       audio.play().catch(err => {
         console.error("Failed to play explore audio url:", err);
         setExplorePlaying(false);
         setExplorePlayingVoiceId(null);
+        liveDspFilterRef.current = null;
       });
       return;
     }
@@ -619,6 +677,7 @@ export default function VoiceDnaStudio() {
       exploreAudioRef.current.pause();
       exploreAudioRef.current = null;
     }
+    liveDspFilterRef.current = null;
     stopAllSynthesis();
     setExplorePlaying(false);
     setExplorePlayingVoiceId(null);
@@ -2964,27 +3023,17 @@ export default function VoiceDnaStudio() {
                     <Sliders className="w-4 h-4 text-fuchsia-400" /> Layer 1 & 4: Voice Attributes Sliders
                   </h3>
                   <div className="flex items-center gap-3">
-                    {/* Live Preview Button */}
+                    {/* Live Preview Button (아이콘 제거, 깔끔한 텍스트) */}
                     <button
                       type="button"
                       onClick={playCurrentDesignedVoicePreview}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer shadow-lg ${
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap shadow-lg ${
                         explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW"
-                          ? "bg-rose-600 text-white shadow-rose-600/30 animate-pulse"
+                          ? "bg-rose-600 text-white shadow-rose-600/30"
                           : "bg-fuchsia-600/20 hover:bg-fuchsia-600/30 border border-fuchsia-500/40 text-fuchsia-300"
                       }`}
                     >
-                      {explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW" ? (
-                        <>
-                          <Pause className="w-3.5 h-3.5" />
-                          <span>청음 중지</span>
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-3.5 h-3.5 fill-current" />
-                          <span>🎧 튜닝된 톤 즉시 청음</span>
-                        </>
-                      )}
+                      {explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW" ? "청음 중지" : "튜닝된 톤 즉시 청음"}
                     </button>
 
                     <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
@@ -3693,27 +3742,25 @@ export default function VoiceDnaStudio() {
                       <button
                         type="button"
                         onClick={() => handleSaveDna(true)}
-                        className="py-2.5 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-lg cursor-pointer"
+                        className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs flex items-center justify-center transition-all shadow-lg cursor-pointer whitespace-nowrap"
                       >
-                        <Save className="w-4 h-4 text-emerald-400" />
-                        <span>기존 보이스에 덮어쓰기</span>
+                        기존 보이스에 덮어쓰기
                       </button>
                       <button
                         type="button"
                         onClick={() => handleSaveDna(false)}
-                        className="py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer"
+                        className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer whitespace-nowrap"
                       >
-                        <Sparkles className="w-4 h-4" />
-                        <span>✨ 새 보이스로 저장 (v2)</span>
+                        새 보이스로 저장 (v2)
                       </button>
                     </div>
                   ) : (
                     <button
                       id="save-btn"
                       onClick={() => handleSaveDna(false)}
-                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer"
+                      className="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer whitespace-nowrap"
                     >
-                      <Save className="w-4 h-4" /> Save Designed Voice DNA
+                      보이스 DNA 저장
                     </button>
                   )}
                 </div>
