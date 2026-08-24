@@ -3631,7 +3631,7 @@ export default function VoiceDnaStudio() {
                             <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                             {demoGenerateStep === 0 && "Voice DNA → Suno 프롬프트 변환 중..."}
                             {demoGenerateStep === 1 && "AI 엔진에 음원 생성 요청 제출 완료"}
-                            {demoGenerateStep === 2 && "🎤 AI가 보컬 노래를 생성하는 중... (약 1~2분 소요)"}
+                            {demoGenerateStep === 2 && "AI가 보컬 노래를 생성하는 중... (약 1~2분 소요)"}
                           </span>
                           <span className="text-zinc-500 font-medium">
                             {demoGenerateStep === 0 && "10%"}
@@ -3691,7 +3691,7 @@ export default function VoiceDnaStudio() {
                                 </span>
                               </div>
                               <span className="text-[9px] text-zinc-500 block mt-0.5 uppercase">
-                                🎤 AI VOCAL GENERATED ({selectedGenre})
+                                AI VOCAL GENERATED ({selectedGenre})
                               </span>
                             </div>
                           </div>
@@ -3736,7 +3736,7 @@ export default function VoiceDnaStudio() {
                                   </span>
                                 </div>
                                 <span className="text-[9px] text-zinc-500 block mt-0.5 uppercase">
-                                  🎤 AI VOCAL GENERATED ({selectedGenre}) (2)
+                                  AI VOCAL GENERATED ({selectedGenre}) (2)
                                 </span>
                               </div>
                             </div>
@@ -3767,7 +3767,7 @@ export default function VoiceDnaStudio() {
                         <div className="flex items-center justify-between text-[9px] text-zinc-500 px-1 pt-0.5">
                           <span className="flex items-center gap-1">
                             <CheckCircle className="w-3 h-3 text-emerald-400" />
-                            보이스 DNA 기반 AI 보컬 음원 생성 완료 ✨
+                            보이스 DNA 기반 AI 보컬 음원 생성 완료
                           </span>
                           <button 
                             onClick={handleGenerateDemo}
@@ -3781,10 +3781,9 @@ export default function VoiceDnaStudio() {
                       /* Generate Button */
                       <button
                         onClick={handleGenerateDemo}
-                        className="w-full py-2.5 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 hover:bg-fuchsia-500/10 text-fuchsia-300 font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-lg shadow-fuchsia-600/5"
+                        className="w-full py-2.5 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 hover:bg-fuchsia-500/10 text-fuchsia-300 font-bold text-xs flex items-center justify-center transition-all cursor-pointer shadow-lg shadow-fuchsia-600/5 whitespace-nowrap"
                       >
-                        <Sparkles className="w-4 h-4 animate-pulse text-fuchsia-400" />
-                        🎤 AI 보컬 샘플 음원 생성 (Suno AI, ~1분 소요)
+                        AI 보컬 샘플 음원 생성 (Suno AI, ~1분 소요)
                       </button>
                     )}
                   </div>
