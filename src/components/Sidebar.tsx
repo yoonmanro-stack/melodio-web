@@ -84,15 +84,21 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
   const { t } = useLanguage();
 
   return (
-    <aside className={clsx(
-      "h-screen border-r border-[rgba(255,255,255,0.05)] bg-[rgba(10,10,14,0.8)] backdrop-blur-xl flex flex-col pt-6 pb-24 fixed top-0 z-40 transition-all duration-300",
-      // Desktop positioning
-      "md:left-0",
-      isCollapsed ? "md:w-20 md:px-2" : "md:w-64 md:px-4",
-      // Mobile positioning (drawer)
-      "w-64 px-4",
-      isMobileOpen ? "left-0 shadow-[0_0_50px_rgba(0,0,0,0.8)]" : "-left-64"
-    )}>
+    <aside
+      id="app-navigation"
+      aria-label="Primary navigation"
+      className={clsx(
+        "h-screen border-r border-[rgba(255,255,255,0.05)] bg-[rgba(10,10,14,0.8)] backdrop-blur-xl flex flex-col pt-6 pb-24 fixed top-0 z-[80] md:z-40 transition-all duration-300",
+        // Desktop positioning
+        "md:left-0",
+        isCollapsed ? "md:w-20 md:px-2" : "md:w-64 md:px-4",
+        // Mobile positioning (drawer)
+        "w-64 px-4",
+        isMobileOpen
+          ? "left-0 visible shadow-[0_0_50px_rgba(0,0,0,0.8)]"
+          : "-left-64 invisible md:visible"
+      )}
+    >
       <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent pr-2">
         {/* Mobile Header Logo and Close button */}
         <div className="md:hidden flex items-center justify-between px-2 mb-6 border-b border-white/5 pb-4">
@@ -100,9 +106,10 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
             <Logo size="sm" showText={true} />
           </Link>
           <button 
+            type="button"
             onClick={onMobileClose}
             className="text-zinc-500 hover:text-zinc-200 transition-colors p-1.5 rounded-lg hover:bg-white/5"
-            title="Close Menu"
+            aria-label="Close navigation"
           >
             <X className="w-5 h-5" />
           </button>

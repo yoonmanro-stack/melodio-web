@@ -227,3 +227,14 @@ npx vercel --prod --yes
 - GitHub `main`과 Vercel Production은 `0aabc2c` 기준으로 `Ready`이며, Mac mini도 기존 폴더를 `/Users/muse/melodio-worker-backup-20260825-1717`에 보존하고 같은 커밋의 clean Git 복제본으로 전환했다.
 - PM2 `melodio-worker`는 새 Git 경로에서 Node 25, 1GB memory limit, 35초 kill timeout, 재시작 0회로 `online`이다.
 - 기존 stuck `장대비` 작업은 stale recovery 후 `completed`로 수렴했다. private 원본 1개와 private Stem 참조 8개가 확정됐고 운영 Stem Studio에서 4채널 로드 및 3분 32초 길이를 확인했다.
+
+---
+
+## 2026-08-26 모바일 사이드 메뉴 터치 복구
+
+- 원인은 모바일 Sidebar와 전체 화면 blur overlay가 같은 `z-40`이어서, DOM 뒤에 있는 overlay가 메뉴 위에 그려지고 모든 터치를 가로채던 stacking 충돌이었다.
+- 모바일 계층을 `헤더 40 < 상단 컨트롤 60 < overlay 70 < Sidebar 80`으로 명시하고 데스크톱 Sidebar는 기존 `z-40`을 유지했다.
+- 닫힌 모바일 Sidebar는 `invisible` 처리해 화면 밖 링크가 키보드 Tab 순서에 남지 않도록 했다. 데스크톱에서는 `md:visible`로 항상 복구된다.
+- 햄버거 버튼에 `aria-controls`·`aria-expanded`, 닫기 버튼에 label, ESC 닫기를 추가했다.
+- `npx tsc --noEmit`, 관련 파일 ESLint, `git diff --check`, `npm run build`를 모두 통과했다.
+- 수정분은 최종 검증 후 GitHub `main`과 Vercel Production에 반영했다.
