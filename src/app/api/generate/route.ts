@@ -552,6 +552,7 @@ export async function POST(request: NextRequest) {
           license_hash: JSON.stringify({
             stylePrompt: payload.stylePrompt,
             engine: 'lyria3',
+            durationSeconds: 30,
             sourceMenu: rawBody.sourceMenu || null,
             isPublic: rawBody.isPublic !== undefined ? rawBody.isPublic : true,
           }),

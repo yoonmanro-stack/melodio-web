@@ -6,13 +6,15 @@ import {
   Trash2, Edit3, Download, RefreshCw, Heart, Share2,
   ChevronLeft, ChevronRight, ListFilter, AlertCircle, X,
   Copy, Check, SkipBack, SkipForward, Shuffle, Repeat, Lock, Globe,
-  Volume2, VolumeX, ThumbsUp, ThumbsDown, Link as LinkIcon
+  Volume2, VolumeX, ThumbsUp, ThumbsDown, Link as LinkIcon, ListPlus
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
 import MultiTrackPlayer from "@/components/MultiTrackPlayer";
 import UploadStemModal from "@/components/UploadStemModal";
 import DashboardViralCarousel, { type DashboardViralVideo } from "@/components/dashboard/DashboardViralCarousel";
 import DashboardChannelDnaPanel from "@/components/dashboard/DashboardChannelDnaPanel";
+import AddToPlaylistModal from "@/components/playlists/AddToPlaylistModal";
+import { usePlaylistPlayback } from "@/contexts/PlaylistPlaybackContext";
 
 const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg 
@@ -251,6 +253,7 @@ const isJapanTrack = (item: any) => {
 };
 
 export default function Home() {
+  const { removeGenerationFromQueue } = usePlaylistPlayback();
   const [history, setHistory] = useState<Generation[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -742,8 +745,18 @@ export default function Home() {
   const [editingTrack, setEditingTrack] = useState<{ id: string; title: string } | null>(null);
   const [newTitle, setNewTitle] = useState('');
   const [sharingTrack, setSharingTrack] = useState<Generation | null>(null);
+  const [playlistTrack, setPlaylistTrack] = useState<Generation | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
+
+  const closePlaylistModal = useCallback(() => setPlaylistTrack(null), []);
+  const handlePlaylistAdded = useCallback((playlistName: string, alreadyAdded: boolean) => {
+    setToastMessage(alreadyAdded
+      ? `이미 ‘${playlistName}’에 담긴 곡입니다.`
+      : `‘${playlistName}’에 곡을 담았습니다.`);
+    setShowToast(true);
+    window.setTimeout(() => setShowToast(false), 3000);
+  }, []);
 
   const handleCopyLink = async (trackId: string) => {
     const shareUrl = `https://melodio.app/vault/share-${trackId}`;
@@ -1047,6 +1060,13 @@ export default function Home() {
       });
       
       if (res.ok) {
+        removeGenerationFromQueue(id);
+        if (playingTrackIdRef.current === id) {
+          audioRef.current?.pause();
+          setPlayingTrackId(null);
+          setPlayingTrack(null);
+          setIsTrackPlaying(false);
+        }
         if (activeGenId === id) {
           setActiveGenId('');
         }
@@ -1769,6 +1789,20 @@ export default function Home() {
                       </button>
                     )}
 
+                    {/* 개인 플레이리스트 추가 (바이럴 숏폼은 상단에서 별도 분리됨) */}
+                    {item.status === 'completed' && (item.audio_url || item.source_audio_url) && (
+                      <button
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setPlaylistTrack(item);
+                        }}
+                        className="flex items-center gap-1 bg-white/5 border border-white/5 hover:border-fuchsia-500/30 hover:bg-fuchsia-500/5 text-zinc-300 hover:text-white px-2.5 py-1.5 md:px-3.5 md:py-2 rounded-xl text-[11px] md:text-xs font-semibold transition-all"
+                      >
+                        <ListPlus className="w-3.5 h-3.5" />
+                        <span>Playlist</span>
+                      </button>
+                    )}
+
                     {/* Remix 버튼 (완료 시에만 노출) */}
                     {item.status === 'completed' && (
                       <Link href={`/audio?remix=${item.id}`} className="inline-flex">
@@ -1811,23 +1845,6 @@ export default function Home() {
                               <span>Edit Title</span>
                             </button>
                             
-                            {(item.audio_url || item.source_audio_url) && (
-                              <button 
-                                onClick={(e) => {
-                                  setActiveMenuId(null);
-                                  handleDownloadTrack(e, item);
-                                }}
-                                disabled={downloadingTrackId === item.id}
-                                className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-left text-xs text-zinc-300 hover:bg-white/5 hover:text-white transition-colors"
-                              >
-                                {downloadingTrackId === item.id ? (
-                                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-cyan-400" />
-                                ) : (
-                                  <Download className="w-3.5 h-3.5" />
-                                )}
-                                <span>{downloadingTrackId === item.id ? 'Downloading...' : 'Download Mix'}</span>
-                              </button>
-                            )}
                             <button 
                               onClick={() => {
                                 setSharingTrack(item);
@@ -2686,6 +2703,14 @@ export default function Home() {
         isOpen={isProPaywallOpen}
         onClose={() => setIsProPaywallOpen(false)}
         feature="stems"
+      />
+
+      <AddToPlaylistModal
+        isOpen={playlistTrack !== null}
+        generationId={playlistTrack?.id || null}
+        trackTitle={playlistTrack?.title || 'Untitled Track'}
+        onClose={closePlaylistModal}
+        onAdded={handlePlaylistAdded}
       />
 
       {/* 🎵 대시보드 하단 전역 통합 플레이어 바 */}

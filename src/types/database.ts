@@ -138,6 +138,7 @@ export type Database = {
           audio_url: string | null
           cover_art_url: string | null
           source_audio_url: string | null
+          duration_mode: string | null
           status: string
           is_public: boolean
           is_liked: boolean
@@ -160,6 +161,7 @@ export type Database = {
           audio_url?: string | null
           cover_art_url?: string | null
           source_audio_url?: string | null
+          duration_mode?: string | null
           status?: string
           is_public?: boolean
           is_liked?: boolean
@@ -179,6 +181,8 @@ export type Database = {
           title?: string
           audio_url?: string | null
           cover_art_url?: string | null
+          source_audio_url?: string | null
+          duration_mode?: string | null
           status?: string
           is_public?: boolean
           is_liked?: boolean
@@ -192,6 +196,52 @@ export type Database = {
           dissonance_score?: number | null
           audio_grade?: string | null
           retry_count?: number | null
+        }
+        Relationships: []
+      }
+      /** 사용자가 감상 목적으로 구성한 비공개 플레이리스트 */
+      user_playlists: {
+        Row: {
+          id: string
+          user_id: string
+          name: string
+          description: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          name: string
+          description?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          name?: string
+          description?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      /** 플레이리스트와 generations 원곡의 순서 있는 연결 */
+      user_playlist_items: {
+        Row: {
+          id: string
+          playlist_id: string
+          generation_id: string
+          position: number
+          added_at: string
+        }
+        Insert: {
+          id?: string
+          playlist_id: string
+          generation_id: string
+          position: number
+          added_at?: string
+        }
+        Update: {
+          position?: number
         }
         Relationships: []
       }
@@ -847,6 +897,26 @@ export type Database = {
       }
       queue_episode_assembly: {
         Args: { p_assembly_id: string }
+        Returns: Json
+      }
+      is_user_playlist_eligible_generation: {
+        Args: { p_generation_id: string }
+        Returns: boolean
+      }
+      add_generation_to_user_playlist: {
+        Args: { p_playlist_id: string; p_generation_id: string }
+        Returns: Json
+      }
+      remove_user_playlist_item: {
+        Args: { p_playlist_id: string; p_item_id: string }
+        Returns: Json
+      }
+      reorder_user_playlist_items: {
+        Args: {
+          p_playlist_id: string
+          p_item_ids: string[]
+          p_expected_updated_at: string
+        }
         Returns: Json
       }
     }
