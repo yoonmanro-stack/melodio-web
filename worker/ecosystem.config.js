@@ -1,10 +1,12 @@
+const WORKER_DIR = __dirname;
+
 module.exports = {
   apps: [
     {
       // ─── 앱 식별 ──────────────────────────────────────────────────
       name: 'melodio-worker',
       script: 'index.js',
-      cwd: '/Users/muse/melodio-worker',
+      cwd: WORKER_DIR,
 
       // ─── 프로세스 설정 ─────────────────────────────────────────────
       instances: 1,          // 워커는 1개만 (중복 처리 방지)
@@ -43,7 +45,7 @@ module.exports = {
       // ─── 유튜브 자율 스케줄러 프로세스 ─────────────────────────────
       name: 'melodio-youtube-scheduler',
       script: 'youtube_autopilot_worker.js',
-      cwd: '/Users/muse/melodio-worker',
+      cwd: WORKER_DIR,
       instances: 1,
       autorestart: true,
       watch: false,
@@ -64,7 +66,7 @@ module.exports = {
       // ─── B2B 1시간 루프 백그라운드 워커 ─────────────────────────────
       name: 'melodio-b2b-loop-worker',
       script: 'b2b-loop-worker.js',
-      cwd: '/Users/muse/melodio-worker',
+      cwd: WORKER_DIR,
       instances: 1,
       autorestart: true,
       watch: false,

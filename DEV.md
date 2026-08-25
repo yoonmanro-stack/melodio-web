@@ -52,8 +52,8 @@ npx tsc --noEmit
 
 ### 2. Mac Mini 개발/운영 서버 배포
 ```bash
-rsync -avz --exclude 'node_modules' --exclude '.next' ./melodio-web/ macmini:/Users/muse/Desktop/project/melodio-web/
-ssh macmini 'export PATH="/opt/homebrew/bin:$PATH" && cd /Users/muse/Desktop/project/melodio-web && npm run build && pm2 restart melodio-web'
+# GitHub main과 같은 clean commit을 사용한다. rsync로 소스를 덮어쓰지 않는다.
+ssh macmini 'export PATH="/opt/homebrew/bin:$PATH" && cd /Users/muse/melodio-worker && git pull --ff-only origin main && cd worker && npm ci && pm2 startOrReload ecosystem.config.js --only melodio-worker --update-env && pm2 save'
 ```
 
 ### 3. Vercel 프로덕션 배포
