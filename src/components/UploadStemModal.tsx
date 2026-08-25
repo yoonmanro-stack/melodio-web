@@ -2,13 +2,49 @@
 
 import React, { useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { UploadCloud, X, Music, Sparkles, Loader2, CheckCircle2, AlertCircle, FileAudio } from 'lucide-react';
+import { UploadCloud, X, Sparkles, Loader2, AlertCircle, FileAudio } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface UploadStemModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSuccess: (generationId: string) => void;
+}
+
+const UPLOAD_CONTENT_TYPES: Record<string, string> = {
+  mp3: 'audio/mpeg',
+  wav: 'audio/wav',
+  m4a: 'audio/mp4',
+  aac: 'audio/aac',
+  ogg: 'audio/ogg',
+  flac: 'audio/flac',
+};
+
+function uploadContentType(fileName: string): string {
+  const extension = fileName.split('.').pop()?.toLowerCase() || '';
+  return UPLOAD_CONTENT_TYPES[extension] || 'audio/mpeg';
+}
+
+function readBrowserAudioDuration(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const objectUrl = URL.createObjectURL(file);
+    const audio = document.createElement('audio');
+    let settled = false;
+    const finish = (value: number | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      audio.removeAttribute('src');
+      audio.load();
+      URL.revokeObjectURL(objectUrl);
+      resolve(value);
+    };
+    const timeout = window.setTimeout(() => finish(null), 8_000);
+    audio.preload = 'metadata';
+    audio.onloadedmetadata = () => finish(Number.isFinite(audio.duration) ? audio.duration : null);
+    audio.onerror = () => finish(null);
+    audio.src = objectUrl;
+  });
 }
 
 export default function UploadStemModal({ isOpen, onClose, onSuccess }: UploadStemModalProps) {
@@ -59,11 +95,23 @@ export default function UploadStemModal({ isOpen, onClose, onSuccess }: UploadSt
     e.preventDefault();
     if (!file) return;
 
+    const cleanTitle = title.trim() || file.name.replace(/\.[^/.]+$/, '');
+    if (cleanTitle.length > 80) {
+      setErrorMsg('곡 제목은 최대 80자까지 입력할 수 있습니다.');
+      return;
+    }
+
     setIsUploading(true);
     setErrorMsg(null);
-    setUploadStep('1/3. 안전한 직통 업로드 링크 생성 중...');
+    setUploadStep('오디오 길이와 형식을 확인하는 중...');
 
     try {
+      const browserDuration = await readBrowserAudioDuration(file);
+      if (browserDuration !== null && browserDuration > 6 * 60) {
+        throw new Error('Stem 분리는 최대 6분 길이의 오디오까지 지원합니다.');
+      }
+
+      setUploadStep('1/3. 안전한 직통 업로드 링크 생성 중...');
       // 1. Vercel 서버리스 4.5MB 제한 우회를 위한 서명된 업로드 URL 요청 (소형 JSON)
       const prepResp = await fetch('/api/stems/prepare-upload', {
         method: 'POST',
@@ -89,27 +137,29 @@ export default function UploadStemModal({ isOpen, onClose, onSuccess }: UploadSt
 
       // 2. 브라우저에서 Supabase Storage로 직접 스트리밍 업로드 (대용량 파일 100% 지원)
       const { path, token, signedUrl } = prepData;
+      const uploadBucket = prepData.bucket || 'melodio-private';
+      const contentType = uploadContentType(file.name);
+      // storage-js는 File/Blob 업로드 시 options.contentType보다 Blob 자체 MIME을
+      // 우선하므로, 브라우저별 audio/x-m4a 같은 값도 버킷 허용 MIME으로 정규화한다.
+      const uploadFile = file.type === contentType
+        ? file
+        : new File([file], file.name, { type: contentType, lastModified: file.lastModified });
       
-      let uploadSuccess = false;
       const { error: uploadError } = await supabase.storage
-        .from('melodio-assets')
-        .uploadToSignedUrl(path, token, file, {
-          contentType: file.type || 'audio/mpeg',
+        .from(uploadBucket)
+        .uploadToSignedUrl(path, token, uploadFile, {
+          contentType,
         });
 
-      if (!uploadError) {
-        uploadSuccess = true;
-      } else {
+      if (uploadError) {
         // Fallback: fetch PUT directly to signedUrl
         console.warn('[UploadStemModal] SDK uploadToSignedUrl failed, trying fetch PUT fallback:', uploadError.message);
         const putResp = await fetch(signedUrl, {
           method: 'PUT',
-          headers: { 'Content-Type': file.type || 'audio/mpeg' },
+          headers: { 'Content-Type': contentType },
           body: file,
         });
-        if (putResp.ok) {
-          uploadSuccess = true;
-        } else {
+        if (!putResp.ok) {
           throw new Error('스토리지 직접 업로드 실패: ' + uploadError.message);
         }
       }
@@ -123,7 +173,7 @@ export default function UploadStemModal({ isOpen, onClose, onSuccess }: UploadSt
         body: JSON.stringify({
           generationId: prepData.generationId,
           path: prepData.path,
-          title: title.trim() || file.name.replace(/\.[^/.]+$/, ''),
+          title: cleanTitle,
           fileName: file.name,
           fileSize: file.size,
         }),
@@ -140,7 +190,7 @@ export default function UploadStemModal({ isOpen, onClose, onSuccess }: UploadSt
         throw new Error(confirmData.error || '분리 큐 등록 실패');
       }
 
-      setUploadStep('✨ 4채널 스템 분리 큐 진입 완료! 스템 플레이어로 이동합니다.');
+      setUploadStep('✨ 4채널 스템 작업 접수 완료! Stem Studio에서 상태를 확인합니다.');
       
       setTimeout(() => {
         setIsUploading(false);
@@ -150,9 +200,9 @@ export default function UploadStemModal({ isOpen, onClose, onSuccess }: UploadSt
         onSuccess(prepData.generationId);
         onClose();
       }, 1000);
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('[UploadStemModal] error:', err);
-      setErrorMsg(err.message || '오디오 업로드 중 오류가 발생했습니다.');
+      setErrorMsg(err instanceof Error ? err.message : '오디오 업로드 중 오류가 발생했습니다.');
       setIsUploading(false);
     }
   };
@@ -198,10 +248,10 @@ export default function UploadStemModal({ isOpen, onClose, onSuccess }: UploadSt
             </div>
             <div>
               <h3 className="text-base font-bold text-white flex items-center gap-2">
-                내 오디오 업로드 & 4채널 스템 분리
+                Stem Studio 오디오 업로드
               </h3>
               <p className="text-xs text-zinc-400">
-                보컬 제거(MR), 드럼/베이스 추출, 아카펠라 분리를 100% 무료로 실행합니다.
+                내 음원을 보컬·드럼·베이스·멜로디 4개 트랙으로 분리합니다.
               </p>
             </div>
           </div>
@@ -255,7 +305,7 @@ export default function UploadStemModal({ isOpen, onClose, onSuccess }: UploadSt
                     여기로 MP3 또는 WAV 파일을 끌어다 놓으세요
                   </p>
                   <p className="text-xs text-zinc-500">
-                    또는 클릭하여 파일 선택 (최대 50MB · 가요/팝송/MR/보컬)
+                    또는 클릭하여 파일 선택 (최대 80MB·6분 · 가요/팝송/MR/보컬)
                   </p>
                 </div>
               )}
@@ -271,6 +321,7 @@ export default function UploadStemModal({ isOpen, onClose, onSuccess }: UploadSt
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="예: My Favorite Song (Original Mix)"
+                maxLength={80}
                 disabled={isUploading}
                 className="w-full px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-white placeholder-zinc-500 text-sm focus:outline-none focus:border-fuchsia-500 transition-colors"
               />

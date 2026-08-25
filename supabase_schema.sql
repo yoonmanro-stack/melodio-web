@@ -18,12 +18,18 @@ CREATE TABLE public.generations (
   title TEXT NOT NULL,
   source_audio_url TEXT,
   status TEXT DEFAULT 'pending', -- 'pending', 'processing', 'completed', 'failed'
+  is_public BOOLEAN DEFAULT TRUE NOT NULL,
   is_stem_extracted BOOLEAN DEFAULT FALSE,
   -- 4채널 스템 URL (melodio-worker가 Supabase Storage 업로드 후 기록)
   stem_vocals_url TEXT,  -- vocals 채널
   stem_drums_url  TEXT,  -- drums 채널
   stem_bass_url   TEXT,  -- bass 채널
   stem_other_url  TEXT,  -- guitar/other 채널 (구 stem_melody_url → 변경)
+  -- 브라우저 재생용 저용량 비공개 프리뷰
+  preview_vocals_url TEXT,
+  preview_drums_url  TEXT,
+  preview_bass_url   TEXT,
+  preview_other_url  TEXT,
   license_hash TEXT, -- IP Vault 증명용 해시값
   is_liked BOOLEAN DEFAULT FALSE NOT NULL, -- 좋아요 여부 (개인 취향 학습 데이터용)
   created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc', NOW()) NOT NULL

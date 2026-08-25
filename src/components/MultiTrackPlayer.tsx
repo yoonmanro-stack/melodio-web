@@ -1,10 +1,11 @@
 'use client';
 
 import { useCallback, useMemo, useState, useEffect } from 'react';
-import { Play, Pause, Volume2, VolumeX, SkipBack, Headphones, Loader2, DownloadCloud, Scissors } from 'lucide-react';
+import { AlertCircle, Play, Pause, Volume2, VolumeX, SkipBack, Headphones, Loader2, DownloadCloud, Scissors } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useStemAudio, type StemId } from '@/hooks/useStemAudio';
+import type { StemAudioState, StemId } from '@/hooks/useStemAudio';
 import { supabase } from '@/lib/supabase';
+import { resolveStemStorageUrl } from '@/lib/stems/resolve-client';
 import AudioTrimmerModal from '@/components/AudioTrimmerModal';
 
 // ─── 스템 시각 설정 (파스텔 중간톤) ──────────────────────────────────────────
@@ -175,12 +176,15 @@ function CenterBarsWaveform({
 interface MultiTrackPlayerProps {
   generationId?: string;
   stemUrls?: Partial<Record<StemId, string>>;
-  stemStates: Record<StemId, any>;
+  stemStates: Record<StemId, StemAudioState>;
   allLoaded: boolean;
+  hasLoadError?: boolean;
   isPlaying: boolean;
   currentTime: number;
   duration: number;
   originalWavUrls: Record<StemId, string | null>;
+  /** 만료되지 않는 public URL 또는 private storage:// 참조. 다운로드/편집 직전에 다시 서명한다. */
+  originalWavRefs?: Partial<Record<StemId, string | null>>;
   onOpenUpload?: () => void;
   play: () => void;
   pause: () => void;
@@ -196,10 +200,12 @@ export default function MultiTrackPlayer({
   stemUrls,
   stemStates,
   allLoaded,
+  hasLoadError = false,
   isPlaying,
   currentTime,
   duration,
   originalWavUrls,
+  originalWavRefs,
   onOpenUpload,
   play,
   pause,
@@ -216,7 +222,7 @@ export default function MultiTrackPlayer({
     clippingCount?: number;
     dissonanceScore?: number;
     coverArtUrl?: string;
-    originalAudioUrl?: string;
+    originalAudioRef?: string;
   }>({
     title: 'Neon Drift — Extended Mix',
     artist: 'Melodio AI · Persona #007',
@@ -224,6 +230,14 @@ export default function MultiTrackPlayer({
   // 커버 로딩 실패 시 그라데이션 자리표시자로 되돌린다
   const [coverFailed, setCoverFailed] = useState(false);
   const [isTrimmerOpen, setIsTrimmerOpen] = useState(false);
+  const [isPreparingTrimmer, setIsPreparingTrimmer] = useState(false);
+  const [trimmerSources, setTrimmerSources] = useState<{
+    vocals?: string;
+    drums?: string;
+    bass?: string;
+    melody?: string;
+    original?: string;
+  }>({});
 
   useEffect(() => {
     if (!generationId) {
@@ -250,7 +264,7 @@ export default function MultiTrackPlayer({
             clippingCount: data.clipping_count ?? undefined,
             dissonanceScore: data.dissonance_score ?? undefined,
             coverArtUrl: data.cover_art_url || undefined,
-            originalAudioUrl: data.audio_url || data.source_audio_url || undefined,
+            originalAudioRef: data.audio_url || data.source_audio_url || undefined,
           });
         }
       } catch (err) {
@@ -262,14 +276,41 @@ export default function MultiTrackPlayer({
     fetchGenMeta();
   }, [generationId]);
 
-  const handleDownload = (url: string | null, stemName: string) => {
+  const handleDownload = async (reference: string | null, stemName: string) => {
+    if (!reference) return;
+    const fileName = `melodio_${stemName}_original.wav`;
+    const url = await resolveStemStorageUrl(reference, { download: fileName }).catch((error) => {
+      console.warn('[MultiTrackPlayer] 다운로드 URL 갱신 실패:', error);
+      return null;
+    });
     if (!url) return;
     const a = document.createElement('a');
     a.href = url;
-    a.download = `melodio_${stemName}_original.wav`;
+    a.download = fileName;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const prepareAndOpenTrimmer = async () => {
+    if (isPreparingTrimmer) return;
+    setIsPreparingTrimmer(true);
+    try {
+      const resolve = async (value?: string | null) => (
+        await resolveStemStorageUrl(value).catch(() => null)
+      ) || undefined;
+      const [vocals, drums, bass, melody, original] = await Promise.all([
+        resolve(originalWavRefs?.vocals || originalWavUrls.vocals || stemUrls?.vocals),
+        resolve(originalWavRefs?.drums || originalWavUrls.drums || stemUrls?.drums),
+        resolve(originalWavRefs?.bass || originalWavUrls.bass || stemUrls?.bass),
+        resolve(originalWavRefs?.other || originalWavUrls.other || stemUrls?.other),
+        resolve(trackMetadata.originalAudioRef),
+      ]);
+      setTrimmerSources({ vocals, drums, bass, melody, original });
+      setIsTrimmerOpen(true);
+    } finally {
+      setIsPreparingTrimmer(false);
+    }
   };
 
   const progress  = currentTime / duration;
@@ -319,10 +360,11 @@ export default function MultiTrackPlayer({
           </button>
 
           <button
-            onClick={() => setIsTrimmerOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-semibold text-zinc-200 hover:text-white transition-all shadow-sm hover:border-fuchsia-500/40 cursor-pointer"
+            onClick={prepareAndOpenTrimmer}
+            disabled={isPreparingTrimmer}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs font-semibold text-zinc-200 hover:text-white transition-all shadow-sm hover:border-fuchsia-500/40 cursor-pointer disabled:cursor-wait disabled:opacity-60"
           >
-            <Scissors className="w-3.5 h-3.5 text-fuchsia-400" />
+            {isPreparingTrimmer ? <Loader2 className="w-3.5 h-3.5 animate-spin text-fuchsia-400" /> : <Scissors className="w-3.5 h-3.5 text-fuchsia-400" />}
             <span>✂️ 구간 컷 & 보컬 추출</span>
           </button>
 
@@ -337,7 +379,14 @@ export default function MultiTrackPlayer({
           )}
 
           <AnimatePresence mode="wait">
-            {!allLoaded ? (
+            {hasLoadError ? (
+              <motion.div key="error" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="flex items-center gap-1.5 text-[11px] text-red-300"
+              >
+                <AlertCircle className="w-3.5 h-3.5" />
+                <span>일부 스템 로드 실패</span>
+              </motion.div>
+            ) : !allLoaded ? (
               <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="flex items-center gap-1.5 text-[11px] text-zinc-400"
               >
@@ -428,7 +477,11 @@ export default function MultiTrackPlayer({
             }}
           >
             <AnimatePresence mode="wait">
-              {!allLoaded ? (
+              {hasLoadError ? (
+                <motion.div key="error" initial={{ scale: 0.7 }} animate={{ scale: 1 }}>
+                  <AlertCircle className="w-4 h-4 text-white" />
+                </motion.div>
+              ) : !allLoaded ? (
                 <motion.div key="spinner" initial={{ scale: 0.7 }} animate={{ scale: 1 }}>
                   <Loader2 className="w-4 h-4 text-white animate-spin" />
                 </motion.div>
@@ -520,10 +573,10 @@ export default function MultiTrackPlayer({
                 }
               </button>
 
-              {originalWavUrls[visual.id] && (
+              {(originalWavRefs?.[visual.id] || originalWavUrls[visual.id]) && (
                 <button
                   title="Download WAV Original"
-                  onClick={() => handleDownload(originalWavUrls[visual.id], visual.label)}
+                  onClick={() => handleDownload(originalWavRefs?.[visual.id] || originalWavUrls[visual.id], visual.label)}
                   className="w-7 h-7 rounded-md flex items-center justify-center transition-all flex-shrink-0 hover:bg-white/10"
                   style={{ background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
                 >
@@ -545,13 +598,7 @@ export default function MultiTrackPlayer({
         isOpen={isTrimmerOpen}
         onClose={() => setIsTrimmerOpen(false)}
         trackTitle={trackMetadata.title}
-        stems={{
-          vocals: originalWavUrls.vocals || stemUrls?.vocals || undefined,
-          drums: originalWavUrls.drums || stemUrls?.drums || undefined,
-          bass: originalWavUrls.bass || stemUrls?.bass || undefined,
-          melody: originalWavUrls.other || stemUrls?.other || undefined,
-          original: trackMetadata.originalAudioUrl,
-        }}
+        stems={trimmerSources}
       />
 
     </div>

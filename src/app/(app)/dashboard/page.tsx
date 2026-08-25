@@ -9,12 +9,13 @@ import {
   Volume2, VolumeX, ThumbsUp, ThumbsDown, Link as LinkIcon, ListPlus
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
-import MultiTrackPlayer from "@/components/MultiTrackPlayer";
-import UploadStemModal from "@/components/UploadStemModal";
 import DashboardViralCarousel, { type DashboardViralVideo } from "@/components/dashboard/DashboardViralCarousel";
 import DashboardChannelDnaPanel from "@/components/dashboard/DashboardChannelDnaPanel";
 import AddToPlaylistModal from "@/components/playlists/AddToPlaylistModal";
+import StemStudioSummary from "@/components/stem/StemStudioSummary";
+import MultiTrackPlayer from "@/components/MultiTrackPlayer";
 import { usePlaylistPlayback } from "@/contexts/PlaylistPlaybackContext";
+import { useStemAudio } from "@/hooks/useStemAudio";
 
 const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg 
@@ -27,7 +28,6 @@ const YoutubeIcon = (props: React.SVGProps<SVGSVGElement>) => (
 );
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { supabase } from "@/lib/supabase";
-import { useStemAudio, type StemId } from "@/hooks/useStemAudio";
 import Link from "next/link";
 import ProPaywallModal from "@/components/prompt-builder/ProPaywallModal";
 import { motion, AnimatePresence } from "framer-motion";
@@ -252,6 +252,54 @@ const isJapanTrack = (item: any) => {
   }
 };
 
+type StemJobMetadata = {
+  sourceMenu?: string;
+  stemStatus?: string;
+  stemStage?: string;
+  stemProgress?: number;
+  stemRequestedAt?: string;
+  stemStartedAt?: string;
+  stemHeartbeatAt?: string;
+  stemUpdatedAt?: string;
+};
+
+const getStemJobMetadata = (item: Generation): StemJobMetadata => {
+  if (!item.license_hash) return {};
+  try {
+    const parsed = JSON.parse(item.license_hash);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const isStemUploadTrack = (item: Generation): boolean => {
+  const sourceMenu = getStemJobMetadata(item).sourceMenu;
+  return sourceMenu === 'stem-upload' || sourceMenu === 'custom-upload';
+};
+
+const getStemJobStatus = (item: Generation): string => {
+  return String(getStemJobMetadata(item).stemStatus || '').toLowerCase();
+};
+
+const getStemJobActivityAt = (item: Generation): number | null => {
+  const metadata = getStemJobMetadata(item);
+  const activityAt = metadata.stemHeartbeatAt
+    || metadata.stemUpdatedAt
+    || metadata.stemStartedAt
+    || metadata.stemRequestedAt;
+  if (!activityAt) return null;
+  const timestamp = Date.parse(activityAt);
+  return Number.isFinite(timestamp) ? timestamp : null;
+};
+
+const isTrackStemSplit = (item: Generation): boolean => Boolean(
+  item &&
+  (item.is_stem_extracted ||
+   (item.preview_vocals_url && item.preview_drums_url) ||
+   (item.stem_vocals_url && item.stem_drums_url))
+);
+
 export default function Home() {
   const { removeGenerationFromQueue } = usePlaylistPlayback();
   const [history, setHistory] = useState<Generation[]>(() => {
@@ -260,28 +308,20 @@ export default function Home() {
         const cached = localStorage.getItem('melodio_cached_generations');
         if (cached) {
           const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            return parsed.filter((item) => !isStemUploadTrack(item));
+          }
         }
       } catch {}
     }
     return [];
   });
   const [activeGenId, setActiveGenId] = useState<string>('');
-  const [isUploadStemModalOpen, setIsUploadStemModalOpen] = useState(false);
-
-  // ─── 4채널 스템 분리 완료 여부 판별 헬퍼 ───
-  const isTrackStemSplit = useCallback((item: any): boolean => {
-    return Boolean(
-      item &&
-      (item.is_stem_extracted ||
-       (item.preview_vocals_url && item.preview_drums_url) ||
-       (item.stem_vocals_url && item.stem_drums_url))
-    );
-  }, []);
 
   const activeSplitTrack = useMemo(() => {
-    return history.find(t => t.id === activeGenId && isTrackStemSplit(t)) || history.find(isTrackStemSplit);
-  }, [history, activeGenId, isTrackStemSplit]);
+    return history.find(t => t.id === activeGenId && !isStemUploadTrack(t) && isTrackStemSplit(t))
+      || history.find(t => !isStemUploadTrack(t) && isTrackStemSplit(t));
+  }, [history, activeGenId]);
 
   const stemUrls = useMemo(() => {
     if (!activeSplitTrack) return undefined;
@@ -591,7 +631,7 @@ export default function Home() {
     if (isTrackStemSplit(item)) {
       setActiveGenId(item.id);
     }
-  }, [playingTrackId, isTrackPlaying, audio, sendRetentionLog, isTrackStemSplit]);
+  }, [playingTrackId, isTrackPlaying, audio, sendRetentionLog]);
 
   // Refs 동기화
   useEffect(() => {
@@ -606,23 +646,30 @@ export default function Home() {
     playingTrackIdRef.current = playingTrackId;
   }, [playingTrackId]);
 
-  // 스템 분리 중인 최근 트랙이 있을 때만 4초 간격 자동 폴링 (완료 시 즉시 최신 상태 반영)
+  // 생성곡 스템 분리가 terminal 상태가 될 때까지 자동 폴링한다.
+  // 생성곡 자체 created_at이 아니라 Stem 요청/시작/heartbeat를 기준으로 폴링 속도를 조절한다.
+  // 외부 업로드 작업은 StemStudioSummary/Stem Studio가 별도로 상태를 확인한다.
   useEffect(() => {
-    const now = Date.now();
-    const hasRecentPending = history.some(t => {
-      const isPending = (t.status === 'pending' || t.status === 'processing') && !isTrackStemSplit(t);
-      if (!isPending) return false;
-      const created = new Date(t.created_at || '').getTime();
-      return isNaN(created) || (now - created) < 10 * 60 * 1000;
+    const activeStemJobs = history.filter(t => {
+      if (isStemUploadTrack(t)) return false;
+      const stemStatus = getStemJobStatus(t);
+      return stemStatus === 'pending' || stemStatus === 'processing';
     });
-    if (!hasRecentPending) return;
+    if (activeStemJobs.length === 0) return;
+
+    const latestActivityAt = Math.max(
+      ...activeStemJobs.map((item) => getStemJobActivityAt(item) || 0),
+    );
+    const hasRecentHeartbeat = latestActivityAt > 0
+      && Date.now() - latestActivityAt < 10 * 60 * 1000;
+    const pollIntervalMs = hasRecentHeartbeat ? 4_000 : 15_000;
 
     const timer = setInterval(() => {
       fetchHistory();
-    }, 4000);
+    }, pollIntervalMs);
 
     return () => clearInterval(timer);
-  }, [history, isTrackStemSplit]);
+  }, [history]);
 
   const playNext = useCallback((isAutoPlay = false) => {
     const list = filteredRef.current;
@@ -834,14 +881,6 @@ export default function Home() {
           .select('*', { count: 'exact', head: true })
           .eq('user_id', user.id);
 
-        const { count: completedCount } = await supabase
-          .from('generations')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id)
-          .eq('status', 'completed');
-
-        const completed = completedCount || 0;
-        
         let customPresetsCount = 0;
         try {
           const saved = localStorage.getItem('melodio_custom_presets');
@@ -853,13 +892,13 @@ export default function Home() {
           console.warn('Failed to parse custom presets from localStorage:', e);
         }
 
-        setStats({
+        setStats((previous) => ({
           personas: 0,
           longformMvs: 0,
           shortsHooks: 0,
           customPresets: customPresetsCount,
-          musicGenerated: completed
-        });
+          musicGenerated: previous.musicGenerated,
+        }));
       }
     } catch (err) {
       console.warn('[Dashboard] Failed to fetch dynamic profile/stats:', err);
@@ -874,12 +913,16 @@ export default function Home() {
       const res = await fetch('/api/generations?scope=dashboard');
       if (res.ok) {
         const { generations } = await res.json();
-        const historyList = generations || [];
+        const historyList = (generations || []).filter((item: Generation) => !isStemUploadTrack(item));
         setHistory(historyList);
+        setStats((previous) => ({
+          ...previous,
+          musicGenerated: historyList.filter((item: Generation) => item.status === 'completed').length,
+        }));
         try {
           localStorage.setItem('melodio_cached_generations', JSON.stringify(historyList));
         } catch {}
-        const splitTracks = historyList.filter(isTrackStemSplit);
+        const splitTracks = historyList.filter((item: Generation) => !isStemUploadTrack(item) && isTrackStemSplit(item));
         if (splitTracks.length > 0) {
           if (!activeGenId || !splitTracks.some((t: any) => t.id === activeGenId)) {
             setActiveGenId(splitTracks[0].id);
@@ -1035,17 +1078,19 @@ export default function Home() {
 
   const handleUpdateTitle = async () => {
     if (!editingTrack || !newTitle.trim()) return;
-    const { error } = await supabase
-      .from('generations')
-      .update({ title: newTitle.trim() })
-      .eq('id', editingTrack.id);
+    const response = await fetch('/api/generations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: editingTrack.id, title: newTitle.trim() }),
+    });
 
-    if (!error) {
+    if (response.ok) {
       setIsEditModalOpen(false);
       setEditingTrack(null);
       fetchHistory(); // 새로고침
     } else {
-      alert('제목 수정 실패: ' + error.message);
+      const payload = await response.json().catch(() => ({}));
+      alert('제목 수정 실패: ' + (payload.error || '서버 요청에 실패했습니다.'));
     }
   };
 
@@ -1180,6 +1225,7 @@ export default function Home() {
 
   // ─── 클라이언트 사이드 검색, 필터, 정렬 ───
   let filtered = history
+    .filter((item) => !isStemUploadTrack(item))
     .filter((item) => getTrackCategory(item) !== 'viral-cf')
     .filter(item => (item.title || 'Untitled').toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -1414,6 +1460,8 @@ export default function Home() {
           if (target) setDetailItem(target);
         }}
       />
+
+      <StemStudioSummary />
       
       {/* ─── Suno 스타일 곡 라이브러리 패널 (Overhaul) ─── */}
       <div className="mt-12 glass-panel p-6">
@@ -1541,6 +1589,8 @@ export default function Home() {
             paginatedHistory.map((item) => {
               const isActive = activeGenId === item.id;
               const isLiked = !!likedTracks[item.id];
+              const stemJobStatus = getStemJobStatus(item);
+              const isStemJobActive = stemJobStatus === 'pending' || stemJobStatus === 'processing';
               return (
                 <motion.div 
                   layout
@@ -1738,7 +1788,7 @@ export default function Home() {
                     </button>
 
                     {/* 스템 분리 (Split Stems) 온디맨드 요청 단추 */}
-                    {item.status === 'completed' && !item.is_stem_extracted && (
+                    {item.status === 'completed' && !item.is_stem_extracted && !isStemJobActive && (
                       <button 
                         onClick={() => handleRequestStemSplit(item.id)}
                         className="flex items-center gap-1.5 bg-gradient-to-r from-fuchsia-600/80 to-cyan-500/80 hover:from-fuchsia-600 hover:to-cyan-500 text-white px-2.5 py-1.5 md:px-3.5 md:py-2 rounded-xl text-[11px] md:text-xs font-bold transition-all hover:shadow-[0_0_10px_rgba(192,38,211,0.3)]"
@@ -1749,7 +1799,7 @@ export default function Home() {
                     )}
 
                     {/* 분리 진행 중 스피너 (Splitting) */}
-                    {(item.status === 'pending' || item.status === 'processing') && (
+                    {isStemJobActive && (
                       <div className="flex items-center gap-1.5 bg-amber-500/10 border border-amber-500/20 text-amber-400 px-2.5 py-1.5 md:px-3.5 md:py-2 rounded-xl text-[11px] md:text-xs font-semibold select-none animate-pulse">
                         <RefreshCw className="w-3.5 h-3.5 animate-spin" />
                         <span>Splitting...</span>
@@ -1936,8 +1986,12 @@ export default function Home() {
       {/* ── 멀티트랙 스템 플레이어 ── */}
       <div className="mt-8">
         {(() => {
-          const activeSplitTrack = history.find(t => t.id === activeGenId && isTrackStemSplit(t)) || history.find(isTrackStemSplit);
-          const processingTrack = history.find(t => (t.status === 'pending' || t.status === 'processing') && !isTrackStemSplit(t));
+          const activeSplitTrack = history.find(t => t.id === activeGenId && !isStemUploadTrack(t) && isTrackStemSplit(t))
+            || history.find(t => !isStemUploadTrack(t) && isTrackStemSplit(t));
+          const processingTrack = history.find(t => {
+            const stemStatus = getStemJobStatus(t);
+            return !isStemUploadTrack(t) && !isTrackStemSplit(t) && (stemStatus === 'pending' || stemStatus === 'processing');
+          });
 
           if (activeSplitTrack) {
             return (
@@ -1945,11 +1999,17 @@ export default function Home() {
                 generationId={activeSplitTrack.id} 
                 stemStates={audio.stemStates}
                 allLoaded={audio.allLoaded}
+                hasLoadError={audio.hasLoadError}
                 isPlaying={audio.isPlaying}
                 currentTime={audio.currentTime}
                 duration={audio.duration}
                 originalWavUrls={audio.originalWavUrls}
-                onOpenUpload={() => setIsUploadStemModalOpen(true)}
+                originalWavRefs={{
+                  vocals: activeSplitTrack.stem_vocals_url || null,
+                  drums: activeSplitTrack.stem_drums_url || null,
+                  bass: activeSplitTrack.stem_bass_url || null,
+                  other: activeSplitTrack.stem_other_url || null,
+                }}
                 play={audio.play}
                 pause={audio.pause}
                 reset={audio.reset}
@@ -1992,17 +2052,17 @@ export default function Home() {
               <div className="max-w-md mx-auto space-y-1.5">
                 <h3 className="text-base font-bold text-white">4-Track Stem Player</h3>
                 <p className="text-xs text-zinc-400 leading-relaxed">
-                  아직 4채널 스템 분리된 트랙이 없습니다. 목록에서 원하는 곡의 <span className="text-fuchsia-400 font-semibold">[Split Stems]</span> 버튼을 누르거나, 소장 중인 MP3/WAV 파일을 직접 업로드하여 보컬/드럼/베이스를 분리해 보세요!
+                  아직 4채널 스템 분리된 생성곡이 없습니다. 목록에서 원하는 곡의 <span className="text-fuchsia-400 font-semibold">[Split Stems]</span> 버튼을 눌러 분리를 시작하세요. 외부 오디오는 전용 Stem Studio에서 관리합니다.
                 </p>
               </div>
               <div className="flex justify-center gap-3 pt-2">
-                <button
-                  onClick={() => setIsUploadStemModalOpen(true)}
+                <Link
+                  href="/stem-studio"
                   className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-cyan-500 hover:from-fuchsia-500 hover:to-cyan-400 text-white text-xs font-bold shadow-lg shadow-fuchsia-500/20 transition-all hover:scale-[1.02]"
                 >
                   <Sparkles className="w-4 h-4" />
-                  <span>+ 내 오디오 파일 업로드 & 스템 분리</span>
-                </button>
+                  <span>Stem Studio 열기</span>
+                </Link>
               </div>
             </div>
           );
@@ -2948,15 +3008,6 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* 외부 음원 업로드 & 스템 분리 모달 */}
-      <UploadStemModal
-        isOpen={isUploadStemModalOpen}
-        onClose={() => setIsUploadStemModalOpen(false)}
-        onSuccess={(genId) => {
-          fetchHistory();
-          setActiveGenId(genId);
-        }}
-      />
     </div>
   );
 }

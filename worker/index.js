@@ -17,6 +17,9 @@ const { exec, execFile } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const { randomUUID } = require('crypto');
+const { isIP } = require('net');
+const { Transform } = require('stream');
 const { pipeline } = require('stream/promises');
 const { analyzeAudio } = require('./analyzer');
 const axios = require('axios');
@@ -335,6 +338,740 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
 
 // ─── 스템 종류 정의 ────────────────────────────────────────────────────────────
 const STEMS = ['vocals', 'bass', 'drums', 'other'];
+const PRIVATE_STEM_BUCKET = 'melodio-private';
+const PRIVATE_STEM_OUTPUT_BUCKET = 'melodio-private-stems';
+const PRIVATE_STEM_INPUT_EXTENSIONS = new Set(['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac']);
+const UUID_OBJECT_SEGMENT_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// ─── 스템 작업 수명주기 ────────────────────────────────────────────────────────
+// generations 테이블에 별도 job 컬럼이 없는 현재 스키마와 호환하기 위해
+// license_hash JSON의 stem* 필드를 lease/진행 상태로 사용한다.
+const STEM_WORKER_ID = process.env.STEM_WORKER_ID || `${os.hostname()}:${process.pid}`;
+const STEM_HEARTBEAT_INTERVAL_MS = Number(process.env.STEM_HEARTBEAT_INTERVAL_MS) || 15_000;
+const STEM_LEASE_TIMEOUT_MS = Number(process.env.STEM_LEASE_TIMEOUT_MS) || 10 * 60_000;
+const STEM_DOWNLOAD_TIMEOUT_MS = Number(process.env.STEM_DOWNLOAD_TIMEOUT_MS) || 2 * 60_000;
+const STEM_DEMUCS_TIMEOUT_MS = Number(process.env.STEM_DEMUCS_TIMEOUT_MS) || 20 * 60_000;
+const STEM_FFMPEG_TIMEOUT_MS = Number(process.env.STEM_FFMPEG_TIMEOUT_MS) || 8 * 60_000;
+const STEM_UPLOAD_TIMEOUT_MS = Number(process.env.STEM_UPLOAD_TIMEOUT_MS) || 5 * 60_000;
+const STEM_SHUTDOWN_GRACE_MS = Number(process.env.STEM_SHUTDOWN_GRACE_MS) || 25_000;
+const STEM_MAX_SOURCE_BYTES = Number(process.env.STEM_MAX_SOURCE_BYTES) || 80 * 1024 * 1024;
+const STEM_MAX_DURATION_SECONDS = Number(process.env.STEM_MAX_DURATION_SECONDS) || 6 * 60;
+const STEM_MAX_PROCESSING_ATTEMPTS = 3;
+// Every claim creates a unique output path recorded in stemArtifactAttempts.
+// Keep a separate hard lease bound so repeated infrastructure interruptions
+// can never push an undeletable path out of the bounded deletion manifest.
+const STEM_MAX_LEASE_CLAIMS = 16;
+const STEM_MAX_LEGACY_BACKFILL_ATTEMPTS = 10;
+const STEM_MAINTENANCE_INTERVAL_MS = Number(process.env.STEM_MAINTENANCE_INTERVAL_MS) || 30 * 60_000;
+const STEM_ERROR_MAX_LENGTH = 500;
+const STEM_MAX_SOURCE_REDIRECTS = 3;
+const DEFAULT_TRUSTED_STEM_SOURCE_HOSTS = [
+  '*.supabase.co',
+  'file.302.ai',
+  'suno.ai',
+  '*.suno.ai',
+  'suno.com',
+  '*.suno.com',
+  'storage.googleapis.com',
+  '*.storage.googleapis.com',
+  'storage.cloud.google.com',
+  '*.googleapis.com',
+  '*.googleusercontent.com',
+  '*.r2.dev',
+  // 오래된 B2B 데모 generation의 실제 원본 호스트다.
+  'www.soundhelix.com',
+];
+const ALLOWED_STEM_AUDIO_CODECS = new Set([
+  'mp3', 'aac', 'alac', 'flac', 'vorbis', 'opus',
+  'pcm_s16le', 'pcm_s24le', 'pcm_s32le', 'pcm_f32le', 'pcm_f64le',
+]);
+
+const activeStemJobs = new Map();
+let isShuttingDown = false;
+let pendingScanInProgress = false;
+let generationChannel = null;
+let pendingScanTimeout = null;
+let pendingScanInterval = null;
+let lastStemMaintenanceAt = 0;
+let stemMaintenanceInProgress = false;
+// Security maintenance must eventually traverse the whole table even when a
+// permanently broken legacy row keeps failing. UUID cursors advance past every
+// inspected batch and wrap after the end instead of repeatedly selecting row 1.
+let expiredSessionCursor = null;
+let cleanupOutboxCursor = null;
+let stemUploadPrivacyCursor = null;
+let customUploadPrivacyCursor = null;
+let ownerlessLegacyCursor = null;
+let completedBackfillCursor = null;
+let completedGeneratedOutputBackfillCursor = null;
+let pendingPublicCleanupCursor = null;
+let failedPublicCleanupCursor = null;
+let pendingGeneratedOutputCleanupCursor = null;
+let failedGeneratedOutputCleanupCursor = null;
+
+function parseGenerationMetadata(value) {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed;
+  } catch {
+    // 예전의 실제 hash 문자열도 잃지 않고 JSON 안에 보존한다.
+  }
+  return { legacyLicenseHash: String(value) };
+}
+
+function sanitizeStemError(error) {
+  const message = error instanceof Error ? error.message : String(error || '알 수 없는 스템 처리 오류');
+  return message.replace(/[\r\n]+/g, ' ').slice(0, STEM_ERROR_MAX_LENGTH);
+}
+
+function addLicenseHashCondition(query, licenseHash) {
+  return licenseHash == null ? query.is('license_hash', null) : query.eq('license_hash', licenseHash);
+}
+
+function isExternalStemUpload(metadata) {
+  return metadata?.sourceMenu === 'stem-upload' || metadata?.sourceMenu === 'custom-upload';
+}
+
+function shouldStoreStemPrivately(row, metadata) {
+  // Stem WAV/AAC artifacts are user-owned working files even when the mixed
+  // song is public. Keeping all owned outputs private decouples publication
+  // toggles from Storage placement and prevents public-bucket privacy drift.
+  return Boolean(row?.user_id)
+    || isExternalStemUpload(metadata)
+    || row?.is_public === false
+    || metadata?.isPublic === false;
+}
+
+function hasStemSource(row) {
+  return Boolean(row?.audio_url || row?.source_audio_url);
+}
+
+function shouldClaimStemRow(row) {
+  const metadata = parseGenerationMetadata(row?.license_hash);
+  if (metadata.stemStatus === 'pending') return hasStemSource(row);
+  // legacy worker는 audio_url이 있는 row만 스템 queue로 취급했다.
+  // source_audio_url="suno:<task>"인 음악 생성 polling row와 혼동하면 안 된다.
+  return row?.status === 'pending' && Boolean(row?.audio_url) && !row?.stem_vocals_url;
+}
+
+function isProcessingStemRow(row) {
+  const metadata = parseGenerationMetadata(row?.license_hash);
+  if (metadata.stemStatus === 'processing') return hasStemSource(row);
+  return row?.status === 'processing' && Boolean(row?.audio_url) && !row?.stem_vocals_url;
+}
+
+function getStemSource(row) {
+  if (typeof row?.source_audio_url === 'string' && row.source_audio_url.startsWith('storage://')) {
+    return row.source_audio_url;
+  }
+  return row?.audio_url || row?.source_audio_url || null;
+}
+
+function allowedStemInputExtension(candidate) {
+  if (typeof candidate !== 'string' || !candidate) return null;
+  const extension = path.posix.extname(candidate).slice(1).toLowerCase();
+  return PRIVATE_STEM_INPUT_EXTENSIONS.has(extension) ? extension : null;
+}
+
+function resolveStemInputExtension(metadata, source) {
+  const candidates = [];
+  const storageRef = parseStorageUri(source);
+  if (storageRef) candidates.push(storageRef.objectPath);
+  if (typeof metadata?.originalFileName === 'string') candidates.push(metadata.originalFileName);
+
+  if (!storageRef) {
+    try {
+      const pathname = new URL(String(source)).pathname;
+      candidates.push(pathname);
+      try { candidates.push(decodeURIComponent(pathname)); } catch {}
+    } catch {
+      // 실제 URL 검증은 다운로드 직전에 수행하고 여기서는 확장자만 찾는다.
+    }
+  }
+
+  for (const candidate of candidates) {
+    const extension = allowedStemInputExtension(candidate);
+    if (extension) return extension;
+  }
+  // 공개 생성 엔진 중에는 확장자 없는 HTTPS download URL을 반환하는 곳이 있다.
+  // private Storage 업로드는 경로 확장자를 엄격히 요구하되, 기존 공개곡은
+  // Demucs/ffmpeg의 포맷 sniffing이 동작하도록 과거 기본값 mp3를 유지한다.
+  if (!storageRef) return 'mp3';
+  throw new Error('지원되는 원본 확장자(mp3, wav, m4a, aac, ogg, flac)를 확인할 수 없습니다.');
+}
+
+function parseStorageUri(uri) {
+  const match = /^storage:\/\/([^/]+)\/(.+)$/.exec(String(uri || ''));
+  if (!match) return null;
+  const bucket = match[1];
+  const objectPath = match[2];
+  const segments = objectPath.split('/');
+  if (
+    !bucket
+    || !objectPath
+    || segments.some(segment => !segment || segment === '.' || segment === '..' || /[?#\\]/.test(segment))
+  ) {
+    throw new Error('유효하지 않은 private Storage URI입니다.');
+  }
+  return { bucket, objectPath };
+}
+
+function validatePrivateStemSource(row, metadata, storageRef) {
+  if (storageRef.bucket !== PRIVATE_STEM_BUCKET) {
+    throw new Error(`허용되지 않은 private Storage bucket입니다: ${storageRef.bucket}`);
+  }
+  if (!row?.user_id) throw new Error('private 원본 소유자를 확인할 수 없습니다.');
+  const ownerPrefix = `uploads/${row.user_id}/`;
+  if (!storageRef.objectPath.startsWith(ownerPrefix)) {
+    throw new Error('private 원본 경로가 generation 소유자와 일치하지 않습니다.');
+  }
+  if (isExternalStemUpload(metadata)) {
+    const relativePath = storageRef.objectPath.slice(ownerPrefix.length);
+    const directMatch = new RegExp(`^${row.id}\\.(mp3|wav|m4a|aac|ogg|flac)$`, 'i').exec(relativePath);
+    const migratedMatch = new RegExp(
+      `^${row.id}/[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\\.(mp3|wav|m4a|aac|ogg|flac)$`,
+      'i',
+    ).exec(relativePath);
+    const extension = (directMatch?.[1] || migratedMatch?.[1] || '').toLowerCase();
+    if (!PRIVATE_STEM_INPUT_EXTENSIONS.has(extension)) {
+      throw new Error('외부 업로드 원본 경로가 generation ID와 일치하지 않습니다.');
+    }
+  }
+}
+
+function configuredTrustedStemSourceHosts() {
+  const configured = String(process.env.STEM_SOURCE_HOSTS || '')
+    .split(',')
+    .map(value => value.trim().toLowerCase().replace(/\.$/, ''))
+    .filter(value => /^(?:\*\.)?[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/.test(value));
+  return [...DEFAULT_TRUSTED_STEM_SOURCE_HOSTS, ...configured];
+}
+
+function stemSourceHostnameMatches(hostname, rule) {
+  if (!rule.startsWith('*.')) return hostname === rule;
+  const suffix = rule.slice(2);
+  return hostname.length > suffix.length && hostname.endsWith(`.${suffix}`);
+}
+
+function validateTrustedHttpStemSource(source) {
+  let url;
+  try {
+    url = new URL(String(source));
+  } catch {
+    throw new Error('원본 오디오 URL 형식이 올바르지 않습니다.');
+  }
+
+  if (url.protocol !== 'https:' || url.username || url.password || (url.port && url.port !== '443')) {
+    throw new Error('스템 원본은 HTTPS 기본 포트 URL만 허용됩니다.');
+  }
+
+  const hostname = url.hostname.toLowerCase().replace(/\.$/, '');
+  const ipCandidate = hostname.startsWith('[') && hostname.endsWith(']')
+    ? hostname.slice(1, -1)
+    : hostname;
+  if (
+    !hostname
+    || isIP(ipCandidate) !== 0
+    || hostname === 'localhost'
+    || hostname.endsWith('.localhost')
+    || hostname.endsWith('.local')
+    || hostname.endsWith('.internal')
+  ) {
+    throw new Error('내부 네트워크 주소는 스템 원본으로 사용할 수 없습니다.');
+  }
+
+  if (!configuredTrustedStemSourceHosts().some(rule => stemSourceHostnameMatches(hostname, rule))) {
+    throw new Error(`신뢰되지 않은 스템 원본 호스트입니다: ${hostname}`);
+  }
+  return url;
+}
+
+function planLegacyPublicStemSourceMigration(row, metadata, source, inputExtension) {
+  if (!isExternalStemUpload(metadata) || String(source).startsWith('storage://') || !row?.user_id) return null;
+
+  let sourceUrl;
+  let supabaseOrigin;
+  try {
+    sourceUrl = validateTrustedHttpStemSource(source);
+    supabaseOrigin = new URL(SUPABASE_URL).origin;
+  } catch {
+    return null;
+  }
+
+  const publicObjectPath = `uploads/${row.id}.${inputExtension}`;
+  const expectedPathname = `/storage/v1/object/public/melodio-assets/${publicObjectPath}`;
+  let decodedPathname;
+  try {
+    decodedPathname = decodeURIComponent(sourceUrl.pathname);
+  } catch {
+    return null;
+  }
+  if (sourceUrl.origin !== supabaseOrigin || decodedPathname !== expectedPathname) return null;
+
+  const privateObjectPath = `uploads/${row.user_id}/${row.id}.${inputExtension}`;
+  const legacyPublicStemPaths = STEMS.flatMap(stem => [
+    `stems/${row.id}/original/${stem}.wav`,
+    `stems/${row.id}/preview/${stem}.m4a`,
+  ]);
+  return {
+    publicBucket: 'melodio-assets',
+    // broad prefix 삭제 없이 검증된 원본 1개 + 고정된 stem 산출물 8개만 정리한다.
+    publicObjectPaths: [publicObjectPath, ...legacyPublicStemPaths],
+    privateBucket: PRIVATE_STEM_BUCKET,
+    privateObjectPath,
+    privateStorageUri: `storage://${PRIVATE_STEM_BUCKET}/${privateObjectPath}`,
+  };
+}
+
+function stemInputContentType(extension) {
+  return {
+    mp3: 'audio/mpeg',
+    wav: 'audio/wav',
+    m4a: 'audio/mp4',
+    aac: 'audio/aac',
+    ogg: 'audio/ogg',
+    flac: 'audio/flac',
+  }[extension] || 'application/octet-stream';
+}
+
+async function fetchTrustedStemSource(source, signal) {
+  let currentUrl = validateTrustedHttpStemSource(source);
+  const redirectStatuses = new Set([301, 302, 303, 307, 308]);
+
+  for (let redirectCount = 0; redirectCount <= STEM_MAX_SOURCE_REDIRECTS; redirectCount++) {
+    const response = await fetch(currentUrl, { signal, redirect: 'manual' });
+    if (!redirectStatuses.has(response.status)) return response;
+
+    const location = response.headers.get('location');
+    await response.body?.cancel().catch(() => {});
+    if (!location) throw new Error('음원 저장소 redirect 위치가 없습니다.');
+    if (redirectCount === STEM_MAX_SOURCE_REDIRECTS) {
+      throw new Error(`음원 저장소 redirect가 ${STEM_MAX_SOURCE_REDIRECTS}회를 초과했습니다.`);
+    }
+    currentUrl = validateTrustedHttpStemSource(new URL(location, currentUrl).toString());
+  }
+
+  throw new Error('음원 저장소 redirect 처리에 실패했습니다.');
+}
+
+function createOperationAbort(parentSignal, timeoutMs, label) {
+  const controller = new AbortController();
+  let timedOut = false;
+  const onParentAbort = () => controller.abort(parentSignal.reason || new Error(`${label} 중단`));
+  if (parentSignal?.aborted) onParentAbort();
+  else parentSignal?.addEventListener('abort', onParentAbort, { once: true });
+
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort(new Error(`${label} 시간 초과`));
+  }, timeoutMs);
+  timer.unref?.();
+
+  return {
+    signal: controller.signal,
+    didTimeout: () => timedOut,
+    cleanup: () => {
+      clearTimeout(timer);
+      parentSignal?.removeEventListener('abort', onParentAbort);
+    },
+  };
+}
+
+async function withOperationTimeout(label, timeoutMs, parentSignal, operation) {
+  const timeout = createOperationAbort(parentSignal, timeoutMs, label);
+  let abortListener;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(() => operation(timeout.signal)),
+      new Promise((_, reject) => {
+        abortListener = () => {
+          const reason = timeout.didTimeout()
+            ? new Error(`${label} 시간 초과 (${Math.ceil(timeoutMs / 1000)}초)`)
+            : (timeout.signal.reason instanceof Error ? timeout.signal.reason : new Error(`${label} 중단`));
+          reject(reason);
+        };
+        timeout.signal.addEventListener('abort', abortListener, { once: true });
+      }),
+    ]);
+  } finally {
+    if (abortListener) timeout.signal.removeEventListener('abort', abortListener);
+    timeout.cleanup();
+  }
+}
+
+async function runChildProcess(command, args, { label, timeoutMs, signal, job }) {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const child = execFile(command, args, {
+      timeout: timeoutMs,
+      killSignal: 'SIGKILL',
+      maxBuffer: 10 * 1024 * 1024,
+    }, (error, stdout, stderr) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener('abort', onAbort);
+      job.childProcesses.delete(child);
+      if (error) {
+        const detail = String(stderr || error.message || '').trim().slice(-2_000);
+        reject(new Error(`${label} 실패${detail ? `: ${detail}` : ''}`));
+        return;
+      }
+      resolve({ stdout, stderr });
+    });
+
+    const onAbort = () => {
+      if (settled) return;
+      child.kill('SIGTERM');
+      const forceKill = setTimeout(() => child.kill('SIGKILL'), 2_000);
+      forceKill.unref?.();
+    };
+
+    job.childProcesses.add(child);
+    if (signal?.aborted) onAbort();
+    else signal?.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+function createByteLimitTransform(maxBytes, label) {
+  let received = 0;
+  return new Transform({
+    transform(chunk, encoding, callback) {
+      received += Buffer.byteLength(chunk);
+      if (received > maxBytes) {
+        callback(new Error(`${label} 크기가 ${Math.floor(maxBytes / 1024 / 1024)}MB 제한을 초과했습니다.`));
+        return;
+      }
+      callback(null, chunk);
+    },
+  });
+}
+
+async function validateStemInputMedia(inputPath, signal, job) {
+  const { stdout } = await runChildProcess('ffprobe', [
+    '-v', 'error',
+    '-show_entries', 'format=duration,format_name:stream=codec_type,codec_name',
+    '-of', 'json',
+    inputPath,
+  ], {
+    label: 'FFprobe 원본 검증',
+    timeoutMs: 30_000,
+    signal,
+    job,
+  });
+
+  let probe;
+  try {
+    probe = JSON.parse(stdout);
+  } catch {
+    throw new Error('원본 오디오 분석 결과를 읽을 수 없습니다.');
+  }
+  const duration = Number(probe?.format?.duration);
+  const audioStreams = Array.isArray(probe?.streams)
+    ? probe.streams.filter(stream => stream?.codec_type === 'audio')
+    : [];
+  if (!Number.isFinite(duration) || duration <= 0 || audioStreams.length === 0) {
+    throw new Error('재생 가능한 오디오 스트림을 찾을 수 없습니다.');
+  }
+  if (duration > STEM_MAX_DURATION_SECONDS) {
+    throw new Error(`오디오 길이는 최대 ${Math.floor(STEM_MAX_DURATION_SECONDS / 60)}분까지 처리할 수 있습니다.`);
+  }
+  const unsupportedCodec = audioStreams.find(stream => !ALLOWED_STEM_AUDIO_CODECS.has(String(stream.codec_name || '').toLowerCase()));
+  if (unsupportedCodec) {
+    throw new Error(`지원하지 않는 오디오 코덱입니다: ${unsupportedCodec.codec_name || 'unknown'}`);
+  }
+  return { duration, codec: audioStreams[0].codec_name };
+}
+
+async function patchStemMetadata(
+  id,
+  patch,
+  rowPatch = {},
+  expectedStemStatus = 'processing',
+  expectedLeaseToken = null,
+) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: current, error: fetchError } = await supabase
+      .from('generations')
+      .select('id,status,license_hash')
+      .eq('id', id)
+      .single();
+    if (fetchError || !current) {
+      throw new Error(`스템 메타데이터 조회 실패: ${fetchError?.message || '행 없음'}`);
+    }
+
+    const metadata = parseGenerationMetadata(current.license_hash);
+    if (expectedStemStatus && metadata.stemStatus !== expectedStemStatus) return false;
+    if (expectedLeaseToken && metadata.stemLeaseToken !== expectedLeaseToken) return false;
+    const nextMetadata = { ...metadata, ...patch };
+    let updateQuery = supabase
+      .from('generations')
+      .update({ ...rowPatch, license_hash: JSON.stringify(nextMetadata) })
+      .eq('id', id);
+    updateQuery = addLicenseHashCondition(updateQuery, current.license_hash);
+    const { data: updated, error: updateError } = await updateQuery.select('id');
+    if (updateError) throw new Error(`스템 메타데이터 업데이트 실패: ${updateError.message}`);
+    if (updated?.length) return true;
+  }
+  return false;
+}
+
+async function claimStemJob(row, job) {
+  const metadata = parseGenerationMetadata(row.license_hash);
+  if (!shouldClaimStemRow(row)) return false;
+
+  const currentAttempt = Math.max(0, Number(metadata.stemAttempt) || 0);
+  if (currentAttempt >= STEM_MAX_PROCESSING_ATTEMPTS) {
+    const failedAt = new Date().toISOString();
+    const nextMetadata = {
+      ...metadata,
+      stemStatus: 'failed',
+      stemStage: 'failed',
+      stemProgress: 0,
+      stemHeartbeatAt: failedAt,
+      stemFailedAt: failedAt,
+      stemError: `스템 분리 최대 ${STEM_MAX_PROCESSING_ATTEMPTS}회 시도를 초과했습니다.`,
+    };
+    const nextStatus = isExternalStemUpload(metadata) ? 'failed' : 'completed';
+    let limitQuery = supabase
+      .from('generations')
+      .update({ status: nextStatus, license_hash: JSON.stringify(nextMetadata) })
+      .eq('id', row.id);
+    limitQuery = addLicenseHashCondition(limitQuery, row.license_hash);
+    const { data: limited, error: limitError } = await limitQuery.select('id');
+    if (limitError) throw new Error(`스템 최대 시도 상태 기록 실패: ${limitError.message}`);
+    if (limited?.length) {
+      log('ERROR', '스템 최대 처리 시도 초과로 작업을 종료합니다.', { id: row.id, attempts: currentAttempt });
+    }
+    return false;
+  }
+
+  const now = new Date().toISOString();
+  const artifactAttemptAudit = normalizedArtifactAttemptsForBackfill(metadata);
+  const previousArtifactAttempts = artifactAttemptAudit.attempts;
+  const storedLeaseClaimCount = Number(metadata.stemLeaseClaimCount);
+  const leaseClaimCount = Number.isFinite(storedLeaseClaimCount)
+    ? Math.max(0, storedLeaseClaimCount, previousArtifactAttempts.length)
+    : previousArtifactAttempts.length;
+  if (artifactAttemptAudit.invalid || leaseClaimCount >= STEM_MAX_LEASE_CLAIMS) {
+    const failedAt = new Date().toISOString();
+    const invalidHistory = artifactAttemptAudit.invalid;
+    const nextMetadata = {
+      ...metadata,
+      stemStatus: 'failed',
+      stemStage: 'failed',
+      stemProgress: 0,
+      stemHeartbeatAt: failedAt,
+      stemFailedAt: failedAt,
+      stemErrorCode: invalidHistory ? 'STEM_ARTIFACT_HISTORY_INVALID' : 'STEM_LEASE_CLAIM_LIMIT',
+      stemError: invalidHistory
+        ? '기존 Stem 파일 정리 이력을 안전하게 검증할 수 없습니다. 관리자 점검이 필요합니다.'
+        : '반복된 시스템 중단으로 안전 복구 한도를 초과했습니다. 작업을 삭제한 뒤 다시 업로드해 주세요.',
+    };
+    const nextStatus = isExternalStemUpload(metadata) ? 'failed' : 'completed';
+    let limitQuery = supabase
+      .from('generations')
+      .update({ status: nextStatus, license_hash: JSON.stringify(nextMetadata) })
+      .eq('id', row.id);
+    limitQuery = addLicenseHashCondition(limitQuery, row.license_hash);
+    const { data: limited, error: limitError } = await limitQuery.select('id');
+    if (limitError) throw new Error(`스템 lease claim 한도 기록 실패: ${limitError.message}`);
+    if (limited?.length) {
+      log('ERROR', '스템 artifact 이력/lease 안전 한도로 작업을 종료합니다.', {
+        id: row.id,
+        leaseClaims: leaseClaimCount,
+        invalidHistory,
+      });
+    }
+    return false;
+  }
+  const artifactStorage = shouldStoreStemPrivately(row, metadata) ? 'private' : 'public';
+  const artifactAttempts = [
+    ...previousArtifactAttempts,
+    { token: job.leaseToken, storage: artifactStorage },
+  ];
+  const nextMetadata = {
+    ...metadata,
+    ...(isExternalStemUpload(metadata) ? { isPublic: false } : {}),
+    stemStatus: 'processing',
+    stemStage: 'claimed',
+    stemProgress: 2,
+    stemHeartbeatAt: now,
+    stemStartedAt: now,
+    stemWorkerId: STEM_WORKER_ID,
+    stemLeaseToken: job.leaseToken,
+    stemArtifactAttempts: artifactAttempts,
+    stemArtifactStorage: artifactStorage,
+    stemAttempt: currentAttempt + 1,
+    stemLeaseClaimCount: leaseClaimCount + 1,
+    stemCleanupReason: null,
+    stemError: null,
+  };
+  const nextGenerationStatus = isExternalStemUpload(metadata) ? 'processing' : 'completed';
+
+  let query = supabase
+    .from('generations')
+    .update({
+      status: nextGenerationStatus,
+      license_hash: JSON.stringify(nextMetadata),
+      ...(isExternalStemUpload(metadata) ? { is_public: false } : {}),
+    })
+    .eq('id', row.id);
+  query = addLicenseHashCondition(query, row.license_hash);
+  if (metadata.stemStatus !== 'pending') query = query.eq('status', 'pending');
+  const { data: claimed, error } = await query.select('id');
+  if (error) throw new Error(`스템 작업 claim 실패: ${error.message}`);
+  return Boolean(claimed?.length);
+}
+
+async function updateStemStage(job, stage, progress, extra = {}) {
+  const updated = await patchStemMetadata(job.id, {
+    stemStage: stage,
+    stemProgress: progress,
+    stemHeartbeatAt: new Date().toISOString(),
+    ...extra,
+  }, {}, 'processing', job.leaseToken);
+  if (!updated) throw new Error(`스템 작업 lease 상실 (${stage})`);
+  return true;
+}
+
+function startStemHeartbeat(job) {
+  job.heartbeatTimer = setInterval(async () => {
+    if (job.heartbeatInFlight || job.controller.signal.aborted) return;
+    job.heartbeatInFlight = true;
+    try {
+      const updated = await patchStemMetadata(
+        job.id,
+        { stemHeartbeatAt: new Date().toISOString() },
+        {},
+        'processing',
+        job.leaseToken,
+      );
+      if (!updated && !job.controller.signal.aborted) {
+        const leaseError = new Error('스템 작업 lease 상실 (heartbeat)');
+        log('WARN', '스템 heartbeat lease 상실 — 작업 중단', { id: job.id });
+        job.controller.abort(leaseError);
+      }
+    } catch (error) {
+      log('WARN', '스템 heartbeat 갱신 실패', { id: job.id, error: sanitizeStemError(error) });
+    } finally {
+      job.heartbeatInFlight = false;
+    }
+  }, STEM_HEARTBEAT_INTERVAL_MS);
+  job.heartbeatTimer.unref?.();
+}
+
+async function downloadStemSource(row, metadata, source, destination, signal) {
+  const storageRef = parseStorageUri(source);
+  if (storageRef) {
+    validatePrivateStemSource(row, metadata, storageRef);
+    await withOperationTimeout('private 원본 다운로드', STEM_DOWNLOAD_TIMEOUT_MS, signal, async (operationSignal) => {
+      const { data, error } = await supabase.storage
+        .from(storageRef.bucket)
+        .download(storageRef.objectPath, undefined, { signal: operationSignal })
+        .asStream();
+      if (error || !data) throw new Error(error?.message || 'Storage 객체 없음');
+      await pipeline(
+        data,
+        createByteLimitTransform(STEM_MAX_SOURCE_BYTES, 'private 원본'),
+        fs.createWriteStream(destination),
+        { signal: operationSignal },
+      );
+    });
+    return;
+  }
+
+  await withOperationTimeout('공개 원본 다운로드', STEM_DOWNLOAD_TIMEOUT_MS, signal, async (operationSignal) => {
+    const response = await fetchTrustedStemSource(source, operationSignal);
+    if (!response.ok || !response.body) throw new Error(`음원 다운로드 실패 (HTTP ${response.status})`);
+    const contentLength = Number(response.headers.get('content-length') || 0);
+    if (Number.isFinite(contentLength) && contentLength > STEM_MAX_SOURCE_BYTES) {
+      await response.body.cancel().catch(() => {});
+      throw new Error(`공개 원본 크기가 ${Math.floor(STEM_MAX_SOURCE_BYTES / 1024 / 1024)}MB 제한을 초과했습니다.`);
+    }
+    await pipeline(
+      response.body,
+      createByteLimitTransform(STEM_MAX_SOURCE_BYTES, '공개 원본'),
+      fs.createWriteStream(destination),
+      { signal: operationSignal },
+    );
+  });
+}
+
+function encodeStoragePath(objectPath) {
+  return objectPath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+}
+
+async function uploadLocalStem({ bucket, objectPath, localPath, contentType, isPrivate, signal }) {
+  const expectedSize = fs.statSync(localPath).size;
+  if (!Number.isFinite(expectedSize) || expectedSize <= 0) {
+    throw new Error(`빈 Stem 산출물은 업로드할 수 없습니다: ${path.basename(localPath)}`);
+  }
+  const bodyStream = fs.createReadStream(localPath);
+  try {
+    await withOperationTimeout(`Storage 업로드 ${path.basename(localPath)}`, STEM_UPLOAD_TIMEOUT_MS, signal, async (operationSignal) => {
+      const endpoint = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(bucket)}/${encodeStoragePath(objectPath)}`;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          apikey: SUPABASE_SERVICE_ROLE_KEY,
+          Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'Content-Type': contentType,
+          'x-upsert': 'true',
+        },
+        body: bodyStream,
+        duplex: 'half',
+        signal: operationSignal,
+      });
+      if (!response.ok) {
+        const detail = (await response.text()).slice(0, 500);
+        throw new Error(`HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
+      }
+
+      const { data: storedInfo, error: storedInfoError } = await supabase.storage
+        .from(bucket)
+        .info(objectPath);
+      const storedSize = Number(storedInfo?.size || 0);
+      if (storedInfoError || storedSize !== expectedSize) {
+        throw new Error(
+          storedInfoError?.message
+          || `Storage 업로드 크기 불일치 (${expectedSize} -> ${storedSize}): ${objectPath}`,
+        );
+      }
+    });
+  } finally {
+    bodyStream.destroy();
+  }
+
+  if (isPrivate) return `storage://${bucket}/${objectPath}`;
+  return supabase.storage.from(bucket).getPublicUrl(objectPath).data.publicUrl;
+}
+
+async function removeLegacyPublicStemArtifacts(migration, signal) {
+  for (let offset = 0; offset < migration.publicObjectPaths.length; offset += 100) {
+    const objectPaths = migration.publicObjectPaths.slice(offset, offset + 100);
+    await withOperationTimeout('legacy 공개 원본/스템 산출물 삭제', STEM_UPLOAD_TIMEOUT_MS, signal, async (operationSignal) => {
+      const { error } = await supabase.storage
+        .from(migration.publicBucket)
+        .remove(objectPaths);
+      if (error) throw new Error(error.message);
+      if (operationSignal.aborted) throw operationSignal.reason || new Error('legacy 공개 artifact 삭제 중단');
+    });
+  }
+}
+
+async function removePartialStemArtifacts({ id, userId, privateOutput, leaseToken }) {
+  const outputRoot = privateOutput
+    ? `stems/${userId}/${id}/${leaseToken}`
+    : `stems/${id}/${leaseToken}`;
+  const bucket = privateOutput ? PRIVATE_STEM_OUTPUT_BUCKET : 'melodio-assets';
+  const outputPaths = STEMS.flatMap(stem => [
+    `${outputRoot}/original/${stem}.wav`,
+    `${outputRoot}/preview/${stem}.m4a`,
+  ]);
+  const { error: outputError } = await supabase.storage.from(bucket).remove(outputPaths);
+  if (outputError) throw new Error(`부분 Stem 산출물 삭제 실패: ${outputError.message}`);
+}
 
 // ─── 야간 과부하 방지: Max 100 Job 제한 ─────────────────────────────────────────
 const MAX_JOBS = 100;
@@ -353,171 +1090,322 @@ const log = (level, msg, data = '') => {
 function enterSleepMode() {
   isSleeping = true;
   log('INFO', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  log('INFO', `  [SLEEP MODE] Max ${MAX_JOBS}개 작업 완료 — 휴면 상태 진입`);
-  log('INFO', '  ▸ Realtime 구독 유지 (새 잡은 무시)');
-  log('INFO', '  ▸ 재활성화: pm2 restart melodio-worker');
+  log('INFO', `  [WORKER ROTATION] Max ${MAX_JOBS}개 작업 완료 — 안전 재시작`);
+  log('INFO', '  ▸ PM2가 새 프로세스로 자동 교체합니다.');
   log('INFO', '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  setImmediate(() => { void initiateGracefulShutdown('max-jobs-rotation', 0); });
 }
 
-// ─── 핵심 파이프라인: 한 generation row를 처리 ────────────────────────────────
-async function processGeneration(row) {
-  if (isSleeping || jobsProcessed >= MAX_JOBS) {
-    log('WARN', `[SLEEP] 새 잡 수신 — 슬립 모드 중 무시`, { id: row.id });
-    return;
-  }
-  jobsProcessed++;
-  log('INFO', `[잡 ${jobsProcessed}/${MAX_JOBS}] 처리 시작 (Phase 10: Dual-Path Encoding)`);
+// ─── 핵심 파이프라인: claim된 generation row를 처리 ───────────────────────────
+async function processGeneration(row, job) {
+  const { id, user_id } = row;
+  const metadata = parseGenerationMetadata(row.license_hash);
+  const attemptBeforeClaim = Math.max(0, Number(metadata.stemAttempt) || 0);
+  const source = getStemSource(row);
+  const externalUpload = isExternalStemUpload(metadata);
+  const privateOutput = shouldStoreStemPrivately(row, metadata);
 
-  const { id, audio_url, user_id } = row;
-  log('INFO', `파이프라인 시작`, { id, user_id });
-
-  if (!audio_url) {
-    log('ERROR', `audio_url이 존재하지 않습니다.`);
-    return;
-  }
-
-  if (row.stem_vocals_url) {
-    log('INFO', `이미 스템 분리가 완료된 잡입니다. 건너뜁니다.`, { id });
-    return;
-  }
-
-  // 작업 디렉토리 설정
   const workDir = path.join(os.tmpdir(), `melodio-worker-${id}`);
-  const inputPath = path.join(workDir, 'input.mp3'); 
   const outDir = path.join(workDir, 'demucs_out');
-  fs.mkdirSync(outDir, { recursive: true });
+  let sourceMigration = null;
 
   try {
-    // 1단계: status → 'processing'
-    const { error: updateErr } = await supabase
-      .from('generations')
-      .update({ status: 'processing' })
-      .eq('id', id);
+    if (!source) throw new Error('분리할 audio_url 또는 source_audio_url이 없습니다.');
+    if (privateOutput && !user_id) throw new Error('private 스템 저장에 필요한 user_id가 없습니다.');
+    const inputExtension = resolveStemInputExtension(metadata, source);
+    const inputFileName = `input.${inputExtension}`;
+    const inputPath = path.join(workDir, inputFileName);
+    const demucsInputName = path.parse(inputFileName).name;
+    const demucsResultDir = path.join(outDir, 'htdemucs_ft', demucsInputName);
+    // Mock 입력은 실제 원본을 대체할 수 없으므로 절대 migration/delete에 사용하지 않는다.
+    sourceMigration = MOCK_MODE
+      ? null
+      : planLegacyPublicStemSourceMigration(row, metadata, source, inputExtension);
+    fs.mkdirSync(outDir, { recursive: true });
+    startStemHeartbeat(job);
+    await updateStemStage(job, 'downloading', 8);
+    log('PROC', `[1/5] 원본 오디오 다운로드 중... | ext=${inputExtension} | private=${Boolean(parseStorageUri(source))} | mock=${MOCK_MODE}`);
+    if (!MOCK_MODE) await downloadStemSource(row, metadata, source, inputPath, job.controller.signal);
+    else fs.writeFileSync(inputPath, Buffer.alloc(1024, 0xff));
+    if (job.controller.signal.aborted) throw job.controller.signal.reason || new Error('스템 작업 중단');
 
-    if (updateErr) throw new Error(`Status 업데이트 실패: ${updateErr.message}`);
-    log('INFO', `[1/6] status → processing 업데이트 성공`);
-
-    // 2단계: 오디오 다운로드 (MOCK 모드: 더미 버퍼 생성)
-    log('PROC', `[2/6] 오디오 다운로드 중... | url=${audio_url} | mock=${MOCK_MODE}`);
     if (!MOCK_MODE) {
-      const response = await fetch(audio_url);
-      if (!response.ok) throw new Error(`음원 다운로드 실패 (HTTP ${response.status})`);
-      await pipeline(response.body, fs.createWriteStream(inputPath));
-    } else {
-      // MOCK: 더미 MP3 헤더 바이트로 파일 생성
-      fs.writeFileSync(inputPath, Buffer.alloc(1024, 0xff));
+      await updateStemStage(job, 'validating', 12);
+      const media = await validateStemInputMedia(inputPath, job.controller.signal, job);
+      log('PROC', '원본 오디오 검증 완료', { id, duration: media.duration, codec: media.codec });
     }
-    log('INFO', `[2/6] 다운로드 성공 → ${inputPath}`);
 
-    // 3단계: Demucs 연산 실행 (MOCK 모드: 더미 WAV 생성)
-    log('PROC', `[3/6] Demucs 분리 프로세스 가동 (htdemucs_ft)... | mock=${MOCK_MODE}`);
-    // demucs 출력 경로: outDir/htdemucs_ft/input/{vocals,bass,drums,other}.wav
-    const demucsResultDir = path.join(outDir, 'htdemucs_ft', 'input');
+    if (sourceMigration) {
+      await updateStemStage(job, 'migrating-source', 15);
+      await uploadLocalStem({
+        bucket: sourceMigration.privateBucket,
+        objectPath: sourceMigration.privateObjectPath,
+        localPath: inputPath,
+        contentType: stemInputContentType(inputExtension),
+        isPrivate: true,
+        signal: job.controller.signal,
+      });
+      log('PROC', 'legacy 공개 업로드 원본을 private Storage에 복사 완료', { id });
+    }
+
+    await updateStemStage(job, 'separating', 20);
+    log('PROC', `[2/5] Demucs 분리 프로세스 가동 (htdemucs_ft)... | mock=${MOCK_MODE}`);
     if (!MOCK_MODE) {
-      await new Promise((resolve, reject) => {
-        // Python 경로는 환경에 따라 동적 탐색 (muse → yoonmanro 경로 변경 대응)
-        const demucsCmd = `/usr/bin/python3 -m demucs -n htdemucs_ft -o "${outDir}" -d cpu "${inputPath}"`;
-        exec(demucsCmd, (error, stdout, stderr) => {
-          if (error) {
-            log('ERROR', 'Demucs 에러', stderr);
-            return reject(new Error('Demucs 실행 실패'));
-          }
-          resolve();
-        });
+      await runChildProcess('/usr/bin/python3', [
+        '-m', 'demucs', '-n', 'htdemucs_ft', '-o', outDir, '-d', 'cpu', inputPath,
+      ], {
+        label: 'Demucs 분리',
+        timeoutMs: STEM_DEMUCS_TIMEOUT_MS,
+        signal: job.controller.signal,
+        job,
       });
       if (!fs.existsSync(demucsResultDir)) {
         throw new Error(`Demucs 출력 디렉토리 없음: ${demucsResultDir}`);
       }
     } else {
-      // MOCK: 더미 WAV 파일 4종 생성
       fs.mkdirSync(demucsResultDir, { recursive: true });
       for (const stem of STEMS) {
         fs.writeFileSync(path.join(demucsResultDir, `${stem}.wav`), Buffer.alloc(2048, 0xab));
       }
     }
-    log('INFO', `[3/6] Demucs 4채널 WAV 분리 완료`);
+    if (job.controller.signal.aborted) throw job.controller.signal.reason || new Error('스템 작업 중단');
 
-    // 4단계: FFmpeg 프리뷰용 AAC 변환 (MOCK 모드: 더미 m4a 생성)
-    log('PROC', `[4/6] FFmpeg AAC 프리뷰 인코딩 시작... | mock=${MOCK_MODE}`);
+    await updateStemStage(job, 'encoding', 62);
+    log('PROC', `[3/5] FFmpeg AAC 프리뷰 인코딩 시작... | mock=${MOCK_MODE}`);
     if (!MOCK_MODE) {
-      const encodePromises = STEMS.map(stem => {
-        return new Promise((resolve, reject) => {
-          const wavFile = path.join(demucsResultDir, `${stem}.wav`);
-          const aacFile = path.join(demucsResultDir, `${stem}.m4a`);
-          exec(`ffmpeg -y -i "${wavFile}" -c:a aac -b:a 192k "${aacFile}"`, (error) => {
-            if (error) return reject(new Error(`FFmpeg AAC 변환 실패: ${stem}`));
-            resolve();
-          });
-        });
-      });
-      await Promise.all(encodePromises);
+      await Promise.all(STEMS.map(stem => runChildProcess('ffmpeg', [
+        '-y', '-i', path.join(demucsResultDir, `${stem}.wav`),
+        // Browser mixer decodes all four previews simultaneously. Mono 44.1k
+        // previews keep full-length memory bounded; downloadable WAVs stay stereo.
+        '-c:a', 'aac', '-ac', '1', '-ar', '44100', '-b:a', '128k', path.join(demucsResultDir, `${stem}.m4a`),
+      ], {
+        label: `FFmpeg AAC 변환(${stem})`,
+        timeoutMs: STEM_FFMPEG_TIMEOUT_MS,
+        signal: job.controller.signal,
+        job,
+      })));
     } else {
-      // MOCK: 더미 AAC 파일 4종 생성
       for (const stem of STEMS) {
         fs.writeFileSync(path.join(demucsResultDir, `${stem}.m4a`), Buffer.alloc(1024, 0xcd));
       }
     }
-    log('INFO', `[4/6] 4채널 AAC(.m4a) 압축 파이프라인 완료`);
+    if (job.controller.signal.aborted) throw job.controller.signal.reason || new Error('스템 작업 중단');
 
-    // 5단계: Supabase 버킷에 듀얼 업로드
-    log('PROC', `[5/6] Supabase Storage 듀얼 업로드 시작 (WAV + AAC)...`);
+    await updateStemStage(job, 'uploading', 75);
+    const bucket = privateOutput ? PRIVATE_STEM_OUTPUT_BUCKET : 'melodio-assets';
+    // Attempt-scoped paths make late cleanup from a stale worker harmless: an
+    // old lease can only delete its own files, never the next attempt's output.
+    const outputRoot = privateOutput
+      ? `stems/${user_id}/${id}/${job.leaseToken}`
+      : `stems/${id}/${job.leaseToken}`;
     const uploadResults = { original: {}, preview: {} };
+    log('PROC', `[4/5] Storage 스트리밍 업로드 시작`, { id, bucket });
 
-    for (const stem of STEMS) {
-      // WAV 업로드
-      const wavLocal = path.join(demucsResultDir, `${stem}.wav`);
-      const wavRemote = `stems/${id}/original/${stem}.wav`;
-      const wavBuf = fs.readFileSync(wavLocal);
-      await supabase.storage.from('melodio-assets').upload(wavRemote, wavBuf, { contentType: 'audio/wav', upsert: true });
-      uploadResults.original[stem] = supabase.storage.from('melodio-assets').getPublicUrl(wavRemote).data.publicUrl;
-
-      // AAC 업로드
-      const aacLocal = path.join(demucsResultDir, `${stem}.m4a`);
-      const aacRemote = `stems/${id}/preview/${stem}.m4a`;
-      const aacBuf = fs.readFileSync(aacLocal);
-      await supabase.storage.from('melodio-assets').upload(aacRemote, aacBuf, { contentType: 'audio/mp4', upsert: true });
-      uploadResults.preview[stem] = supabase.storage.from('melodio-assets').getPublicUrl(aacRemote).data.publicUrl;
-
+    for (let index = 0; index < STEMS.length; index++) {
+      const stem = STEMS[index];
+      const wavRemote = `${outputRoot}/original/${stem}.wav`;
+      const aacRemote = `${outputRoot}/preview/${stem}.m4a`;
+      uploadResults.original[stem] = await uploadLocalStem({
+        bucket,
+        objectPath: wavRemote,
+        localPath: path.join(demucsResultDir, `${stem}.wav`),
+        contentType: 'audio/wav',
+        isPrivate: privateOutput,
+        signal: job.controller.signal,
+      });
+      uploadResults.preview[stem] = await uploadLocalStem({
+        bucket,
+        objectPath: aacRemote,
+        localPath: path.join(demucsResultDir, `${stem}.m4a`),
+        contentType: 'audio/mp4',
+        isPrivate: privateOutput,
+        signal: job.controller.signal,
+      });
+      if (job.controller.signal.aborted) throw job.controller.signal.reason || new Error('스템 작업 중단');
+      await updateStemStage(job, 'uploading', 80 + ((index + 1) * 4));
       log('PROC', `  → [${stem}] WAV + AAC 업로드 완료`);
     }
-    log('INFO', `[5/6] 총 8개 스템 파일 업로드 성공`);
 
-    // 6단계: generations DB 반영
-    const { error: completeErr } = await supabase
-      .from('generations')
-      .update({
-        status: 'completed',
-        is_stem_extracted: true,
-        stem_vocals_url: uploadResults.original['vocals'],
-        stem_bass_url: uploadResults.original['bass'],
-        stem_drums_url: uploadResults.original['drums'],
-        stem_other_url: uploadResults.original['other'],
-        preview_vocals_url: uploadResults.preview['vocals'],
-        preview_bass_url: uploadResults.preview['bass'],
-        preview_drums_url: uploadResults.preview['drums'],
-        preview_other_url: uploadResults.preview['other'],
-      })
-      .eq('id', id);
+    await updateStemStage(job, 'finalizing', 98);
+    const completedAt = new Date().toISOString();
+    const rowPatch = {
+      is_stem_extracted: true,
+      stem_vocals_url: uploadResults.original.vocals,
+      stem_bass_url: uploadResults.original.bass,
+      stem_drums_url: uploadResults.original.drums,
+      stem_other_url: uploadResults.original.other,
+      preview_vocals_url: uploadResults.preview.vocals,
+      preview_bass_url: uploadResults.preview.bass,
+      preview_drums_url: uploadResults.preview.drums,
+      preview_other_url: uploadResults.preview.other,
+      ...(externalUpload ? { status: 'completed' } : {}),
+      ...(sourceMigration ? {
+        audio_url: null,
+        source_audio_url: sourceMigration.privateStorageUri,
+      } : {}),
+    };
+    const completed = await patchStemMetadata(id, {
+      stemStatus: 'completed',
+      stemStage: 'completed',
+      stemProgress: 100,
+      stemHeartbeatAt: completedAt,
+      stemCompletedAt: completedAt,
+      stemError: null,
+      ...(sourceMigration ? {
+        stemSourceMigratedAt: completedAt,
+        storageBucket: sourceMigration.privateBucket,
+        storagePath: sourceMigration.privateObjectPath,
+        stemLegacyPublicArtifactsCleanup: 'pending',
+        stemLegacyPublicArtifactsCleanupError: null,
+      } : {}),
+    }, rowPatch, 'processing', job.leaseToken);
+    if (!completed) throw new Error('작업 lease를 잃어 최종 DB 반영을 중단했습니다.');
 
-    if (completeErr) throw new Error(`Completed URL 업데이트 실패: ${completeErr.message}`);
-    log('INFO', `[6/6] 파이프라인 최종 완료 ✔`);
+    if (sourceMigration) {
+      try {
+        await removeLegacyPublicStemArtifacts(sourceMigration, job.controller.signal);
+        await patchStemMetadata(id, {
+          stemLegacyPublicArtifactsCleanup: 'completed',
+          stemLegacyPublicArtifactsDeletedAt: new Date().toISOString(),
+          stemLegacyPublicArtifactsCleanupError: null,
+        }, {}, 'completed');
+        log('INFO', 'legacy public artifacts cleanup 완료', { id, objectCount: sourceMigration.publicObjectPaths.length });
+      } catch (cleanupError) {
+        const cleanupMessage = sanitizeStemError(cleanupError);
+        log('ERROR', 'legacy public artifacts cleanup 실패', { id, error: cleanupMessage });
+        try {
+          await patchStemMetadata(id, {
+            stemLegacyPublicArtifactsCleanup: 'failed',
+            stemLegacyPublicArtifactsCleanupError: cleanupMessage,
+          }, {}, 'completed');
+        } catch (metadataError) {
+          log('ERROR', 'legacy public artifacts cleanup 실패 메타데이터 기록 실패', {
+            id,
+            error: sanitizeStemError(metadataError),
+          });
+        }
+      }
+    }
+    log('INFO', `[5/5] 스템 파이프라인 최종 완료 ✔`, { id, privateOutput });
+  } catch (error) {
+    const errorMessage = sanitizeStemError(error);
+    const shouldRequeue = isShuttingDown;
+    log(shouldRequeue ? 'WARN' : 'ERROR', shouldRequeue ? '종료 중 스템 작업 재큐' : '스템 파이프라인 실패', {
+      id,
+      error: errorMessage,
+    });
+    try {
+      if (job.heartbeatTimer) {
+        clearInterval(job.heartbeatTimer);
+        job.heartbeatTimer = null;
+      }
+      // 먼저 이 lease만 진입할 수 있는 정리 상태를 CAS로 선점한다. 이 상태는
+      // stale recovery/다른 worker가 claim하지 않으므로, 선점 이후 deterministic
+      // Storage 경로를 지워도 새 시도의 정상 산출물과 충돌하지 않는다.
+      const ownsFailureCleanup = await patchStemMetadata(id, {
+        stemStatus: 'cleanup',
+        stemStage: 'cleanup',
+        stemHeartbeatAt: new Date().toISOString(),
+        stemCleanupReason: shouldRequeue ? 'worker-shutdown' : 'processing-error',
+      }, {}, 'processing', job.leaseToken);
+      if (!ownsFailureCleanup) {
+        log('WARN', 'lease를 잃은 실행의 실패 정리/상태 변경을 건너뜁니다.', { id });
+        return;
+      }
 
-  } catch (err) {
-    log('ERROR', `파이프라인 치명적 에러: ${err.message}`);
-    await supabase.from('generations').update({ status: 'failed' }).eq('id', id);
+      try {
+        await removePartialStemArtifacts({
+          id,
+          userId: user_id,
+          privateOutput,
+          leaseToken: job.leaseToken,
+        });
+      } catch (cleanupError) {
+        log('ERROR', '실패한 Stem 부분 산출물 정리 실패', { id, error: sanitizeStemError(cleanupError) });
+      }
+
+      const rowStatus = externalUpload
+        ? (shouldRequeue ? 'pending' : 'failed')
+        : 'completed';
+      const recorded = await patchStemMetadata(id, {
+        stemStatus: shouldRequeue ? 'pending' : 'failed',
+        stemStage: shouldRequeue ? 'queued' : 'failed',
+        stemProgress: 0,
+        stemHeartbeatAt: new Date().toISOString(),
+        stemError: shouldRequeue ? null : errorMessage,
+        ...(shouldRequeue
+          ? {
+              stemAttempt: attemptBeforeClaim,
+              stemInfrastructureRequeueCount: Math.max(0, Number(metadata.stemInfrastructureRequeueCount) || 0) + 1,
+              stemCleanupReason: null,
+              stemRequeuedAt: new Date().toISOString(),
+              stemRequeueReason: 'worker-shutdown',
+            }
+          : { stemCleanupReason: null, stemFailedAt: new Date().toISOString() }),
+      }, { status: rowStatus }, 'cleanup', job.leaseToken);
+      if (!recorded) log('WARN', '스템 실패/재큐 최종 상태 CAS 충돌', { id });
+    } catch (stateError) {
+      log('ERROR', '스템 실패/재큐 상태 기록 실패', { id, error: sanitizeStemError(stateError) });
+    }
   } finally {
-    // 임시 디렉토리 클린업
+    if (job.heartbeatTimer) clearInterval(job.heartbeatTimer);
+    for (const child of job.childProcesses) child.kill('SIGKILL');
     try {
       fs.rmSync(workDir, { recursive: true, force: true });
       log('PROC', `[CLEANUP] 임시 파일 정리 완료: ${workDir}`);
-    } catch (e) {
-      log('WARN', `임시 파일 정리 실패: ${e.message}`);
+    } catch (error) {
+      log('WARN', `임시 파일 정리 실패: ${sanitizeStemError(error)}`);
     }
-    
-    // MAX_JOBS에 도달했을 때만 슬립
-    if (jobsProcessed >= MAX_JOBS) {
-      enterSleepMode();
+  }
+}
+
+async function scheduleStemJob(row, source = 'unknown') {
+  if (isShuttingDown || isSleeping) return false;
+  if (!row?.id || activeStemJobs.has(row.id)) {
+    if (row?.id) log('INFO', '이미 이 프로세스에서 처리 중인 스템 작업을 건너뜁니다.', { id: row.id, source });
+    return false;
+  }
+  // Demucs는 Mac mini CPU/RAM을 크게 사용하므로 프로세스 전체에서 반드시 1개만 실행한다.
+  // 다른 ID는 DB pending 상태를 유지하며 다음 30초 스캔에서 다시 잡는다.
+  if (activeStemJobs.size > 0) {
+    log('INFO', '다른 스템 작업이 실행 중이므로 pending을 유지합니다.', { id: row.id, source });
+    return false;
+  }
+  if (jobsProcessed >= MAX_JOBS) {
+    enterSleepMode();
+    return false;
+  }
+
+  const job = {
+    id: row.id,
+    leaseToken: randomUUID(),
+    controller: new AbortController(),
+    childProcesses: new Set(),
+    heartbeatTimer: null,
+    heartbeatInFlight: false,
+    promise: null,
+  };
+  activeStemJobs.set(row.id, job);
+
+  job.promise = (async () => {
+    const claimed = await claimStemJob(row, job);
+    if (!claimed) {
+      log('INFO', '다른 worker가 먼저 claim했거나 더 이상 pending이 아닙니다.', { id: row.id, source });
+      return false;
     }
+    jobsProcessed++;
+    log('INFO', `[잡 ${jobsProcessed}/${MAX_JOBS}] 스템 처리 시작`, { id: row.id, source });
+    await processGeneration(row, job);
+    return true;
+  })();
+
+  try {
+    return await job.promise;
+  } catch (error) {
+    log('ERROR', '스템 작업 스케줄 실패', { id: row.id, source, error: sanitizeStemError(error) });
+    return false;
+  } finally {
+    activeStemJobs.delete(row.id);
   }
 }
 
@@ -538,11 +1426,11 @@ function startRealtimeSubscription() {
         const row = payload.new;
         if (!row) return;
 
-        // 온디맨드 스템 분리: 사용자가 버튼을 눌러 status가 'pending'이 되었을 때만 시작
-        if (row.status === 'pending' && row.audio_url && !row.stem_vocals_url) {
-          log('INFO', `generation ${payload.eventType} 감지 (pending) -> 스템 분리 시작`, { id: row.id });
+        // 새 큐 기준은 license_hash.stemStatus이며, 예전 status=pending 행도 계속 지원한다.
+        if (shouldClaimStemRow(row)) {
+          log('INFO', `generation ${payload.eventType} 감지 -> 스템 분리 claim 시도`, { id: row.id });
           try {
-            await processGeneration(row);
+            await scheduleStemJob(row, `realtime:${payload.eventType}`);
           } catch (err) {
             log('ERROR', '이벤트 핸들러 예외', err.message);
           }
@@ -559,22 +1447,80 @@ function startRealtimeSubscription() {
       }
     });
 
-  return channel;
+  generationChannel = channel;
+  return generationChannel;
 }
 
-// ─── 비정상 종료 핸들링 ────────────────────────────────────────────────────────
-process.on('SIGTERM', () => {
-  log('WARN', 'SIGTERM 수신 — 워커를 종료합니다.');
-  process.exit(0);
-});
+// ─── graceful 종료: 진행 중 작업을 중단하고 pending으로 돌린 뒤 종료 ──────────
+async function initiateGracefulShutdown(reason, exitCode = 0) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  log('WARN', `graceful shutdown 시작`, { reason, activeStemJobs: activeStemJobs.size });
 
-process.on('SIGINT', () => {
-  log('WARN', 'SIGINT 수신 — 워커를 종료합니다.');
-  process.exit(0);
-});
+  if (pendingScanTimeout) clearTimeout(pendingScanTimeout);
+  if (pendingScanInterval) clearInterval(pendingScanInterval);
+  if (generationChannel) {
+    try { await supabase.removeChannel(generationChannel); } catch {}
+  }
 
-process.on('uncaughtException', (err) => {
-  log('ERROR', `예외 미처리: ${err.message}`, err.stack);
+  const activePromises = [];
+  for (const job of activeStemJobs.values()) {
+    job.controller.abort(new Error(`worker shutdown: ${reason}`));
+    if (job.promise) activePromises.push(job.promise);
+  }
+
+  let graceTimer;
+  await Promise.race([
+    Promise.allSettled(activePromises),
+    new Promise(resolve => {
+      graceTimer = setTimeout(resolve, STEM_SHUTDOWN_GRACE_MS);
+      graceTimer.unref?.();
+    }),
+  ]);
+  if (graceTimer) clearTimeout(graceTimer);
+
+  // timeout 등으로 catch에 도달하지 못한 job도 낙관적 조건으로 재큐한다.
+  for (const job of activeStemJobs.values()) {
+    try {
+      const { data: row } = await supabase
+        .from('generations')
+        .select('id,status,license_hash')
+        .eq('id', job.id)
+        .single();
+      if (!row || !isProcessingStemRow(row)) continue;
+      const metadata = parseGenerationMetadata(row.license_hash);
+      const status = isExternalStemUpload(metadata) ? 'pending' : 'completed';
+      const processingAttempt = Math.max(0, Number(metadata.stemAttempt) || 0);
+      await patchStemMetadata(job.id, {
+        stemStatus: 'pending',
+        stemStage: 'queued',
+        stemProgress: 0,
+        stemHeartbeatAt: new Date().toISOString(),
+        stemAttempt: Math.max(0, processingAttempt - 1),
+        stemInfrastructureRequeueCount: Math.max(0, Number(metadata.stemInfrastructureRequeueCount) || 0) + 1,
+        stemCleanupReason: null,
+        stemError: null,
+        stemRequeuedAt: new Date().toISOString(),
+        stemRequeueReason: `worker-shutdown:${reason}`,
+      }, { status }, 'processing', job.leaseToken);
+    } catch (error) {
+      log('ERROR', 'shutdown 재큐 실패', { id: job.id, error: sanitizeStemError(error) });
+    }
+  }
+
+  log('INFO', 'graceful shutdown 완료', { reason });
+  process.exit(exitCode);
+}
+
+process.on('SIGTERM', () => { void initiateGracefulShutdown('SIGTERM'); });
+process.on('SIGINT', () => { void initiateGracefulShutdown('SIGINT'); });
+process.on('uncaughtException', (error) => {
+  log('ERROR', `예외 미처리: ${error.message}`, error.stack);
+  void initiateGracefulShutdown('uncaughtException', 1);
+});
+process.on('unhandledRejection', (error) => {
+  log('ERROR', 'Promise rejection 미처리', sanitizeStemError(error));
+  void initiateGracefulShutdown('unhandledRejection', 1);
 });
 
 // ─── 워커 메인 진입점 ─────────────────────────────────────────────────────────
@@ -586,24 +1532,1339 @@ log('INFO', `SUPABASE_URL: ${SUPABASE_URL}`);
 startRealtimeSubscription();
 startVideoSubscription();
 
-// ─── 시작 시 기존 PENDING 작업 자동 스캔 & 처리 ────────────────────────────────
-async function processExistingPending() {
-  log("INFO", "기존 PENDING 작업 스캔 시작...");
-  try {
-    const { data, error } = await supabase
-      .from("generations")
-      .select("*")
-      .in("status", ["pending"])
-      .not("audio_url", "is", null)
-      .is("stem_vocals_url", null)
-      .order("created_at", { ascending: true });
+async function cleanupExpiredStemUploadSessions() {
+  let query = supabase
+    .from('stem_upload_sessions')
+    .select('id,user_id,storage_path')
+    .is('confirmed_at', null)
+    .lt('expires_at', new Date().toISOString())
+    .order('id', { ascending: true })
+    .limit(100);
+  if (expiredSessionCursor) query = query.gt('id', expiredSessionCursor);
+  const { data: sessions, error } = await query;
+  if (error) throw new Error(`만료 Stem 업로드 세션 조회 실패: ${error.message}`);
+  expiredSessionCursor = sessions?.length ? sessions[sessions.length - 1].id : null;
 
-    if (error) {
-      log("ERROR", "PENDING 스캔 실패", error.message);
-      return;
+  for (const session of sessions || []) {
+    const sourceUri = `storage://${PRIVATE_STEM_BUCKET}/${session.storage_path}`;
+    const { data: reference, error: referenceError } = await supabase
+      .from('generations')
+      .select('id')
+      .eq('user_id', session.user_id)
+      .eq('source_audio_url', sourceUri)
+      .limit(1)
+      .maybeSingle();
+    if (referenceError) {
+      log('ERROR', '만료 업로드 세션 참조 확인 실패', { id: session.id, error: referenceError.message });
+      continue;
+    }
+    if (reference) {
+      const { error: repairError } = await supabase
+        .from('stem_upload_sessions')
+        .update({ confirmed_at: new Date().toISOString(), generation_id: reference.id })
+        .eq('id', session.id)
+        .is('confirmed_at', null);
+      if (repairError) log('ERROR', 'Stem 업로드 세션 확정 상태 복구 실패', { id: session.id, error: repairError.message });
+      continue;
     }
 
-    if (!data || data.length === 0) {
+    const { data: cleanupScheduled, error: scheduleError } = await supabase.rpc(
+      'expire_stem_upload_session_with_cleanup',
+      {
+        p_id: session.id,
+        p_user_id: session.user_id,
+        p_storage_path: session.storage_path,
+      },
+    );
+    if (scheduleError) {
+      log('ERROR', '만료 Stem 업로드 cleanup 예약 실패', { id: session.id, error: scheduleError.message });
+      continue;
+    }
+    if (!cleanupScheduled) continue;
+
+    const { error: removeError } = await supabase.storage
+      .from(PRIVATE_STEM_BUCKET)
+      .remove([session.storage_path]);
+    if (removeError) {
+      log('ERROR', '만료 미확정 Stem 원본 삭제 실패', { id: session.id, error: removeError.message });
+    }
+  }
+
+  if (sessions?.length) log('INFO', '만료 Stem 업로드 세션 정리 완료', { count: sessions.length });
+}
+
+function validateStemCleanupManifest(task) {
+  const manifest = task?.cleanup_manifest;
+  if (!manifest || typeof manifest !== 'object' || Array.isArray(manifest)) return null;
+  const privateSource = Array.isArray(manifest.privateSource) ? manifest.privateSource : null;
+  const privateOutputs = Array.isArray(manifest.privateOutputs) ? manifest.privateOutputs : null;
+  const publicAssets = Array.isArray(manifest.publicAssets) ? manifest.publicAssets : null;
+  if (!privateSource || !privateOutputs || !publicAssets) return null;
+  if (![...privateSource, ...privateOutputs, ...publicAssets].every(value => typeof value === 'string')) return null;
+
+  const uuidSegment = '[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}';
+  const optionalAttempt = `(?:${uuidSegment}/)?`;
+  const stemName = '(?:vocals|drums|bass|other)';
+  const sourcePattern = new RegExp(
+    `^uploads/${task.user_id}/${task.generation_id}(?:/${uuidSegment})?\\.(?:mp3|wav|m4a|aac|ogg|flac)$`,
+    'i',
+  );
+  const privateOutputPattern = new RegExp(
+    `^stems/${task.user_id}/${task.generation_id}/${optionalAttempt}(?:original/${stemName}\\.wav|preview/${stemName}\\.m4a)$`,
+    'i',
+  );
+  const publicOutputPattern = new RegExp(
+    `^stems/${task.generation_id}/${optionalAttempt}(?:original/${stemName}\\.wav|preview/${stemName}\\.m4a)$`,
+    'i',
+  );
+  const publicSourcePattern = new RegExp(`^uploads/${task.generation_id}\\.(?:mp3|wav|m4a|aac|ogg|flac)$`, 'i');
+  if (privateSource.length > 11 || !privateSource.every(value => sourcePattern.test(value))) return null;
+  if (privateOutputs.length > 144 || !privateOutputs.every(value => privateOutputPattern.test(value))) return null;
+  if (publicAssets.length > 145 || !publicAssets.every(value => publicOutputPattern.test(value) || publicSourcePattern.test(value))) return null;
+  return { privateSource, privateOutputs, publicAssets };
+}
+
+async function processStemStorageCleanupOutbox() {
+  let query = supabase
+    .from('stem_storage_cleanup_tasks')
+    .select('generation_id,user_id,cleanup_manifest,attempts,next_attempt_at')
+    .lte('next_attempt_at', new Date().toISOString())
+    .order('generation_id', { ascending: true })
+    .limit(100);
+  if (cleanupOutboxCursor) query = query.gt('generation_id', cleanupOutboxCursor);
+  const { data: tasks, error } = await query;
+  if (error) throw new Error(`Stem cleanup outbox 조회 실패: ${error.message}`);
+  cleanupOutboxCursor = tasks?.length ? tasks[tasks.length - 1].generation_id : null;
+
+  for (const task of tasks || []) {
+    const manifest = validateStemCleanupManifest(task);
+    if (!manifest) {
+      const message = 'cleanup manifest exact-path 검증 실패';
+      log('ERROR', message, { id: task.generation_id });
+      await supabase.from('stem_storage_cleanup_tasks').update({
+        attempts: Number(task.attempts || 0) + 1,
+        last_error: message,
+        next_attempt_at: new Date(Date.now() + 24 * 60 * 60_000).toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('generation_id', task.generation_id);
+      continue;
+    }
+
+    try {
+      for (const [bucket, paths] of [
+        [PRIVATE_STEM_BUCKET, manifest.privateSource],
+        [PRIVATE_STEM_OUTPUT_BUCKET, manifest.privateOutputs],
+        ['melodio-assets', manifest.publicAssets],
+      ]) {
+        if (paths.length === 0) continue;
+        for (let offset = 0; offset < paths.length; offset += 100) {
+          const { error: removeError } = await supabase.storage
+            .from(bucket)
+            .remove(paths.slice(offset, offset + 100));
+          if (removeError) throw new Error(`${bucket}: ${removeError.message}`);
+        }
+      }
+      const { error: deleteError } = await supabase
+        .from('stem_storage_cleanup_tasks')
+        .delete()
+        .eq('generation_id', task.generation_id);
+      if (deleteError) throw new Error(`outbox 완료 삭제: ${deleteError.message}`);
+      log('INFO', 'Stem Storage cleanup outbox 처리 완료', { id: task.generation_id });
+    } catch (cleanupError) {
+      const message = sanitizeStemError(cleanupError);
+      log('ERROR', 'Stem Storage cleanup outbox 처리 실패', { id: task.generation_id, error: message });
+      await supabase.from('stem_storage_cleanup_tasks').update({
+        attempts: Number(task.attempts || 0) + 1,
+        last_error: message,
+        next_attempt_at: new Date(
+          Date.now() + Math.min(60 * 60_000, Math.max(5 * 60_000, (Number(task.attempts || 0) + 1) * 5 * 60_000)),
+        ).toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq('generation_id', task.generation_id);
+    }
+  }
+}
+
+async function enforceLegacyStemUploadPrivacy() {
+  let stemUploadQuery = supabase
+      .from('generations')
+      .select('id,is_public,license_hash')
+      .like('license_hash', '%"sourceMenu":"stem-upload"%')
+      .or('is_public.is.null,is_public.eq.true')
+      .order('id', { ascending: true })
+      .limit(200);
+  let customUploadQuery = supabase
+      .from('generations')
+      .select('id,is_public,license_hash')
+      .like('license_hash', '%"sourceMenu":"custom-upload"%')
+      .or('is_public.is.null,is_public.eq.true')
+      .order('id', { ascending: true })
+      .limit(200);
+  if (stemUploadPrivacyCursor) stemUploadQuery = stemUploadQuery.gt('id', stemUploadPrivacyCursor);
+  if (customUploadPrivacyCursor) customUploadQuery = customUploadQuery.gt('id', customUploadPrivacyCursor);
+  const [stemUploadResult, customUploadResult] = await Promise.all([stemUploadQuery, customUploadQuery]);
+  if (stemUploadResult.error) throw new Error(`stem-upload privacy 조회 실패: ${stemUploadResult.error.message}`);
+  if (customUploadResult.error) throw new Error(`custom-upload privacy 조회 실패: ${customUploadResult.error.message}`);
+  stemUploadPrivacyCursor = stemUploadResult.data?.length
+    ? stemUploadResult.data[stemUploadResult.data.length - 1].id
+    : null;
+  customUploadPrivacyCursor = customUploadResult.data?.length
+    ? customUploadResult.data[customUploadResult.data.length - 1].id
+    : null;
+
+  const rows = Array.from(new Map(
+    [...(stemUploadResult.data || []), ...(customUploadResult.data || [])].map(row => [row.id, row]),
+  ).values());
+  for (const row of rows) {
+    const metadata = parseGenerationMetadata(row.license_hash);
+    if (!isExternalStemUpload(metadata) || (row.is_public === false && metadata.isPublic === false)) continue;
+    const nextMetadata = { ...metadata, isPublic: false };
+    let query = supabase
+      .from('generations')
+      .update({ is_public: false, license_hash: JSON.stringify(nextMetadata) })
+      .eq('id', row.id);
+    query = addLicenseHashCondition(query, row.license_hash);
+    const { error: updateError } = await query;
+    if (updateError) log('ERROR', 'legacy Stem 비공개 강제 실패', { id: row.id, error: updateError.message });
+  }
+}
+
+function rebuildLegacyPublicCleanupPlan(row, metadata) {
+  if (!row?.id || !row?.user_id || !isExternalStemUpload(metadata)) return null;
+  if (!['pending', 'failed'].includes(metadata.stemLegacyPublicArtifactsCleanup)) return null;
+  const storagePath = String(metadata.storagePath || '');
+  const escapedUserId = String(row.user_id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const escapedRowId = String(row.id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const storageMatch = new RegExp(
+    `^uploads/${escapedUserId}/${escapedRowId}(?:/[0-9a-f-]{36})?\\.(mp3|wav|m4a|aac|ogg|flac)$`,
+    'i',
+  ).exec(storagePath);
+  const extension = (storageMatch?.[1] || '').toLowerCase();
+  if (!PRIVATE_STEM_INPUT_EXTENSIONS.has(extension)) return null;
+  if (row.source_audio_url !== `storage://${PRIVATE_STEM_BUCKET}/${storagePath}`) return null;
+
+  return {
+    publicBucket: 'melodio-assets',
+    publicObjectPaths: [
+      `uploads/${row.id}.${extension}`,
+      ...STEMS.flatMap(stem => [
+        `stems/${row.id}/original/${stem}.wav`,
+        `stems/${row.id}/preview/${stem}.m4a`,
+      ]),
+    ],
+  };
+}
+
+function planCompletedLegacyStemBackfill(row, metadata, backfillToken) {
+  if (!row?.id || !row?.user_id || !row?.is_stem_extracted || !isExternalStemUpload(metadata)) return null;
+  const source = row.source_audio_url || row.audio_url;
+  if (typeof source !== 'string' || source.startsWith('storage://')) return null;
+
+  let sourceUrl;
+  try {
+    sourceUrl = new URL(source);
+  } catch {
+    return null;
+  }
+  const expectedPrefix = `/storage/v1/object/public/melodio-assets/uploads/${row.id}.`;
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(sourceUrl.pathname);
+  } catch {
+    return null;
+  }
+  if (sourceUrl.origin !== new URL(SUPABASE_URL).origin || !decodedPath.startsWith(expectedPrefix)) return null;
+  const extension = decodedPath.slice(expectedPrefix.length).toLowerCase();
+  if (!PRIVATE_STEM_INPUT_EXTENSIONS.has(extension)) return null;
+
+  const sourcePublicPath = `uploads/${row.id}.${extension}`;
+  const sourcePrivatePath = `uploads/${row.user_id}/${row.id}/${backfillToken}.${extension}`;
+  const outputPairs = STEMS.flatMap(stem => [
+    {
+      publicPath: `stems/${row.id}/original/${stem}.wav`,
+      privatePath: `stems/${row.user_id}/${row.id}/${backfillToken}/original/${stem}.wav`,
+      contentType: 'audio/wav',
+      kind: 'original',
+      stem,
+    },
+    {
+      publicPath: `stems/${row.id}/preview/${stem}.m4a`,
+      privatePath: `stems/${row.user_id}/${row.id}/${backfillToken}/preview/${stem}.m4a`,
+      contentType: 'audio/mp4',
+      kind: 'preview',
+      stem,
+    },
+  ]);
+  return {
+    extension,
+    sourcePublicPath,
+    sourcePrivatePath,
+    outputPairs,
+    publicObjectPaths: [sourcePublicPath, ...outputPairs.map(item => item.publicPath)],
+  };
+}
+
+const GENERATED_STEM_OUTPUT_FIELDS = STEMS.flatMap(stem => [
+  {
+    field: `stem_${stem}_url`,
+    stem,
+    kind: 'original',
+    extension: 'wav',
+    contentType: 'audio/wav',
+  },
+  {
+    field: `preview_${stem}_url`,
+    stem,
+    kind: 'preview',
+    extension: 'm4a',
+    contentType: 'audio/mp4',
+  },
+]);
+
+function exactLegacyPublicStorageObjectPath(reference) {
+  if (typeof reference !== 'string' || !reference) return null;
+  let parsed;
+  try {
+    parsed = new URL(reference);
+  } catch {
+    return null;
+  }
+  if (parsed.origin !== new URL(SUPABASE_URL).origin || parsed.username || parsed.password) return null;
+  if (parsed.search || parsed.hash) return null;
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(parsed.pathname);
+  } catch {
+    return null;
+  }
+  const prefix = '/storage/v1/object/public/melodio-assets/';
+  if (!decodedPath.startsWith(prefix)) return null;
+  return decodedPath.slice(prefix.length);
+}
+
+function generatedOutputPath(id, storageToken, descriptor, isPrivate, userId = null) {
+  const root = isPrivate
+    ? `stems/${userId}/${id}/${storageToken}`
+    : `stems/${id}`;
+  return `${root}/${descriptor.kind}/${descriptor.stem}.${descriptor.extension}`;
+}
+
+function generatedPublicOutputAttemptToken(id, descriptor, objectPath) {
+  const deterministicPath = generatedOutputPath(id, null, descriptor, false);
+  if (objectPath === deterministicPath) return '';
+  const prefix = `stems/${id}/`;
+  const suffix = `/${descriptor.kind}/${descriptor.stem}.${descriptor.extension}`;
+  if (!objectPath.startsWith(prefix) || !objectPath.endsWith(suffix)) return null;
+  const token = objectPath.slice(prefix.length, -suffix.length);
+  return UUID_OBJECT_SEGMENT_PATTERN.test(token) ? token : null;
+}
+
+function isAllowedGeneratedPublicOutputPath(id, objectPath) {
+  return GENERATED_STEM_OUTPUT_FIELDS.some(
+    descriptor => generatedPublicOutputAttemptToken(id, descriptor, objectPath) !== null,
+  );
+}
+
+function isSeparatedShortFormStemDomain(metadata) {
+  if (isShortFormTrack(metadata) || metadata?.viralMode === true) return true;
+  const sourceMenu = String(metadata?.sourceMenu || '').toLowerCase();
+  if (sourceMenu.includes('viral') || sourceMenu.includes('parody') || sourceMenu.includes('short')) return true;
+  if (metadata?.isParody === true || metadata?.parodyMode === true || metadata?.shortForm === true) return true;
+  const actualDuration = Number(metadata?.duration);
+  return Number.isFinite(actualDuration) && actualDuration > 0 && actualDuration <= 60;
+}
+
+function normalizedArtifactAttemptsForBackfill(metadata) {
+  if (!Array.isArray(metadata.stemArtifactAttempts)) return { attempts: [], invalid: false };
+  const attempts = [];
+  const seen = new Set();
+  for (const value of metadata.stemArtifactAttempts) {
+    const token = typeof value === 'string' ? value : value?.token;
+    const storage = typeof value === 'string' ? metadata.stemArtifactStorage : value?.storage;
+    if (
+      typeof token !== 'string'
+      || !UUID_OBJECT_SEGMENT_PATTERN.test(token)
+      || (storage !== 'private' && storage !== 'public')
+    ) return { attempts: [], invalid: true };
+    const key = `${storage}:${token}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    attempts.push({ token, storage });
+  }
+  return { attempts, invalid: false };
+}
+
+function normalizedArtifactMetadataAfterPublicCleanup(metadata) {
+  const normalized = normalizedArtifactAttemptsForBackfill(metadata);
+  if (normalized.invalid) return null;
+  const privateAttempts = normalized.attempts.filter(attempt => attempt.storage === 'private');
+  return {
+    stemArtifactAttempts: privateAttempts,
+    stemArtifactStorage: privateAttempts.length ? 'private' : null,
+  };
+}
+
+function planCompletedGeneratedStemOutputBackfill(row, metadata, storageToken) {
+  if (
+    !row?.id
+    || !row?.user_id
+    || !row?.is_stem_extracted
+    || isExternalStemUpload(metadata)
+    || isSeparatedShortFormStemDomain(metadata)
+    || metadata.stemStatus === 'processing'
+    || metadata.stemStatus === 'cleanup'
+    || !UUID_OBJECT_SEGMENT_PATTERN.test(storageToken)
+  ) return null;
+
+  const outputPairs = [];
+  let currentPublicAttemptToken;
+  for (const descriptor of GENERATED_STEM_OUTPUT_FIELDS) {
+    const publicPath = exactLegacyPublicStorageObjectPath(row[descriptor.field]);
+    if (!publicPath) return null;
+    const publicAttemptToken = generatedPublicOutputAttemptToken(row.id, descriptor, publicPath);
+    if (publicAttemptToken === null) return null;
+    if (currentPublicAttemptToken === undefined) currentPublicAttemptToken = publicAttemptToken;
+    else if (currentPublicAttemptToken !== publicAttemptToken) return null;
+    outputPairs.push({
+      ...descriptor,
+      publicPath,
+      privatePath: generatedOutputPath(row.id, storageToken, descriptor, true, row.user_id),
+    });
+  }
+  const artifactAttempts = normalizedArtifactAttemptsForBackfill(metadata);
+  if (artifactAttempts.invalid || artifactAttempts.attempts.length > STEM_MAX_LEASE_CLAIMS) return null;
+  const publicObjectPaths = new Set(outputPairs.map(output => output.publicPath));
+  for (const attempt of artifactAttempts.attempts) {
+    if (attempt.storage !== 'public') continue;
+    for (const descriptor of GENERATED_STEM_OUTPUT_FIELDS) {
+      publicObjectPaths.add(`stems/${row.id}/${attempt.token}/${descriptor.kind}/${descriptor.stem}.${descriptor.extension}`);
+    }
+  }
+  if (publicObjectPaths.size > 136) return null;
+  return {
+    outputPairs,
+    publicObjectPaths: [...publicObjectPaths],
+  };
+}
+
+function rebuildGeneratedStemOutputCleanupPlan(row, metadata) {
+  if (!row?.id || !row?.user_id || isExternalStemUpload(metadata)) return null;
+  if (metadata.stemLegacyOutputBackfillKind !== 'outputs-only') return null;
+  if (!['pending', 'failed'].includes(metadata.stemLegacyOutputPublicArtifactsCleanup)) return null;
+  const storageToken = String(metadata.stemLegacyOutputBackfillStorageToken || '');
+  if (!UUID_OBJECT_SEGMENT_PATTERN.test(storageToken)) return null;
+
+  const persistedPublicPaths = metadata.stemLegacyOutputPublicObjectPaths;
+  if (
+    !Array.isArray(persistedPublicPaths)
+    || persistedPublicPaths.length < GENERATED_STEM_OUTPUT_FIELDS.length
+    || persistedPublicPaths.length > 136
+    || persistedPublicPaths.some(value => typeof value !== 'string')
+  ) return null;
+  const publicObjectPaths = [...new Set(persistedPublicPaths)];
+  if (
+    publicObjectPaths.length !== persistedPublicPaths.length
+    || !publicObjectPaths.every(objectPath => isAllowedGeneratedPublicOutputPath(row.id, objectPath))
+  ) return null;
+  for (const descriptor of GENERATED_STEM_OUTPUT_FIELDS) {
+    const privatePath = generatedOutputPath(row.id, storageToken, descriptor, true, row.user_id);
+    if (row[descriptor.field] !== `storage://${PRIVATE_STEM_OUTPUT_BUCKET}/${privatePath}`) return null;
+  }
+  return { publicBucket: 'melodio-assets', publicObjectPaths };
+}
+
+function planOwnerlessLegacyUploadCleanup(row, metadata) {
+  if (!row?.id || row.user_id || !isExternalStemUpload(metadata)) return null;
+  if (!['completed', 'failed'].includes(String(row.status || '').toLowerCase())) return null;
+  if (['pending', 'processing', 'cleanup'].includes(String(metadata.stemStatus || '').toLowerCase())) return null;
+  const source = row.source_audio_url || row.audio_url;
+  if (typeof source !== 'string' || source.startsWith('storage://')) return null;
+  let sourceUrl;
+  try {
+    sourceUrl = new URL(source);
+  } catch {
+    return null;
+  }
+  const expectedPrefix = `/storage/v1/object/public/melodio-assets/uploads/${row.id}.`;
+  let decodedPath;
+  try {
+    decodedPath = decodeURIComponent(sourceUrl.pathname);
+  } catch {
+    return null;
+  }
+  if (sourceUrl.origin !== new URL(SUPABASE_URL).origin || !decodedPath.startsWith(expectedPrefix)) return null;
+  const extension = decodedPath.slice(expectedPrefix.length).toLowerCase();
+  if (!PRIVATE_STEM_INPUT_EXTENSIONS.has(extension)) return null;
+  return {
+    publicBucket: 'melodio-assets',
+    publicObjectPaths: [
+      `uploads/${row.id}.${extension}`,
+      ...STEMS.flatMap(stem => [
+        `stems/${row.id}/original/${stem}.wav`,
+        `stems/${row.id}/preview/${stem}.m4a`,
+      ]),
+    ],
+  };
+}
+
+async function removeOwnerlessLegacyStemUploads() {
+  let query = supabase
+    .from('generations')
+    .select('id,user_id,status,audio_url,source_audio_url,license_hash')
+    .is('user_id', null)
+    .in('status', ['completed', 'failed'])
+    .like('source_audio_url', '%/storage/v1/object/public/melodio-assets/uploads/%')
+    .order('id', { ascending: true })
+    .limit(100);
+  if (ownerlessLegacyCursor) query = query.gt('id', ownerlessLegacyCursor);
+  const { data: rows, error } = await query;
+  if (error) throw new Error(`ownerless legacy Stem 조회 실패: ${error.message}`);
+  ownerlessLegacyCursor = rows?.length ? rows[rows.length - 1].id : null;
+
+  for (const row of rows || []) {
+    if (activeStemJobs.has(row.id)) continue;
+    const metadata = parseGenerationMetadata(row.license_hash);
+    const cleanupPlan = planOwnerlessLegacyUploadCleanup(row, metadata);
+    if (!cleanupPlan) continue;
+    try {
+      const cleanupManifest = {
+        privateSource: [],
+        privateOutputs: [],
+        publicAssets: cleanupPlan.publicObjectPaths,
+      };
+      const { data: scheduled, error: scheduleError } = await supabase.rpc(
+        'delete_ownerless_legacy_stem_with_cleanup',
+        {
+          p_id: row.id,
+          p_expected_status: row.status,
+          p_expected_license_hash: row.license_hash,
+          p_expected_source_url: row.source_audio_url,
+          p_cleanup_manifest: cleanupManifest,
+        },
+      );
+      if (scheduleError) throw new Error(`ownerless cleanup transaction 실패: ${scheduleError.message}`);
+      if (!scheduled) {
+        log('INFO', '소유자 없는 legacy row 상태 변경으로 자동 정리를 건너뜁니다.', { id: row.id });
+        continue;
+      }
+      // The row deletion and exact-path task are already atomic, so immediate
+      // removal is now safe. Any timeout/error leaves the outbox intact for an
+      // idempotent retry instead of leaving an untracked public object.
+      try {
+        await removeLegacyPublicStemArtifacts(cleanupPlan, new AbortController().signal);
+        const { error: outboxDeleteError } = await supabase
+          .from('stem_storage_cleanup_tasks')
+          .delete()
+          .eq('generation_id', row.id);
+        if (outboxDeleteError) {
+          log('WARN', 'ownerless cleanup 완료 후 outbox 삭제 실패 — 멱등 재확인 유지', {
+            id: row.id,
+            error: outboxDeleteError.message,
+          });
+        }
+        log('WARN', '소유자 없는 legacy 공개 Stem 업로드 정리 완료', { id: row.id });
+      } catch (storageError) {
+        log('ERROR', 'ownerless Storage 즉시 정리 실패 — outbox 재시도 유지', {
+          id: row.id,
+          error: sanitizeStemError(storageError),
+        });
+      }
+    } catch (cleanupError) {
+      log('ERROR', '소유자 없는 legacy 공개 Stem 업로드 cleanup 예약 실패', { id: row.id, error: sanitizeStemError(cleanupError) });
+    }
+  }
+}
+
+async function copyStorageObject({ sourceBucket, sourcePath, destinationBucket, destinationPath, contentType, signal }) {
+  await withOperationTimeout('legacy private Storage 복사', STEM_UPLOAD_TIMEOUT_MS, signal, async (operationSignal) => {
+    const { data: sourceInfo, error: sourceInfoError } = await supabase.storage
+      .from(sourceBucket)
+      .info(sourcePath);
+    const sourceSize = Number(sourceInfo?.size || 0);
+    if (sourceInfoError || !Number.isFinite(sourceSize) || sourceSize <= 0) {
+      throw new Error(sourceInfoError?.message || `Storage 원본 크기 확인 실패: ${sourcePath}`);
+    }
+
+    const { data, error } = await supabase.storage
+      .from(sourceBucket)
+      .download(sourcePath, undefined, { signal: operationSignal })
+      .asStream();
+    if (error || !data) throw new Error(error?.message || `Storage 원본 없음: ${sourcePath}`);
+
+    const endpoint = `${SUPABASE_URL}/storage/v1/object/${encodeURIComponent(destinationBucket)}/${encodeStoragePath(destinationPath)}`;
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_SERVICE_ROLE_KEY,
+        Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        'Content-Type': contentType,
+        'x-upsert': 'true',
+      },
+      body: data,
+      duplex: 'half',
+      signal: operationSignal,
+    });
+    if (!response.ok) {
+      const detail = (await response.text()).slice(0, 500);
+      throw new Error(`Storage 복사 HTTP ${response.status}${detail ? `: ${detail}` : ''}`);
+    }
+
+    const { data: destinationInfo, error: destinationInfoError } = await supabase.storage
+      .from(destinationBucket)
+      .info(destinationPath);
+    const destinationSize = Number(destinationInfo?.size || 0);
+    if (destinationInfoError || destinationSize !== sourceSize) {
+      throw new Error(
+        destinationInfoError?.message
+        || `Storage 복사 크기 불일치 (${sourceSize} -> ${destinationSize}): ${destinationPath}`,
+      );
+    }
+  });
+}
+
+async function patchLegacyBackfillMetadata(id, leaseToken, patch, rowPatch = {}) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: current, error: fetchError } = await supabase
+      .from('generations')
+      .select('id,license_hash')
+      .eq('id', id)
+      .single();
+    if (fetchError || !current) return false;
+    const metadata = parseGenerationMetadata(current.license_hash);
+    if (metadata.stemLegacyBackfillToken !== leaseToken) return false;
+
+    const nextMetadata = { ...metadata, ...patch };
+    let query = supabase
+      .from('generations')
+      .update({ ...rowPatch, license_hash: JSON.stringify(nextMetadata) })
+      .eq('id', id);
+    query = addLicenseHashCondition(query, current.license_hash);
+    const { data: updated, error: updateError } = await query.select('id');
+    if (updateError) throw new Error(`legacy backfill 메타데이터 업데이트 실패: ${updateError.message}`);
+    if (updated?.length) return true;
+  }
+  return false;
+}
+
+async function patchGeneratedOutputBackfillMetadata(id, leaseToken, patch, rowPatch = {}) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const { data: current, error: fetchError } = await supabase
+      .from('generations')
+      .select('id,license_hash')
+      .eq('id', id)
+      .single();
+    if (fetchError || !current) return false;
+    const metadata = parseGenerationMetadata(current.license_hash);
+    if (metadata.stemLegacyOutputBackfillToken !== leaseToken) return false;
+
+    const nextMetadata = { ...metadata, ...patch };
+    let query = supabase
+      .from('generations')
+      .update({ ...rowPatch, license_hash: JSON.stringify(nextMetadata) })
+      .eq('id', id);
+    query = addLicenseHashCondition(query, current.license_hash);
+    const { data: updated, error: updateError } = await query.select('id');
+    if (updateError) throw new Error(`일반곡 legacy Stem output 메타데이터 업데이트 실패: ${updateError.message}`);
+    if (updated?.length) return true;
+  }
+  return false;
+}
+
+function validGeneratedOutputBackfillAttempts(metadata) {
+  if (!Array.isArray(metadata.stemLegacyOutputBackfillAttempts)) return [];
+  return [...new Set(
+    metadata.stemLegacyOutputBackfillAttempts
+      .filter(value => typeof value === 'string' && UUID_OBJECT_SEGMENT_PATTERN.test(value)),
+  )];
+}
+
+async function backfillCompletedGeneratedStemOutputs() {
+  let query = supabase
+    .from('generations')
+    .select([
+      'id',
+      'user_id',
+      'status',
+      'is_stem_extracted',
+      'license_hash',
+      ...GENERATED_STEM_OUTPUT_FIELDS.map(descriptor => descriptor.field),
+    ].join(','))
+    .eq('status', 'completed')
+    .eq('is_stem_extracted', true)
+    .not('user_id', 'is', null)
+    .like('stem_vocals_url', '%/storage/v1/object/public/melodio-assets/stems/%')
+    .order('id', { ascending: true })
+    .limit(20);
+  if (completedGeneratedOutputBackfillCursor) {
+    query = query.gt('id', completedGeneratedOutputBackfillCursor);
+  }
+  const { data: rows, error } = await query;
+  if (error) throw new Error(`일반곡 legacy 공개 Stem output 조회 실패: ${error.message}`);
+  completedGeneratedOutputBackfillCursor = rows?.length ? rows[rows.length - 1].id : null;
+
+  for (const row of rows || []) {
+    const metadata = parseGenerationMetadata(row.license_hash);
+    if (isExternalStemUpload(metadata)) continue;
+
+    const processingStartedAt = Date.parse(
+      metadata.stemLegacyOutputBackfillHeartbeatAt || metadata.stemLegacyOutputBackfillStartedAt || '',
+    );
+    if (
+      metadata.stemLegacyOutputBackfillStatus === 'processing'
+      && Number.isFinite(processingStartedAt)
+      && Date.now() - processingStartedAt < STEM_LEASE_TIMEOUT_MS
+    ) continue;
+    const nextRetryAt = Date.parse(metadata.stemLegacyOutputBackfillNextRetryAt || '');
+    if (
+      metadata.stemLegacyOutputBackfillStatus === 'failed'
+      && Number.isFinite(nextRetryAt)
+      && Date.now() < nextRetryAt
+    ) continue;
+
+    const attempt = Math.max(0, Number(metadata.stemLegacyOutputBackfillAttempt) || 0);
+    if (attempt >= STEM_MAX_LEGACY_BACKFILL_ATTEMPTS) {
+      log('ERROR', '일반곡 legacy Stem output backfill 최대 시도 초과 — 수동 점검 필요', {
+        id: row.id,
+        attempts: attempt,
+      });
+      continue;
+    }
+
+    const artifactAttemptAudit = normalizedArtifactAttemptsForBackfill(metadata);
+    const artifactAttemptCount = artifactAttemptAudit.attempts.length;
+    if (artifactAttemptAudit.invalid || artifactAttemptCount > STEM_MAX_LEASE_CLAIMS) {
+      log('ERROR', '일반곡 legacy Stem output backfill 중단 — 기존 artifact 이력이 유효하지 않거나 manifest 한도를 초과함', {
+        id: row.id,
+        artifactAttemptCount,
+      });
+      continue;
+    }
+    // Deletion manifests allow 144 exact output paths: 8 legacy base paths,
+    // up to 16 processing attempts, and these output-only backfill paths must
+    // fit inside that same finite bound. At least one backfill path remains
+    // available even when all 16 processing-attempt slots were used.
+    const outputAttemptPathLimit = Math.min(
+      STEM_MAX_LEGACY_BACKFILL_ATTEMPTS,
+      Math.max(1, 17 - artifactAttemptCount),
+    );
+    const previousOutputAttempts = validGeneratedOutputBackfillAttempts(metadata);
+    if (previousOutputAttempts.length > outputAttemptPathLimit) {
+      log('ERROR', '일반곡 legacy Stem output backfill 중단 — output attempt manifest 한도 초과', {
+        id: row.id,
+        outputAttempts: previousOutputAttempts.length,
+        outputAttemptPathLimit,
+      });
+      continue;
+    }
+
+    const leaseToken = randomUUID();
+    const canAllocateOutputPath = previousOutputAttempts.length < outputAttemptPathLimit;
+    const storageToken = canAllocateOutputPath
+      ? randomUUID()
+      : previousOutputAttempts[previousOutputAttempts.length - 1];
+    if (!storageToken) continue;
+    const plan = planCompletedGeneratedStemOutputBackfill(row, metadata, storageToken);
+    if (!plan) continue;
+
+    const claimedAt = new Date().toISOString();
+    const nextOutputAttempts = canAllocateOutputPath
+      ? [...previousOutputAttempts, storageToken]
+      : previousOutputAttempts;
+    const claimedMetadata = {
+      ...metadata,
+      stemLegacyOutputBackfillStatus: 'processing',
+      stemLegacyOutputBackfillKind: 'outputs-only',
+      stemLegacyOutputBackfillToken: leaseToken,
+      stemLegacyOutputBackfillStorageToken: storageToken,
+      stemLegacyOutputBackfillStartedAt: claimedAt,
+      stemLegacyOutputBackfillHeartbeatAt: claimedAt,
+      stemLegacyOutputBackfillStage: 'claimed',
+      stemLegacyOutputBackfillError: null,
+      stemLegacyOutputBackfillAttempt: attempt + 1,
+      stemLegacyOutputBackfillAttempts: nextOutputAttempts,
+      stemLegacyOutputPublicObjectPaths: plan.publicObjectPaths,
+      stemLegacyOutputPublicArtifactsCleanup: null,
+      stemLegacyOutputPublicArtifactsCleanupError: null,
+    };
+    const { data: claimed, error: claimError } = await supabase.rpc('claim_legacy_stem_backfill', {
+      p_id: row.id,
+      p_user_id: row.user_id,
+      p_expected_status: row.status,
+      p_expected_license_hash: row.license_hash,
+      p_next_license_hash: JSON.stringify(claimedMetadata),
+    });
+    if (claimError) {
+      log('ERROR', '일반곡 legacy Stem output backfill claim 실패', { id: row.id, error: claimError.message });
+      continue;
+    }
+    if (!claimed) continue;
+
+    let databaseSwitched = false;
+    const controller = new AbortController();
+    const renewLease = async (stage) => {
+      const renewed = await patchGeneratedOutputBackfillMetadata(row.id, leaseToken, {
+        stemLegacyOutputBackfillHeartbeatAt: new Date().toISOString(),
+        stemLegacyOutputBackfillStage: stage,
+      });
+      if (!renewed) {
+        const leaseError = new Error(`일반곡 legacy Stem output backfill lease 상실 (${stage})`);
+        controller.abort(leaseError);
+        throw leaseError;
+      }
+    };
+
+    try {
+      for (const output of plan.outputPairs) {
+        await renewLease(`copying-${output.kind}-${output.stem}`);
+        await copyStorageObject({
+          sourceBucket: 'melodio-assets',
+          sourcePath: output.publicPath,
+          destinationBucket: PRIVATE_STEM_OUTPUT_BUCKET,
+          destinationPath: output.privatePath,
+          contentType: output.contentType,
+          signal: controller.signal,
+        });
+        await renewLease(`copied-${output.kind}-${output.stem}`);
+      }
+
+      const rowPatch = {};
+      for (const output of plan.outputPairs) {
+        rowPatch[output.field] = `storage://${PRIVATE_STEM_OUTPUT_BUCKET}/${output.privatePath}`;
+      }
+      const migratedAt = new Date().toISOString();
+      const switched = await patchGeneratedOutputBackfillMetadata(row.id, leaseToken, {
+        stemLegacyOutputBackfillStatus: 'completed',
+        stemLegacyOutputBackfillStage: 'completed',
+        stemLegacyOutputBackfillHeartbeatAt: migratedAt,
+        stemLegacyOutputBackfillCompletedAt: migratedAt,
+        stemLegacyOutputBackfillError: null,
+        stemLegacyOutputBackfillNextRetryAt: null,
+        stemLegacyOutputPublicArtifactsCleanup: 'pending',
+        stemLegacyOutputPublicArtifactsCleanupError: null,
+      }, rowPatch);
+      if (!switched) throw new Error('일반곡 legacy Stem output backfill CAS 충돌');
+      databaseSwitched = true;
+
+      await removeLegacyPublicStemArtifacts({
+        publicBucket: 'melodio-assets',
+        publicObjectPaths: plan.publicObjectPaths,
+      }, new AbortController().signal);
+      const normalizedArtifacts = normalizedArtifactMetadataAfterPublicCleanup(claimedMetadata);
+      if (!normalizedArtifacts) throw new Error('일반곡 legacy 공개 artifact 이력 정상화 실패');
+      await patchGeneratedOutputBackfillMetadata(row.id, leaseToken, {
+        stemLegacyOutputPublicArtifactsCleanup: 'completed',
+        stemLegacyOutputPublicArtifactsDeletedAt: new Date().toISOString(),
+        stemLegacyOutputPublicArtifactsCleanupError: null,
+        ...normalizedArtifacts,
+      });
+      log('INFO', '일반곡 legacy 공개 Stem output private backfill 완료', { id: row.id });
+    } catch (backfillError) {
+      const message = sanitizeStemError(backfillError);
+      log('ERROR', '일반곡 legacy 공개 Stem output private backfill 실패', { id: row.id, error: message });
+      try {
+        if (databaseSwitched) {
+          await patchGeneratedOutputBackfillMetadata(row.id, leaseToken, {
+            stemLegacyOutputPublicArtifactsCleanup: 'failed',
+            stemLegacyOutputPublicArtifactsCleanupError: message,
+          });
+        } else {
+          await patchGeneratedOutputBackfillMetadata(row.id, leaseToken, {
+            stemLegacyOutputBackfillStatus: 'failed',
+            stemLegacyOutputBackfillFailedAt: new Date().toISOString(),
+            stemLegacyOutputBackfillError: message,
+            stemLegacyOutputBackfillNextRetryAt: new Date(Date.now() + STEM_LEASE_TIMEOUT_MS).toISOString(),
+          });
+        }
+      } catch (metadataError) {
+        log('ERROR', '일반곡 legacy Stem output backfill 실패 상태 기록 실패', {
+          id: row.id,
+          error: sanitizeStemError(metadataError),
+        });
+      }
+    }
+  }
+}
+
+async function backfillCompletedLegacyStemUploads() {
+  let query = supabase
+    .from('generations')
+    .select('id,user_id,status,is_stem_extracted,is_public,audio_url,source_audio_url,license_hash')
+    .eq('status', 'completed')
+    .eq('is_stem_extracted', true)
+    .like('source_audio_url', '%/storage/v1/object/public/melodio-assets/uploads/%')
+    .order('id', { ascending: true })
+    .limit(20);
+  if (completedBackfillCursor) query = query.gt('id', completedBackfillCursor);
+  const { data: rows, error } = await query;
+  if (error) throw new Error(`완료 legacy Stem backfill 조회 실패: ${error.message}`);
+  completedBackfillCursor = rows?.length ? rows[rows.length - 1].id : null;
+
+  for (const row of rows || []) {
+    const metadata = parseGenerationMetadata(row.license_hash);
+    const backfillAttempt = Math.max(0, Number(metadata.stemLegacyBackfillAttempt) || 0);
+    if (backfillAttempt >= STEM_MAX_LEGACY_BACKFILL_ATTEMPTS) {
+      log('ERROR', 'legacy Stem private backfill 최대 시도 초과 — 수동 점검 필요', {
+        id: row.id,
+        attempts: backfillAttempt,
+      });
+      continue;
+    }
+
+    const artifactAttemptAudit = normalizedArtifactAttemptsForBackfill(metadata);
+    if (artifactAttemptAudit.invalid || artifactAttemptAudit.attempts.length >= STEM_MAX_LEASE_CLAIMS) {
+      log('ERROR', 'legacy Stem private backfill 중단 — artifact 이력이 유효하지 않거나 안전 한도에 도달함', {
+        id: row.id,
+        artifactAttempts: artifactAttemptAudit.attempts.length,
+      });
+      continue;
+    }
+    const rawBackfillAttempts = Array.isArray(metadata.stemLegacyBackfillAttempts)
+      ? metadata.stemLegacyBackfillAttempts
+      : [];
+    if (rawBackfillAttempts.some(value => typeof value !== 'string' || !UUID_OBJECT_SEGMENT_PATTERN.test(value))) {
+      log('ERROR', 'legacy Stem private backfill 중단 — source attempt 이력 검증 실패', { id: row.id });
+      continue;
+    }
+    const previousBackfillAttempts = [...new Set(rawBackfillAttempts)];
+    if (previousBackfillAttempts.length >= STEM_MAX_LEGACY_BACKFILL_ATTEMPTS) {
+      log('ERROR', 'legacy Stem private backfill 중단 — source attempt manifest 안전 한도 도달', {
+        id: row.id,
+        sourceAttempts: previousBackfillAttempts.length,
+      });
+      continue;
+    }
+
+    const backfillToken = randomUUID();
+    const plan = planCompletedLegacyStemBackfill(row, metadata, backfillToken);
+    if (!plan) continue;
+    const backfillStartedAt = Date.parse(
+      metadata.stemLegacyBackfillHeartbeatAt || metadata.stemLegacyBackfillStartedAt || '',
+    );
+    if (
+      metadata.stemLegacyBackfillStatus === 'processing'
+      && Number.isFinite(backfillStartedAt)
+      && Date.now() - backfillStartedAt < STEM_LEASE_TIMEOUT_MS
+    ) {
+      continue;
+    }
+    const nextRetryAt = Date.parse(metadata.stemLegacyBackfillNextRetryAt || '');
+    if (metadata.stemLegacyBackfillStatus === 'failed' && Number.isFinite(nextRetryAt) && Date.now() < nextRetryAt) {
+      continue;
+    }
+
+    const claimedAt = new Date().toISOString();
+    const claimedMetadata = {
+      ...metadata,
+      stemLegacyBackfillStatus: 'processing',
+      stemLegacyBackfillToken: backfillToken,
+      stemLegacyBackfillStartedAt: claimedAt,
+      stemLegacyBackfillHeartbeatAt: claimedAt,
+      stemLegacyBackfillError: null,
+      stemLegacyBackfillAttempt: backfillAttempt + 1,
+      stemLegacyBackfillAttempts: [...previousBackfillAttempts, backfillToken],
+      stemLegacyBackfillSourceExtension: plan.extension,
+      stemArtifactAttempts: [
+        ...artifactAttemptAudit.attempts,
+        { token: backfillToken, storage: 'private' },
+      ],
+      stemArtifactStorage: 'private',
+    };
+    const claimedLicenseHash = JSON.stringify(claimedMetadata);
+    const { data: claimed, error: claimError } = await supabase.rpc('claim_legacy_stem_backfill', {
+      p_id: row.id,
+      p_user_id: row.user_id,
+      p_expected_status: row.status,
+      p_expected_license_hash: row.license_hash,
+      p_next_license_hash: claimedLicenseHash,
+    });
+    if (claimError) {
+      log('ERROR', '완료 legacy Stem backfill claim 실패', { id: row.id, error: claimError.message });
+      continue;
+    }
+    if (!claimed) continue;
+
+    let databaseSwitched = false;
+    const backfillController = new AbortController();
+    const renewBackfillLease = async (stage) => {
+      const heartbeatAt = new Date().toISOString();
+      const renewed = await patchLegacyBackfillMetadata(row.id, backfillToken, {
+        stemLegacyBackfillHeartbeatAt: heartbeatAt,
+        stemLegacyBackfillStage: stage,
+      });
+      if (!renewed) {
+        const leaseError = new Error(`legacy backfill lease 상실 (${stage})`);
+        backfillController.abort(leaseError);
+        throw leaseError;
+      }
+    };
+    try {
+      await renewBackfillLease('copying-source');
+      await copyStorageObject({
+        sourceBucket: 'melodio-assets',
+        sourcePath: plan.sourcePublicPath,
+        destinationBucket: PRIVATE_STEM_BUCKET,
+        destinationPath: plan.sourcePrivatePath,
+        contentType: stemInputContentType(plan.extension),
+        signal: backfillController.signal,
+      });
+      await renewBackfillLease('copying-outputs');
+      for (const output of plan.outputPairs) {
+        await renewBackfillLease(`copying-${output.kind}-${output.stem}`);
+        await copyStorageObject({
+          sourceBucket: 'melodio-assets',
+          sourcePath: output.publicPath,
+          destinationBucket: PRIVATE_STEM_OUTPUT_BUCKET,
+          destinationPath: output.privatePath,
+          contentType: output.contentType,
+          signal: backfillController.signal,
+        });
+        await renewBackfillLease(`copied-${output.kind}-${output.stem}`);
+      }
+
+      const original = {};
+      const preview = {};
+      for (const output of plan.outputPairs) {
+        const uri = `storage://${PRIVATE_STEM_OUTPUT_BUCKET}/${output.privatePath}`;
+        if (output.kind === 'original') original[output.stem] = uri;
+        else preview[output.stem] = uri;
+      }
+      const migratedAt = new Date().toISOString();
+      const completionPatch = {
+        isPublic: false,
+        stemStatus: 'completed',
+        stemStage: 'completed',
+        stemProgress: 100,
+        stemSourceMigratedAt: migratedAt,
+        storageBucket: PRIVATE_STEM_BUCKET,
+        storagePath: plan.sourcePrivatePath,
+        stemLegacyPublicArtifactsCleanup: 'pending',
+        stemLegacyPublicArtifactsCleanupError: null,
+        stemLegacyBackfillStatus: 'completed',
+        stemLegacyBackfillStage: 'completed',
+        stemLegacyBackfillHeartbeatAt: migratedAt,
+        stemLegacyBackfillCompletedAt: migratedAt,
+        stemLegacyBackfillError: null,
+        stemLegacyBackfillNextRetryAt: null,
+      };
+      const switched = await patchLegacyBackfillMetadata(row.id, backfillToken, completionPatch, {
+          is_public: false,
+          audio_url: null,
+          source_audio_url: `storage://${PRIVATE_STEM_BUCKET}/${plan.sourcePrivatePath}`,
+          stem_vocals_url: original.vocals,
+          stem_bass_url: original.bass,
+          stem_drums_url: original.drums,
+          stem_other_url: original.other,
+          preview_vocals_url: preview.vocals,
+          preview_bass_url: preview.bass,
+          preview_drums_url: preview.drums,
+          preview_other_url: preview.other,
+        });
+      if (!switched) throw new Error('legacy backfill CAS 충돌');
+      databaseSwitched = true;
+
+      await removeLegacyPublicStemArtifacts({
+        publicBucket: 'melodio-assets',
+        publicObjectPaths: plan.publicObjectPaths,
+      }, new AbortController().signal);
+      await patchStemMetadata(row.id, {
+        stemLegacyPublicArtifactsCleanup: 'completed',
+        stemLegacyPublicArtifactsDeletedAt: new Date().toISOString(),
+        stemLegacyPublicArtifactsCleanupError: null,
+      }, {}, 'completed');
+      log('INFO', '완료 legacy Stem private backfill 완료', { id: row.id });
+    } catch (backfillError) {
+      const message = sanitizeStemError(backfillError);
+      log('ERROR', '완료 legacy Stem private backfill 실패', { id: row.id, error: message });
+      try {
+        if (databaseSwitched) {
+          await patchStemMetadata(row.id, {
+            stemLegacyPublicArtifactsCleanup: 'failed',
+            stemLegacyPublicArtifactsCleanupError: message,
+          }, {}, 'completed');
+        } else {
+          await patchLegacyBackfillMetadata(row.id, backfillToken, {
+            stemLegacyBackfillStatus: 'failed',
+            stemLegacyBackfillFailedAt: new Date().toISOString(),
+            stemLegacyBackfillError: message,
+            stemLegacyBackfillNextRetryAt: new Date(Date.now() + STEM_LEASE_TIMEOUT_MS).toISOString(),
+          });
+        }
+      } catch (metadataError) {
+        log('ERROR', 'legacy backfill 실패 상태 기록 실패', {
+          id: row.id,
+          error: sanitizeStemError(metadataError),
+        });
+      }
+    }
+  }
+}
+
+async function retryLegacyPublicArtifactCleanup() {
+  let pendingQuery = supabase
+    .from('generations')
+    .select('id,user_id,source_audio_url,license_hash')
+    .like('license_hash', '%"stemLegacyPublicArtifactsCleanup":"pending"%')
+    .order('id', { ascending: true })
+    .limit(100);
+  let failedQuery = supabase
+    .from('generations')
+    .select('id,user_id,source_audio_url,license_hash')
+    .like('license_hash', '%"stemLegacyPublicArtifactsCleanup":"failed"%')
+    .order('id', { ascending: true })
+    .limit(100);
+  if (pendingPublicCleanupCursor) pendingQuery = pendingQuery.gt('id', pendingPublicCleanupCursor);
+  if (failedPublicCleanupCursor) failedQuery = failedQuery.gt('id', failedPublicCleanupCursor);
+  const [pendingResult, failedResult] = await Promise.all([
+    pendingQuery,
+    failedQuery,
+  ]);
+  if (pendingResult.error) throw new Error(`legacy cleanup pending 조회 실패: ${pendingResult.error.message}`);
+  if (failedResult.error) throw new Error(`legacy cleanup failed 조회 실패: ${failedResult.error.message}`);
+  pendingPublicCleanupCursor = pendingResult.data?.length
+    ? pendingResult.data[pendingResult.data.length - 1].id
+    : null;
+  failedPublicCleanupCursor = failedResult.data?.length
+    ? failedResult.data[failedResult.data.length - 1].id
+    : null;
+
+  const rows = Array.from(new Map(
+    [...(pendingResult.data || []), ...(failedResult.data || [])].map(row => [row.id, row]),
+  ).values());
+  for (const row of rows) {
+    const metadata = parseGenerationMetadata(row.license_hash);
+    const cleanupPlan = rebuildLegacyPublicCleanupPlan(row, metadata);
+    if (!cleanupPlan) continue;
+    try {
+      await removeLegacyPublicStemArtifacts(cleanupPlan, new AbortController().signal);
+      const updated = await patchStemMetadata(row.id, {
+        stemLegacyPublicArtifactsCleanup: 'completed',
+        stemLegacyPublicArtifactsDeletedAt: new Date().toISOString(),
+        stemLegacyPublicArtifactsCleanupError: null,
+      }, {}, 'completed');
+      if (updated) log('INFO', 'legacy public artifacts cleanup 재시도 완료', { id: row.id });
+    } catch (cleanupError) {
+      const cleanupMessage = sanitizeStemError(cleanupError);
+      log('ERROR', 'legacy public artifacts cleanup 재시도 실패', { id: row.id, error: cleanupMessage });
+      try {
+        await patchStemMetadata(row.id, {
+          stemLegacyPublicArtifactsCleanup: 'failed',
+          stemLegacyPublicArtifactsCleanupError: cleanupMessage,
+        }, {}, 'completed');
+      } catch (metadataError) {
+        log('ERROR', 'legacy cleanup 재시도 오류 기록 실패', { id: row.id, error: sanitizeStemError(metadataError) });
+      }
+    }
+  }
+}
+
+async function retryGeneratedStemOutputPublicCleanup() {
+  const selectFields = [
+    'id',
+    'user_id',
+    'license_hash',
+    ...GENERATED_STEM_OUTPUT_FIELDS.map(descriptor => descriptor.field),
+  ].join(',');
+  let pendingQuery = supabase
+    .from('generations')
+    .select(selectFields)
+    .like('license_hash', '%"stemLegacyOutputPublicArtifactsCleanup":"pending"%')
+    .order('id', { ascending: true })
+    .limit(100);
+  let failedQuery = supabase
+    .from('generations')
+    .select(selectFields)
+    .like('license_hash', '%"stemLegacyOutputPublicArtifactsCleanup":"failed"%')
+    .order('id', { ascending: true })
+    .limit(100);
+  if (pendingGeneratedOutputCleanupCursor) {
+    pendingQuery = pendingQuery.gt('id', pendingGeneratedOutputCleanupCursor);
+  }
+  if (failedGeneratedOutputCleanupCursor) {
+    failedQuery = failedQuery.gt('id', failedGeneratedOutputCleanupCursor);
+  }
+  const [pendingResult, failedResult] = await Promise.all([pendingQuery, failedQuery]);
+  if (pendingResult.error) {
+    throw new Error(`일반곡 legacy Stem output cleanup pending 조회 실패: ${pendingResult.error.message}`);
+  }
+  if (failedResult.error) {
+    throw new Error(`일반곡 legacy Stem output cleanup failed 조회 실패: ${failedResult.error.message}`);
+  }
+  pendingGeneratedOutputCleanupCursor = pendingResult.data?.length
+    ? pendingResult.data[pendingResult.data.length - 1].id
+    : null;
+  failedGeneratedOutputCleanupCursor = failedResult.data?.length
+    ? failedResult.data[failedResult.data.length - 1].id
+    : null;
+
+  const rows = Array.from(new Map(
+    [...(pendingResult.data || []), ...(failedResult.data || [])].map(row => [row.id, row]),
+  ).values());
+  for (const row of rows) {
+    const metadata = parseGenerationMetadata(row.license_hash);
+    const cleanupPlan = rebuildGeneratedStemOutputCleanupPlan(row, metadata);
+    if (!cleanupPlan) continue;
+    const leaseToken = String(metadata.stemLegacyOutputBackfillToken || '');
+    if (!UUID_OBJECT_SEGMENT_PATTERN.test(leaseToken)) continue;
+    const normalizedArtifacts = normalizedArtifactMetadataAfterPublicCleanup(metadata);
+    if (!normalizedArtifacts) {
+      log('ERROR', '일반곡 legacy 공개 Stem output cleanup 중단 — artifact 이력 검증 실패', { id: row.id });
+      continue;
+    }
+    try {
+      await removeLegacyPublicStemArtifacts(cleanupPlan, new AbortController().signal);
+      const updated = await patchGeneratedOutputBackfillMetadata(row.id, leaseToken, {
+        stemLegacyOutputPublicArtifactsCleanup: 'completed',
+        stemLegacyOutputPublicArtifactsDeletedAt: new Date().toISOString(),
+        stemLegacyOutputPublicArtifactsCleanupError: null,
+        ...normalizedArtifacts,
+      });
+      if (updated) log('INFO', '일반곡 legacy 공개 Stem output cleanup 재시도 완료', { id: row.id });
+    } catch (cleanupError) {
+      const message = sanitizeStemError(cleanupError);
+      log('ERROR', '일반곡 legacy 공개 Stem output cleanup 재시도 실패', { id: row.id, error: message });
+      try {
+        await patchGeneratedOutputBackfillMetadata(row.id, leaseToken, {
+          stemLegacyOutputPublicArtifactsCleanup: 'failed',
+          stemLegacyOutputPublicArtifactsCleanupError: message,
+        });
+      } catch (metadataError) {
+        log('ERROR', '일반곡 legacy 공개 Stem output cleanup 오류 기록 실패', {
+          id: row.id,
+          error: sanitizeStemError(metadataError),
+        });
+      }
+    }
+  }
+}
+
+async function runStemMaintenance() {
+  if (stemMaintenanceInProgress || Date.now() - lastStemMaintenanceAt < STEM_MAINTENANCE_INTERVAL_MS) return;
+  stemMaintenanceInProgress = true;
+  lastStemMaintenanceAt = Date.now();
+  try {
+    await processStemStorageCleanupOutbox();
+    await enforceLegacyStemUploadPrivacy();
+    await cleanupExpiredStemUploadSessions();
+    await removeOwnerlessLegacyStemUploads();
+    await backfillCompletedLegacyStemUploads();
+    await backfillCompletedGeneratedStemOutputs();
+    await retryLegacyPublicArtifactCleanup();
+    await retryGeneratedStemOutputPublicCleanup();
+  } catch (error) {
+    log('ERROR', 'Stem 유지보수 작업 실패', sanitizeStemError(error));
+  } finally {
+    stemMaintenanceInProgress = false;
+  }
+}
+
+async function recoverStaleStemJobs() {
+  const [legacyResult, metadataResult, cleanupResult] = await Promise.all([
+    supabase
+      .from('generations')
+      .select('*')
+      .eq('status', 'processing')
+      .not('audio_url', 'is', null)
+      .is('stem_vocals_url', null)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('generations')
+      .select('*')
+      .like('license_hash', '%"stemStatus":"processing"%')
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('generations')
+      .select('*')
+      .like('license_hash', '%"stemStatus":"cleanup"%')
+      .order('created_at', { ascending: true }),
+  ]);
+  if (legacyResult.error) throw new Error(`legacy processing 복구 조회 실패: ${legacyResult.error.message}`);
+  if (metadataResult.error) throw new Error(`stemStatus processing 복구 조회 실패: ${metadataResult.error.message}`);
+  if (cleanupResult.error) throw new Error(`stemStatus cleanup 복구 조회 실패: ${cleanupResult.error.message}`);
+  const rows = Array.from(new Map(
+    [...(legacyResult.data || []), ...(metadataResult.data || []), ...(cleanupResult.data || [])]
+      .map(row => [row.id, row]),
+  ).values());
+
+  const now = Date.now();
+  for (const row of rows) {
+    const metadata = parseGenerationMetadata(row.license_hash);
+    const recoverable = isProcessingStemRow(row) || metadata.stemStatus === 'cleanup';
+    if (activeStemJobs.has(row.id) || !recoverable || !hasStemSource(row)) continue;
+    const heartbeatAt = Date.parse(metadata.stemHeartbeatAt || metadata.stemStartedAt || row.created_at || '');
+    if (Number.isFinite(heartbeatAt) && now - heartbeatAt < STEM_LEASE_TIMEOUT_MS) continue;
+
+    const recoveredAt = new Date().toISOString();
+    const processingAttempt = Math.max(0, Number(metadata.stemAttempt) || 0);
+    const refundInfrastructureAttempt = metadata.stemStatus === 'processing'
+      || (metadata.stemStatus === 'cleanup' && metadata.stemCleanupReason === 'worker-shutdown');
+    const nextMetadata = {
+      ...metadata,
+      stemStatus: 'pending',
+      stemStage: 'queued',
+      stemProgress: 0,
+      stemHeartbeatAt: recoveredAt,
+      stemAttempt: refundInfrastructureAttempt ? Math.max(0, processingAttempt - 1) : processingAttempt,
+      ...(refundInfrastructureAttempt ? {
+        stemInfrastructureRequeueCount: Math.max(0, Number(metadata.stemInfrastructureRequeueCount) || 0) + 1,
+      } : {}),
+      stemCleanupReason: null,
+      stemError: null,
+      stemRecoveredAt: recoveredAt,
+      stemRequeueReason: metadata.stemStatus === 'cleanup'
+        ? 'stale-failure-cleanup-lease'
+        : 'stale-processing-lease',
+    };
+    const nextStatus = isExternalStemUpload(metadata) ? 'pending' : 'completed';
+    let query = supabase
+      .from('generations')
+      .update({ status: nextStatus, license_hash: JSON.stringify(nextMetadata) })
+      .eq('id', row.id)
+      .eq('status', row.status);
+    query = addLicenseHashCondition(query, row.license_hash);
+    const { data: recovered, error: recoverError } = await query.select('*');
+    if (recoverError) {
+      log('ERROR', 'stale processing 복구 실패', { id: row.id, error: recoverError.message });
+    } else if (recovered?.length) {
+      log('WARN', 'stale processing lease를 pending으로 복구', { id: row.id });
+      await scheduleStemJob(recovered[0], 'stale-recovery');
+    }
+  }
+}
+
+async function fetchQueuedStemRows() {
+  const columns = '*';
+  const [legacyResult, metadataResult] = await Promise.all([
+    supabase
+      .from('generations')
+      .select(columns)
+      .eq('status', 'pending')
+      .is('stem_vocals_url', null)
+      .order('created_at', { ascending: true }),
+    supabase
+      .from('generations')
+      .select(columns)
+      .like('license_hash', '%"stemStatus":"pending"%')
+      .order('created_at', { ascending: true }),
+  ]);
+  if (legacyResult.error) throw new Error(`legacy pending 조회 실패: ${legacyResult.error.message}`);
+  if (metadataResult.error) throw new Error(`stemStatus pending 조회 실패: ${metadataResult.error.message}`);
+  return Array.from(new Map(
+    [...(legacyResult.data || []), ...(metadataResult.data || [])]
+      .filter(shouldClaimStemRow)
+      .map(row => [row.id, row]),
+  ).values());
+}
+
+// ─── 시작 시 기존 PENDING 및 stale PROCESSING 작업 자동 스캔 ─────────────────
+async function processExistingPending() {
+  if (isShuttingDown || pendingScanInProgress) return;
+  pendingScanInProgress = true;
+  log("INFO", "기존 PENDING 작업 스캔 시작...");
+  try {
+    await runStemMaintenance();
+    await recoverStaleStemJobs();
+    const data = await fetchQueuedStemRows();
+    if (data.length === 0) {
       log("INFO", "처리 대기 중인 PENDING 작업 없음");
       return;
     }
@@ -612,7 +2873,7 @@ async function processExistingPending() {
     for (const row of data) {
       log("INFO", `PENDING 작업 처리 시작`, { id: row.id, title: (row.title || "").slice(0, 30) });
       try {
-        await processGeneration(row);
+        await scheduleStemJob(row, 'periodic-scan');
       } catch (err) {
         log("ERROR", `PENDING 작업 처리 실패`, { id: row.id, error: err.message });
       }
@@ -620,12 +2881,14 @@ async function processExistingPending() {
     log("INFO", "기존 PENDING 작업 스캔 완료");
   } catch (err) {
     log("ERROR", "PENDING 스캔 예외", err.message);
+  } finally {
+    pendingScanInProgress = false;
   }
 }
 
 // 시작 후 5초 대기 후 PENDING 스캔, 이후 30초마다 반복 (Realtime 누락 방지)
-setTimeout(processExistingPending, 5000);
-setInterval(processExistingPending, 30000);
+pendingScanTimeout = setTimeout(processExistingPending, 5000);
+pendingScanInterval = setInterval(processExistingPending, 30000);
 
 // ─── Suno 버전 모델 매핑 헬퍼 ────────────────────────────────────────────────
 function mapSunoVersionToModel(version) {
@@ -1217,16 +3480,29 @@ async function pollSunoGenerations() {
                 log("INFO", `[AUTO RVC] 음성 복제 기능 비활성화 — 자동 변환 건너뜀`, { id: row.id.slice(0, 8) });
               }
 
-              if (VOICE_CLONING_ENABLED && isAutoVoice && winner.clip.audio_url && typeof processGeneration === 'function') {
-                log("INFO", `[AUTO RVC] 🎤 마이 보이스 자동 1:1 음성 변환 & 마스터 리믹스 파이프라인 즉시 가동!`, { id: row.id.slice(0, 8) });
-                processGeneration({
-                  id: row.id,
-                  audio_url: winner.clip.audio_url,
-                  user_id: row.user_id,
-                  voice_conversion_status: 'pending',
-                  voice_model_id: metaObj.voice_model_id || 'qr_yoon',
-                  pitch_shift: metaObj.pitch_shift || 0,
-                }).catch((err) => log("ERROR", "[AUTO RVC] 백그라운드 자동 보이스 변환 실패:", err.message));
+              if (VOICE_CLONING_ENABLED && isAutoVoice && winner.clip.audio_url) {
+                log("INFO", `[AUTO RVC] 후속 스템 작업을 안전한 큐에 등록`, { id: row.id.slice(0, 8) });
+                const queuedAt = new Date().toISOString();
+                const queuedMetadata = {
+                  ...parseGenerationMetadata(updatedMetaStr),
+                  stemStatus: 'pending',
+                  stemStage: 'queued',
+                  stemProgress: 0,
+                  stemHeartbeatAt: queuedAt,
+                  stemError: null,
+                };
+                const { data: autoVoiceRow, error: autoVoiceQueueError } = await supabase
+                  .from('generations')
+                  .update({ license_hash: JSON.stringify(queuedMetadata) })
+                  .eq('id', row.id)
+                  .eq('license_hash', updatedMetaStr)
+                  .select('*')
+                  .single();
+                if (autoVoiceQueueError || !autoVoiceRow) {
+                  log('ERROR', '[AUTO RVC] 스템 큐 등록 실패', autoVoiceQueueError?.message || '행 없음');
+                } else {
+                  void scheduleStemJob(autoVoiceRow, 'auto-voice');
+                }
               }
             }
           }
@@ -1275,6 +3551,7 @@ async function pollSunoGenerations() {
                 audio_url: loser.clip.audio_url,
                 source_audio_url: loser.clip.audio_url,
                 status: "completed",
+                is_public: false,
                 is_stem_extracted: false,
                 duration_mode: row.duration_mode || null,
                 license_hash: updatedMeta2Str,

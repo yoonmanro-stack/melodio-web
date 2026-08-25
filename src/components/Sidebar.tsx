@@ -24,12 +24,14 @@ import {
   Mic2,
   Workflow,
   ListMusic,
+  Headphones,
 } from "lucide-react";
 import clsx from "clsx";
 
 const navItems = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Playlists", href: "/playlists", icon: ListMusic },
+  { name: "Stem Studio", href: "/stem-studio", icon: Headphones },
   { name: "Artist Incubator", href: "/incubator", icon: Fingerprint },
   { name: "아티스트 페르소나", href: "/persona", icon: Sparkles },
   { name: "뮤직 스튜디오", href: "/style-library", icon: Music4 },

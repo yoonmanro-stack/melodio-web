@@ -14,6 +14,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   ko: {
     "Dashboard": "대시보드",
     "Playlists": "내 플레이리스트",
+    "Stem Studio": "스템 스튜디오",
     "Artist Incubator": "아티스트 인큐베이터",
     "Persona Lab": "아티스트 페르소나",
     "아티스트 페르소나": "아티스트 페르소나",
@@ -56,6 +57,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   en: {
     "Dashboard": "Dashboard",
     "Playlists": "Playlists",
+    "Stem Studio": "Stem Studio",
     "Artist Incubator": "Artist Incubator",
     "Persona Lab": "Persona Lab",
     "Style Library": "Style Library",
@@ -86,6 +88,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   ja: {
     "Dashboard": "ダッシュボード",
     "Playlists": "マイプレイリスト",
+    "Stem Studio": "ステムスタジオ",
     "Artist Incubator": "アーティスト育成",
     "Persona Lab": "ペルソナラボ",
     "Style Library": "スタイルライブラリ",
@@ -116,6 +119,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   es: {
     "Dashboard": "Panel de Control",
     "Playlists": "Listas de reproducción",
+    "Stem Studio": "Estudio de Stems",
     "Artist Incubator": "Incubadora de Artistas",
     "Persona Lab": "Laboratorio de Persona",
     "Style Library": "Biblioteca de Estilos",
@@ -146,6 +150,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   fr: {
     "Dashboard": "Tableau de Bord",
     "Playlists": "Playlists",
+    "Stem Studio": "Studio de Stems",
     "Artist Incubator": "Incubateur d'Artistes",
     "Persona Lab": "Labo de Persona",
     "Style Library": "Bibliothèque de Styles",
@@ -176,6 +181,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   de: {
     "Dashboard": "Dashboard",
     "Playlists": "Playlists",
+    "Stem Studio": "Stem-Studio",
     "Artist Incubator": "Künstler-Inkubator",
     "Persona Lab": "Persona-Labor",
     "Style Library": "Stil-Bibliothek",
@@ -206,6 +212,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   pt: {
     "Dashboard": "Painel de Controle",
     "Playlists": "Playlists",
+    "Stem Studio": "Estúdio de Stems",
     "Artist Incubator": "Incubadora de Artistas",
     "Persona Lab": "Laboratório de Persona",
     "Style Library": "Biblioteca de Estilos",
@@ -236,6 +243,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   zh: {
     "Dashboard": "控制台",
     "Playlists": "我的播放列表",
+    "Stem Studio": "分轨工作室",
     "Artist Incubator": "艺术家孵化器",
     "Persona Lab": "角色实验室",
     "Style Library": "风格库",
@@ -266,6 +274,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   it: {
     "Dashboard": "Dashboard",
     "Playlists": "Playlist",
+    "Stem Studio": "Studio Stem",
     "Artist Incubator": "Incubatore Artisti",
     "Persona Lab": "Laboratorio Persona",
     "Style Library": "Libreria di Stili",
@@ -296,6 +305,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
   hi: {
     "Dashboard": "डैशबोर्ड",
     "Playlists": "मेरी प्लेलिस्ट",
+    "Stem Studio": "स्टेम स्टूडियो",
     "Artist Incubator": "कलाकार इनक्यूबेटर",
     "Persona Lab": "व्यक्तित्व लैब",
     "Style Library": "शैली लाइब्रेरी",

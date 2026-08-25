@@ -171,3 +171,56 @@ npx vercel --prod --yes
 - 신규 플레이리스트 파일 대상 ESLint 오류 0건(동적 외부 커버 이미지 관련 최적화 경고만 존재).
 - `npm run build` 통과(Next.js 16.2.3, `/playlists` 및 플레이리스트 API 라우트 생성 확인).
 - 변경 파일 Gitleaks 검사 결과 비밀정보 0건.
+
+---
+
+## 2026-08-25 Stem Studio 업로드·분리 파이프라인 복구
+
+### 장애 원인
+
+- 외부 음원 `장대비`의 Demucs 분리는 끝났지만 Mac mini PM2가 약 513MB RSS에서 worker를 재시작했고, DB가 `processing`에 남아 대시보드에서 `Splitting...`이 끝나지 않았다.
+- 기존 복구 로직은 `pending`만 다시 읽어 장시간 heartbeat가 끊긴 `processing` 작업을 회수하지 못했다.
+- 외부 업로드가 일반 AI 생성곡 목록과 같은 `generations` 화면에 섞이고 `Suno v5.5`로 표시돼 실제 작업 흐름을 오해하게 했다.
+
+### 수정된 구조
+
+- 외부 음원은 전용 `/stem-studio`에서 업로드·진행률·실패·재시도·재생·삭제를 관리하고, 대시보드 Track Library에는 AI 생성곡만 유지한다.
+- 브라우저 → private source bucket 직통 signed upload → 원자적 DB queue 등록 → Mac mini Demucs → private output bucket 순서로 분리했다.
+- `stem_upload_sessions`와 사용자별 advisory-lock RPC로 시간당 업로드, 2GB source, 동시 3작업, 보관 10작업 한도를 병렬 요청에도 원자적으로 적용한다.
+- 원본은 최대 80MB·6분으로 제한하고 worker가 실제 codec·duration을 `ffprobe`로 재검증한다. 다운로드 스트림에도 80MB hard cap과 timeout을 적용한다.
+- 브라우저 메모리를 줄이기 위해 mixer preview는 mono AAC 44.1kHz/128kbps로 만들고, 다운로드용 원본 WAV는 그대로 보존한다.
+- 혼합곡의 공개 여부와 관계없이 사용자 소유 Stem WAV/AAC는 모두 private bucket에 저장한다. 진행 중 공개 상태 변경은 차단하고, 과거 public Stem이 남은 완료곡은 이전 없이 비공개로 바꾸지 못하게 해 공개 파일 잔존을 막는다.
+- 운영 DB에는 `generations.is_public` 생성 이력이 누락돼 있었다. secure migration이 `audio_url`·`is_public`·preview URL 4개를 먼저 자체 보강하고, legacy 메타데이터의 `isPublic:false` 및 외부 업로드 행을 비공개로 backfill한 뒤 `DEFAULT TRUE NOT NULL` 계약을 적용한다. 새 Lyria/Suno/서브곡 INSERT도 DB 컬럼과 메타데이터 공개 값을 항상 함께 기록한다.
+- 공개 generation API는 비소유자 응답에서 private `storage://` Stem 참조를 제거한다. 소유자만 Storage RLS를 통해 signed 재생·다운로드 URL을 만들 수 있다.
+- worker 실행마다 고유 lease token을 발급하고 모든 heartbeat·단계·완료 갱신에 토큰을 확인한다. 산출물은 attempt별 경로에 저장해 늦은 이전 worker의 정리가 새 결과를 삭제할 수 없고, 실패 정리는 DB의 전용 `cleanup` 상태를 같은 lease로 선점한 실행만 수행한다.
+- Demucs 실제 처리 시도와 PM2 재시작·stale lease 회수를 분리했다. 인프라 중단은 `stemAttempt`를 환급하고 별도 카운터에만 기록하므로 재시작 3회가 정상 작업을 영구 실패로 만들지 않는다. 다만 exact 삭제 목록을 유한하게 보장하기 위해 전체 lease claim은 16회에서 안전 중단한다.
+- 보관 10작업 한도는 `/stem-studio`에서 관리할 수 있는 `stem-upload`·`custom-upload`에만 적용하며, 일반 대시보드 곡의 별도 Stem 분리 결과는 이 한도를 소모하지 않는다. 완료·진행 작업과 유효한 signed-upload 예약을 하나의 사용자 lock 안에서 합산해 동시 요청도 10개를 넘지 않는다.
+- 사용자 삭제는 generation 행과 exact Storage 삭제 목록을 `stem_storage_cleanup_tasks` outbox에 한 트랜잭션으로 기록한다. worker가 API의 즉시 정리보다 먼저 task를 소비하지 못하도록 안전 재확인 시각도 같은 트랜잭션에서 예약한다. signed upload 원본은 세션 만료 후 30분까지 task를 보존해 삭제 뒤 늦게 끝난 PUT도 제거하며, 안전 재확인이 필요 없는 객체의 즉시 삭제 실패만 바로 재시도한다.
+- legacy 완료 파일의 private backfill은 삭제 RPC와 동일한 사용자 advisory lock으로 먼저 claim하며, 각 최대 5분 복사 전후 heartbeat/token을 재검증하고 token별 경로를 사용한다. 고정 batch는 UUID cursor로 순회해 영구 실패 행이 뒤의 공개 파일 이전을 막지 못하게 했다.
+- 외부 업로드와 별개인 사용자 소유 일반 생성곡도 공개 Stem URL 8개가 정확히 기존 Storage 경로와 일치할 때만 output-only backfill한다(viral/viral-cf·패러디·60초 이하 숏폼은 제외). 원곡 URL·공개 상태는 유지하고 Stem만 private bucket의 attempt 경로로 CAS 전환하며, URL에서 검증한 exact 공개 object 목록을 메타데이터에 영속화해 실패한 공개 파일 삭제를 별도 상태/cursor로 재시도한다. 성공 후 과거 public artifact 이력을 정상화하고, output attempt 이력은 기존 처리 이력과 합쳐 삭제 manifest 144개 한도를 넘지 않게 제한한다.
+- worker는 새 Stem 업로드와 legacy Storage 복사 직후 목적지 객체 크기를 원본과 비교한다. HTTP 성공만으로 완료 처리하지 않으므로 부분 업로드나 잘린 WAV/AAC가 DB에 확정되지 않는다.
+- attempt·이전 이력은 한도에 맞추려고 잘라내지 않는다. 손상된 이력 또는 안전 한도 도달 시 claim·자동 삭제를 중단해 기록에서 빠진 Storage 객체가 고아로 남는 일을 막는다.
+- 만료 미확정 업로드 sweeper, legacy 공개 업로드의 private backfill/공개 파일 삭제 재시도를 추가했다.
+- 만료된 미확정 signed upload도 세션을 바로 잊지 않고 exact source 경로를 durable outbox에 먼저 기록한다. 즉시 1차 삭제 후 30분 뒤 재삭제해 토큰 만료 직전에 시작된 느린 PUT의 지연 완료까지 정리한다.
+- 소유자가 없는 과거 공개 업로드는 DB 행 삭제와 exact object 9개의 durable cleanup 예약을 한 트랜잭션으로 먼저 확정한 뒤 outbox가 제거한다. 소유권 복구 가능성이 남은 행의 파일을 먼저 지우지 않으며, 소유자가 있는 완료/실패 업로드는 private Storage로 이전한다.
+- `generations` 브라우저 직접 쓰기를 차단하고 소유자 SELECT만 허용한다. source/output bucket에는 restrictive guard를 설치해 과거의 넓은 permissive 정책이 있어도 소유자 읽기 외에는 통과하지 못하며, 쓰기·갱신·삭제는 signed token 또는 service worker로 제한한다.
+
+### 운영 적용 순서 — 짧은 maintenance window 필수
+
+새 web/worker는 새 RPC와 private bucket이 필요하고, migration은 구 web의 직접 DB 쓰기를 차단하므로 순서를 바꾸지 않는다.
+
+1. Mac mini에서 `melodio-worker`를 중지해 새 Stem intake를 잠시 멈춘다.
+2. Supabase에서 `migrations/20260825133000_secure_stem_studio_storage.sql` 단일 migration을 실행한다.
+3. 두 private bucket, 7개 RPC, `stem_upload_sessions`, `stem_storage_cleanup_tasks`, generations/storage RLS 정책이 생성됐는지 확인한다. `UNSAFE_BROAD_STORAGE_POLICY_REQUIRES_REVIEW`가 발생하면 우회하지 말고 기존 broad Storage 정책을 먼저 감사한다.
+4. Mac mini `/Users/muse/melodio-worker`를 같은 Git commit으로 동기화하고 `node -v`가 **22 이상**인지 확인한 뒤 의존성을 설치하고 PM2 worker를 재시작한다.
+5. 새 web commit을 Vercel에 배포한다.
+6. 기존 stuck 작업이 stale recovery로 `pending → processing → completed` 또는 명시적 `failed`가 되는지 확인한다.
+7. 새 MP3/WAV 1개로 upload, 진행률 heartbeat, 완료 재생, WAV 다운로드, terminal 삭제 후 Storage 정리까지 스모크 테스트한다.
+
+### 로컬 검증
+
+- `node --check worker/index.js`, `node --check worker/ecosystem.config.js` 통과.
+- `npx tsc --noEmit` 통과. 변경된 Stem Studio/API/lib 파일 ESLint 오류 0건이다.
+- `npm run build` 통과(Next.js 16.2.3, `/stem-studio` 및 4개 Stem API route 생성 확인).
+- 변경 파일과 신규 파일 Gitleaks 검사 결과 비밀정보 0건.
+- 아직 migration·Mac mini worker·Vercel에는 적용하지 않은 로컬 변경 상태다.

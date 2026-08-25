@@ -147,6 +147,10 @@ export type Database = {
           stem_drums_url: string | null
           stem_bass_url: string | null
           stem_other_url: string | null
+          preview_vocals_url: string | null
+          preview_drums_url: string | null
+          preview_bass_url: string | null
+          preview_other_url: string | null
           license_hash: string | null
           created_at: string
           clipping_count: number | null
@@ -170,6 +174,10 @@ export type Database = {
           stem_drums_url?: string | null
           stem_bass_url?: string | null
           stem_other_url?: string | null
+          preview_vocals_url?: string | null
+          preview_drums_url?: string | null
+          preview_bass_url?: string | null
+          preview_other_url?: string | null
           license_hash?: string | null
           created_at?: string
           clipping_count?: number | null
@@ -191,6 +199,10 @@ export type Database = {
           stem_drums_url?: string | null
           stem_bass_url?: string | null
           stem_other_url?: string | null
+          preview_vocals_url?: string | null
+          preview_drums_url?: string | null
+          preview_bass_url?: string | null
+          preview_other_url?: string | null
           license_hash?: string | null
           clipping_count?: number | null
           dissonance_score?: number | null

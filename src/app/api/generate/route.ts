@@ -386,6 +386,9 @@ export async function POST(request: NextRequest) {
     const vdCode = rawBody.vdCode
     const noiseRatio = rawBody.noiseRatio
     const queueItemId = typeof rawBody.queueItemId === 'string' ? rawBody.queueItemId : null
+    // 공개 여부는 DB 컬럼과 license_hash 메타데이터가 반드시 같은 값을 갖도록
+    // 요청 초기에 한 번만 정규화한다. 이전 요청처럼 값이 없으면 공개가 기본이다.
+    const isPublic = typeof rawBody.isPublic === 'boolean' ? rawBody.isPublic : true
     // 화면의 구조화된 가사 섹션을 서버의 단일 기준으로 사용한다. 클라이언트에서
     // 조립한 lyricsPrompt가 비었거나 오래된 상태여도 화면에 표시된 섹션과 동일한
     // 프롬프트를 서버에서 다시 만든다.
@@ -547,6 +550,7 @@ export async function POST(request: NextRequest) {
           audio_url: track.audioUrl,
           source_audio_url: track.audioUrl,
           status: 'completed',
+          is_public: isPublic,
           is_stem_extracted: false,
           cover_art_url: coverArtUrl1,
           license_hash: JSON.stringify({
@@ -554,7 +558,7 @@ export async function POST(request: NextRequest) {
             engine: 'lyria3',
             durationSeconds: 30,
             sourceMenu: rawBody.sourceMenu || null,
-            isPublic: rawBody.isPublic !== undefined ? rawBody.isPublic : true,
+            isPublic,
           }),
         })
         .select().single()
@@ -613,7 +617,7 @@ export async function POST(request: NextRequest) {
       presetId: rawBody.presetId || null,
       presetName: rawBody.presetName || null,
       sourceMenu: rawBody.sourceMenu || null,
-      isPublic: rawBody.isPublic !== undefined ? rawBody.isPublic : true,
+      isPublic,
       youtubeMainTitle: rawBody.youtubeMainTitle || null,
       tracklistText: rawBody.tracklistText || null,
       queueItemId,
@@ -627,6 +631,7 @@ export async function POST(request: NextRequest) {
         user_id: user?.id || null,
         title: trackTitle,
         status: 'generating',
+        is_public: isPublic,
         source_audio_url: `suno:${taskId}`,
         duration_mode: 'clip',
         license_hash: metadata,

@@ -1668,17 +1668,19 @@ export default function JapanLandingClient() {
 
   const handleUpdateTitle = async () => {
     if (!editingTrack || !newTitle.trim()) return;
-    const { error } = await supabase
-      .from('generations')
-      .update({ title: newTitle.trim() })
-      .eq('id', editingTrack.id);
+    const response = await fetch('/api/generations', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: editingTrack.id, title: newTitle.trim() }),
+    });
 
-    if (!error) {
+    if (response.ok) {
       setIsEditModalOpen(false);
       setEditingTrack(null);
       fetchMyJpTracks();
     } else {
-      alert('제목 수정 실패: ' + error.message);
+      const payload = await response.json().catch(() => ({}));
+      alert('제목 수정 실패: ' + (payload.error || '서버 요청에 실패했습니다.'));
     }
   };
 
