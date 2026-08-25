@@ -212,8 +212,8 @@ npx vercel --prod --yes
 1. Mac mini에서 `melodio-worker`를 중지해 새 Stem intake를 잠시 멈춘다.
 2. Supabase에서 `migrations/20260825133000_secure_stem_studio_storage.sql` 단일 migration을 실행한다.
 3. 두 private bucket, 7개 RPC, `stem_upload_sessions`, `stem_storage_cleanup_tasks`, generations/storage RLS 정책이 생성됐는지 확인한다. `UNSAFE_BROAD_STORAGE_POLICY_REQUIRES_REVIEW`가 발생하면 우회하지 말고 기존 broad Storage 정책을 먼저 감사한다.
-4. Mac mini `/Users/muse/melodio-worker`를 같은 Git commit으로 동기화하고 `node -v`가 **22 이상**인지 확인한 뒤 의존성을 설치하고 PM2 worker를 재시작한다.
-5. 새 web commit을 Vercel에 배포한다.
+4. 새 web commit을 Vercel에 배포하고 `melodio.app`이 새 배포의 `Ready` alias인지 확인한다. 새 worker가 private URI로 DB를 전환하기 전에 web이 signed URL을 해석할 수 있어야 한다.
+5. Mac mini `/Users/muse/melodio-worker`를 같은 Git commit으로 동기화하고 `node -v`가 **22 이상**인지 확인한 뒤 `worker`에서 의존성을 설치하고 PM2 worker를 재시작한다.
 6. 기존 stuck 작업이 stale recovery로 `pending → processing → completed` 또는 명시적 `failed`가 되는지 확인한다.
 7. 새 MP3/WAV 1개로 upload, 진행률 heartbeat, 완료 재생, WAV 다운로드, terminal 삭제 후 Storage 정리까지 스모크 테스트한다.
 
@@ -223,4 +223,7 @@ npx vercel --prod --yes
 - `npx tsc --noEmit` 통과. 변경된 Stem Studio/API/lib 파일 ESLint 오류 0건이다.
 - `npm run build` 통과(Next.js 16.2.3, `/stem-studio` 및 4개 Stem API route 생성 확인).
 - 변경 파일과 신규 파일 Gitleaks 검사 결과 비밀정보 0건.
-- 아직 migration·Mac mini worker·Vercel에는 적용하지 않은 로컬 변경 상태다.
+- 2026-08-25 운영 반영 완료: secure migration 적용 후 private bucket 2개·테이블 2개·RPC 7개·필수 generation 컬럼 6개·`is_public IS NULL` 0건을 확인했다.
+- GitHub `main`과 Vercel Production은 `0aabc2c` 기준으로 `Ready`이며, Mac mini도 기존 폴더를 `/Users/muse/melodio-worker-backup-20260825-1717`에 보존하고 같은 커밋의 clean Git 복제본으로 전환했다.
+- PM2 `melodio-worker`는 새 Git 경로에서 Node 25, 1GB memory limit, 35초 kill timeout, 재시작 0회로 `online`이다.
+- 기존 stuck `장대비` 작업은 stale recovery 후 `completed`로 수렴했다. private 원본 1개와 private Stem 참조 8개가 확정됐고 운영 Stem Studio에서 4채널 로드 및 3분 32초 길이를 확인했다.

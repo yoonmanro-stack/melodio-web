@@ -46,6 +46,8 @@ next-env.d.ts
 worker/.env
 worker/logs/
 worker/tmp/
+worker/vertex-express-key.json
+worker/models/
 
 # local and remote editor backups
 *.remote_bak
