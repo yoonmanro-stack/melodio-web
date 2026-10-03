@@ -1,4 +1,5 @@
 'use client'
+import { SUNO_VERSIONS, currentSunoVersion } from '@/lib/suno-models'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -38,9 +39,8 @@ function buildLyricsPrompt(sections: LyricsSection[]): string {
     .join('\n\n')
 }
 
-/** 엔진 자동 선택 — 보컬 없으면 Lyria 3, 보컬 있으면 Suno V5 */
+/** Lyria 3가 제공되지 않는 동안 자동 선택은 Suno를 사용한다. */
 function autoSelectEngine(selections: TagSelections, isInstrumental: boolean): MusicEngine {
-  // Always default to suno_v5 for auto, so that users get real AI generation rather than mock Lyria tracks
   return 'suno_v5'
 }
 
@@ -65,7 +65,7 @@ export default function PromptBuilder({
   const [lyricsSections, setLyricsSections] = useState<LyricsSection[]>([])
   const [isInstrumental, setIsInstrumental] = useState(false)
   const [engine, setEngine] = useState<MusicEngine>('auto')
-  const [sunoVersion, setSunoVersion] = useState<string>('v5.5')
+  const [sunoVersion, setSunoVersion] = useState<string>('v6')
   const [isSunoDropdownOpen, setIsSunoDropdownOpen] = useState(false)
   const [trackCount, setTrackCount] = useState<number>(2)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -118,7 +118,7 @@ export default function PromptBuilder({
 
   const { user } = useAuth()
   const { saveHistory } = useHistory()
-  const { activeVoice } = useVoice()
+  const { activeVoice, studioVoiceFields } = useVoice()
 
   const [isPro, setIsPro] = useState(false)
   const [customPresets, setCustomPresets] = useState<Preset[]>([])
@@ -386,8 +386,8 @@ export default function PromptBuilder({
 
           // 기본 설정 복구
           setIsInstrumental(!!meta.isInstrumental)
-          if (meta.engine) setEngine(meta.engine)
-          if (meta.sunoVersion) setSunoVersion(meta.sunoVersion)
+          if (meta.engine) setEngine(meta.engine === 'lyria3' ? 'auto' : meta.engine)
+          if (meta.sunoVersion) setSunoVersion(currentSunoVersion(meta.sunoVersion))
           
           // 제목 복구
           if (gen.title) {
@@ -650,7 +650,7 @@ export default function PromptBuilder({
     setLyricsSections([])
     setIsInstrumental(false)
     setEngine('auto')
-    setSunoVersion('v5.5')
+    setSunoVersion('v6')
     setTrackCount(2)
     setTitle('')
     setYoutubeTags('')
@@ -729,13 +729,9 @@ export default function PromptBuilder({
 
   // 엔진 변경 및 트랙 수 동기화
   const handleEngineChange = (newEngine: MusicEngine) => {
+    if (newEngine === 'lyria3') return
     setEngine(newEngine)
-    if (newEngine === 'lyria3') {
-      if (trackCount === 2) {
-        setTrackCount(1)
-        setIsPlaylistMode(false)
-      }
-    } else if (newEngine === 'suno_v5') {
+    if (newEngine === 'suno_v5') {
       if (trackCount === 1) {
         setTrackCount(2)
         setIsPlaylistMode(false)
@@ -882,6 +878,7 @@ export default function PromptBuilder({
               voicePrompt: activeVoice?.stylePrompt || undefined,
               activeVoice: activeVoice || undefined,
               sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
+              ...studioVoiceFields,
               isPublic: isPublic,
             }),
           })
@@ -949,12 +946,18 @@ export default function PromptBuilder({
               stylePrompt: finalStyle,
               topic,
               language,
-              vocalGender,
+              vocalGender: studioVoiceFields.vocalGender,
               presetId: selectedPresetId,
               durationSeconds: targetDuration,
             })
           })
           const lyricData = await lyricRes.json()
+          if (!lyricRes.ok || !lyricData.success) {
+            throw new Error(lyricData.error || '가사 생성을 완료하지 못했습니다. 다시 시도해 주세요.')
+          }
+          if (!isInstrumental && (!Array.isArray(lyricData.sections) || !lyricData.sections.some((section: LyricsSection) => section.content?.trim()))) {
+            throw new Error('생성된 가사를 확인하지 못했습니다. 다시 시도해 주세요.')
+          }
           if (lyricData.success) {
             if (lyricData.title) {
               finalTitle = lyricData.title
@@ -1032,6 +1035,7 @@ export default function PromptBuilder({
             voicePrompt: activeVoice?.stylePrompt || undefined,
             activeVoice: activeVoice || undefined,
             sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
+              ...studioVoiceFields,
             isPublic: isPublic,
           }),
         })
@@ -1253,14 +1257,12 @@ export default function PromptBuilder({
             🔄 Auto
           </button>
           <button
-            onClick={() => handleEngineChange('lyria3')}
-            className={`px-3 py-1.5 rounded-lg border text-xs transition-all ${
-              engine === 'lyria3'
-                ? 'border-melodio-accent bg-melodio-accent/20 text-melodio-accent-light'
-                : 'border-melodio-border text-melodio-muted hover:border-melodio-accent/50'
-            }`}
+            type="button"
+            disabled
+            title="Lyria 3는 현재 사용할 수 없습니다. Suno를 선택해 주세요."
+            className="px-3 py-1.5 rounded-lg border border-melodio-border text-melodio-muted/50 text-xs cursor-not-allowed"
           >
-            🟢 Lyria 3
+            Lyria 3 · 현재 이용 불가
           </button>
 
           {/* Suno Button & Dropdown */}
@@ -1291,7 +1293,7 @@ export default function PromptBuilder({
                   onClick={() => setIsSunoDropdownOpen(false)}
                 />
                 <div className="absolute left-0 mt-1 w-28 bg-[#1a1515] border border-melodio-border rounded-lg shadow-xl z-50 py-1 text-xs">
-                  {['v5.5', 'v5', 'v4.5+', 'v4.5', 'v4.5-all', 'v4'].map((v) => (
+                  {SUNO_VERSIONS.map((v) => (
                     <button
                       key={v}
                       onClick={() => {

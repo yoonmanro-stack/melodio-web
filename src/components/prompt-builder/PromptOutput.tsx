@@ -484,7 +484,7 @@ export default function PromptOutput({
               ? 'border-yellow-500/40 bg-yellow-500/10 text-yellow-400'
               : 'border-melodio-border text-melodio-muted'
           }`}>
-            {payload.engine === 'lyria3' ? '🟢 Lyria 3' : payload.engine === 'suno_v5' ? `🟡 Suno ${payload.sunoVersion || 'V5.5'}` : '🔄 Auto'}
+            {payload.engine === 'lyria3' ? '🟢 Lyria 3' : payload.engine === 'suno_v5' ? `🟡 Suno ${payload.sunoVersion || 'V6'}` : '🔄 Auto'}
           </span>
           {payload.isInstrumental && (
             <span className="px-2 py-1 rounded-md border border-blue-500/40 bg-blue-500/10 text-blue-400">

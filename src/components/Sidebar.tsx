@@ -149,8 +149,9 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
         <nav className="space-y-1 pb-6">
           {navItems.map((item) => {
             const isActive = pathname === item.href;
+            const NavigationLink = item.href === '/viral' ? 'a' : Link;
             return (
-              <Link
+              <NavigationLink
                 key={item.name}
                 href={item.href}
                 onClick={onMobileClose}
@@ -174,7 +175,7 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
                     {t(item.name)}
                   </div>
                 )}
-              </Link>
+              </NavigationLink>
             );
           })}
 

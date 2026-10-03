@@ -5,7 +5,9 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import ffmpegStatic from 'ffmpeg-static';
+import { createHash } from 'node:crypto';
 import { planFit, buildFitCommand, probeDurationSeconds } from '@/lib/video/fitVideoToAudio';
+import { LEGACY_NO_TEXT_RULE, LEGACY_SHORT_SECONDS, LegacyShortExportError, muxLegacyShortVideo, validateLegacyShortAudio, validateLegacyShortProxyOutput } from '@/lib/video/legacyShortExport';
 
 const execAsync = promisify(exec);
 
@@ -23,7 +25,7 @@ async function generateGrokClip(
   const motionRule = allowDance
     ? `MOTION DIRECTIVE: ENERGETIC CHALLENGE-STYLE BODY MOVEMENT AND SIMPLE REPEATABLE GESTURES ARE ENCOURAGED. KEEP IT SITUATIONAL AND COMEDIC, NOT A POLISHED STAGE PERFORMANCE.`
     : `STRICT DIRECTIVE: ABSOLUTELY NO DANCING, NO STAGE DANCE, NO CHOREOGRAPHY, NO DANCERS, NO DANCE MOVES. FOCUS ON DRAMATIC STORYLINE ACTING, SITUATIONAL HUMOR, AND REALISTIC CHARACTER EMOTIONS.`;
-  const cleanPrompt = `${promptText.trim()}, expert short-form comedy camera direction, rapid crash-zooms, whip-pans, fisheye angle, ${motionRule}, ${outputRequirements}`;
+  const cleanPrompt = `${promptText.trim()}, expert short-form comedy camera direction, rapid crash-zooms, whip-pans, fisheye angle, ${motionRule}, ${outputRequirements}, ${LEGACY_NO_TEXT_RULE}`;
 
   const initRes = await fetch(`${apiBase}/videos/generations`, {
     method: 'POST',
@@ -128,12 +130,15 @@ interface MergeResult {
 
 async function mergeClipsAndAudio(
   videoUrls: string[],
-  audioUrl?: string,
-  reqDuration: number = 30
+  audioUrl: string,
 ): Promise<MergeResult | null> {
   if (!videoUrls || videoUrls.length === 0) return null;
+  if (!audioUrl) throw new LegacyShortExportError('완성된 음원이 필요합니다. 음원 없는 영상은 제공하지 않습니다.', 'AUDIO_REQUIRED');
+  let scratchDirectory: string | undefined;
+  let ffmpegCmd = 'ffmpeg';
   try {
-    const tmpDir = os.tmpdir();
+    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'grok-short-'));
+    scratchDirectory = tmpDir;
     const videoFiles: string[] = [];
     const timestamp = Date.now();
 
@@ -151,7 +156,7 @@ async function mergeClipsAndAudio(
     if (videoFiles.length === 0) return null;
 
     let audioFile: string | null = null;
-    let targetDurationSec = reqDuration || 30;
+    const targetDurationSec = LEGACY_SHORT_SECONDS;
 
     if (audioUrl) {
       const aRes = await fetch(audioUrl);
@@ -162,7 +167,6 @@ async function mergeClipsAndAudio(
       }
     }
 
-    let ffmpegCmd = 'ffmpeg';
     try {
       if (ffmpegStatic && fs.existsSync(ffmpegStatic)) {
         ffmpegCmd = ffmpegStatic;
@@ -175,34 +179,13 @@ async function mergeClipsAndAudio(
       }
     } catch {}
 
-    /*
-     * 음원 실제 길이 측정.
-     *
-     * 이 값이 틀리면 뒤의 모든 계산이 틀어진다. 예전에는 여기서 존재하지 않는
-     * ffprobe 를 호출해 늘 실패했고, 조용히 기본값 30초로 넘어갔다. 그래서
-     * 34초 음원이 30초에서 잘렸다. probeDurationSeconds 는 ffprobe 가 없으면
-     * ffmpeg 로 잰다.
-     */
-    if (audioFile && fs.existsSync(audioFile)) {
-      const measured = await probeDurationSeconds(ffmpegCmd, audioFile);
-      if (measured !== null) {
-        targetDurationSec = Math.round(measured * 10) / 10;
-        console.log(`[API/grok-video/ffmpeg] Detected Melodio song audio duration: ${targetDurationSec}s (Full UNCUT Audio Matching)`);
-      } else {
-        console.warn(`[API/grok-video/ffmpeg] 음원 길이 측정 실패 — 기본값 ${targetDurationSec}s 사용 (마지막 소절이 잘릴 수 있음)`);
-      }
-    }
+    if (!audioFile) throw new LegacyShortExportError('음원을 다운로드하지 못했습니다. 음원 없는 영상은 제공하지 않습니다.', 'AUDIO_REQUIRED');
+    await validateLegacyShortAudio(ffmpegCmd, audioFile);
 
     const concatVideoFile = path.join(tmpDir, `grok_concat_${timestamp}.mp4`);
     const finalOutputFile = path.join(tmpDir, `grok_final_${timestamp}.mp4`);
 
-    /*
-     * 원본 Grok 오디오 제거(-an) + 음원 길이에 맞춰 영상 채우기.
-     *
-     * 2클립 concat 은 소스가 30초(15초 × 2)뿐이라 -t 를 크게 줘도 늘어나지 않는다.
-     * 34초 음원에 30초 영상이 붙고 -shortest 로 묶이면서 마지막 소절이 잘렸다.
-     * 남는 구간을 어떻게 채울지는 planFit 이 정한다(기본: 마지막 프레임 고정).
-     */
+    // Remove provider audio and fit the existing visual clips to the fixed 30-second export.
     let sourceVideoFile: string;
     let cleanupConcat: string | null = null;
 
@@ -232,14 +215,7 @@ async function mergeClipsAndAudio(
     );
     if (cleanupConcat) await fs.promises.unlink(cleanupConcat).catch(() => {});
 
-    if (audioFile && fs.existsSync(audioFile)) {
-      // 멜로디오 음원 오디오 1:1 무손실 Muxing (-shortest 로 음원 마감 프레임에 깔끔 트림)
-      const muxCmd = `${ffmpegCmd} -y -i "${concatVideoFile}" -i "${audioFile}" -t ${targetDurationSec} -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest "${finalOutputFile}"`;
-      console.log(`[API/grok-video/ffmpeg] Muxing Melodio audio into pure silent video (Exact ${targetDurationSec}s): ${muxCmd}`);
-      await execAsync(muxCmd);
-    } else {
-      await fs.promises.copyFile(concatVideoFile, finalOutputFile);
-    }
+    const durationSeconds = await muxLegacyShortVideo(ffmpegCmd, concatVideoFile, audioFile, finalOutputFile);
 
     if (!fs.existsSync(finalOutputFile)) return null;
 
@@ -258,7 +234,8 @@ async function mergeClipsAndAudio(
     if (!supabaseUrl || !supabaseServiceKey) return null;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const fileName = `grok_short_30s_${Date.now()}.mp4`;
+    const fingerprint = createHash('sha256').update(finalBuffer).digest('hex').slice(0, 16);
+    const fileName = `grok_short_30s_captionless_v1_${fingerprint}.mp4`;
     const filePath = `viral_shorts/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
@@ -278,14 +255,15 @@ async function mergeClipsAndAudio(
       .getPublicUrl(filePath);
 
     console.log(`[API/grok-video/supabase] Merged ${targetDurationSec}s MP4 uploaded successfully: ${publicUrl}`);
-    return { url: publicUrl, durationSeconds: targetDurationSec };
+    return { url: publicUrl, durationSeconds };
   } catch (err: any) {
+    if (err instanceof LegacyShortExportError) throw err;
     console.error('[API/grok-video/ffmpeg] Local merge failed, delegating to Mac Mini server proxy:', err.message);
     try {
       const macMiniRes = await fetch('https://hivedesk-app.hivedesk.ai/api/viral-cf/grok-video/merge', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ videoUrls, audioUrl })
+        body: JSON.stringify({ videoUrls, audioUrl, duration: LEGACY_SHORT_SECONDS })
       });
       if (macMiniRes.ok) {
         const data = await macMiniRes.json();
@@ -293,15 +271,16 @@ async function mergeClipsAndAudio(
           console.log('[API/grok-video/ffmpeg] Proxy merge succeeded via Mac Mini:', data.mergedVideoUrl);
           return {
             url: data.mergedVideoUrl,
-            durationSeconds: Number(data.durationSeconds) || 0,
+            durationSeconds: await validateLegacyShortProxyOutput(ffmpegCmd, data.mergedVideoUrl, data.durationSeconds),
           };
         }
       }
     } catch (proxyErr: any) {
+      if (proxyErr instanceof LegacyShortExportError) throw proxyErr;
       console.error('[API/grok-video/ffmpeg] Proxy merge exception:', proxyErr.message);
     }
     return null;
-  }
+  } finally { if (scratchDirectory) await fs.promises.rm(scratchDirectory, { recursive: true, force: true }); }
 }
 
 export async function POST(req: NextRequest) {
@@ -339,13 +318,16 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+    if (typeof audioUrl !== 'string' || !audioUrl.trim()) {
+      throw new LegacyShortExportError('완성된 음원이 필요합니다. 음원 없는 영상은 제공하지 않습니다.', 'AUDIO_REQUIRED');
+    }
 
     const apiBase = process.env.XAI_API_BASE || 'https://api.x.ai/v1';
 
     if (generate30SecFull) {
       console.log(`[API/grok-video] Generating 30-sec full short-form video with 2 distinct Grok 15-sec clips in parallel...`);
 
-      const noTextRule = `STRICT DIRECTIVE: ABSOLUTELY NO TEXT ON SCREEN, NO KOREAN OR ENGLISH SUBTITLES, NO TYPOGRAPHY, NO LABELS. PURE CLEAN VISUAL MOTION ONLY.`;
+      const noTextRule = LEGACY_NO_TEXT_RULE;
       const continuityDirective = `CHARACTER CONSISTENCY DIRECTIVE: MAINTAIN THE EXACT SAME SUBJECT APPEARANCE, WARDROBE, SUPPORTING ACTOR, AND SET DECOR FOR 1:1 VISUAL SCENE CONTINUITY.`;
 
       // 컷 밀도는 클립 수를 늘리지 않고 클립 내부 하드컷 지시로 확보한다.
@@ -385,36 +367,13 @@ export async function POST(req: NextRequest) {
       }
 
       if (!videoUrl1 && !videoUrl2) {
-        videoUrl1 = await generateGrokClip(prompt, xaiApiKey, apiBase, allowDance);
+        throw new Error('두 영상 클립을 생성하지 못했습니다. 음원을 보존하고 중단합니다.');
       }
 
       const activeClips = [videoUrl1, videoUrl2].filter(Boolean) as string[];
       console.log(`[API/grok-video] Finished distinct clips (${activeClips.length}). Merging 30s clips & audio...`);
 
-      let merged = await mergeClipsAndAudio(activeClips, audioUrl);
-
-      // 🚨 FFmpeg 결합 실패 시 Melodio 맥미니 서버에 결합 강제 요청
-      if (!merged && activeClips.length > 0) {
-        console.warn('[API/grok-video] Local merge failed, calling Melodio Mac Mini merge proxy directly...');
-        try {
-          const proxyRes = await fetch('https://hivedesk-app.hivedesk.ai/api/viral-cf/grok-video/merge', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ videoUrls: activeClips, audioUrl })
-          });
-          if (proxyRes.ok) {
-            const proxyData = await proxyRes.json();
-            if (proxyData.success && proxyData.mergedVideoUrl) {
-              merged = {
-                url: proxyData.mergedVideoUrl,
-                durationSeconds: Number(proxyData.durationSeconds) || 0,
-              };
-            }
-          }
-        } catch (proxyErr: any) {
-          console.error('[API/grok-video] Proxy merge call error:', proxyErr.message);
-        }
-      }
+      const merged = await mergeClipsAndAudio(activeClips, audioUrl);
 
       if (!merged) {
         throw new Error('비디오 결합 및 음원 인코딩에 실패했습니다. 맥미니 서버 상태를 확인해주세요.');
@@ -433,13 +392,14 @@ export async function POST(req: NextRequest) {
       console.log(`[API/grok-video] Generating single 15-sec Grok AI video clip...`);
       const singleUrl = await generateGrokClip(prompt, xaiApiKey, apiBase, allowDance);
       const merged = await mergeClipsAndAudio([singleUrl], audioUrl);
-      const finalUrl = merged?.url || singleUrl;
+      if (!merged) throw new Error('비디오 결합 및 음원 인코딩에 실패했습니다. 원본 클립과 음원은 보존됩니다.');
+      const finalUrl = merged.url;
 
       return NextResponse.json({
         success: true,
         videoUrl: finalUrl,
-        // 병합에 실패해 원본 클립을 그대로 쓰는 경우 길이를 알 수 없다(0 = 미측정).
-        durationSeconds: merged?.durationSeconds ?? 0,
+        // Only a verified 30-second MP4 with the selected audio is a successful output.
+        durationSeconds: merged.durationSeconds,
         clips: [finalUrl],
         is30SecFull: false,
         message: 'Grok AI 비디오 + 멜로디오 음원 결합이 완료되었습니다.'
@@ -449,8 +409,8 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error('[API/grok-video] Exception:', err.message);
     return NextResponse.json(
-      { success: false, error: err.message || 'Grok 비디오 생성 처리 중 오류 발생' },
-      { status: 500 }
+      { success: false, error: err.message || 'Grok 비디오 생성 처리 중 오류 발생', ...(err instanceof LegacyShortExportError ? { code: err.code } : {}) },
+      { status: err instanceof LegacyShortExportError ? err.status : 500 }
     );
   }
 }

@@ -129,6 +129,45 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_dnas: {
+        Row: {
+          id: string
+          user_id: string | null
+          vd_code: string
+          name: string
+          physical_layers: Json
+          textures: Json
+          emotions: Json
+          performance: Json
+          style: string
+          noise_entropy: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id?: string | null
+          vd_code: string
+          name: string
+          physical_layers?: Json
+          textures?: Json
+          emotions?: Json
+          performance?: Json
+          style?: string
+          noise_entropy?: number
+          created_at?: string
+        }
+        Update: {
+          vd_code?: string
+          name?: string
+          physical_layers?: Json
+          textures?: Json
+          emotions?: Json
+          performance?: Json
+          style?: string
+          noise_entropy?: number
+        }
+        Relationships: []
+      }
       /** 실제 음악 생성 기록 (generations) */
       generations: {
         Row: {

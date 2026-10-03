@@ -7,6 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generateLyrics } from '@/lib/engines/lyrics-generator'
 
 export const dynamic = 'force-dynamic'
+/** Leave room beyond the 180-second Sol provider deadline for prompt preparation. */
+export const maxDuration = 240
 
 export async function POST(request: NextRequest) {
   try {

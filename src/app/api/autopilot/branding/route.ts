@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { presets } from '@/data/presets'
 
 export const dynamic = 'force-dynamic'
+export const maxDuration = 180
 
 function parsePlaybookBranding(content: string) {
   const lines = content.split('\n')
@@ -419,13 +420,9 @@ CRITICAL REGENERATION & VARIETY RULE:
 - You MUST generate 100% brand new, unique, and fresh candidate names. Be deeply creative, culturally rich, and think out of the box.`
 
     const apiKey = process.env.OPENAI_API_KEY
-    const backupKey = process.env.SUNO_API_KEY
-    const apiBase = (process.env.SUNO_API_URL || 'https://api.302.ai').replace(/\/+$/, '')
     let parsed: any = null
-    let responseOk = false
 
-    const OFFICIAL_MODEL_CHAIN = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-4o', 'gpt-4o-mini']
-    const BACKUP_MODEL_CHAIN = ['gpt-5.5', 'gpt-5.4', 'gpt-5-mini', 'gpt-4o', 'gpt-4o-mini']
+    const OFFICIAL_MODEL_CHAIN = ['gpt-5.6-sol']
 
     async function attemptBranding(apiKeyStr: string, apiUrlStr: string, modelChain: string[]): Promise<any> {
       for (const model of modelChain) {
@@ -444,16 +441,19 @@ CRITICAL REGENERATION & VARIETY RULE:
                 { role: 'user', content: userPrompt },
               ],
               response_format: { type: 'json_object' },
+              reasoning_effort: 'high',
+              max_completion_tokens: 16384,
             }),
+            signal: AbortSignal.timeout(150_000),
           })
 
           if (response.ok) {
             const data = await response.json()
-            const content = data.choices[0]?.message?.content ?? '{}'
+            const content = data.choices[0]?.message?.content
+            if (!content) return null
             return JSON.parse(content)
           } else {
-            const errText = await response.text()
-            console.warn(`[BrandingAPI] Model ${model} failed at ${apiUrlStr}:`, errText)
+            console.warn(`[BrandingAPI] Model ${model} failed: HTTP ${response.status}`)
           }
         } catch (err: any) {
           console.error(`[BrandingAPI] Exception with model ${model}:`, err.message)
@@ -462,17 +462,7 @@ CRITICAL REGENERATION & VARIETY RULE:
       return null
     }
 
-    // 1순위: 302.ai 프록시 API 시도 (메인 호출)
-    if (backupKey) {
-      console.log('[BrandingAPI] Attempting 302.ai Proxy API call...')
-      const backupUrl = `${apiBase}/v1/chat/completions`
-      parsed = await attemptBranding(backupKey, backupUrl, BACKUP_MODEL_CHAIN)
-      if (parsed) responseOk = true
-    }
-
-    // 2순위: 공식 OpenAI API 시도 (백업)
-    if (!responseOk && apiKey) {
-      console.log('[BrandingAPI] 302.ai failed or not set, falling back to official OpenAI...')
+    if (apiKey) {
       parsed = await attemptBranding(apiKey, 'https://api.openai.com/v1/chat/completions', OFFICIAL_MODEL_CHAIN)
     }
 
@@ -491,104 +481,7 @@ CRITICAL REGENERATION & VARIETY RULE:
       return NextResponse.json({ success: true, ...parsed })
     }
 
-    // ─── HIGH FIDELITY FALLBACK / MOCK DATA ───
-    if (dbPlaybook) {
-      const parsedBrands = parsePlaybookBranding(dbPlaybook.content)
-      const engNames = parsedBrands.map(b => splitName(b.name).eng)
-      const locNames = parsedBrands.map(b => splitName(b.name).loc)
-      const playbookHandles = parsedBrands.map(b => b.handle).filter(Boolean)
-
-      return NextResponse.json({
-        success: true,
-        channelConcept: dbPlaybook.metadata?.description || dbPlaybook.title,
-        names: [
-          {
-            style: 'Type A (해당 국가 언어 100%)',
-            desc: '플레이북의 정체성을 100% 로컬 언어로 매칭제안',
-            candidates: locNames.map((name, i) => ({ name, desc: `플레이북 한글 네이밍 시안 ${i + 1}. [디자인가이드] 모노그램/워드마크 로고 추천.` })),
-            korean: locNames.map((name, i) => ({ name, desc: `플레이북 한글 네이밍 시안 ${i + 1}` })),
-            english: engNames.map((name, i) => ({ name, desc: `Playbook English suggestion ${i + 1}` }))
-          },
-          {
-            style: 'Type B (영어 100%)',
-            desc: '글로벌 범용성을 강조한 100% 영문 매칭제안',
-            candidates: engNames.map((name, i) => ({ name, desc: `Playbook English suggestion ${i + 1}. [디자인가이드] 정중앙 대형 타이포 레이아웃 추천.` })),
-            korean: locNames.map((name, i) => ({ name: `${name}의 달빛`, desc: `서사적 변주 ${i + 1}` })),
-            english: engNames.map((name, i) => ({ name: `Midnight ${name}`, desc: `Narrative vibe variation ${i + 1}` }))
-          },
-          {
-            style: 'Type C (국가 언어 + 영어 조합)',
-            desc: '언어 간 시너지를 내는 트렌디한 하이브리드 조합',
-            candidates: locNames.map((name, i) => ({ name: `${name} Project`, desc: `하이브리드 합성 시안 ${i + 1}. [디자인가이드] 자간 축소 및 2줄 구성 추천.` })),
-            korean: locNames.map((name, i) => ({ name: `${name} 프로젝트`, desc: `확장형 변주 ${i + 1}` })),
-            english: engNames.map((name, i) => ({ name: `Neo ${name}`, desc: `Scalable conceptual suggestion ${i + 1}` }))
-          }
-        ],
-        handles: playbookHandles.length > 0 ? playbookHandles : [`@${preset.id}_official`, `@${preset.id}_music`],
-        aboutText: `Melodio AI 가 직접 편곡한 차분한 BGM 채널입니다. 컨셉: ${preset.desc}`,
-        channelTags: '로파이, BGM, 플레이리스트, 매장음악',
-        brandColors: '#0A0A0E (Midnight Black), #C5A880 (Warm Champagne), #4A4A6A (Soft Slate)',
-        logoPrompt: dbPlaybook.metadata?.logo_prompt ? `${dbPlaybook.metadata.logo_prompt}, featuring a centered emblem for '[CHANNEL_NAME]'` : `Visual Style: ${visualStyle}. cozy flat anime logo featuring '[CHANNEL_NAME]' emblem, warm amber tone --no photorealistic`,
-        bannerPrompt: dbPlaybook.metadata?.banner_prompt ? `${dbPlaybook.metadata.banner_prompt}, centered typography of '[CHANNEL_NAME]'` : `Visual Style: ${visualStyle}. Widescreen banner art featuring '[CHANNEL_NAME]' in the center on a clean light-toned background --ar 16:9`,
-        watermarkPrompt: `Flat vector watermark icon, minimalist play icon with rounded corners`,
-        thumbnailPrompt: dbPlaybook.metadata?.thumbnail_prompt || `Visual Style: ${visualStyle}. YouTube thumbnail background matching ${preset.name} --ar 16:9`,
-        thumbnailTypography: 'Title: "하루의 끝, 따뜻한 BGM" / Font: Rounded Gothic',
-        videoTitleTemplate: `[BGM] ${preset.name} ｜ [비디오 일련번호]`,
-        videoDescriptionTemplate: `🎧 Tracklist:\n[트랙리스트 타임코드 들어갈 자리]\n\n[🎁 Affiliate Links]\n[수익화 링크 들어갈 자리]`,
-        videoTags: '감성 BGM, 로파이, 집중음악',
-        pinnedComment: `오늘 하루도 수고 많으셨습니다. 🥃`
-      })
-    }
-
-    // Generic fallback if there is no dbPlaybook
-    return NextResponse.json({
-      success: true,
-      names: [
-        {
-          style: 'Type A (해당 국가 언어 100%)',
-          desc: '로컬라이징 극대화. 현지 시청자에게 가장 자연스러운 정서적 네이밍',
-          candidates: [
-            { name: `단비`, desc: '지친 일상에 내리는 단비 같은 선율. [디자인가이드] 모노그램/워드마크 로고 추천.' },
-            { name: `늘봄`, desc: '언제나 따뜻한 봄날 같은 감성 플레이리스트. [디자인가이드] 텍스트 중심 미니멀형 적용.' },
-            { name: `여울`, desc: '잔잔하게 흐르는 물살처럼 스며드는 잔향. [디자인가이드] 1줄 가로 정렬 적용.' }
-          ]
-        },
-        {
-          style: 'Type B (영어 100%)',
-          desc: '글로벌 확장성 및 범용성 최적화. 전 세계 시청자 타겟',
-          candidates: [
-            { name: `Vibe`, desc: '음악이 흐르는 공간 전체의 감성과 맥박. [디자인가이드] 정중앙 대형 타이포 레이아웃 추천.' },
-            { name: `Echo`, desc: '깊은 밤 사색에 어울리는 잔잔한 울림. [디자인가이드] 워드마크형 로고 매칭.' },
-            { name: `Aura`, desc: '고유의 은은하고 고급스러운 분위기 Core. [디자인가이드] 심플 텍스트 스타일 추천.' }
-          ]
-        },
-        {
-          style: 'Type C (국가 언어 + 영어 조합)',
-          desc: '두 언어 간 시너지를 내는 트렌디한 하이브리드 네이밍',
-          candidates: [
-            { name: `쉼Fi`, desc: '휴식(쉼)과 로파이(Lofi) 리듬의 트렌디한 조합. [디자인가이드] 자간 축소 및 2줄 구성 추천.' },
-            { name: `늘봄Wave`, desc: '따뜻한 감성과 세련된 파동 사운드. [디자인가이드] 폰트 크기 자동 축소 적용.' },
-            { name: `온Beat`, desc: '온전한 소리와 리듬이 채워지는 공간. [디자인가이드] 이니셜 추출 로고화 적용.' }
-          ]
-        }
-      ],
-      handles: [
-        `@danbi_beats`,
-        `@neulbom_vibe`
-      ],
-      aboutText: `Melodio AI 가 직접 편곡한 차분한 인공지능 BGM 채널입니다. 컨셉: ${preset.desc}. 요구감성: ${customVibe || '없음'}`,
-      channelTags: '로파이, 재즈, 플레이리스트, 매장음악',
-      brandColors: '#0A0A0E (Midnight Black), #C5A880 (Warm Champagne), #4A4A6A (Soft Slate)',
-      logoPrompt: `Visual Style: ${visualStyle}. cozy flat anime logo featuring '[CHANNEL_NAME]' emblem, warm amber tone --no photorealistic`,
-      bannerPrompt: `Visual Style: ${visualStyle}. Widescreen banner art featuring '[CHANNEL_NAME]' in the center on a clean light-toned background --ar 16:9`,
-      watermarkPrompt: `Flat vector watermark icon, minimalist bell icon with "구독" text`,
-      thumbnailPrompt: `Visual Style: ${visualStyle}. YouTube thumbnail background, warm cozy bedroom scenery at night --ar 16:9`,
-      thumbnailTypography: 'Title: "하루의 끝, 따뜻한 BGM" / Font: Rounded Gothic',
-      videoTitleTemplate: `[BGM] ${preset.name} ｜ [비디오 일련번호]`,
-      videoDescriptionTemplate: `🎧 Tracklist:\n[트랙리스트 타임코드 들어갈 자리]\n\n[🎁 Affiliate Links]\n[수익화 링크 들어갈 자리]`,
-      videoTags: '감성 BGM, 로파이, 재즈',
-      pinnedComment: `오늘 하루도 수고 많으셨습니다. 🥃`
-    })
+    return NextResponse.json({ success: false, error: 'GPT-5.6 Sol 브랜딩을 완료하지 못했습니다.' }, { status: 502 })
 
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Branding generate error'

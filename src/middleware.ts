@@ -8,6 +8,9 @@ import { NextResponse, type NextRequest } from 'next/server'
 
 export async function middleware(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
+  // Kie follows a short-lived signed capability URL to fetch private voice
+  // audio. This endpoint authenticates its token itself and has no user cookie.
+  if (request.nextUrl.pathname.startsWith('/api/voice/audio/')) return supabaseResponse
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 

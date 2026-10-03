@@ -5,13 +5,16 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import ffmpegStatic from 'ffmpeg-static';
+import { createHash } from 'node:crypto';
 import { planFit, buildFitCommand, probeDurationSeconds } from '@/lib/video/fitVideoToAudio';
+import { LEGACY_SHORT_SECONDS, LegacyShortExportError, muxLegacyShortVideo, validateLegacyShortAudio } from '@/lib/video/legacyShortExport';
 
 const execAsync = promisify(exec);
 
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
+  let scratchDirectory: string | undefined;
   try {
     const body = await req.json();
     const { videoUrls, audioUrl, trackId, prompt } = body;
@@ -19,8 +22,12 @@ export async function POST(req: NextRequest) {
     if (!videoUrls || !Array.isArray(videoUrls) || videoUrls.length === 0) {
       return NextResponse.json({ success: false, error: 'videoUrls 배열이 필요합니다.' }, { status: 400 });
     }
+    if (typeof audioUrl !== 'string' || !audioUrl.trim()) {
+      throw new LegacyShortExportError('완성된 음원이 필요합니다. 음원 없는 영상은 제공하지 않습니다.', 'AUDIO_REQUIRED');
+    }
 
-    const tmpDir = os.tmpdir();
+    const tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'grok-short-merge-'));
+    scratchDirectory = tmpDir;
     const timestamp = Date.now();
     const videoFiles: string[] = [];
 
@@ -63,31 +70,14 @@ export async function POST(req: NextRequest) {
       }
     } catch {}
 
-    let targetDurationSec = body.duration || 28.5;
-
-    /*
-     * 음원 실제 길이 측정. 여기가 틀리면 뒤가 전부 틀어진다.
-     * (기존에는 없는 ffprobe 를 불러 늘 실패 → 기본 28.5초로 조용히 넘어갔다.)
-     */
-    if (audioFile && fs.existsSync(audioFile)) {
-      const measured = await probeDurationSeconds(ffmpegCmd, audioFile);
-      if (measured !== null) {
-        targetDurationSec = Math.round(measured * 10) / 10;
-        console.log(`[API/grok-video/merge] Detected Melodio song audio duration: ${targetDurationSec}s (Full UNCUT Audio Matching)`);
-      } else {
-        console.warn(`[API/grok-video/merge] 음원 길이 측정 실패 — 기본값 ${targetDurationSec}s 사용 (마지막 소절이 잘릴 수 있음)`);
-      }
-    }
+    const targetDurationSec = LEGACY_SHORT_SECONDS;
+    if (!audioFile) throw new LegacyShortExportError('음원을 다운로드하지 못했습니다. 음원 없는 영상은 제공하지 않습니다.', 'AUDIO_REQUIRED');
+    await validateLegacyShortAudio(ffmpegCmd, audioFile);
 
     const concatVideoFile = path.join(tmpDir, `grok_concat_${timestamp}.mp4`);
     const finalOutputFile = path.join(tmpDir, `grok_final_${timestamp}.mp4`);
 
-    /*
-     * 원본 Grok 오디오 제거(-an) + 음원 길이에 맞춰 영상 채우기.
-     * 채우는 방식(마지막 프레임 고정 / 루프 / 트림)은 fitVideoToAudio 가 정한다.
-     * 예전에는 이 로직이 ../route.ts 에도 복제돼 있어 한쪽만 고치면 반영이
-     * 안 됐다. 지금은 공용 모듈 하나만 고치면 양쪽에 반영된다.
-     */
+    // Remove provider audio and fit existing visual clips to the fixed 30-second export.
     let sourceVideoFile: string;
     let cleanupConcat: string | null = null;
 
@@ -117,14 +107,7 @@ export async function POST(req: NextRequest) {
     );
     if (cleanupConcat) await fs.promises.unlink(cleanupConcat).catch(() => {});
 
-    if (audioFile && fs.existsSync(audioFile)) {
-      // 멜로디오 음원 오디오 1:1 무손실 Muxing (-shortest 로 음원 마감 프레임에 깔끔 트림)
-      const muxCmd = `${ffmpegCmd} -y -i "${concatVideoFile}" -i "${audioFile}" -t ${targetDurationSec} -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest "${finalOutputFile}"`;
-      console.log(`[API/grok-video/merge] Muxing Melodio audio into pure silent video (Exact ${targetDurationSec}s): ${muxCmd}`);
-      await execAsync(muxCmd);
-    } else {
-      await fs.promises.copyFile(concatVideoFile, finalOutputFile);
-    }
+    const durationSeconds = await muxLegacyShortVideo(ffmpegCmd, concatVideoFile, audioFile, finalOutputFile);
 
     if (!fs.existsSync(finalOutputFile)) {
       return NextResponse.json({ success: false, error: 'FFmpeg 비디오 인코딩 생성 실패' }, { status: 500 });
@@ -144,7 +127,8 @@ export async function POST(req: NextRequest) {
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
-    const fileName = `grok_short_30s_merged_${Date.now()}.mp4`;
+    const fingerprint = createHash('sha256').update(finalBuffer).digest('hex').slice(0, 16);
+    const fileName = `grok_short_30s_captionless_v1_${fingerprint}.mp4`;
     const filePath = `viral_shorts/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
@@ -164,7 +148,7 @@ export async function POST(req: NextRequest) {
       .getPublicUrl(`viral_shorts/${fileName}`);
 
     const publicUrl = publicUrlData.publicUrl;
-    console.log(`[API/grok-video/merge] Merged 28s MP4 uploaded to Supabase: ${publicUrl}`);
+    console.log(`[API/grok-video/merge] Verified 30s MP4 uploaded to Supabase: ${publicUrl}`);
 
     // 💾 대시보드 및 Vault 보관함 저장을 위해 generations 테이블 video_url 및 license_hash 직접 업데이트
     if (trackId) {
@@ -218,12 +202,12 @@ export async function POST(req: NextRequest) {
       success: true,
       mergedVideoUrl: publicUrl,
       // 호출부(../route.ts)와 화면이 길이를 바로 표시할 수 있게 실측값을 함께 돌려준다.
-      durationSeconds: targetDurationSec,
+      durationSeconds,
       message: `${targetDurationSec}초 풀 비디오 + 멜로디오 음원 머징 인코딩이 완료되었습니다.`
     });
 
   } catch (err: any) {
     console.error('[API/grok-video/merge] Exception:', err.message);
-    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
-  }
+    return NextResponse.json({ success: false, error: err.message, ...(err instanceof LegacyShortExportError ? { code: err.code } : {}) }, { status: err instanceof LegacyShortExportError ? err.status : 500 });
+  } finally { if (scratchDirectory) await fs.promises.rm(scratchDirectory, { recursive: true, force: true }); }
 }

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const maxDuration = 60
+
 export async function POST(request: NextRequest) {
   try {
     const { images, channelTitle, logoConcept } = await request.json()
     const apiKey = process.env.OPENAI_API_KEY
-    const backupKey = process.env.SUNO_API_KEY
-    const apiBase = (process.env.SUNO_API_URL || 'https://api.302.ai').replace(/\/+$/, '')
 
     if (!images || images.length === 0) {
       return NextResponse.json({ error: '분석할 레퍼런스 이미지가 없습니다.' }, { status: 400 })
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       })
     })
 
-    const MODEL_CHAIN = ['gpt-5.6-sol', 'gpt-5.5', 'gpt-4o', 'gpt-4o-mini']
+    const MODEL_CHAIN = ['gpt-5.6-sol']
     let parsedText: string | null = null
     let responseOk = false
 
@@ -59,17 +59,17 @@ export async function POST(request: NextRequest) {
                   content: userContent
                 }
               ],
-              max_tokens: 300,
-              temperature: 0.7
-            })
+              reasoning_effort: 'low',
+              max_completion_tokens: 4096
+            }),
+            signal: AbortSignal.timeout(45_000)
           })
 
           if (response.ok) {
-            const data = await response.ok ? await response.json() : null
+            const data = await response.json()
             return data?.choices?.[0]?.message?.content?.trim() || null
           } else {
-            const errText = await response.text()
-            console.warn(`[API/analyze-image] Model ${model} failed at ${apiUrlStr}:`, errText)
+            console.warn(`[API/analyze-image] Model ${model} failed: HTTP ${response.status}`)
           }
         } catch (err: any) {
           console.error(`[API/analyze-image] Exception with model ${model} at ${apiUrlStr}:`, err.message)
@@ -78,23 +78,13 @@ export async function POST(request: NextRequest) {
       return null
     }
 
-    // 1순위: 302.ai API 시도
-    if (backupKey) {
-      console.log('[API/analyze-image] Attempting 302.ai Proxy API call...')
-      const backupUrl = `${apiBase}/v1/chat/completions`
-      parsedText = await attemptVision(backupKey, backupUrl)
-      if (parsedText) responseOk = true
-    }
-
-    // 2순위: 공식 OpenAI API 시도
-    if (!responseOk && apiKey) {
-      console.log('[API/analyze-image] 302.ai failed/missing, falling back to official OpenAI...')
+    if (apiKey) {
       parsedText = await attemptVision(apiKey, 'https://api.openai.com/v1/chat/completions')
       if (parsedText) responseOk = true
     }
 
     if (!responseOk || !parsedText) {
-      return NextResponse.json({ error: '모든 비전 API 호출에 실패했습니다.' }, { status: 500 })
+      return NextResponse.json({ error: 'GPT-5.6 Sol 이미지 분석을 완료하지 못했습니다.' }, { status: 500 })
     }
 
     console.log('[API/analyze-image] 분석 성공. 생성된 프롬프트:', parsedText)

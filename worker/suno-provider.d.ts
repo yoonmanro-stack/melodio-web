@@ -1,0 +1,40 @@
+export type SunoModel = 'V6' | 'V6_MINI' | 'V6_WILD';
+export interface SunoJobOptions {
+  style: string;
+  lyrics?: string;
+  title?: string;
+  instrumental?: boolean;
+  model?: string;
+  exclude?: string;
+  durationSeconds?: number | string;
+  vocalGender?: string;
+  /** Server-resolved Kie/Suno Voice ID. */
+  personaId?: string;
+}
+export interface SunoConfig { apiKey: string; apiBaseUrl: string }
+export interface SunoClip {
+  id: string;
+  title?: string;
+  audio_url?: string;
+  image_url?: string;
+  duration?: number;
+  status: string;
+}
+export interface SunoTaskStatus {
+  state: 'processing' | 'failed' | 'complete' | 'held';
+  clips: SunoClip[];
+  progress?: number;
+  reason?: 'legacy_not_supported';
+}
+export const SUNO_TIMEOUT_MS: number;
+export class SunoProviderError extends Error { code: number }
+export function resolveSunoModel(version?: string): SunoModel;
+export function sunoVersionLabel(model?: string): string;
+export function resolveDurationSeconds(value: unknown, fallback?: number): number;
+export function kieTaskReference(taskId: string): string;
+export function parseSunoTaskReference(reference: string): { provider: 'kie' | 'legacy'; taskId: string };
+export function normalizeKieConfig(config: SunoConfig): SunoConfig;
+export function getKieConfig(): SunoConfig;
+export function buildKieSunoRequest(options: SunoJobOptions): object;
+export function submitKieSunoJob(options: SunoJobOptions, config?: SunoConfig, fetchImpl?: typeof fetch): Promise<{ taskId: string; model: SunoModel }>;
+export function fetchSunoTask(reference: string, config?: SunoConfig, fetchImpl?: typeof fetch): Promise<SunoTaskStatus>;

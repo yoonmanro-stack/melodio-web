@@ -1,4 +1,6 @@
 "use client";
+import { useVoice } from "@/contexts/VoiceContext";
+import { SUNO_VERSIONS } from '@/lib/suno-models';
 
 import { useState, useEffect } from "react";
 import { useSearchParams } from "next/navigation";
@@ -48,6 +50,7 @@ import type { MusicEngine, PromptPayload, LyricsSection, Preset } from "@/types"
 import { composeStylePrompt, resolveRotationPrompt } from "@/lib/prompt-compositor";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { jpPresetTranslations } from "@/data/jp-presets-translations";
+import { getAudioPlaybackError, getExpiredAudioPlaybackError, getStoredTrackDuration } from "@/lib/audio-playback";
 
 // ─── 음원 앨범 커버 페이드인 이미지 컴포넌트 ───
 const FadeInImage = ({ src, alt, className = "" }: { src: string; alt: string; className?: string }) => {
@@ -97,14 +100,17 @@ const getFallbackCoverArt = (item: any): string => {
 };
 
 // ─── 음원 실시간 길이(Duration) 획득용 컴포넌트 ───
-const TrackDuration = ({ audioUrl, initialDuration }: { audioUrl?: string; initialDuration?: number }) => {
-  const [duration, setDuration] = useState<number | null>(initialDuration || null);
+const TrackDuration = ({ audioUrl, initialDuration, track }: { audioUrl?: string; initialDuration?: number; track?: { license_hash?: string | null; duration_mode?: string | null } }) => {
+  const storedDuration = Number.isFinite(initialDuration) && Number(initialDuration) > 0
+    ? Number(initialDuration) : getStoredTrackDuration(track || {});
+  const [duration, setDuration] = useState<number | null>(storedDuration || null);
 
   useEffect(() => {
-    if (initialDuration && initialDuration > 0) {
-      setDuration(initialDuration);
+    if (storedDuration > 0) {
+      setDuration(storedDuration);
       return;
     }
+    setDuration(null);
     if (!audioUrl) return;
 
     const audio = new Audio();
@@ -112,7 +118,7 @@ const TrackDuration = ({ audioUrl, initialDuration }: { audioUrl?: string; initi
     audio.preload = 'metadata'; // 오직 헤더 정보만 로드
 
     const handleLoadedMetadata = () => {
-      if (audio.duration && !isNaN(audio.duration)) {
+      if (Number.isFinite(audio.duration) && audio.duration > 0) {
         setDuration(audio.duration);
       }
     };
@@ -122,16 +128,16 @@ const TrackDuration = ({ audioUrl, initialDuration }: { audioUrl?: string; initi
 
     return () => {
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.src = '';
+      audio.removeAttribute('src');
     };
-  }, [audioUrl, initialDuration]);
+  }, [audioUrl, storedDuration]);
 
   if (duration === null || duration <= 0) {
-    return <span>2:30</span>; // 로딩중 및 기존 음원 에러 시 기본값
+    return <span>--:--</span>;
   }
 
   const mins = Math.floor(duration / 60);
-  const secs = Math.round(duration % 60);
+  const secs = Math.floor(duration % 60);
   return <span>{mins}:{secs < 10 ? '0' : ''}{secs}</span>;
 };
 
@@ -555,6 +561,7 @@ function buildLyricsPrompt(sections: LyricsSection[]): string {
 }
 
 export default function JapanLandingClient() {
+  const { studioVoiceFields } = useVoice();
   const { user, loading } = useAuth();
   const { saveHistory } = useHistory();
   const { language } = useLanguage();
@@ -582,6 +589,7 @@ export default function JapanLandingClient() {
   const [publicTracksRefreshSignal, setPublicTracksRefreshSignal] = useState(0);
   const [myTracks, setMyTracks] = useState<any[]>([]);
   const [playingTrackId, setPlayingTrackId] = useState<string | null>(null);
+  const [playbackError, setPlaybackError] = useState<{ id: string; title: string; message: string } | null>(null);
   const [detailItem, setDetailItem] = useState<any | null>(null);
   const [copiedTextType, setCopiedTextType] = useState<string | null>(null);
 
@@ -589,7 +597,7 @@ export default function JapanLandingClient() {
   const [isPlaylistMode, setIsPlaylistMode] = useState(false);
   const [trackCount, setTrackCount] = useState(2);
   const [engine, setEngine] = useState<MusicEngine>("auto");
-  const [sunoVersion, setSunoVersion] = useState<string>("v5.5");
+  const [sunoVersion, setSunoVersion] = useState<string>("v6");
   const [youtubeTags, setYoutubeTags] = useState("");
   const [snsHashtags, setSnsHashtags] = useState("");
   const [playlistTitle, setPlaylistTitle] = useState("");
@@ -616,6 +624,7 @@ export default function JapanLandingClient() {
   const [editingPreset, setEditingPreset] = useState<Preset | null>(null);
   const [trackPage, setTrackPage] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playbackAttemptRef = useRef<{ id: string; title: string; url: string } | null>(null);
 
   // 대시보드 연동용 추가 상태
   const [activeGenId, setActiveGenId] = useState<string>('');
@@ -920,13 +929,31 @@ export default function JapanLandingClient() {
     if (typeof window === 'undefined') return;
     const el = new Audio();
     el.preload = 'auto';
-    el.addEventListener('ended', () => setIsTrackPlaying(false));
-    el.addEventListener('pause', () => setIsTrackPlaying(false));
-    el.addEventListener('play', () => setIsTrackPlaying(true));
+    const handleStopped = () => setIsTrackPlaying(false);
+    const handlePlaying = () => {
+      if (!el.paused && playbackAttemptRef.current && (!el.currentSrc || el.currentSrc === el.src)) setIsTrackPlaying(true);
+    };
+    const handleError = () => {
+      const attempt = playbackAttemptRef.current;
+      if (!attempt || audioRef.current !== el || (el.currentSrc && el.currentSrc !== el.src)) return;
+      setIsTrackPlaying(false);
+      const message = getAudioPlaybackError(attempt.url, el.error?.code === 1 ? { name: 'AbortError' } : undefined);
+      if (message) setPlaybackError({ id: attempt.id, title: attempt.title, message });
+    };
+    el.addEventListener('ended', handleStopped);
+    el.addEventListener('pause', handleStopped);
+    el.addEventListener('play', handlePlaying);
+    el.addEventListener('error', handleError);
     audioRef.current = el;
     return () => {
+      playbackAttemptRef.current = null;
+      audioRef.current = null;
+      el.removeEventListener('ended', handleStopped);
+      el.removeEventListener('pause', handleStopped);
+      el.removeEventListener('play', handlePlaying);
+      el.removeEventListener('error', handleError);
       el.pause();
-      el.src = '';
+      el.removeAttribute('src');
     };
   }, []);
 
@@ -1074,13 +1101,9 @@ export default function JapanLandingClient() {
 
   // 엔진 변경 및 트랙 수 동기화
   const handleEngineChange = (newEngine: MusicEngine) => {
+    if (newEngine === 'lyria3') return;
     setEngine(newEngine);
-    if (newEngine === 'lyria3') {
-      if (trackCount === 2) {
-        setTrackCount(1);
-        setIsPlaylistMode(false);
-      }
-    } else if (newEngine === 'suno_v5') {
+    if (newEngine === 'suno_v5') {
       if (trackCount === 1) {
         setTrackCount(2);
         setIsPlaylistMode(false);
@@ -1253,6 +1276,7 @@ export default function JapanLandingClient() {
               presetId: selectedPresetId,
               presetName: activePreset?.name,
               sourceMenu: 'japan',
+              ...studioVoiceFields,
               coverArtUrl1: img1,
               coverArtUrl2: img2,
               isPublic: isPublic,
@@ -1427,6 +1451,7 @@ export default function JapanLandingClient() {
             presetId: selectedPresetId,
             presetName: activePreset?.name,
             sourceMenu: 'japan',
+              ...studioVoiceFields,
             coverArtUrl1: img1,
             coverArtUrl2: img2,
             isPublic: isPublic,
@@ -1513,21 +1538,40 @@ export default function JapanLandingClient() {
     if (!el) return;
 
     const trackUrl = item.audio_url || item.source_audio_url;
-    if (item.status !== "completed" || !trackUrl) return;
+    if (item.status !== "completed") return;
+    if (!trackUrl) {
+      setPlaybackError({ id: item.id, title: item.title || 'Untitled', message: getAudioPlaybackError('') || '음원 파일을 불러오지 못했습니다' });
+      return;
+    }
 
-    if (playingTrackId === item.id) {
-      if (isTrackPlaying) {
-        el.pause();
-      } else {
-        el.play().catch(() => {});
-      }
-    } else {
+    const attempt = { id: item.id, title: item.title || 'Untitled', url: trackUrl };
+    const isCurrentSource = playingTrackId === item.id && el.src === new URL(trackUrl, window.location.href).href;
+    playbackAttemptRef.current = attempt;
+    const expired = getExpiredAudioPlaybackError(trackUrl);
+    if (expired) {
+      el.pause();
+      setPlayingTrackId(item.id);
+      setIsTrackPlaying(false);
+      setPlaybackError({ id: item.id, title: attempt.title, message: expired });
+      return;
+    }
+    if (isCurrentSource && isTrackPlaying) {
+      el.pause();
+      return;
+    }
+    setPlaybackError(null);
+    if (!isCurrentSource) {
       el.pause();
       el.src = trackUrl;
       el.load();
-      el.play().catch(() => {});
       setPlayingTrackId(item.id);
     }
+    el.play().catch(error => {
+      if (audioRef.current !== el || playbackAttemptRef.current !== attempt) return;
+      setIsTrackPlaying(false);
+      const message = getAudioPlaybackError(trackUrl, error);
+      if (message) setPlaybackError({ id: attempt.id, title: attempt.title, message });
+    });
   };
 
   // ─── 좋아요 토글 ───
@@ -2034,14 +2078,12 @@ export default function JapanLandingClient() {
                   🔄 Auto
                 </button>
                 <button
-                  onClick={() => handleEngineChange('lyria3')}
-                  className={`px-3 py-1.5 rounded-lg border text-xs transition-all ${
-                    engine === 'lyria3'
-                      ? 'border-[#ff4e7e] bg-[#ff4e7e]/20 text-[#ff6b4a]'
-                      : 'border-zinc-800 text-melodio-muted hover:text-zinc-300 hover:border-zinc-700'
-                  }`}
+                  type="button"
+                  disabled
+                  title="Lyria 3는 현재 사용할 수 없습니다. Suno를 선택해 주세요."
+                  className="px-3 py-1.5 rounded-lg border border-zinc-800 text-zinc-500 text-xs cursor-not-allowed"
                 >
-                  🟢 Lyria 3
+                  Lyria 3 · 현재 이용 불가
                 </button>
 
                 {/* Suno Button & Dropdown */}
@@ -2072,7 +2114,7 @@ export default function JapanLandingClient() {
                         onClick={() => setIsSunoDropdownOpen(false)}
                       />
                       <div className="absolute left-0 mt-1 w-28 bg-[#18181b] border border-zinc-800 rounded-lg shadow-xl z-50 py-1 text-xs">
-                        {['v5.5', 'v5', 'v4.5+', 'v4.5', 'v4.5-all', 'v4'].map((v) => (
+                        {SUNO_VERSIONS.map((v) => (
                           <button
                             key={v}
                             onClick={() => {
@@ -2231,6 +2273,9 @@ export default function JapanLandingClient() {
         {/* J-BGM 공개 음원 목록 */}
         <section className="pt-6 border-t border-white/5">
           <PublicTrackGrid sourceMenu="japan" itemsPerPage={16} refreshSignal={publicTracksRefreshSignal} />
+          {playbackError && playbackError.id === playingTrackId && (
+            <p role="alert" className="mt-3 text-xs leading-relaxed text-red-300">{playbackError.title}: {playbackError.message}</p>
+          )}
         </section>
 
         {/* 🔮 일본 특화 나만의 프리셋 만들기/수정 모달 */}
@@ -2817,7 +2862,7 @@ export default function JapanLandingClient() {
                       </div>
                       <h3 className="text-lg font-bold text-white mb-2">AI 원스톱 제작 (5분)</h3>
                       <p className="text-sm text-zinc-400 leading-relaxed font-light">
-                        Google Lyria 3와 Suno V5 듀얼 엔진이 오케스트레이션하여 믹스 다운을 완료하고, AI 기반의 고해상도 비주얼 테마와 자동 번역 메타데이터를 결합합니다.
+                        Suno V6로 음원을 생성하고, AI 기반의 비주얼 테마와 자동 번역 메타데이터를 결합합니다.
                       </p>
                     </div>
                     <div className="p-6 rounded-2xl bg-white/[0.02] border border-white/[0.05] hover:border-[#00D4FF]/20 transition-all duration-300 relative overflow-hidden group">
@@ -2941,8 +2986,8 @@ export default function JapanLandingClient() {
               },
               {
                 icon: Bot,
-                title: "Lyria 3 + Suno V5 듀얼 엔진 연동",
-                desc: "Vertex AI 공식 API의 초고속 프리뷰와 Suno V5의 고품질 풀트랙 생성 기술을 동시 제공하여 상황별 음질 최적화.",
+                title: "Suno V6 음원 생성",
+                desc: "일본 채널에 맞춘 프리셋과 스타일 태그를 Suno V6 음원 생성에 적용합니다.",
               },
               {
                 icon: Video,
@@ -3054,7 +3099,7 @@ export default function JapanLandingClient() {
                     <Check className="w-4 h-4 text-emerald-400" /> Japan 프리셋 5종 전체 개방
                   </li>
                   <li className="flex items-center gap-2">
-                    <Check className="w-4 h-4 text-emerald-400" /> Lyria + Suno 듀얼 엔진 연동
+                    <Check className="w-4 h-4 text-emerald-400" /> Suno V6 음원 생성
                   </li>
                   <li className="flex items-center gap-2">
                     <Check className="w-4 h-4 text-emerald-400" /> 월 20곡 주요 음원 유통

@@ -99,11 +99,11 @@ export default function DashboardViralCarousel({ videos, onOpenDetails }: Dashbo
                     }}
                     src={video.videoUrl}
                     poster={video.posterUrl}
-                    loop
                     playsInline
                     preload="none"
                     onPlay={(event) => handlePlay(video.id, event.currentTarget)}
                     onPause={() => setPlayingId((current) => current === video.id ? null : current)}
+                    onEnded={() => setPlayingId((current) => current === video.id ? null : current)}
                     className="h-full w-full object-cover"
                     aria-label={`${video.title} 영상`}
                   />

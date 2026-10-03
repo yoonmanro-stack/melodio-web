@@ -117,7 +117,7 @@ export interface PromptPayload {
   }
 }
 
-/** Suno V5 API 요청 (Mock 포함) */
+/** Kie Suno V6 API 요청 */
 export interface SunoGenerateRequest {
   prompt: string
   lyrics?: string
@@ -125,6 +125,8 @@ export interface SunoGenerateRequest {
   title?: string
   instrumental?: boolean
   model?: string
+  exclude?: string
+  durationSeconds?: number
 }
 
 /** Lyria 3 API 요청 (Mock 포함) */

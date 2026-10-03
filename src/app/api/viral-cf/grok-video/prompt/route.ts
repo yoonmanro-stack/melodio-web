@@ -9,8 +9,7 @@ import {
 } from '@/lib/vle/viralCategorySpec';
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? '';
-const SUNO_API_KEY = process.env.SUNO_API_KEY ?? '';
-const SUNO_API_URL = (process.env.SUNO_API_URL || 'https://api.302.ai').replace(/\/+$/, '');
+export const maxDuration = 90;
 
 /**
  * 가사에서 영상 장면 비트를 뽑는다.
@@ -19,7 +18,7 @@ const SUNO_API_URL = (process.env.SUNO_API_URL || 'https://api.302.ai').replace(
  * 이 곡의 가사가 결정해야 한다. 그래야 "영상이 뭘 표현하려는지 모르겠다"는
  * 문제가 사라진다.
  *
- * LLM이 실패하면 빈 배열을 돌려 카테고리 기본 소품으로 안전하게 떨어진다.
+ * 모델 실패를 오류로 반환하여 원문과 무관한 기본 장면을 생성하지 않는다.
  */
 async function extractSceneBeats(
   spec: CategorySpecV2,
@@ -47,48 +46,46 @@ RULES:
 Return ONLY JSON: {"beats": ["...","...","..."], "coreObject": "..."}`;
 
   const body = JSON.stringify({
-    model: 'gpt-4o-mini',
+    model: 'gpt-5.6-sol',
     messages: [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: source },
     ],
-    temperature: 0.6,
+    reasoning_effort: 'low',
+    max_completion_tokens: 4096,
     response_format: { type: 'json_object' },
   });
 
-  const endpoints: [string, string][] = [];
-  if (SUNO_API_KEY) endpoints.push([`${SUNO_API_URL}/v1/chat/completions`, SUNO_API_KEY]);
-  if (OPENAI_API_KEY) endpoints.push(['https://api.openai.com/v1/chat/completions', OPENAI_API_KEY]);
-
-  for (const [url, key] of endpoints) {
+  if (OPENAI_API_KEY) {
     try {
-      const res = await fetch(url, {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${OPENAI_API_KEY}` },
         body,
+        signal: AbortSignal.timeout(75_000),
       });
-      if (!res.ok) continue;
+      if (!res.ok) { await res.body?.cancel(); throw new Error(`HTTP ${res.status}`); }
       const data = await res.json();
       const content = data.choices?.[0]?.message?.content;
-      if (!content) continue;
-      const parsed = JSON.parse(content);
-      const beats = (Array.isArray(parsed.beats) ? parsed.beats : [])
-        .map((b: unknown) => (typeof b === 'string' ? b.trim() : ''))
-        .filter(Boolean)
-        .slice(0, 3);
-      if (beats.length) {
-        return {
-          sceneBeats: beats,
-          coreObjectEn: typeof parsed.coreObject === 'string' ? parsed.coreObject.trim() : undefined,
-        };
+      if (content) {
+        const parsed = JSON.parse(content);
+        const beats = (Array.isArray(parsed.beats) ? parsed.beats : [])
+          .map((b: unknown) => (typeof b === 'string' ? b.trim() : ''))
+          .filter(Boolean)
+          .slice(0, 3);
+        if (beats.length) {
+          return {
+            sceneBeats: beats,
+            coreObjectEn: typeof parsed.coreObject === 'string' ? parsed.coreObject.trim() : undefined,
+          };
+        }
       }
     } catch {
-      console.warn('[GrokPromptAPI] 장면 비트 추출 실패, 다음 엔드포인트 시도');
+      console.warn('[GrokPromptAPI] OpenAI 장면 비트 추출 실패');
     }
   }
 
-  console.warn('[GrokPromptAPI] 장면 비트 추출 불가 — 카테고리 기본 소품으로 폴백');
-  return { sceneBeats: [] };
+  throw new Error('GPT-5.6 Sol 장면 비트 추출을 완료하지 못했습니다.');
 }
 
 /**
@@ -224,37 +221,7 @@ ${lyrics || 'No specific lyrics provided'}`;
 
     let generatedPrompt = '';
 
-    // 1. 302.ai API 시도
-    if (SUNO_API_KEY) {
-      try {
-        const res = await fetch(`${SUNO_API_URL}/v1/chat/completions`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${SUNO_API_KEY}`,
-          },
-          body: JSON.stringify({
-            model: 'gpt-4o-mini',
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userContent },
-            ],
-            temperature: 0.7,
-            max_tokens: 380,
-          }),
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          generatedPrompt = data.choices?.[0]?.message?.content?.trim() || '';
-        }
-      } catch (err) {
-        console.warn('[GrokPromptAPI] 302.ai failed, trying official OpenAI:', err);
-      }
-    }
-
-    // 2. OpenAI 백업 시도
-    if (!generatedPrompt && OPENAI_API_KEY) {
+    if (OPENAI_API_KEY) {
       try {
         const res = await fetch('https://api.openai.com/v1/chat/completions', {
           method: 'POST',
@@ -263,31 +230,28 @@ ${lyrics || 'No specific lyrics provided'}`;
             'Authorization': `Bearer ${OPENAI_API_KEY}`,
           },
           body: JSON.stringify({
-            model: 'gpt-4o-mini',
+            model: 'gpt-5.6-sol',
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: userContent },
             ],
-            temperature: 0.7,
-            max_tokens: 380,
+            reasoning_effort: 'low',
+            max_completion_tokens: 4096,
           }),
+          signal: AbortSignal.timeout(75_000),
         });
 
         if (res.ok) {
           const data = await res.json();
           generatedPrompt = data.choices?.[0]?.message?.content?.trim() || '';
-        }
+        } else { await res.body?.cancel(); }
       } catch (err) {
         console.warn('[GrokPromptAPI] OpenAI failed:', err);
       }
     }
 
-    // 3. Fallback Smart Prompt using Category Matrix Visual Anchors
     if (!generatedPrompt) {
-      const vDir = categoryMatrix.videoDirective;
-      // 폴백 프롬프트에도 이번 회차 변형을 넣는다. 넣지 않으면 LLM 실패 시마다
-      // 완전히 동일한 문자열이 나가 결과가 한 가지로 굳는다.
-      generatedPrompt = `Hyper-kinetic 9:16 vertical short-form viral skit for "${cleanTitle}" (${cleanGenre}). STRICT VISUAL SUBJECT & CHARACTER LOCK: PROTAGONIST: ${protagonist}, SUPPORTING ACTOR: ${vDir.supporting}. ${styleSeed} CORE OBJECT: ${vDir.coreObject}. VISUAL ACTION & SCENE: ${vDir.action}. CAMERA & LIGHTING: ${vDir.cameraLighting}. CHARACTER CONTINUATION: MAINTAIN EXACT SAME CHARACTER FACE, HAIR, AND CLOTHING ACROSS ALL SCENES. ABSOLUTELY CLEAN VISUAL MOTION ONLY, ABSOLUTELY ZERO TEXT ON SCREEN, NO SUBTITLES, NO TYPOGRAPHY.`;
+      throw new Error('GPT-5.6 Sol 영상 프롬프트를 완료하지 못했습니다.');
     }
 
     return NextResponse.json({ prompt: generatedPrompt });

@@ -9,7 +9,12 @@ import {
   Volume2, VolumeX, ThumbsUp, ThumbsDown, Link as LinkIcon, ListPlus
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
+import { trackEngineLabel } from "@/lib/track-engine-label";
+import { getAudioPlaybackError, getExpiredAudioPlaybackError, getStoredTrackDuration } from "@/lib/audio-playback";
 import DashboardViralCarousel, { type DashboardViralVideo } from "@/components/dashboard/DashboardViralCarousel";
+import { DashboardDanceAudio, DashboardDanceProductionList } from "@/components/dashboard/DashboardDanceTracks";
+import { getDashboardTrackCategory as getTrackCategory, getDashboardLibraryCategory, getDashboardMusicTitle, getDashboardDanceAudio } from "@/lib/dance/dashboard";
+import { petVideoStorageKey, readPetEpisode } from "@/components/viral/PetVideoStudio";
 import DashboardChannelDnaPanel from "@/components/dashboard/DashboardChannelDnaPanel";
 import AddToPlaylistModal from "@/components/playlists/AddToPlaylistModal";
 import StemStudioSummary from "@/components/stem/StemStudioSummary";
@@ -78,6 +83,49 @@ type Generation = {
   dissonance_score?: number;
   retry_count?: number;
 };
+
+function DashboardPetProductionList({ history, userId }: { history: Generation[]; userId: string | null }) {
+  if (!userId) return null;
+  const petRows = history.flatMap(item => {
+    if (item.user_id !== userId) return [];
+    const episode = readPetEpisode(item);
+    if (!episode) return [];
+    let meta: Record<string, unknown>;
+    try {
+      const parsed: unknown = JSON.parse(item.license_hash || '{}');
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
+      meta = parsed as Record<string, unknown>;
+    } catch { return []; }
+    if (meta.sourceMenu !== 'viral' && meta.sourceMenu !== 'viral-cf') return [];
+    const videoCandidates: unknown[] = [item.video_url, meta.video_url, meta.grok_video_url, meta.videoUrl];
+    return [{
+      track: item,
+      episode,
+      hasVideo: videoCandidates.some(value => typeof value === 'string' && value.trim().length > 0),
+    }];
+  });
+  const completedVideoEpisodeIds = new Set(
+    petRows.filter(({ hasVideo }) => hasVideo).map(({ episode }) => episode.id),
+  );
+  const tracks = petRows.filter(({ track, episode, hasVideo }) => (
+    ['generating', 'failed', 'completed'].includes(track.status)
+      && !hasVideo
+      && (track.status !== 'completed' || !completedVideoEpisodeIds.has(episode.id))
+  ));
+  if (tracks.length === 0) return null;
+  return <section aria-label="댕냥이 숏폼 작업" className="mt-6 rounded-2xl border border-fuchsia-500/20 bg-fuchsia-950/10 p-5">
+    <h2 className="text-sm font-bold text-fuchsia-200">댕냥이 숏폼 작업</h2>
+    <ul className="mt-3 space-y-3">
+      {tracks.map(({ track, episode }) => <li key={track.id} className="flex items-center justify-between gap-3 text-xs">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-zinc-200">{episode.title || track.title}</p>
+          <p role="status" className="mt-1 text-zinc-400">{track.status === 'completed' ? '음원 완료 · 영상 제작 대기' : track.status === 'failed' ? '음원 생성 실패' : '음원 생성 중'}</p>
+        </div>
+        <Link href={track.status === 'completed' ? `/viral?petTrack=${encodeURIComponent(track.id)}` : '/viral'} className="shrink-0 text-fuchsia-300">{track.status === 'completed' ? '콘티 열기' : '작업 보기'}</Link>
+      </li>)}
+    </ul>
+  </section>;
+}
 
 // ─── 음원 앨범 커버 페이드인 이미지 컴포넌트 ───
 const FadeInImage = ({ src, alt, className = "" }: { src: string; alt: string; className?: string }) => {
@@ -317,6 +365,7 @@ export default function Home() {
     return [];
   });
   const [activeGenId, setActiveGenId] = useState<string>('');
+  const [deletingTrackId, setDeletingTrackId] = useState<string | null>(null);
 
   const activeSplitTrack = useMemo(() => {
     return history.find(t => t.id === activeGenId && !isStemUploadTrack(t) && isTrackStemSplit(t))
@@ -346,6 +395,7 @@ export default function Home() {
   const [isTrackPlaying, setIsTrackPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [trackPlaybackError, setTrackPlaybackError] = useState<string | null>(null);
   
   const [isShuffle, setIsShuffle] = useState(false);
   const [isRepeat, setIsRepeat] = useState(false);
@@ -515,6 +565,26 @@ export default function Home() {
     }
   };
 
+  const playDashboardAudio = useCallback((el: HTMLAudioElement) => {
+    const requestedUrl = el.src;
+    const requestedId = playingTrackIdRef.current;
+    const expired = getExpiredAudioPlaybackError(requestedUrl);
+    if (expired) {
+      el.pause();
+      setIsTrackPlaying(false);
+      setTrackPlaybackError(expired);
+      return;
+    }
+    setTrackPlaybackError(null);
+    void el.play().catch((error: { name?: string }) => {
+      if (el.src !== requestedUrl || playingTrackIdRef.current !== requestedId) return;
+      const message = getAudioPlaybackError(requestedUrl, error);
+      if (!message) return;
+      setIsTrackPlaying(false);
+      setTrackPlaybackError(message);
+    });
+  }, []);
+
   // 오디오 엘리먼트 초기화 (한 번만)
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -523,6 +593,7 @@ export default function Home() {
     
     const handlePlay = () => {
       setIsTrackPlaying(true);
+      setTrackPlaybackError(null);
       const currentId = playingTrackIdRef.current;
       if (currentId) {
         if (!hasTriggeredPlayRef.current) {
@@ -546,9 +617,16 @@ export default function Home() {
       setCurrentTime(el.currentTime);
     };
     const handleDurationChange = () => {
-      if (el.duration && !isNaN(el.duration)) {
+      if (Number.isFinite(el.duration) && el.duration > 0) {
         setDuration(el.duration);
       }
+    };
+    const handleError = () => {
+      if (!playingTrackIdRef.current || !el.src || (el.currentSrc && el.currentSrc !== el.src)) return;
+      const message = getAudioPlaybackError(el.src, el.error?.code === 1 ? { name: 'AbortError' } : undefined);
+      if (!message) return;
+      setIsTrackPlaying(false);
+      setTrackPlaybackError(message);
     };
 
     el.addEventListener('play', handlePlay);
@@ -557,6 +635,7 @@ export default function Home() {
     el.addEventListener('timeupdate', handleTimeUpdate);
     el.addEventListener('durationchange', handleDurationChange);
     el.addEventListener('loadedmetadata', handleDurationChange);
+    el.addEventListener('error', handleError);
 
     audioRef.current = el;
 
@@ -575,6 +654,7 @@ export default function Home() {
       el.removeEventListener('timeupdate', handleTimeUpdate);
       el.removeEventListener('durationchange', handleDurationChange);
       el.removeEventListener('loadedmetadata', handleDurationChange);
+      el.removeEventListener('error', handleError);
       el.pause();
       el.src = '';
     };
@@ -606,23 +686,25 @@ export default function Home() {
       } else {
         audio.pause(); // 스템 재생 중지
         registerActiveAudio(el, () => setIsTrackPlaying(false));
-        el.play();
+        playDashboardAudio(el);
       }
     } else {
       // 다른 트랙 → 새로 로드 & 재생
       el.pause();
       audio.pause(); // 스템 재생 중지
       setCurrentTime(0);
-      setDuration(0);
+      setDuration(getStoredTrackDuration(item));
+      setTrackPlaybackError(null);
 
       // 새 트랙 트래킹 초기화
       hasTriggeredPlayRef.current = false;
       hasTriggeredSkipRef.current = false;
 
+      playingTrackIdRef.current = item.id;
       el.src = trackUrl;
       el.load();
       registerActiveAudio(el, () => setIsTrackPlaying(false));
-      el.play().catch(() => { /* autoplay policy */ });
+      playDashboardAudio(el);
       setPlayingTrackId(item.id);
       setPlayingTrack(item);
     }
@@ -631,7 +713,7 @@ export default function Home() {
     if (isTrackStemSplit(item)) {
       setActiveGenId(item.id);
     }
-  }, [playingTrackId, isTrackPlaying, audio, sendRetentionLog]);
+  }, [playingTrackId, isTrackPlaying, audio, sendRetentionLog, playDashboardAudio]);
 
   // Refs 동기화
   useEffect(() => {
@@ -747,12 +829,12 @@ export default function Home() {
       if (!audio) return;
       if (isRepeatRef.current) {
         audio.currentTime = 0;
-        audio.play().catch(err => console.error(err));
+        playDashboardAudio(audio);
       } else {
         playNext(true);
       }
     };
-  }, [playNext]);
+  }, [playNext, playDashboardAudio]);
 
   // 스템 플레이어가 재생을 시작하면, 싱글 트랙 재생을 일시정지시킵니다.
   useEffect(() => {
@@ -1095,26 +1177,37 @@ export default function Home() {
   };
 
   // ─── 곡 삭제 처리 ───
-  const handleDeleteTrack = async (id: string) => {
+  const handleDeleteTrack = async (id: string, mode: 'audio' | 'viral-video' = 'audio') => {
     setActiveMenuId(null);
-    if (!confirm('정말 이 AI 생성 음원을 삭제하시겠습니까? (삭제된 곡의 스템 분리 데이터도 전부 초기화됩니다)')) return;
-    
+    if (deletingTrackId) return;
+    const confirmation = mode === 'viral-video'
+      ? '이 Viral Shorts 영상과 연결 음원을 영구 삭제하시겠습니까?'
+      : '정말 이 AI 생성 음원을 삭제하시겠습니까? (삭제된 곡의 스템 분리 데이터도 전부 초기화됩니다)';
+    if (!confirm(confirmation)) return;
+    setDeletingTrackId(id);
     try {
       const res = await fetch(`/api/generations?id=${id}`, {
         method: 'DELETE',
       });
       
       if (res.ok) {
+        const deletedEpisode = readPetEpisode(history.find(item => item.id === id) || {});
+        if (userId && deletedEpisode) {
+          try { localStorage.removeItem(petVideoStorageKey(userId, deletedEpisode)); } catch { /* Durable server deletion remains authoritative. */ }
+        }
         removeGenerationFromQueue(id);
         if (playingTrackIdRef.current === id) {
           audioRef.current?.pause();
+          playingTrackIdRef.current = null;
           setPlayingTrackId(null);
           setPlayingTrack(null);
           setIsTrackPlaying(false);
+          setTrackPlaybackError(null);
         }
         if (activeGenId === id) {
           setActiveGenId('');
         }
+        setDetailItem(current => current?.id === id ? null : current);
         fetchHistory();
         fetchUserDataAndStats();
       } else {
@@ -1123,6 +1216,8 @@ export default function Home() {
       }
     } catch (err) {
       alert('삭제 중 통신 오류가 발생했습니다.');
+    } finally {
+      setDeletingTrackId(null);
     }
   };
 
@@ -1175,35 +1270,6 @@ export default function Home() {
     }
   };
 
-  // ─── 카테고리 판별 헬퍼 ───
-  const getTrackCategory = (item: any): string => {
-    if (item.license_hash) {
-      try {
-        const meta = JSON.parse(item.license_hash);
-        if (meta.sourceMenu === 'japan' || meta.presetId === 'japan_landing') {
-          return 'japan';
-        }
-        if (meta.sourceMenu === 'style-library' || meta.presetId?.includes('style') || meta.sourceMenu === 'style') {
-          return 'style-library';
-        }
-        if (meta.sourceMenu === 'viral-cf' || meta.sourceMenu === 'viral') {
-          return 'viral-cf';
-        }
-        if (meta.sourceMenu === 'audio-forge') {
-          return 'audio-forge';
-        }
-      } catch {
-        // ignore
-      }
-    }
-    const titleLower = (item.title || '').toLowerCase();
-    const promptLower = (item.license_hash || '').toLowerCase();
-    if (titleLower.includes('style') || promptLower.includes('style-library')) {
-      return 'style-library';
-    }
-    return 'audio-forge'; // Default
-  };
-
   const dashboardViralVideos: DashboardViralVideo[] = history
     .filter((item) => !!item.user_id && getTrackCategory(item) === 'viral-cf')
     .map((item) => {
@@ -1226,15 +1292,15 @@ export default function Home() {
   // ─── 클라이언트 사이드 검색, 필터, 정렬 ───
   let filtered = history
     .filter((item) => !isStemUploadTrack(item))
-    .filter((item) => getTrackCategory(item) !== 'viral-cf')
-    .filter(item => (item.title || 'Untitled').toLowerCase().includes(searchQuery.toLowerCase()));
+    .filter((item) => getDashboardLibraryCategory(item) !== null)
+    .filter(item => getDashboardMusicTitle(item).toLowerCase().includes(searchQuery.toLowerCase()));
 
   if (statusFilter !== 'all') {
     filtered = filtered.filter(item => item.status === statusFilter);
   }
 
   if (categoryTab !== 'all') {
-    filtered = filtered.filter(item => getTrackCategory(item) === categoryTab);
+    filtered = filtered.filter(item => getDashboardLibraryCategory(item) === categoryTab);
   }
 
   if (sortBy === 'oldest') {
@@ -1460,6 +1526,8 @@ export default function Home() {
           if (target) setDetailItem(target);
         }}
       />
+      <DashboardPetProductionList history={history} userId={userId} />
+      <DashboardDanceProductionList history={history} userId={userId} />
 
       <StemStudioSummary />
       
@@ -1692,7 +1760,7 @@ export default function Home() {
                           className={`font-semibold text-sm truncate hover:underline cursor-pointer ${playingTrackId === item.id && isTrackPlaying ? 'text-fuchsia-400' : isActive ? 'text-fuchsia-300' : 'text-white'}`}
                           title="클릭하여 상세 정보 보기"
                         >
-                          {item.title || 'Untitled Track'}
+                          {getDashboardMusicTitle(item)}
                         </span>
 
                         {/* J-BGM 특화 배지 */}
@@ -1712,7 +1780,7 @@ export default function Home() {
                         
                         {/* 버전/엔진 태그 */}
                         <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/20 font-mono">
-                          {(item.audio_url || item.source_audio_url || '').includes('lyria') ? 'Lyria v3.0' : 'Suno v5.5'}
+                          {trackEngineLabel(item)}
                         </span>
 
                         {/* 음질 등급 배지 */}
@@ -2246,13 +2314,13 @@ export default function Home() {
                     </div>
                   )}
 
-                  {/* 오디오 URL (있으면 표시) */}
-                  {detailItem.audio_url && (
+                  {/* 댄스 원본과 선택 구간은 영상 완료 후에도 바로 재생·다운로드 가능 */}
+                  {getDashboardDanceAudio(detailItem) ? <DashboardDanceAudio track={detailItem} /> : detailItem.audio_url ? (
                     <div className="bg-white/5 rounded-xl p-3 border border-white/5">
                       <div className="text-emerald-400 text-[10px] font-bold uppercase tracking-wider mb-1">Audio Source</div>
                       <div className="text-zinc-400 text-xs font-mono break-all">{detailItem.audio_url}</div>
                     </div>
-                  )}
+                  ) : null}
 
                   {/* 적용된 프리셋/스타일 매칭 및 제작 링크 */}
                   {(() => {
@@ -2260,6 +2328,12 @@ export default function Home() {
                     const presetName = meta.presetName || null;
                     const sourceMenu = meta.sourceMenu || null;
 
+                    if (meta.workflow === 'dance-music-first-v1' && meta.presetId === 'dance_challenge') {
+                      return <div className="flex items-center justify-between gap-3 rounded-xl border border-fuchsia-400/20 bg-fuchsia-950/30 p-4">
+                        <div><p className="text-sm font-bold text-fuchsia-100">댄스·챌린지</p><p className="text-xs text-zinc-300">음악에서 30초를 골라 영상으로 만듭니다.</p></div>
+                        <Link href={`/viral?danceTrack=${encodeURIComponent(detailItem.id)}`} onClick={() => setDetailItem(null)} className="text-sm font-bold text-fuchsia-200 underline">작업 열기</Link>
+                      </div>;
+                    }
                     let displayPresetId = presetId;
                     let displayPresetName = presetName;
 
@@ -2505,17 +2579,31 @@ export default function Home() {
                                 </div>
 
                                 {hasVideo ? (
-                                  <a
-                                    href={`/api/download?url=${encodeURIComponent(vUrl)}&filename=${encodeURIComponent(`melodio_short_${detailItem.title || 'video'}.mp4`)}`}
-                                    download={`melodio_short_${detailItem.title || 'video'}.mp4`}
-                                    className="px-3 py-1.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(217,70,239,0.3)] active:scale-95 shrink-0"
-                                  >
-                                    <Download className="w-3.5 h-3.5" />
-                                    <span>🎬 MP4 다운로드</span>
-                                  </a>
+                                  <div className="flex flex-wrap items-center justify-end gap-2">
+                                    <a
+                                      href={`/api/download?url=${encodeURIComponent(vUrl)}&filename=${encodeURIComponent(`melodio_short_${detailItem.title || 'video'}.mp4`)}`}
+                                      download={`melodio_short_${detailItem.title || 'video'}.mp4`}
+                                      className="px-3 py-1.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(217,70,239,0.3)] active:scale-95 shrink-0"
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                      <span>MP4 다운로드</span>
+                                    </a>
+                                    {getTrackCategory(detailItem) === 'viral-cf' ? <button
+                                      type="button"
+                                      onClick={() => void handleDeleteTrack(detailItem.id, 'viral-video')}
+                                      disabled={deletingTrackId === detailItem.id}
+                                      aria-label={`${detailItem.title || 'Viral Shorts'} 삭제`}
+                                      className="px-3 py-1.5 bg-red-950/70 hover:bg-red-900 text-red-300 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 border border-red-500/30 active:scale-95 shrink-0 disabled:cursor-wait disabled:opacity-50"
+                                    >
+                                      {deletingTrackId === detailItem.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                      <span>삭제</span>
+                                    </button> : null}
+                                  </div>
                                 ) : (
                                   <Link
-                                    href={`/viral?trackId=${detailItem.id}`}
+                                    href={meta.workflow === 'dance-music-first-v1' ? `/viral?danceTrack=${encodeURIComponent(detailItem.id)}` : readPetEpisode(detailItem)
+                                      ? `/viral?petTrack=${encodeURIComponent(detailItem.id)}`
+                                      : `/viral?trackId=${encodeURIComponent(detailItem.id)}`}
                                     onClick={() => setDetailItem(null)}
                                     className="px-3 py-1.5 bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(217,70,239,0.3)] active:scale-95 shrink-0"
                                   >
@@ -2533,6 +2621,7 @@ export default function Home() {
                                     playsInline
                                     preload="metadata"
                                     className="w-full h-full object-cover"
+                                    onPlay={meta.workflow === 'dance-music-first-v1' ? event => registerActiveAudio(event.currentTarget) : undefined}
                                   />
                                 </div>
                               ) : (
@@ -2809,8 +2898,13 @@ export default function Home() {
                   {currentDashboardTrack.title || 'Untitled Track'}
                 </h4>
                 <p className="text-[10px] text-zinc-400 font-mono mt-1 truncate">
-                  {meta.genre ? `${meta.genre} • ` : meta.stylePrompt ? `${meta.stylePrompt.slice(0, 15)}... • ` : ''}Suno v5.5 • Master
+                  {meta.genre ? `${meta.genre} • ` : meta.stylePrompt ? `${meta.stylePrompt.slice(0, 15)}... • ` : ''}{trackEngineLabel(currentDashboardTrack)} • Master
                 </p>
+                {trackPlaybackError ? (
+                  <p role="alert" className="text-[10px] text-amber-300 mt-1 leading-tight">
+                    {trackPlaybackError}
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -2886,6 +2980,7 @@ export default function Home() {
                   max={duration || 100}
                   step={0.1}
                   value={currentTime}
+                  disabled={Boolean(trackPlaybackError) || duration <= 0}
                   onChange={(e) => {
                     const val = parseFloat(e.target.value);
                     if (audioRef.current) {
@@ -2900,7 +2995,7 @@ export default function Home() {
                   }}
                 />
                 <span className="text-[10px] text-zinc-400 font-mono w-9">
-                  {formatTime(duration)}
+                  {duration > 0 ? formatTime(duration) : '--:--'}
                 </span>
               </div>
             </div>
@@ -2981,7 +3076,10 @@ export default function Home() {
                     audioRef.current.pause();
                   }
                   setIsTrackPlaying(false);
+                  playingTrackIdRef.current = null;
                   setPlayingTrackId(null);
+                  setPlayingTrack(null);
+                  setTrackPlaybackError(null);
                 }}
                 className="text-zinc-500 hover:text-white p-1.5 transition-colors ml-1"
                 title="플레이어 닫기"

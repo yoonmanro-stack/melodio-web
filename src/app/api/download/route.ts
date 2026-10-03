@@ -2,6 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
+function isRetiredProviderApiHost(url: URL): boolean {
+  const host = url.hostname.toLowerCase().replace(/\.$/, '');
+  if (host === '301.ai' || host.endsWith('.301.ai')) return true;
+  // Old tracks can still point to this read-only file host until their audio
+  // has been migrated to Melodio storage.
+  if (host === 'file.302.ai') return false;
+  return host === '302.ai' || host.endsWith('.302.ai');
+}
+
+function parseDownloadUrl(value: string): URL {
+  const url = new URL(value);
+  if ((url.protocol !== 'http:' && url.protocol !== 'https:') || isRetiredProviderApiHost(url)) {
+    throw new Error('지원되지 않는 다운로드 주소입니다.');
+  }
+  return url;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -12,15 +29,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'url 파라미터가 누락되었습니다.' }, { status: 400 });
     }
 
-    // URL 유효성 검사 (http / https 만 허용)
+    // Legacy file storage remains readable; retired provider API hosts do not.
     let parsedUrl: URL;
     try {
-      parsedUrl = new URL(targetUrl);
-      if (parsedUrl.protocol !== 'http:' && parsedUrl.protocol !== 'https:') {
-        return NextResponse.json({ error: '지원되지 않는 프로토콜입니다.' }, { status: 400 });
-      }
+      parsedUrl = parseDownloadUrl(targetUrl);
     } catch {
-      return NextResponse.json({ error: '잘못된 URL 형식입니다.' }, { status: 400 });
+      return NextResponse.json({ error: '지원되지 않는 다운로드 주소입니다.' }, { status: 400 });
     }
 
     // 파일명 안전 정제 (특수문자 제거)
@@ -29,20 +43,37 @@ export async function GET(request: NextRequest) {
       .replace(/\s+/g, ' ')
       .trim() || 'melodio-track.mp3';
 
-    // 업스트림(302.ai, Suno, Cloudflare CDN 등) 음원 데이터 요청
+    // 저장소 또는 음원 CDN의 미디어 데이터 요청
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 30000); // 30초 타임아웃
 
     let upstreamRes: Response;
     try {
-      upstreamRes = await fetch(parsedUrl.toString(), {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': '*/*',
-        },
-        signal: controller.signal,
-        cache: 'no-store',
-      });
+      let currentUrl = parsedUrl;
+      let response: Response | null = null;
+      for (let redirects = 0; redirects <= 5; redirects++) {
+        response = await fetch(currentUrl.toString(), {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+          },
+          signal: controller.signal,
+          cache: 'no-store',
+          redirect: 'manual',
+        });
+        if (![301, 302, 303, 307, 308].includes(response.status)) break;
+        const location = response.headers.get('location');
+        await response.body?.cancel();
+        if (!location || redirects === 5) {
+          return NextResponse.json({ error: '음원 주소 이동이 너무 많습니다.' }, { status: 502 });
+        }
+        try {
+          currentUrl = parseDownloadUrl(new URL(location, currentUrl).toString());
+        } catch {
+          return NextResponse.json({ error: '지원되지 않는 다운로드 주소입니다.' }, { status: 400 });
+        }
+      }
+      upstreamRes = response!;
     } finally {
       clearTimeout(timeoutId);
     }
@@ -104,10 +135,11 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers,
     });
-  } catch (err: any) {
-    console.error('[API/download] 예외 발생:', err.message || err);
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : '알 수 없는 오류';
+    console.error('[API/download] 예외 발생:', message);
     return NextResponse.json(
-      { error: '음원 다운로드 프록시 처리 중 오류가 발생했습니다.', details: err.message },
+      { error: '음원 다운로드 프록시 처리 중 오류가 발생했습니다.', details: message },
       { status: 500 }
     );
   }

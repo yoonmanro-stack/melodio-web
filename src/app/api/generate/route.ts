@@ -1,3 +1,4 @@
+import { suppressIneligibleVoice } from "@/lib/voice/studio-selection"
 /**
  * Melodio — 음악 생성 API Route (비동기 아키텍처)
  * POST /api/generate
@@ -15,6 +16,44 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { GoogleAuth } from 'google-auth-library'
 import { titlePlaybooks } from '@/data/titlePlaybooks'
 import { scrubConflictingVocalTags } from '@/lib/voice-dna-scrubber'
+import { submitKieSunoJob, kieTaskReference, sunoVersionLabel, resolveDurationSeconds } from '../../../../worker/suno-provider'
+import { validatePetEpisode, type PetEpisode } from '@/lib/vle/petEpisode'
+import { registeredVoicePersona } from '@/lib/voice/custom-voice-integrity'
+import { readCustomVoice } from '@/lib/voice/custom-voice-repository'
+
+type ViralBriefSnapshot = {
+  sourceTopic: string
+  categoryId: string
+  title: string
+  hook: string
+  lyrics: string
+  stylePrompt: string
+}
+
+function readViralBriefSnapshot(value: unknown): ViralBriefSnapshot | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const brief = value as Record<string, unknown>
+  const limits: Record<keyof ViralBriefSnapshot, number> = {
+    sourceTopic: 1500,
+    categoryId: 40,
+    title: 200,
+    hook: 500,
+    lyrics: 10_000,
+    stylePrompt: 5_000,
+  }
+  for (const [key, max] of Object.entries(limits) as Array<[keyof ViralBriefSnapshot, number]>) {
+    const field = brief[key]
+    if (typeof field !== 'string' || field.length > max || /data:|base64/i.test(field)) return null
+  }
+  return {
+    sourceTopic: brief.sourceTopic as string,
+    categoryId: brief.categoryId as string,
+    title: brief.title as string,
+    hook: brief.hook as string,
+    lyrics: brief.lyrics as string,
+    stylePrompt: brief.stylePrompt as string,
+  }
+}
 
 // 제출만 하므로 긴 타임아웃 불필요 (Vercel 타임아웃 60초로 확장)
 export const maxDuration = 60;
@@ -53,41 +92,15 @@ function inferGenreLabel(payload: PromptPayload, selections: any): string {
   return payload.stylePrompt.split(',')[0]?.trim() || payload.metadata?.primaryGenre || 'Unspecified'
 }
 
-async function generateSongMetadata(stylePrompt: string, lyricsPrompt: string): Promise<{ title: string; description: string; tags: string }> {
+async function generateSongMetadata(stylePrompt: string, lyricsPrompt: string): Promise<{ title: string; description: string; tags: string; source: 'ai' | 'basic'; model: string | null }> {
   const openaiApiKey = process.env.OPENAI_API_KEY
-  const pLower = stylePrompt.toLowerCase();
-
-  // Dynamic Context Blender Archetype Helper for Fallbacks
-  const generateDynamicFallbackTitle = (style: string): string => {
-    const p = style.toLowerCase();
-    if (p.includes('joseon') || p.includes('조선') || p.includes('gugak') || p.includes('국악')) {
-      const pool = ['먹빛 깃발', '달빛 아래 칼춤', '한과 흥', '새벽 안개속 나그네', '바람의 궤적'];
-      return pool[Math.floor(Math.random() * pool.length)];
-    }
-    if (p.includes('trot') || p.includes('트로트') || p.includes('뽕짝') || p.includes('7080')) {
-      const pool = ['청춘의 첫사랑', '빗속의 가로등', '마지막 편지', '세월이 가면', '연인의 바다'];
-      return pool[Math.floor(Math.random() * pool.length)];
-    }
-    if (p.includes('city') || p.includes('synth') || p.includes('시티팝') || p.includes('레트로')) {
-      const pool = ['Midnight Highway 1986', 'Neon Sunset', 'Tokyo Rain', 'Plastic Heart', 'Retro Cassette'];
-      return pool[Math.floor(Math.random() * pool.length)];
-    }
-    if (p.includes('chanson') || p.includes('샹송') || p.includes('french')) {
-      const pool = ['Café de Paris', 'Sous le Ciel', 'Whispering Seine', 'Midnight Accordion'];
-      return pool[Math.floor(Math.random() * pool.length)];
-    }
-    if (p.includes('japan') || p.includes('j-pop') || p.includes('anime')) {
-      const pool = ['夜の雨音 (밤의 빗소리)', '星空の記憶', 'Midnight Serenade', 'Cherry Blossom Winds'];
-      return pool[Math.floor(Math.random() * pool.length)];
-    }
-    const generalPool = ['Midnight Compiler', 'Coffee & Terminal', 'Bugfix Serenade', 'Echoes of Solitude', 'Quiet Raindrops'];
-    return generalPool[Math.floor(Math.random() * generalPool.length)];
-  };
 
   const fallback = {
-    title: generateDynamicFallbackTitle(stylePrompt),
-    description: 'Professional studio master mix, poetic track aesthetics',
-    tags: stylePrompt.split(',').slice(0, 4).join(', ')
+    title: (stylePrompt.split(',')[0]?.trim() || '제목 없는 곡').slice(0, 80),
+    description: '',
+    tags: stylePrompt.split(',').slice(0, 4).join(', '),
+    source: 'basic' as const,
+    model: null
   }
 
   if (!openaiApiKey) return fallback;
@@ -103,15 +116,15 @@ Output a JSON object with:
 
 Output ONLY valid raw JSON.`
 
-  const models = ['gpt-5.6-sol', 'gpt-5.5', 'gpt-5.6-terra', 'gpt-4o', 'gpt-4o-mini']
-  const apiBase = process.env.OPENAI_API_BASE || 'https://api.openai.com'
-  const url = `${apiBase}/v1/chat/completions`
+  const models = ['gpt-5.6-sol']
+  const url = 'https://api.openai.com/v1/chat/completions'
 
   for (const model of models) {
+    const controller = new AbortController()
+    // Optional metadata leaves time for the music submission within this route's 60-second budget.
+    const timeoutId = setTimeout(() => controller.abort(), 15_000)
     try {
       console.log(`[API/generate] Generating song metadata using OpenAI ${model}...`)
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 5000)
 
       const res = await fetch(url, {
         method: 'POST',
@@ -126,64 +139,42 @@ Output ONLY valid raw JSON.`
             { role: 'user', content: `Style Prompt: "${stylePrompt}"\nLyrics: "${lyricsPrompt}"` }
           ],
           response_format: { type: "json_object" },
-          temperature: 0.8,
-          max_tokens: 200
+          reasoning_effort: 'low',
+          max_completion_tokens: 4096
         }),
         signal: controller.signal
       })
-      clearTimeout(timeoutId)
-
       if (res.ok) {
         const data = await res.json()
+        if (typeof data.model !== 'string' || (data.model !== model && !data.model.startsWith(`${model}-`))
+            || data.choices?.[0]?.finish_reason !== 'stop' || data.choices?.[0]?.message?.refusal) return fallback;
         const content = data.choices?.[0]?.message?.content?.trim()
         if (content) {
           const parsed = JSON.parse(content);
+          if (![parsed.title, parsed.description, parsed.tags].every(value => typeof value === 'string' && value.trim())) return fallback;
           return {
-            title: (parsed.title || fallback.title).replace(/['"“”]/g, '').trim(),
-            description: (parsed.description || fallback.description).trim(),
-            tags: (parsed.tags || fallback.tags).trim()
+            title: parsed.title.replace(/['"“”]/g, '').trim() || fallback.title,
+            description: parsed.description.trim(),
+            tags: parsed.tags.trim(),
+            source: 'ai',
+            model: data.model
           }
         }
-      }
-    } catch (err: any) {
-      console.warn(`[API/generate] Metadata generation model ${model} error:`, err.message)
+      } else { await res.body?.cancel(); }
+    } catch {
+      console.warn(`[API/generate] ${model} metadata unavailable; using basic metadata`)
+    } finally {
+      clearTimeout(timeoutId)
     }
   }
 
   return fallback;
 }
 
-// ─── Suno 엔진 맵핑 ──────────────────────────────────────────────────────────
-function mapSunoVersionToModel(version?: string): string {
-  if (!version) return 'chirp-fenix'
-  const n = version.toLowerCase()
-  switch (n) {
-    case 'v5.5':
-      return 'chirp-fenix' // Suno v5.5
-    case 'v5':
-      return 'chirp-crow'  // Suno v5.0
-    case 'v4.5+':
-      return 'chirp-bluejay'
-    case 'v4.5':
-      return 'chirp-auk'
-    default:
-      return 'chirp-fenix'
-  }
-}
-
 // ─── Suno 작업 제출 (폴링 없이 task_id만 반환) ──────────────────────────────────
-async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Promise<{ taskId: string; engine: string }> {
-  const apiKey = process.env.SUNO_API_KEY
-  const apiBaseUrl = process.env.SUNO_API_URL || 'https://api.302.ai'
-
-  if (!apiKey) {
-    throw new Error('SUNO_API_KEY 환경 변수가 설정되지 않았습니다.')
-  }
-
-  // Exclude 프롬프트 처리
-  const baseStylePrompt = payload.excludePrompt?.trim()
-    ? `${payload.stylePrompt}, avoid: ${payload.excludePrompt.trim()}`
-    : payload.stylePrompt
+async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, personaId?: string) {
+  // Kie has a dedicated negative_tags field; keep exclusions out of positive style.
+  const baseStylePrompt = payload.stylePrompt
 
   // Match playbooks from DB (Obsidian synced) to enrich tags ONLY if prompt is short and unmastered
   let effectiveStylePrompt = baseStylePrompt
@@ -226,7 +217,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
     }
   }
 
-  // ── [Suno v5.5 Selective Engine Fidelity Cap Injection] ───────────────────────
+  // ── [Suno V6 Selective Engine Fidelity Cap Injection] ───────────────────────
   // 기존 프롬프트를 100% 보존하면서, 최상단 헤더 캡만 얇게 주입하여 고음 뭉개짐(Slop) 방어
   if (!effectiveStylePrompt.includes('[Hyper-Realistic')) {
     effectiveStylePrompt = `[Hyper-Realistic 24-bit 96kHz, studio master production] ${effectiveStylePrompt}`
@@ -257,6 +248,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
 
   // ── [Vocal Gender Conflict Scrubber] ──────────────────────────────────────────
   // Viral & Trend Zone 및 Voice Lab 옵션 결합 시 성별 상충 태그 정화 및 보컬 고정
+  let vocalGender: string | undefined
   if (!payload.isInstrumental) {
     const explicitGender = (payload as any).vocalGender || ((payload as any).activeVoice?.gender) || (
       Array.isArray((payload.metadata as any)?.vocal) ? ((payload.metadata as any).vocal.includes('Male') ? 'male' : (payload.metadata as any).vocal.includes('Female') ? 'female' : undefined) : undefined
@@ -266,6 +258,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
     const hasMaleKeyword = /\b(male|man|baritone|tenor|gentleman|boy|남성)\b/i.test(promptLower)
 
     const resolvedGender = explicitGender || (hasMaleKeyword && !hasFemaleKeyword ? 'male' : hasFemaleKeyword && !hasMaleKeyword ? 'female' : undefined)
+    vocalGender = resolvedGender === 'male' ? 'm' : resolvedGender === 'female' ? 'f' : undefined
 
     if (resolvedGender === 'male') {
       effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'male')
@@ -284,46 +277,20 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
     effectiveStylePrompt = effectiveStylePrompt.slice(0, 1000)
   }
 
-  const model = mapSunoVersionToModel(payload.sunoVersion)
-
-  console.log(`[API/generate] Suno 제출 (model: ${model}, isInstrumental: ${Boolean(payload.isInstrumental)})`)
-
-  const submitRes = await fetch(`${apiBaseUrl}/suno/submit/music`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      prompt: finalLyricsPrompt,
-      tags: effectiveStylePrompt ?? '',
-      title: payload.title ?? 'Untitled',
-      mv: model,
-      make_instrumental: false,
-    }),
+  const metadata = payload.metadata as PromptPayload['metadata'] & { durationSeconds?: number; duration?: string }
+  const result = await submitKieSunoJob({
+    style: effectiveStylePrompt,
+    lyrics: finalLyricsPrompt,
+    title: payload.title,
+    model: payload.sunoVersion,
+    instrumental: payload.isInstrumental,
+    exclude: payload.excludePrompt,
+    vocalGender,
+    personaId,
+    durationSeconds: isShortsTrack ? 28 : resolveDurationSeconds(metadata?.durationSeconds || metadata?.duration),
   })
-
-  if (!submitRes.ok) {
-    const errorText = await submitRes.text()
-    console.error('[API/generate] Suno 제출 실패:', errorText)
-    throw new Error(`Suno API 제출 실패: ${submitRes.status}`)
-  }
-
-  const submitData = await submitRes.json()
-  if (submitData.code !== 200 && submitData.code !== 'success' && submitData.message !== 'success') {
-    throw new Error(`Suno API 에러: ${submitData.message || JSON.stringify(submitData)}`)
-  }
-
-  const taskId = typeof submitData.data === 'string'
-    ? submitData.data
-    : (submitData.data?.task_id || submitData.data?.id)
-
-  if (!taskId) {
-    throw new Error('Suno API에서 작업 ID를 받지 못했습니다.')
-  }
-
-  console.log(`[API/generate] Suno 제출 성공. Task ID: ${taskId}`)
-  return { taskId, engine: 'suno_v5' }
+  console.log(`[API/generate] Kie Suno 제출 성공 (model: ${result.model})`)
+  return result
 }
 
 // ─── 앨범 커버 생성은 melodio-worker 로 이관됨 ────────────────────────────────
@@ -344,14 +311,9 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any): Pro
 const FALLBACK_PRESET_BASE =
   'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets';
 
-function getGenreFallback(pStr: string, pb: any) {
-  // ⚠️ playbook 썸네일을 곡 커버로 쓰지 않는다.
-  // /preset-thumbs/ 는 Preset Studio 장르 카탈로그 이미지이고, 곡 내용과 무관하다.
-  // (강아지 노래에 vocaloid_pop.png 가 붙던 사고 — 2026-08-09)
-  const pbThumb = pb?.metadata?.thumbnail_url;
-  if (pbThumb && !pbThumb.includes('unsplash.com') && !pbThumb.includes('/preset-thumbs/')) {
-    return pbThumb;
-  }
+function getGenreFallback(pStr: string) {
+  // A playbook thumbnail is a catalog asset, never a finished track cover.
+  // Use only recognizable temporary placeholders until the worker adopts clip artwork.
   const p = (pStr || '').toLowerCase();
   const has = (...words: string[]) =>
     words.some((w) => new RegExp(`(^|[^a-z가-힣])${w.replace(/[-\s]/g, '[-\\s]?')}([^a-z가-힣]|$)`, 'i').test(p));
@@ -365,22 +327,35 @@ function getGenreFallback(pStr: string, pb: any) {
   return `${FALLBACK_PRESET_BASE}/deep-sleep-drift.png`;
 }
 
-// ─── Lyria 엔진 (기존 동기 방식 유지 — 즉시 반환) ──────────────────────────────
-async function handleLyria(payload: PromptPayload) {
-  const { generateWithLyria3 } = await import('@/lib/engines/lyria3')
-  return generateWithLyria3({
-    prompt: payload.stylePrompt,
-    durationSeconds: 30,
-    sampleRate: 48000,
-  })
-}
-
 export async function POST(request: NextRequest) {
   let claimedQueueItemId: string | null = null
   let sunoTaskAccepted = false
   try {
     const rawBody = await request.json()
+    suppressIneligibleVoice(rawBody)
     const payload = rawBody as PromptPayload
+    if (payload.engine === 'lyria3') {
+      return NextResponse.json({ error: 'Lyria 3 생성은 현재 제공되지 않습니다. Suno V6를 선택해 주세요.' }, { status: 400 })
+    }
+    const requestedCustomVoiceId = typeof rawBody.activeVoice?.customVoiceId === 'string'
+      ? rawBody.activeVoice.customVoiceId
+      : typeof rawBody.customVoiceId === 'string' ? rawBody.customVoiceId : null
+    const requestedViralBrief = rawBody.metadata?.viralBrief
+    const viralBrief = requestedViralBrief === undefined ? null : readViralBriefSnapshot(requestedViralBrief)
+    if (requestedViralBrief !== undefined && !viralBrief) {
+      return NextResponse.json({ error: '바이럴 기획 정보 형식을 확인해 주세요.' }, { status: 400 })
+    }
+    const petEpisode = rawBody.sourceMenu === 'viral' && rawBody.presetId === 'pet'
+      ? rawBody.metadata?.petEpisode as PetEpisode | undefined
+      : undefined
+    if (petEpisode) {
+      const issues = validatePetEpisode(petEpisode)
+      if (issues.length) {
+        return NextResponse.json({ error: issues[0] }, { status: 400 })
+      }
+      // Pet v3 must remain a short even when the chosen music genre has no "viral" tag.
+      rawBody.isViral = true
+    }
     const selections = rawBody.selections
     let lyricsSections = rawBody.lyricsSections
     const vdCode = rawBody.vdCode
@@ -395,6 +370,17 @@ export async function POST(request: NextRequest) {
     const canonicalLyricsPrompt = buildLyricsPromptFromSections(lyricsSections)
     if (!payload.isInstrumental && canonicalLyricsPrompt) {
       payload.lyricsPrompt = canonicalLyricsPrompt
+    }
+
+    // Compare snapshots only after lyricsSections has been canonicalized. Otherwise a
+    // caller could validate one lyricsPrompt and submit different structured lyrics.
+    if (petEpisode && petEpisode.lyrics !== payload.lyricsPrompt) {
+      return NextResponse.json({ error: '콘티의 가사와 음원 가사가 다릅니다. 콘티를 다시 확인해 주세요.' }, { status: 400 })
+    }
+    if (viralBrief && (rawBody.sourceMenu !== 'viral' || rawBody.presetId === 'pet'
+      || viralBrief.categoryId !== rawBody.presetId || viralBrief.lyrics !== payload.lyricsPrompt
+      || viralBrief.stylePrompt !== payload.stylePrompt)) {
+      return NextResponse.json({ error: '기획한 상황·가사·음악 스타일이 다릅니다. 다시 기획해 주세요.' }, { status: 400 })
     }
 
     if (!payload.stylePrompt) {
@@ -453,6 +439,8 @@ export async function POST(request: NextRequest) {
           title: payload.title || 'Untitled',
           description: 'Channel Builder에서 승인된 Episode Track Blueprint',
           tags: payload.stylePrompt.split(',').slice(0, 4).join(', '),
+          source: 'approved-blueprint' as const,
+          model: null,
         }
       : await generateSongMetadata(payload.stylePrompt, payload.lyricsPrompt || '');
     if (needTitle) {
@@ -460,11 +448,46 @@ export async function POST(request: NextRequest) {
     }
     generatedDescription = generated.description;
     generatedTags = generated.tags;
-    console.log(`[API/generate] Auto-generated catchy metadata:`, generated);
+    console.log(`[API/generate] Metadata source: ${generated.source}`);
 
     // Supabase 클라이언트
     const supabase = await createClient()
     const { data: { user } } = await supabase.auth.getUser()
+
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+    if (!serviceRoleKey || !supabaseUrl) {
+      throw new Error('Supabase 환경 변수 누락')
+    }
+    const serviceSupabase = createSupabaseClient(supabaseUrl, serviceRoleKey)
+
+    // The browser sends only Melodio's registration UUID. Resolve the provider
+    // Voice ID server-side after checking ownership and readiness.
+    let registeredVoicePersonaId: string | undefined
+    let registeredVoiceName: string | undefined
+    if (requestedCustomVoiceId && !payload.isInstrumental) {
+      if (!user) return NextResponse.json({ error: '등록 목소리를 사용하려면 로그인이 필요합니다.' }, { status: 401 })
+      if (!/^[0-9a-f-]{36}$/i.test(requestedCustomVoiceId)) {
+        return NextResponse.json({ error: '등록 목소리 선택값이 올바르지 않습니다.' }, { status: 400 })
+      }
+      let registeredVoice: Awaited<ReturnType<typeof readCustomVoice>>
+      try {
+        registeredVoice = await readCustomVoice(serviceSupabase, user.id, requestedCustomVoiceId)
+      } catch (error) {
+        return NextResponse.json({ error: '등록 목소리 저장 정보를 확인하지 못했습니다.' }, {
+          status: error instanceof Error && error.message === 'invalid_voice_registration' ? 409 : 503,
+        })
+      }
+      if (!registeredVoice) {
+        return NextResponse.json({ error: '선택한 등록 목소리를 찾을 수 없습니다.' }, { status: 404 })
+      }
+      try {
+        registeredVoicePersonaId = registeredVoicePersona(registeredVoice, user.id)
+      } catch {
+        return NextResponse.json({ error: '선택한 목소리는 아직 Suno V6에서 사용할 수 없습니다.' }, { status: 409 })
+      }
+      registeredVoiceName = registeredVoice.name
+    }
 
     if (queueItemId) {
       if (!user) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
@@ -499,13 +522,6 @@ export async function POST(request: NextRequest) {
       claimedQueueItemId = queueItemId
     }
 
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    if (!serviceRoleKey || !supabaseUrl) {
-      throw new Error('Supabase 환경 변수 누락')
-    }
-    const serviceSupabase = createSupabaseClient(supabaseUrl, serviceRoleKey)
-
     // 0. 장르 플레이북 매칭
     let matchedPlaybook: any = null
     try {
@@ -530,57 +546,16 @@ export async function POST(request: NextRequest) {
     let coverArtUrl1 = rawBody.coverArtUrl1;
     let coverArtUrl2 = rawBody.coverArtUrl2;
 
-    const defaultFallback = getGenreFallback(payload.stylePrompt, matchedPlaybook);
+    const defaultFallback = getGenreFallback(payload.stylePrompt);
     if (!coverArtUrl1) coverArtUrl1 = defaultFallback;
     if (!coverArtUrl2) coverArtUrl2 = defaultFallback;
 
-    // 엔진 분기
-    const engine = payload.engine === 'auto'
-      ? 'suno_v5' // 연주곡 여부와 관계없이 진짜 Suno v5.5 Pro를 가동
-      : payload.engine
-
-    if (engine === 'lyria3') {
-      // Lyria는 빠르므로 동기 처리
-      const track = await handleLyria(payload)
-      const { data: genData, error: genError } = await serviceSupabase
-        .from('generations')
-        .insert({
-          user_id: user?.id || null,
-          title: track.title,
-          audio_url: track.audioUrl,
-          source_audio_url: track.audioUrl,
-          status: 'completed',
-          is_public: isPublic,
-          is_stem_extracted: false,
-          cover_art_url: coverArtUrl1,
-          license_hash: JSON.stringify({
-            stylePrompt: payload.stylePrompt,
-            engine: 'lyria3',
-            durationSeconds: 30,
-            sourceMenu: rawBody.sourceMenu || null,
-            isPublic,
-          }),
-        })
-        .select().single()
-
-      if (genError) console.error('[API/generate] INSERT 에러:', genError.message)
-
-      return NextResponse.json({ 
-        success: true, 
-        track: { 
-          ...track, 
-          id: genData?.id || track.id,
-          cover_art_url: coverArtUrl1
-        } 
-      })
-    }
-
     // ─── Suno: 비동기 제출 ────────────────────────────────────────────────────
-    const { taskId } = await submitSunoJob(payload, matchedPlaybook)
+    const { taskId, model } = await submitSunoJob(payload, matchedPlaybook, registeredVoicePersonaId)
     sunoTaskAccepted = true
 
     // DB에 'generating' 상태로 저장 (워커가 폴링하여 완료 처리)
-    // source_audio_url에 'suno:{taskId}' 형식으로 Suno task ID 저장
+    // provider 표시로 기존 302.ai 작업과 Kie 작업을 구분한다.
     // duration_mode에 메타데이터 JSON 저장 (스타일프롬프트, 가사, 엔진 등)
     // 실제 음성 등록·변환 기능은 준비 중이다. 기존 스타일 코드는 프롬프트
     // 합성에만 사용하며, Mac mini의 과거 자동 변환 조건(yoon/custom)이
@@ -595,7 +570,10 @@ export async function POST(request: NextRequest) {
       excludePrompt: payload.excludePrompt || '',
       engine: payload.engine || 'suno_v5',
       isInstrumental: payload.isInstrumental,
-      sunoVersion: payload.sunoVersion || 'v5.5',
+      sunoVersion: sunoVersionLabel(model),
+      sunoModel: model,
+      sunoProvider: 'kie',
+      sunoSubmittedAt: new Date().toISOString(),
       genre: payload.metadata?.primaryGenre || '',
       genreLabel: inferGenreLabel(payload, selections),
       subGenre: payload.metadata?.subGenre || '',
@@ -605,15 +583,19 @@ export async function POST(request: NextRequest) {
       vocal: inferVocalLabel(payload, selections, vdCode),
       voiceDna: storedVoiceStyleCode,
       vocalToneStyleCode: vdCode || null,
-      voiceFeatureMode: 'prompt_style_only',
+      voiceFeatureMode: registeredVoicePersonaId ? 'suno_voice_persona' : 'prompt_style_only',
       auto_voice_convert: false,
       voice_model_id: null,
+      customVoiceRegistrationId: registeredVoicePersonaId ? requestedCustomVoiceId : null,
+      customVoiceName: registeredVoiceName || null,
       lyricsSections: lyricsSections || [],
       duration: rawBody.metadata?.duration || '',
       durationSeconds: rawBody.metadata?.durationSeconds || null,
       coverArtUrl2: coverArtUrl2, // 두 번째 곡용 커버 이미지 보관
       description: generatedDescription,
       tags: generatedTags,
+      metadataSource: generated.source,
+      metadataModel: generated.model,
       presetId: rawBody.presetId || null,
       presetName: rawBody.presetName || null,
       sourceMenu: rawBody.sourceMenu || null,
@@ -621,6 +603,8 @@ export async function POST(request: NextRequest) {
       youtubeMainTitle: rawBody.youtubeMainTitle || null,
       tracklistText: rawBody.tracklistText || null,
       queueItemId,
+      ...(petEpisode ? { petEpisode, formatVersion: 'pet-v3', targetVideoSeconds: 30 } : {}),
+      ...(viralBrief ? { viralBrief, targetVideoSeconds: 30 } : {}),
     })
 
     const trackTitle = payload.title?.trim() || payload.stylePrompt.slice(0, 60)
@@ -632,7 +616,7 @@ export async function POST(request: NextRequest) {
         title: trackTitle,
         status: 'generating',
         is_public: isPublic,
-        source_audio_url: `suno:${taskId}`,
+        source_audio_url: kieTaskReference(taskId),
         duration_mode: 'clip',
         license_hash: metadata,
         is_stem_extracted: false,

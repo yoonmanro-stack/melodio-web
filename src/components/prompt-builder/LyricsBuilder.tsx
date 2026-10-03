@@ -1,6 +1,7 @@
 'use client'
+import { StudioVoicePicker } from "@/components/voice/StudioVoicePicker";
 
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { 
   FileText, Music, Sparkles, Wand2, Globe, Mic, Shuffle, AlertCircle, 
   Play, Zap, Flame, GitMerge, Moon, Copy, Check, Info, ListMusic, Tag, PlayCircle,
@@ -101,41 +102,15 @@ export default function LyricsBuilder({
 }: LyricsBuilderProps) {
   const [topic, setTopic] = useState('')
   const [language, setLanguage] = useState<'ko' | 'en' | 'ja' | 'ko-en' | 'ja-en' | 'fr' | 'zh' | 'es' | 'pt' | 'de' | 'ru' | 'ar'>(isJapanCampaign ? 'ja' : 'ko')
-  const [vocalGender, setVocalGender] = useState<'mixed' | 'female' | 'male' | 'duet'>('mixed')
+  const { studioGender: vocalGender, setStudioGender: setVocalGender } = useVoice()
   const [isGenerating, setIsGenerating] = useState(false)
   const [autoTitle, setAutoTitle] = useState(true) // 제목 자동생성 토글 (기본: ON)
   const [autoTopic, setAutoTopic] = useState(true) // 주제 자동생성 토글 (기본: ON)
-  const [isVdDropdownOpen, setIsVdDropdownOpen] = useState(false)
-
-  const { voices, activeVoice, setActiveVoice } = useVoice()
-
-  // Suno VoiceContext의 전체 보이스 목록과 vdOptions 병합
-  const mergedVdOptions = useMemo(() => {
-    const fromContext = (voices || []).filter(Boolean).map((v) => ({
-      code: v.id || '',
-      name: v.name || 'Voice',
-      gender: v.gender || 'female',
-      desc: v.desc || '',
-      sourceType: v.sourceType || 'default',
-      isFavorite: !!v.isFavorite,
-    }))
-    const existing = new Set(fromContext.map((o) => o.code))
-    const legacyExtras = (vdOptions || []).filter((o) => !existing.has(o.code))
-    return [...fromContext, ...legacyExtras]
-  }, [voices, vdOptions])
-
-  // 성별 필터링된 보이스 DNA 옵션
-  const filteredVdOptions = useMemo(() => {
-    return mergedVdOptions.filter(opt => {
-      if (vocalGender === 'female') return opt.gender === 'female'
-      if (vocalGender === 'male') return opt.gender === 'male'
-      return true
-    })
-  }, [mergedVdOptions, vocalGender])
+  const { activeVoice } = useVoice()
 
   // activeVoice가 변경되었을 때 selectedVdCode 자동 동기화
   useEffect(() => {
-    if (activeVoice && selectedVdCode !== activeVoice.id) {
+    if (activeVoice && activeVoice.gender === vocalGender && selectedVdCode !== activeVoice.id) {
       onSelectedVdCodeChange?.(activeVoice.id)
     }
   }, [activeVoice])
@@ -219,7 +194,7 @@ export default function LyricsBuilder({
     }
     setIsGenerating(true)
     try {
-      const resolvedVocalGender = (selectedVdCode !== 'auto' ? mergedVdOptions.find(o => o.code === selectedVdCode)?.gender : undefined) || activeVoice?.gender || vocalGender
+      const resolvedVocalGender = vocalGender
 
       const response = await fetch('/api/lyrics/generate', {
         method: 'POST',
@@ -439,7 +414,7 @@ export default function LyricsBuilder({
               </div>
 
               {/* 가창 & 언어 설정 (독립된 행으로 분리) */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-1">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-1">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[11px] text-melodio-muted font-medium flex items-center gap-1.5">
                     <Globe className="w-3 h-3 text-zinc-400 shrink-0" /> 가사 언어
@@ -455,6 +430,7 @@ export default function LyricsBuilder({
                     <option value="en">영어 (English)</option>
                     <option value="ja">일본어 (Japanese)</option>
                     <option value="ja-en">일본어 + 영어 (Ja + En)</option>
+                    {!isJapanCampaign && (<>
                     <option value="zh">중국어 (Chinese)</option>
                     <option value="es">스페인어 (Spanish)</option>
                     <option value="pt">포르투갈어 (Portuguese)</option>
@@ -464,6 +440,7 @@ export default function LyricsBuilder({
                     <option value="hi">힌디어 (Hindi)</option>
                     <option value="ru">러시아어 (Russian)</option>
                     <option value="ar">아랍어 (Arabic)</option>
+                    </>)}
                   </select>
                 </div>
 
@@ -490,136 +467,7 @@ export default function LyricsBuilder({
                   </select>
                 </div>
 
-                {/* VoiceDNA Dropdown (Relocated to Vocal/Lyrics Planner step) */}
-                <div className="flex flex-col gap-1.5 relative">
-                  <label className={`text-[11px] font-medium flex items-center gap-1.5 ${
-                    vocalGender === 'mixed' || vocalGender === 'duet' ? 'text-zinc-500' : 'text-cyan-400'
-                  }`}>
-                    <Mic className={`w-3 h-3 shrink-0 ${
-                      vocalGender === 'mixed' || vocalGender === 'duet' ? 'text-zinc-500' : 'text-cyan-400'
-                    }`} /> 보컬 음색 스타일
-                  </label>
-                  <div className="relative">
-                    <button
-                      type="button"
-                      disabled={vocalGender === 'mixed' || vocalGender === 'duet'}
-                      onClick={() => setIsVdDropdownOpen(!isVdDropdownOpen)}
-                      className={`w-full flex items-center justify-between gap-1.5 px-3 py-2 rounded-lg border text-sm font-sans transition-all text-left cursor-pointer ${
-                        vocalGender === 'mixed' || vocalGender === 'duet'
-                          ? 'border-zinc-800 bg-zinc-950/20 text-zinc-500 cursor-not-allowed'
-                          : selectedVdCode !== 'auto'
-                          ? 'border-cyan-500 bg-cyan-500/20 text-cyan-200 shadow-sm shadow-cyan-500/10'
-                          : 'border-melodio-border bg-black/40 text-melodio-muted hover:border-cyan-500/50'
-                      }`}
-                    >
-                      <span className="truncate">
-                        {vocalGender === 'mixed' || vocalGender === 'duet'
-                          ? '자동 (듀엣/랜덤 사용 불가)'
-                          : selectedVdCode === 'auto'
-                          ? '자동 (기본 음색)'
-                          : filteredVdOptions.find(o => o.code === selectedVdCode)?.name || mergedVdOptions.find(o => o.code === selectedVdCode)?.name || (activeVoice?.id === selectedVdCode ? activeVoice.name : selectedVdCode)}
-                      </span>
-                      {vocalGender !== 'mixed' && vocalGender !== 'duet' && (
-                        <span className="text-[9px] opacity-70">▼</span>
-                      )}
-                    </button>
-
-                    {isVdDropdownOpen && vocalGender !== 'mixed' && vocalGender !== 'duet' && (
-                      <>
-                        <div
-                          className="fixed inset-0 z-40"
-                          onClick={() => setIsVdDropdownOpen(false)}
-                        />
-                        <div className="absolute right-0 mt-1 w-full bg-[#18151f] border border-zinc-700/80 rounded-xl shadow-2xl z-50 py-1.5 text-xs max-h-64 overflow-y-auto">
-                          {/* 1. Auto 기본 */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              onSelectedVdCodeChange?.('auto');
-                              setActiveVoice(null);
-                              setIsVdDropdownOpen(false);
-                            }}
-                            className={`w-full text-left px-3 py-2 hover:bg-cyan-500/15 hover:text-cyan-300 flex items-center justify-between transition-colors border-b border-white/5 cursor-pointer ${
-                              selectedVdCode === 'auto' ? 'text-cyan-300 font-bold bg-cyan-500/10' : 'text-zinc-300'
-                            }`}
-                          >
-                            <span>자동 (기본 음색)</span>
-                            {selectedVdCode === 'auto' && <span className="text-cyan-400 font-bold">✓</span>}
-                          </button>
-
-                          {/* 2. 내가 저장한 음색 스타일 */}
-                          {filteredVdOptions.some(o => o.sourceType && o.sourceType !== 'default') && (
-                            <div className="pt-2 pb-1 border-b border-white/5">
-                              <div className="px-3 pb-1 text-[10px] font-bold text-rose-400 uppercase tracking-wider flex items-center gap-1">
-                                <Sparkles className="w-2.5 h-2.5" />
-                                <span>내 음색 스타일</span>
-                              </div>
-                              {filteredVdOptions.filter(o => o.sourceType && o.sourceType !== 'default').map((opt) => (
-                                <button
-                                  key={opt.code}
-                                  type="button"
-                                  onClick={() => {
-                                    onSelectedVdCodeChange?.(opt.code);
-                                    const v = voices.find(item => item.id === opt.code);
-                                    if (v) setActiveVoice(v);
-                                    setIsVdDropdownOpen(false);
-                                  }}
-                                  className={`w-full text-left px-3 py-1.5 hover:bg-rose-500/15 hover:text-rose-200 flex items-center justify-between transition-colors cursor-pointer ${
-                                    selectedVdCode === opt.code ? 'text-rose-300 font-bold bg-rose-500/10' : 'text-zinc-300'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-1.5 truncate">
-                                    <Mic2 className="w-3 h-3 text-rose-400 shrink-0" />
-                                    <span className="truncate">{opt.name}</span>
-                                  </div>
-                                  {selectedVdCode === opt.code && <span className="text-rose-400 font-bold">✓</span>}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* 3. 시스템 추천 음색 스타일 */}
-                          <div className="pt-1 pb-1">
-                            <div className="px-3 py-1 text-[10px] font-bold text-zinc-500 uppercase tracking-wider">
-                              추천 음색 스타일
-                            </div>
-                            {filteredVdOptions.filter(o => !o.sourceType || o.sourceType === 'default').map((opt) => (
-                              <button
-                                key={opt.code}
-                                type="button"
-                                onClick={() => {
-                                  onSelectedVdCodeChange?.(opt.code);
-                                  const v = voices.find(item => item.id === opt.code);
-                                  if (v) setActiveVoice(v);
-                                  setIsVdDropdownOpen(false);
-                                }}
-                                className={`w-full text-left px-3 py-1.5 hover:bg-cyan-500/15 hover:text-cyan-300 flex items-center justify-between transition-colors cursor-pointer ${
-                                  selectedVdCode === opt.code ? 'text-cyan-300 font-bold bg-cyan-500/10' : 'text-zinc-300'
-                                }`}
-                              >
-                                <span className="truncate">{opt.name}</span>
-                                {selectedVdCode === opt.code && <span className="text-cyan-400 font-bold">✓</span>}
-                              </button>
-                            ))}
-                          </div>
-
-                          {/* 실제 목소리 등록은 준비 중 */}
-                          <div className="p-1.5 border-t border-white/10 bg-black/40">
-                            <button
-                              type="button"
-                              disabled
-                              title="목소리 녹음·업로드 등록 기능은 준비 중입니다."
-                              className="w-full py-1.5 px-2 rounded-lg bg-white/5 border border-white/10 text-zinc-500 font-semibold flex items-center justify-center gap-1.5 cursor-not-allowed"
-                            >
-                              <Plus className="w-3.5 h-3.5" />
-                              <span>목소리 등록 · 준비 중</span>
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
+                <div className="md:col-span-2"><StudioVoicePicker /></div>
               </div>
               <div className="flex justify-center mt-1">
                 <button

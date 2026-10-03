@@ -1,0 +1,39 @@
+Melodio browser audio conversion - third-party notices
+
+The versioned public/vendor/voice-audio runtime directory contains unchanged
+files copied from the following pinned npm packages. These files are generated
+locally by scripts/prepare-voice-audio-assets.cjs during development and builds.
+
+@ffmpeg/ffmpeg 0.12.15
+Files: worker.js, const.js, errors.js
+License: MIT; see ffmpeg-wrapper-MIT.txt.
+Copyright (c) 2019 Jerome Wu
+Upstream release source (package version 0.12.15):
+https://github.com/ffmpegwasm/ffmpeg.wasm/tree/f78aed147c4185484da8eba1d97c51354a5e3352
+Source archive:
+https://github.com/ffmpegwasm/ffmpeg.wasm/archive/f78aed147c4185484da8eba1d97c51354a5e3352.tar.gz
+
+@ffmpeg/core 0.12.10 (single-thread WebAssembly build)
+Files: ffmpeg-core.js, ffmpeg-core.wasm
+Package license: GPL-2.0-or-later; see ffmpeg-core-GPL-2.0.txt.
+FFmpeg copyright belongs to the FFmpeg developers and individual contributors.
+Upstream release source, build scripts, and external library version references:
+https://github.com/ffmpegwasm/ffmpeg.wasm/tree/71aa99d37c02a7b4c435275ca9ef50e612f6efa1
+Source archive:
+https://github.com/ffmpegwasm/ffmpeg.wasm/archive/71aa99d37c02a7b4c435275ca9ef50e612f6efa1.tar.gz
+Build configuration:
+https://github.com/ffmpegwasm/ffmpeg.wasm/blob/71aa99d37c02a7b4c435275ca9ef50e612f6efa1/Dockerfile
+The pinned build uses FFmpeg n5.1.4. FFmpeg source and license notices:
+https://github.com/FFmpeg/FFmpeg/tree/n5.1.4
+https://github.com/FFmpeg/FFmpeg/archive/refs/tags/n5.1.4.tar.gz
+https://github.com/FFmpeg/FFmpeg/blob/n5.1.4/LICENSE.md
+
+The WebAssembly core incorporates FFmpeg and external libraries, which retain
+their applicable copyright and license terms. The upstream Dockerfile and
+build scripts above identify their source repositories and pinned revisions.
+Upstream license explanation:
+https://ffmpegwasm.netlify.app/docs/faq/#what-is-the-license-of-ffmpegwasm
+
+The license texts are reproduced from these official upstream files:
+https://github.com/ffmpegwasm/ffmpeg.wasm/blob/f78aed147c4185484da8eba1d97c51354a5e3352/LICENSE
+https://github.com/FFmpeg/FFmpeg/blob/n5.1.4/COPYING.GPLv2

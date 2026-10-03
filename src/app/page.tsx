@@ -97,7 +97,7 @@ export default async function LandingPage() {
           <div className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
             <Music className="w-8 h-8 text-cyan-400 mb-4" />
             <h3 className="text-xl font-bold text-white mb-2">Dual-Engine AI</h3>
-            <p className="text-sm text-zinc-400">Powered by Suno and Lyria to generate infinite, high-fidelity stems simultaneously.</p>
+            <p className="text-sm text-zinc-400">Powered by Suno V6 to create music for your next release.</p>
           </div>
           <div className="p-6 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
             <Sparkles className="w-8 h-8 text-fuchsia-400 mb-4" />

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { registerActiveAudio } from '@/lib/globalAudio'
+import { getAudioPlaybackError, getExpiredAudioPlaybackError, getStoredTrackDuration } from '@/lib/audio-playback'
 
 interface PublicTrackGridProps {
   sourceMenu: 'audio-forge' | 'style-library' | 'japan' | 'viral' | 'viral-cf' | 'preset-studio' | 'audio-forge-pro'
@@ -81,7 +82,48 @@ export default function PublicTrackGrid({
   const [isRepeat, setIsRepeat] = useState(false)
   const [likedSongs, setLikedSongs] = useState<Set<string>>(new Set())
   const [dislikedSongs, setDislikedSongs] = useState<Set<string>>(new Set())
+  const [playbackErrors, setPlaybackErrors] = useState<Record<string, string>>({})
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const playbackAttemptRef = useRef<{ id: string; url: string } | null>(null)
+
+  const playLocalAudio = useCallback((audio: HTMLAudioElement, track: { id: string }, audioUrl: string) => {
+    const attempt = { id: track.id, url: audioUrl }
+    playbackAttemptRef.current = attempt
+    const expired = getExpiredAudioPlaybackError(audioUrl)
+    if (expired) {
+      audio.pause()
+      setLocalIsPlaying(false)
+      setPlaybackErrors(prev => ({ ...prev, [track.id]: expired }))
+      return
+    }
+    setPlaybackErrors(prev => {
+      if (!prev[track.id]) return prev
+      const next = { ...prev }
+      delete next[track.id]
+      return next
+    })
+    registerActiveAudio(audio, () => {
+      if (playbackAttemptRef.current === attempt) setLocalIsPlaying(false)
+    })
+    audio.play().then(() => {
+      if (audioRef.current === audio && playbackAttemptRef.current === attempt && !audio.paused) setLocalIsPlaying(true)
+    }).catch(error => {
+      if (audioRef.current !== audio || playbackAttemptRef.current !== attempt) return
+      setLocalIsPlaying(false)
+      const message = getAudioPlaybackError(audioUrl, error)
+      if (message) setPlaybackErrors(prev => ({ ...prev, [track.id]: message }))
+    })
+  }, [])
+
+  useEffect(() => () => {
+    playbackAttemptRef.current = null
+    const audio = audioRef.current
+    audioRef.current = null
+    if (audio) {
+      audio.pause()
+      audio.removeAttribute('src')
+    }
+  }, [])
 
   const fetchPublicTracks = async () => {
     try {
@@ -101,14 +143,13 @@ export default function PublicTrackGrid({
 
           let isPublic = true
           let trackCategory = 'audio-forge'
-          let trackDuration = 0
+          const trackDuration = getStoredTrackDuration(item)
           let isViralMode = false
 
           if (item.license_hash) {
             try {
               const meta = JSON.parse(item.license_hash)
               isPublic = meta.isPublic !== false
-              trackDuration = meta.duration || 0
               isViralMode = meta.viralMode === true || meta.sourceMenu === 'viral-cf' || meta.sourceMenu === 'viral'
 
               if (meta.sourceMenu === 'japan' || meta.presetId === 'japan_landing') {
@@ -187,27 +228,35 @@ export default function PublicTrackGrid({
     }
 
     // 로컬 오디오 재생 관리
+    const audioUrl = track.audio_url || track.source_audio_url
+    if (!audioUrl) {
+      setPlaybackErrors(prev => ({ ...prev, [track.id]: getAudioPlaybackError('') || '음원 파일을 불러오지 못했습니다' }))
+      return
+    }
     if (!audioRef.current) {
       audioRef.current = new Audio()
     }
 
     const isCurrentActive = localPlayingTrack?.id === track.id
+      && (localPlayingTrack.audio_url || localPlayingTrack.source_audio_url) === audioUrl
     if (isCurrentActive) {
       if (localIsPlaying) {
+        playbackAttemptRef.current = { id: track.id, url: audioUrl }
         audioRef.current.pause()
         setLocalIsPlaying(false)
       } else {
-        registerActiveAudio(audioRef.current, () => setLocalIsPlaying(false))
-        audioRef.current.play().catch(err => console.error(err))
-        setLocalIsPlaying(true)
+        playLocalAudio(audioRef.current, track, audioUrl)
       }
     } else {
-      audioRef.current.src = track.audio_url
+      playbackAttemptRef.current = null
+      audioRef.current.pause()
+      audioRef.current.src = audioUrl
       audioRef.current.volume = isMuted ? 0 : volume
-      registerActiveAudio(audioRef.current, () => setLocalIsPlaying(false))
-      audioRef.current.play().catch(err => console.error(err))
       setLocalPlayingTrack(track)
-      setLocalIsPlaying(true)
+      setCurrentTime(0)
+      setDuration(getStoredTrackDuration(track))
+      setLocalIsPlaying(false)
+      playLocalAudio(audioRef.current, track, audioUrl)
     }
   }
 
@@ -292,14 +341,32 @@ export default function PublicTrackGrid({
   // 오디오 타임라인 및 재생 완료 동기화
   useEffect(() => {
     const audio = audioRef.current
-    if (!audio) return
+    if (!audio || !localPlayingTrack) return
+    const track = localPlayingTrack
+    const audioUrl = track.audio_url || track.source_audio_url
+    const isSelectedSource = () => {
+      const attempt = playbackAttemptRef.current
+      return Boolean(attempt && attempt.id === track.id && attempt.url === audioUrl
+        && (!audio.currentSrc || audio.currentSrc === audio.src))
+    }
 
-    const handleTimeUpdate = () => setCurrentTime(audio.currentTime)
-    const handleLoadedMetadata = () => setDuration(audio.duration)
+    const handleTimeUpdate = () => {
+      if (isSelectedSource()) setCurrentTime(audio.currentTime)
+    }
+    const handleLoadedMetadata = () => {
+      if (isSelectedSource() && Number.isFinite(audio.duration) && audio.duration > 0) setDuration(audio.duration)
+    }
+    const handleError = () => {
+      if (!isSelectedSource()) return
+      setLocalIsPlaying(false)
+      const message = getAudioPlaybackError(audioUrl, audio.error?.code === 1 ? { name: 'AbortError' } : undefined)
+      if (message) setPlaybackErrors(prev => ({ ...prev, [track.id]: message }))
+    }
     const handleEnded = () => {
+      if (!isSelectedSource()) return
       if (isRepeat) {
         audio.currentTime = 0
-        audio.play().catch(console.error)
+        playLocalAudio(audio, track, audioUrl)
       } else {
         playNextTrack()
       }
@@ -308,13 +375,15 @@ export default function PublicTrackGrid({
     audio.addEventListener('timeupdate', handleTimeUpdate)
     audio.addEventListener('loadedmetadata', handleLoadedMetadata)
     audio.addEventListener('ended', handleEnded)
+    audio.addEventListener('error', handleError)
 
     return () => {
       audio.removeEventListener('timeupdate', handleTimeUpdate)
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
       audio.removeEventListener('ended', handleEnded)
+      audio.removeEventListener('error', handleError)
     }
-  }, [localPlayingTrack, isRepeat, playNextTrack])
+  }, [localPlayingTrack, isRepeat, playNextTrack, playLocalAudio])
 
   // 볼륨 변경 동기화
   useEffect(() => {
@@ -544,6 +613,9 @@ export default function PublicTrackGrid({
                             {tags}
                           </p>
                         )}
+                        {playbackErrors[track.id] && (
+                          <p role="alert" className="mt-1 text-[10px] leading-relaxed text-red-300">{playbackErrors[track.id]}</p>
+                        )}
                       </div>
                     </div>
                   );
@@ -594,7 +666,10 @@ export default function PublicTrackGrid({
                       
                       {/* Hover Play/Pause Overlay */}
                       <div
-                        onClick={() => handleTogglePlay(track)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleTogglePlay(track)
+                        }}
                         className="absolute inset-0 opacity-0 group-hover/play:opacity-100 transition-opacity duration-200 flex items-center justify-center z-10"
                       >
                         {playing ? (
@@ -629,6 +704,9 @@ export default function PublicTrackGrid({
                         <p className="text-[10px] text-zinc-500 font-mono mt-1.5 truncate max-w-[95%]" title={tags}>
                           {tags}
                         </p>
+                      )}
+                      {playbackErrors[track.id] && (
+                        <p role="alert" className="mt-1 text-[10px] leading-relaxed text-red-300">{playbackErrors[track.id]}</p>
                       )}
                     </div>
                   </div>
@@ -707,6 +785,9 @@ export default function PublicTrackGrid({
                     <p className="text-[11px] text-zinc-400 truncate mt-0.5">
                       {meta.genre} • {meta.vocal}
                     </p>
+                    {playbackErrors[localPlayingTrack.id] && (
+                      <p role="alert" className="mt-1 text-[10px] leading-relaxed text-red-300">{playbackErrors[localPlayingTrack.id]}</p>
+                    )}
                   </div>
                 </div>
               )
@@ -781,7 +862,7 @@ export default function PublicTrackGrid({
                   }}
                 />
                 <span className="text-[10px] text-zinc-400 font-mono w-9">
-                  {formatTime(duration)}
+                  {duration > 0 ? formatTime(duration) : '--:--'}
                 </span>
               </div>
             </div>
@@ -871,6 +952,7 @@ export default function PublicTrackGrid({
               {/* Close Player Button */}
               <button
                 onClick={() => {
+                  playbackAttemptRef.current = null
                   if (audioRef.current) {
                     audioRef.current.pause()
                   }

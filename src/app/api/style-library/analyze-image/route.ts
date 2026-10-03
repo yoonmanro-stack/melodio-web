@@ -1,11 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+export const maxDuration = 90
+
 export async function POST(request: NextRequest) {
   try {
-    const { images, conceptName, locale } = await request.json()
+    const { images, conceptName, desc, inferredGenre, customPrompt, additionalRequest, locale } = await request.json()
+    const optionalText = (value: unknown, maxLength: number) =>
+      typeof value === 'string' ? value.trim().slice(0, maxLength) : ''
+    const requestedConceptName = optionalText(conceptName, 100)
+    const conceptDescription = optionalText(desc, 300)
+    const musicGenre = optionalText(inferredGenre, 50)
+    const musicStyle = optionalText(customPrompt, 1000)
+    const userRequirements = optionalText(additionalRequest, 200)
+    const conceptContext = [
+      requestedConceptName ? `Concept name: ${requestedConceptName}` : '',
+      conceptDescription ? `Concept description: ${conceptDescription}` : '',
+      musicGenre ? `Requested music genre: ${musicGenre}` : '',
+      musicStyle ? `Requested music style, instrumentation and mood: ${musicStyle}` : '',
+      userRequirements ? `Additional user requirements: ${userRequirements}` : '',
+    ].filter(Boolean).join('\n')
     const apiKey = process.env.OPENAI_API_KEY
-    const backupKey = process.env.SUNO_API_KEY
-    const apiBase = (process.env.SUNO_API_URL || 'https://api.302.ai').replace(/\/+$/, '')
 
     const targetLocale = (locale || 'ko').toLowerCase()
 
@@ -150,6 +164,7 @@ CRITICAL DIRECTIVES:
 1. GENDER & SUBJECT PRESERVATION: You MUST carefully analyze the reference images to determine the primary subject's characteristics. If the subject is a young woman (e.g. wearing headphones, sitting alone, long hair, cap, leaning on a train/monorail window), you MUST preserve her identity exactly as a "young woman" or "a beautiful young woman with long hair" in the Korean, Japanese, and English fields. NEVER generalise or swap her gender to a man.
 2. ART STYLE CONVERGENCE: Match the visual style of the reference images (e.g. cozy anime art style, retro 90s anime aesthetic, soft warm digital painting, cinematic Ghibli watercolor texture, vintage film photography). Include these style keywords inside 'base_video_prompt'.
 3. STRICTOR TEXT & TYPOGRAPHY PROHIBITION: To prevent the image generator from producing messy text, letters, subtitles, watermarks, or signatures, the 'base_video_prompt' MUST NOT contain any words that imply text overlays (e.g. 'text', 'writing', 'signboard', 'typography', 'subtitle', 'logo') and MUST end with the strong negative constraint: '--no text, watermark, signature, typography, subtitles, writing, letters, words, logo'.
+4. USER CONCEPT FIDELITY: When supplied, the user's concept description, requested music genre, style tags, and additional requirements are primary creative requirements. Incorporate them meaningfully into the preset description, inferred_genre, music prompts, visual tags, and scene prompt wherever applicable. Preserve reference-image subjects and setting unless the user explicitly requests a change. Do not replace a specific requested genre or mood with generic cozy or lo-fi defaults. Musical sound and rhythm tags need not become visible objects; use physically plausible scene details.
 `;
 
     const userContent: any[] = []
@@ -157,7 +172,10 @@ CRITICAL DIRECTIVES:
       console.log(`[API/style-library/analyze-image] 이미지 ${images.length}장 비전 분석 시작...`)
       userContent.push({
         type: 'text',
-        text: 'Analyze the attached image(s) and generate a music style preset matching their artistic style and emotional mood.'
+        text: [
+          'Analyze the attached image(s) and generate a music style preset matching their artistic style and emotional mood. Apply any supplied concept and additional user requirements below.',
+          conceptContext,
+        ].filter(Boolean).join('\n\n')
       })
       images.forEach((img: string) => {
         userContent.push({
@@ -169,13 +187,12 @@ CRITICAL DIRECTIVES:
       console.log(`[API/style-library/analyze-image] 텍스트 컨셉명 "${conceptName}" 기반 분석 시작...`)
       userContent.push({
         type: 'text',
-        text: `Analyze the user's music concept title: "${conceptName}" and generate a music style preset matching this style and emotional mood.`
+        text: `Analyze the user's music concept below and generate a music style preset preserving its specific style and emotional mood.\n\n${conceptContext}`
       })
     }
 
-    const MODEL_CHAIN = ['gpt-4o', 'gpt-4o-mini']
+    const MODEL_CHAIN = ['gpt-5.6-sol']
     let parsed: any = null
-    let responseOk = false
 
     async function attemptVision(keyStr: string, apiUrlStr: string): Promise<any | null> {
       for (const model of MODEL_CHAIN) {
@@ -194,17 +211,19 @@ CRITICAL DIRECTIVES:
                 { role: 'user', content: userContent }
               ],
               response_format: { type: 'json_object' },
-              temperature: 0.7
-            })
+              reasoning_effort: 'low',
+              max_completion_tokens: 8192
+            }),
+            signal: AbortSignal.timeout(75_000)
           })
 
           if (response.ok) {
             const data = await response.json()
-            const contentText = data.choices?.[0]?.message?.content?.trim() || '{}'
+            const contentText = data.choices?.[0]?.message?.content?.trim()
+            if (!contentText) return null
             return JSON.parse(contentText)
           } else {
-            const errText = await response.text()
-            console.warn(`[API/style-library/analyze-image] Model ${model} failed at ${apiUrlStr}:`, errText)
+            console.warn(`[API/style-library/analyze-image] Model ${model} failed: HTTP ${response.status}`)
           }
         } catch (err: any) {
           console.error(`[API/style-library/analyze-image] Exception with model ${model} at ${apiUrlStr}:`, err.message)
@@ -213,19 +232,8 @@ CRITICAL DIRECTIVES:
       return null
     }
 
-    // 1순위: 302.ai API 시도
-    if (backupKey) {
-      console.log('[API/style-library/analyze-image] Attempting 302.ai Proxy API call...')
-      const backupUrl = `${apiBase}/v1/chat/completions`
-      parsed = await attemptVision(backupKey, backupUrl)
-      if (parsed) responseOk = true
-    }
-
-    // 2순위: 공식 OpenAI API 시도
-    if (!responseOk && apiKey) {
-      console.log('[API/style-library/analyze-image] 302.ai failed/missing, falling back to official OpenAI...')
+    if (apiKey) {
       parsed = await attemptVision(apiKey, 'https://api.openai.com/v1/chat/completions')
-      if (parsed) responseOk = true
     }
 
     if (parsed) {

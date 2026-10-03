@@ -1408,7 +1408,7 @@ function AutopilotContent() {
         setBrandingResult(result)
         localStorage.setItem(cacheKey, JSON.stringify(result))
       } else {
-        alert(`AI 기획 재생성에 실패했습니다: ${data.error || 'OpenAI API 한도 초과 또는 302.ai 모델 권한 부족'}`)
+        alert(`AI 기획 재생성에 실패했습니다: ${data.error || 'AI 모델 요청을 처리하지 못했습니다'}`)
       }
     } catch (e) {
       console.error(e)

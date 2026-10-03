@@ -7,6 +7,12 @@ import {
   parsePrivateStorageUri,
   validateLegacyPublicStemUploadSource,
 } from '@/lib/stems/stem-api'
+import {
+  MAX_VIRAL_JOBS_PER_GENERATION,
+  StorageCleanupPolicyError,
+  listViralCleanupPaths,
+  prepareViralCleanupJobs,
+} from '../../../../worker/storage-cleanup-policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -139,6 +145,20 @@ function stripPrivateStemReferences(record: Record<string, unknown>): void {
   }
 }
 
+function stripPrivateGenerationMetadata(record: Record<string, unknown>): void {
+  if (typeof record.license_hash !== 'string') return
+  try {
+    const metadata: unknown = JSON.parse(record.license_hash)
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return
+    if (!Object.prototype.hasOwnProperty.call(metadata, 'audioPersistence')) return
+    const publicMetadata = { ...metadata } as Record<string, unknown>
+    delete publicMetadata.audioPersistence
+    record.license_hash = JSON.stringify(publicMetadata)
+  } catch {
+    // Preserve legacy non-JSON license values; they have no persistence manifest.
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -198,6 +218,7 @@ export async function GET(request: NextRequest) {
       // 공개 음원도 소유자가 아니면 개인 식별 필드를 마스킹한다.
       if (data && !isOwner) {
         stripPrivateStemReferences(data)
+        stripPrivateGenerationMetadata(data)
         delete data.user_id
         delete data.email
         delete data.user_email
@@ -241,6 +262,7 @@ export async function GET(request: NextRequest) {
               sibling = null
             } else if (!siblingIsOwner) {
               stripPrivateStemReferences(sibling)
+              stripPrivateGenerationMetadata(sibling)
               delete sibling.user_id
               delete sibling.email
               delete sibling.user_email
@@ -273,6 +295,31 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
+    // Completed pet videos live in the durable video-job table. Attach only the
+    // current owner's final result to their dashboard audio rows.
+    const petVideos = new Map<string, string>()
+    const petPosters = new Map<string, string>()
+    if (scope === 'dashboard' && loggedInUserId) {
+      const { data: jobs, error: jobError } = await serviceSupabase
+        .from('viral_pet_jobs')
+        .select('state')
+        .eq('user_id', loggedInUserId)
+        .eq('status', 'completed')
+        .order('updated_at', { ascending: false })
+      if (jobError) {
+        return NextResponse.json({ error: '완성 영상 목록을 불러오지 못했습니다' }, { status: 503 })
+      }
+      for (const job of jobs || []) {
+        const trackId = job.state?.audio?.trackId
+        const videoUrl = job.state?.videoUrl
+        if (typeof trackId === 'string' && typeof videoUrl === 'string' && isHttpAssetUrl(videoUrl) && !petVideos.has(trackId)) {
+          petVideos.set(trackId, videoUrl)
+          const poster = job.state?.shots?.[0]?.keyframeUrl
+          if (typeof poster === 'string' && isHttpAssetUrl(poster)) petPosters.set(trackId, poster)
+        }
+      }
+    }
+
     const filtered = (data || [])
       .filter(item => !item.title?.includes('VoiceDNA Demo'))
       .filter(item => {
@@ -292,7 +339,14 @@ export async function GET(request: NextRequest) {
           delete rest.email
           delete rest.user_email
           stripPrivateStemReferences(rest)
+          stripPrivateGenerationMetadata(rest)
           return rest
+        }
+        const petVideo = petVideos.get(item.id)
+        if (petVideo) {
+          let metadata: Record<string, unknown> = {}
+          try { metadata = JSON.parse(item.license_hash || '{}') } catch { /* Preserve the audio row below. */ }
+          return { ...item, video_url: petVideo, ...(petPosters.has(item.id) ? { cover_art_url: petPosters.get(item.id), thumbnail_url: petPosters.get(item.id) } : {}), license_hash: JSON.stringify({ ...metadata, sourceMenu: 'viral-cf', video_url: petVideo }) }
         }
         return item
       })
@@ -341,6 +395,28 @@ export async function DELETE(request: NextRequest) {
 
     if (!existing || existing.user_id !== user.id) {
       return NextResponse.json({ error: '권한이 없습니다 (소유자가 아님)' }, { status: 403 })
+    }
+
+    // Resolve the JSON-era relationship through the generated relational key.
+    // The RPC locks and rechecks this exact set before deleting either table.
+    const { data: linkedViralJobs, error: linkedViralJobsError } = await serviceSupabase
+      .from('viral_pet_jobs')
+      .select('id,user_id,status')
+      .eq('generation_id', id)
+      .order('id', { ascending: true })
+      .limit(MAX_VIRAL_JOBS_PER_GENERATION + 1)
+    if (linkedViralJobsError) {
+      console.error('[API/generations] Viral Shorts 연결 조회 실패:', linkedViralJobsError.message)
+      return NextResponse.json({ error: '연결된 Viral Shorts 작업을 확인하지 못했습니다.' }, { status: 503 })
+    }
+    let viralJobs: Array<{ jobId: string; prefix: string }>
+    try {
+      viralJobs = prepareViralCleanupJobs(linkedViralJobs || [], user.id)
+    } catch (error) {
+      const message = error instanceof StorageCleanupPolicyError
+        ? error.message
+        : '연결된 Viral Shorts 작업을 안전하게 확인하지 못했습니다.'
+      return NextResponse.json({ error: message }, { status: 409 })
     }
 
     let metadata: Record<string, unknown> = {}
@@ -526,6 +602,23 @@ export async function DELETE(request: NextRequest) {
       privateSource: [...privateSourcePaths],
       privateOutputs: [...privateOutputPaths],
       publicAssets: [...publicSourcePaths, ...publicOutputPaths],
+      viralJobs,
+    }
+
+    // Storage has no atomic recursive delete. Enumerate a bounded, validated
+    // set now for best-effort cleanup; the durable worker enumerates the same
+    // exact job prefixes again after the database transaction commits.
+    let viralAssetPaths: string[]
+    try {
+      viralAssetPaths = await listViralCleanupPaths(
+        serviceSupabase.storage.from('melodio-assets'),
+        viralJobs,
+      )
+    } catch (error) {
+      const message = error instanceof StorageCleanupPolicyError
+        ? error.message
+        : 'Viral Shorts 저장소 정리 목록을 확인하지 못했습니다.'
+      return NextResponse.json({ error: message }, { status: 409 })
     }
 
     const requiresSafetyRecheck = isExternalStemUpload
@@ -533,6 +626,7 @@ export async function DELETE(request: NextRequest) {
       || uniqueArtifactAttempts.length > 0
       || legacyBackfillAttempts.length > 0
       || legacyOutputBackfillAttempts.length > 0
+      || viralJobs.length > 0
     // Insert the durable cleanup task in a future-due state in the same
     // transaction as the generation deletion. This prevents the worker from
     // consuming the task while this request is still doing immediate cleanup.
@@ -551,6 +645,31 @@ export async function DELETE(request: NextRequest) {
     })
     if (deleteError) {
       console.error('[API/generations] DELETE transaction 에러:', deleteError.message)
+      if (deleteError.message.includes('VIRAL_JOB_NOT_TERMINAL')) {
+        return NextResponse.json({
+          error: 'Viral Shorts 작업 상태가 변경되었습니다. 완료 후 다시 시도해 주세요.',
+        }, { status: 409 })
+      }
+      if (deleteError.message.includes('VIRAL_CLEANUP_MANIFEST_MISMATCH')) {
+        return NextResponse.json({
+          error: '연결된 Viral Shorts 작업이 변경되었습니다. 새로고침 후 다시 시도해 주세요.',
+        }, { status: 409 })
+      }
+      if (deleteError.message.includes('GENERATION_DELETE_MISMATCH')) {
+        return NextResponse.json({
+          error: '음원 상태가 변경되었습니다. 새로고침 후 다시 시도해 주세요.',
+        }, { status: 409 })
+      }
+      if (deleteError.message.includes('VIRAL_JOB_LIMIT')) {
+        return NextResponse.json({
+          error: '연결된 Viral Shorts 작업 수가 안전 한도를 초과했습니다. 관리자 점검이 필요합니다.',
+        }, { status: 409 })
+      }
+      if (deleteError.message.includes('VIRAL_JOB_OWNER_MISMATCH') || deleteError.message.includes('VIRAL_JOB_DELETE_MISMATCH')) {
+        return NextResponse.json({
+          error: '연결된 Viral Shorts 작업의 무결성을 확인하지 못했습니다. 관리자 점검이 필요합니다.',
+        }, { status: 409 })
+      }
       return NextResponse.json({ error: '음원 삭제 준비에 실패했습니다.' }, { status: 500 })
     }
     if (!deleted) {
@@ -573,7 +692,7 @@ export async function DELETE(request: NextRequest) {
     await Promise.all([
       cleanupStorage(PRIVATE_STEM_BUCKET, [...privateSourcePaths]),
       cleanupStorage(PRIVATE_STEM_OUTPUT_BUCKET, [...privateOutputPaths]),
-      cleanupStorage('melodio-assets', [...publicSourcePaths, ...publicOutputPaths]),
+      cleanupStorage('melodio-assets', [...publicSourcePaths, ...publicOutputPaths, ...viralAssetPaths]),
     ])
     if (cleanupFailures.length > 0) {
       console.error('[API/generations] DELETE 후 즉시 Stem 객체 정리 일부 실패:', cleanupFailures)

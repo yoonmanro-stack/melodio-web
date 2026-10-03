@@ -1,17 +1,32 @@
 /**
- * Melodio — GPT-5.5-pro 기반 가사, 제목, 태그 및 10곡 플레이리스트 생성 엔진
+ * Melodio — GPT-5.6-sol 기반 가사, 제목, 태그 및 10곡 플레이리스트 생성 엔진
  */
 
 import type { LyricsSection, LyricsSectionType } from '@/types'
 import type { PlaylistGeneratorResult, PlaylistTrack } from '@/types/playlist'
-import { matchPlaybooksByPrompt } from '@/lib/db/knowledge'
+import type { CurationPlaybook } from '@/lib/db/knowledge'
 import { generateBoundlessCreativeVector } from '@/lib/engines/infinite-story-matrix'
 
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? ''
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
+export const LYRICS_MODEL = 'gpt-5.6-sol' as const
+export const LYRICS_PROVIDER_TIMEOUT_MS = 180_000
+
+export interface LyricsModelUsage {
+  requestedModel: typeof LYRICS_MODEL
+  actualModel: string
+  reasoningEffort: 'high'
+  inputTokens: number
+  outputTokens: number
+  reasoningTokens?: number
+}
+
+interface LyricsGeneratorDependencies {
+  apiKey?: string
+  fetch?: typeof fetch
+}
 
 import { loadVLEMasterPrompt } from '@/lib/vle/vleEngine';
-import { buildStructureDirective, VIRAL_SONG_SPEC } from '@/lib/vle/viralSongSpec';
+import { buildStructureDirective } from '@/lib/vle/viralSongSpec';
 
 export interface GenerateLyricsParams {
   stylePrompt: string
@@ -38,11 +53,29 @@ export interface LyricsGeneratorResult {
 interface GPTLyricsSection {
   type: LyricsSectionType
   content: string
+  description?: string
+}
+
+interface GPTLyricsPayload {
+  title?: string
+  playlistTitle?: string
+  youtubeDescription?: string
+  youtubeTags?: string
+  snsHashtags?: string
+  lyricsPrompt?: string
+  sections?: GPTLyricsSection[]
+  tracks?: Array<{ trackNumber?: number; title?: string; youtubeTags?: string; snsHashtags?: string; sections?: GPTLyricsSection[] }>
+}
+
+function hasLyricsSections(value: unknown): value is GPTLyricsSection[] {
+  return Array.isArray(value) && value.length > 0 && value.every(section => section
+    && typeof section.content === 'string' && (section.description === undefined || typeof section.description === 'string'))
+    && value.some(section => section.content.trim())
 }
 
 /**
  * GPT를 활용하여 단일 곡 또는 플레이리스트를 일괄 생성
- * 모델 폴백 체인: gpt-5 → gpt-4o → gpt-4o-mini
+ * 단일 GPT-5.6-sol 요청. 모델 오류를 샘플 가사나 다른 모델로 대체하지 않는다.
  */
 interface GenreThematicProfile {
   genre: 'trot' | 'citypop' | 'joseon' | 'lofi' | 'acoustic' | 'kpop' | 'rock' | 'chanson' | 'general'
@@ -212,8 +245,11 @@ function randomizeStylePrompt(baseStyle: string, genreProfile?: GenreThematicPro
 }
 
 export async function generateLyrics(
-  params: GenerateLyricsParams
-): Promise<(LyricsGeneratorResult | PlaylistGeneratorResult) & { stylePrompt?: string }> {
+  params: GenerateLyricsParams,
+  dependencies: LyricsGeneratorDependencies = {}
+): Promise<(LyricsGeneratorResult | PlaylistGeneratorResult) & { stylePrompt?: string; modelUsage?: LyricsModelUsage }> {
+  const apiKey = dependencies.apiKey ?? process.env.OPENAI_API_KEY ?? ''
+  if (!apiKey) throw new Error('가사 생성에 필요한 OpenAI API 설정이 없습니다.')
   const isPlaylist = !!params.isPlaylistMode
   const trackCount = params.trackCount ?? 10
   
@@ -224,18 +260,6 @@ export async function generateLyrics(
   const randomizedStylePrompt = randomizeStylePrompt(params.stylePrompt, genreProfile)
   // Unique seed to force the LLM to write distinct lyrics and titles
   const seed = Math.random().toString(36).substring(2, 10)
-
-  if (!OPENAI_API_KEY) {
-    console.log(`[Lyrics Generator] API Key 미검출로 Mock ${isPlaylist ? '플레이리스트' : '단일 가사'}를 생성합니다.`)
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    const mockResult = isPlaylist
-      ? getMockPlaylistResult(randomizedStylePrompt, params.topic, trackCount)
-      : getMockLyricsResult(randomizedStylePrompt, params.topic)
-    return {
-      ...mockResult,
-      stylePrompt: randomizedStylePrompt
-    }
-  }
 
   let languageInstruction = 'Korean'
   if (params.language === 'en') {
@@ -269,13 +293,13 @@ export async function generateLyrics(
   // Match playbooks from DB (Obsidian synced)
   let playbookInstructions = ''
   try {
-    let matchedPlaybook: any = null
+    let matchedPlaybook: CurationPlaybook | null = null
     if (params.presetId) {
       const { getPlaybookByKey } = await import('@/lib/db/knowledge')
       matchedPlaybook = await getPlaybookByKey(params.presetId)
     }
 
-    let playbooks: any[] = []
+    let playbooks: CurationPlaybook[] = []
     if (matchedPlaybook) {
       playbooks = [matchedPlaybook]
     } else {
@@ -349,80 +373,58 @@ Vocal Target: ${params.vocalGender || 'mixed'}
 Random seed token: ${seed}.
 ${narrativeDirective}`
 
-  // 모델 폴백 체인 (공식 OpenAI 최신 플래그십 gpt-5.6-sol 1순위)
-  const MODEL_CHAIN = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-4o', 'gpt-4o-mini']
-  let parsed: any = null
-
-  async function attemptGeneration(apiKeyStr: string, apiUrlStr: string, modelChain: string[]): Promise<any> {
-    for (const model of modelChain) {
-      try {
-        console.log(`[Lyrics Generator] Trying model ${model} with endpoint ${apiUrlStr}...`)
-        const response = await fetch(apiUrlStr, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${apiKeyStr}`,
-          },
-          body: JSON.stringify({
-            model,
-            messages: [
-              { role: 'system', content: systemPrompt },
-              { role: 'user', content: userPrompt },
-            ],
-            response_format: { type: 'json_object' },
-            temperature: 0.92,
-            presence_penalty: 0.6,
-            frequency_penalty: 0.4,
-          }),
-        })
-
-        if (!response.ok) {
-          const errText = await response.text()
-          console.warn(`[Lyrics Generator] ${model} failed: HTTP ${response.status} - ${errText}`)
-          continue
-        }
-
-        const data = await response.json()
-        const resultText = data.choices[0]?.message?.content ?? '{}'
-        return JSON.parse(resultText)
-      } catch (err: any) {
-        console.warn(`[Lyrics Generator] Exception with model ${model}: ${err.message}`)
-      }
-    }
-    return null
+  // Preserve the Chat Completions endpoint and JSON contract; high effort needs
+  // a completion budget for reasoning as well as a complete playlist response.
+  let response: Response
+  try {
+    response = await (dependencies.fetch || fetch)(OPENAI_API_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model: LYRICS_MODEL,
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
+        response_format: { type: 'json_object' },
+        reasoning_effort: 'high',
+        max_completion_tokens: 32_000,
+      }),
+      signal: AbortSignal.timeout(LYRICS_PROVIDER_TIMEOUT_MS),
+    })
+  } catch { throw new Error('GPT-5.6-sol 가사 생성 연결이 중단되었습니다. 다시 시도해 주세요.') }
+  if (!response.ok) {
+    await response.body?.cancel()
+    throw new Error(`GPT-5.6-sol 가사 생성 요청이 실패했습니다 (HTTP ${response.status}).`)
   }
-
-  // 1단계: 302.ai 프록시 API 시도 (302.AI 전용 모델 gpt-5.5 / gpt-5.4 / gpt-5-mini)
-  if (process.env.SUNO_API_KEY) {
-    console.log('[Lyrics Generator] Attempting 302.ai Proxy API call...')
-    const backupKey = process.env.SUNO_API_KEY
-    const apiBase = (process.env.SUNO_API_URL || 'https://api.302.ai').replace(/\/+$/, '')
-    const backupUrl = `${apiBase}/v1/chat/completions`
-    const BACKUP_MODEL_CHAIN = ['gpt-5.5', 'gpt-5.4', 'gpt-5-mini', 'gpt-4o', 'gpt-4o-mini']
-    parsed = await attemptGeneration(backupKey, backupUrl, BACKUP_MODEL_CHAIN)
-  }
-
-  // 2단계: 실패 시 공식 OpenAI API 시도 (백업)
-  if (!parsed && OPENAI_API_KEY) {
-    console.log('[Lyrics Generator] 302.ai failed or not set, falling back to official OpenAI...')
-    parsed = await attemptGeneration(OPENAI_API_KEY, OPENAI_API_URL, MODEL_CHAIN)
-  }
-
-  if (!parsed) {
-    console.warn('[Lyrics Generator] All OpenAI and 302.ai attempts failed, falling back to mock data.')
-    return isPlaylist
-      ? getMockPlaylistResult(params.stylePrompt, params.topic, trackCount)
-      : getMockLyricsResult(params.stylePrompt, params.topic)
-  }
+  let parsed: GPTLyricsPayload
+  let modelUsage: LyricsModelUsage
+  try {
+    const data = await response.json()
+    if (typeof data.model !== 'string' || (data.model !== LYRICS_MODEL && !data.model.startsWith(`${LYRICS_MODEL}-`))) throw new Error('Model mismatch')
+    const usage = data.usage
+    if (!Number.isInteger(usage?.prompt_tokens) || usage.prompt_tokens < 0
+        || !Number.isInteger(usage?.completion_tokens) || usage.completion_tokens < 0) throw new Error('Missing token usage')
+    const reasoningTokens = usage.completion_tokens_details?.reasoning_tokens
+    if (reasoningTokens !== undefined && (!Number.isInteger(reasoningTokens) || reasoningTokens < 0)) throw new Error('Invalid reasoning usage')
+    modelUsage = { requestedModel: LYRICS_MODEL, actualModel: data.model, reasoningEffort: 'high',
+      inputTokens: usage.prompt_tokens, outputTokens: usage.completion_tokens,
+      ...(reasoningTokens !== undefined ? { reasoningTokens } : {}) }
+    const choice = data.choices?.[0]
+    const content = choice?.message?.content
+    if (choice?.message?.refusal || (choice?.finish_reason && choice.finish_reason !== 'stop')
+        || typeof content !== 'string' || !content.trim() || content.length > 200_000) throw new Error('Incomplete lyrics')
+    parsed = JSON.parse(content) as GPTLyricsPayload
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid lyrics')
+  } catch { throw new Error('GPT-5.6-sol 가사 생성 응답을 확인하지 못했습니다. 다시 시도해 주세요.') }
 
   if (isPlaylist) {
-    if (!parsed.playlistTitle || !parsed.tracks || !Array.isArray(parsed.tracks)) {
+    if (typeof parsed.playlistTitle !== 'string' || !parsed.playlistTitle.trim()
+        || !Array.isArray(parsed.tracks) || parsed.tracks.length !== trackCount
+        || parsed.tracks.some(track => !track || !hasLyricsSections(track.sections))) {
       throw new Error('Invalid playlist response structure from OpenAI')
     }
     
-    const tracks: PlaylistTrack[] = parsed.tracks.map((t: any, tIdx: number) => {
+    const tracks: PlaylistTrack[] = parsed.tracks.map((t, tIdx: number) => {
       let sCounter = 0
-      const sections: LyricsSection[] = (t.sections || []).map((s: any) => {
+      const sections: LyricsSection[] = (t.sections || []).map(s => {
         let resolvedType = (s.type || 'verse').toLowerCase().trim() as LyricsSectionType
         if (!['intro', 'verse', 'pre-chorus', 'chorus', 'bridge', 'outro'].includes(resolvedType)) {
           resolvedType = 'verse'
@@ -451,14 +453,15 @@ ${narrativeDirective}`
       snsHashtags: parsed.snsHashtags || '',
       tracks,
       stylePrompt: randomizedStylePrompt,
+      modelUsage,
     }
   } else {
-    if (!parsed.title || !parsed.sections || !Array.isArray(parsed.sections)) {
+    if (typeof parsed.title !== 'string' || !parsed.title.trim() || !hasLyricsSections(parsed.sections)) {
       throw new Error('Invalid single track response structure from OpenAI')
     }
 
     let counter = 0
-    const sections = parsed.sections.map((s: any) => {
+    const sections = parsed.sections.map(s => {
       let resolvedType = (s.type || 'verse').toLowerCase().trim() as LyricsSectionType
       if (!['intro', 'verse', 'pre-chorus', 'chorus', 'bridge', 'outro'].includes(resolvedType)) {
         resolvedType = 'verse'
@@ -475,7 +478,7 @@ ${narrativeDirective}`
     
     let lyricsPrompt = parsed.lyricsPrompt;
     if (!lyricsPrompt) {
-      lyricsPrompt = sections.map((s: any) => `[${s.type.toUpperCase()}]\n${s.content}`).join('\n\n');
+      lyricsPrompt = sections.map(s => `[${s.type.toUpperCase()}]\n${s.content}`).join('\n\n');
     }
 
     return {
@@ -485,6 +488,7 @@ ${narrativeDirective}`
       sections,
       stylePrompt: randomizedStylePrompt,
       lyricsPrompt,
+      modelUsage,
     }
   }
 }
@@ -749,131 +753,4 @@ Rules:
 4. Strictly return valid JSON.
 ${playbookInstructions || ''}
 `
-}
-
-/** Mock 단일 곡 데이터 Fallback */
-function getMockLyricsResult(stylePrompt: string, topic?: string): LyricsGeneratorResult {
-  const resolvedTopic = topic || '새로운 시작'
-  
-  let title = '눈부신 내일의 노래'
-  if (stylePrompt.toLowerCase().includes('lo-fi') || stylePrompt.toLowerCase().includes('jazz')) {
-    title = `비 내리는 가을 밤의 ${resolvedTopic}`
-  } else if (stylePrompt.toLowerCase().includes('k-pop') || stylePrompt.toLowerCase().includes('pop')) {
-    title = `Love Signal (${resolvedTopic})`
-  }
-
-  const sections: LyricsSection[] = [
-    {
-      id: `mock-intro-${Date.now()}`,
-      type: 'intro',
-      content: '(감미로운 인트로 선율 흐름)\n어둠 속을 헤매이던 시간들\n이제 빛을 향해 걸어가려 해',
-    },
-    {
-      id: `mock-verse-1-${Date.now()}`,
-      type: 'verse',
-      content: `차가운 바람이 불어오던 날들\n내 마음에 남은 작은 속삭임\n${resolvedTopic}의 순간이 다가와\n조용히 눈을 떠 바라보네`,
-    },
-    {
-      id: `mock-chorus-${Date.now()}`,
-      type: 'chorus',
-      content: `우리는 날아올라 저 하늘 높이\n다시 꿈을 향해 노래할 거야\n포기하지 마, 너와 나 함께라면\n눈부신 아침이 우리를 반겨줄 테니`,
-    },
-    {
-      id: `mock-bridge-${Date.now()}`,
-      type: 'bridge',
-      content: '힘들고 지칠 때도 있겠지만\n약속할게, 네 곁에 언제나\n서로의 손을 꼭 잡고 걸어가',
-    },
-    {
-      id: `mock-outro-${Date.now()}`,
-      type: 'outro',
-      content: '(점점 멀어지는 비트와 함께)\n우리만의 멜로디가 널 울릴 때\n끝나지 않을 노래를 불러',
-    },
-  ]
-
-  return {
-    title,
-    youtubeTags: `${resolvedTopic}, lofi, chill beat, study bgm, relaxing music, focus piano, sleep song`,
-    snsHashtags: `#${resolvedTopic.replace(/\s+/g, '')} #lofi #chillhop #playlist #studybgm #youtubeplaylist`,
-    sections,
-    lyricsPrompt: sections.map((s: any) => `[${s.type.toUpperCase()}]\n${s.content}`).join('\n\n'),
-  }
-}
-
-/** Mock 플레이리스트 데이터 Fallback */
-function getMockPlaylistResult(stylePrompt: string, topic?: string, trackCount: number = 10): PlaylistGeneratorResult {
-  const resolvedTopic = topic || '따뜻한 감성 카페'
-  const playlistTitle = `[Playlist] ${resolvedTopic}에서 듣는 차분한 음악`
-  
-  const baseTitles = [
-    '첫 커피의 온도',
-    '창가에 부딪치는 빗방울',
-    '오후 3시의 나른함',
-    '작은 전등 불빛 아래',
-    '시간이 멈춘 공간',
-    '당신과의 조용한 대화',
-    '오래된 책장 냄새',
-    '어스름해지는 거리',
-    '식어가는 컵을 쥐고',
-    '조용히 문을 닫으며'
-  ]
-
-  const trackTitles: string[] = []
-  for (let i = 0; i < trackCount; i++) {
-    if (i < baseTitles.length) {
-      trackTitles.push(baseTitles[i])
-    } else {
-      trackTitles.push(`${resolvedTopic}의 순간 #${i + 1}`)
-    }
-  }
-
-  const tracks: PlaylistTrack[] = trackTitles.map((title, idx) => {
-    const trackNum = idx + 1
-    const sections: LyricsSection[] = [
-      {
-        id: `mock-pl-intro-${idx}-${Date.now()}`,
-        type: 'intro',
-        content: `(Track ${trackNum} - 어쿠스틱 악기 인트로 선율)`,
-      },
-      {
-        id: `mock-pl-verse-${idx}-${Date.now()}`,
-        type: 'verse',
-        content: `소박하게 흘러가는 오늘 하루의 끝자락\n마음 한구석에 쌓아둔 사소한 기억들\n${title}의 떨림처럼 조용히 스며드네\n우리는 이곳에서 가만히 숨을 고르네`,
-      },
-      {
-        id: `mock-pl-chorus-${idx}-${Date.now()}`,
-        type: 'chorus',
-        content: `이 따스한 멜로디 속에 내 모든 걸 기대어 봐\n시간은 천천히 흐르고 우린 자유로워질 거야\n어두운 밤이 찾아와도 우리만의 작은 쉼터\n이 노래와 함께 영원히 머물러 줄게`,
-      },
-      {
-        id: `mock-pl-outro-${idx}-${Date.now()}`,
-        type: 'outro',
-        content: `(잔잔하게 페이드 아웃 되는 엠비언트)\n끝나가는 소절마다 남겨진 그대의 미소\n편안한 밤이 되기를`,
-      },
-    ]
-
-    return {
-      trackNumber: trackNum,
-      title,
-      youtubeTags: `${title}, ${resolvedTopic}, lofi BGM, curating, chill music`,
-      snsHashtags: `#track${trackNum} #lofi #chillhop #studybgm #${resolvedTopic.replace(/\s+/g, '')}`,
-      sections,
-    }
-  })
-
-  // 유튜브 설명 조립
-  const timeLines = trackTitles.map((t, idx) => {
-    const mins = idx * 3
-    const timeStr = mins < 10 ? `0${mins}:00` : `${mins}:00`
-    return `${timeStr} 트랙 ${idx + 1}. ${t}`
-  }).join('\n')
-
-  const youtubeDescription = `안녕하세요. 멜로디오 AI 큐레이터입니다.\n${resolvedTopic}을 테마로 기획된 감성 플레이리스트입니다. 지치고 바쁜 일상 속에서 잠시나마 편안한 휴식과 몰입의 시간이 되시길 바랍니다.\n구독과 좋아요는 다음 플레이리스트 제작에 큰 힘이 됩니다. ☕✨\n\n[Timeline]\n${timeLines}`
-
-  return {
-    playlistTitle,
-    youtubeDescription,
-    youtubeTags: `${resolvedTopic}, 플레이리스트, 공부 BGM, 카페 음악, 힐링 사운드, lofi playlist, youtube bgm`,
-    snsHashtags: `#${resolvedTopic.replace(/\s+/g, '')} #플레이리스트 #lofi #playlist #유튜브 #감성음악`,
-    tracks,
-  }
 }

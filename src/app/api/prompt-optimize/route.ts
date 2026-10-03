@@ -4,6 +4,8 @@ import { createClient } from '@/lib/supabase/server'
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? ''
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 
+export const maxDuration = 60
+
 const OFFICIAL_PRESETS_MAP: Record<string, string> = {
   'developer-debugging': 'A dark cyberpunk synthwave track designed for deep cognitive focus and backend debugging, featuring a slow-burning tension. A repetitive hypnotic 16th-note retro arpeggiated synthesizer in D minor driving the core progression. A gritty analog saw lead synth weaves a sharp cybernetic melody alongside clean, metallic pluck synths that delay in a wide stereo field. Deep vintage analog pads and drone-like bass synths swell slowly, creating a subterranean atmosphere. The rhythm section is anchored by a tight, punchy retro electronic snare, a heavy sidechained 808 kick, and crisp metallic hi-hats. Subtle mechanical keyboard brown-switch typing foley and server room air-conditioning ambient white noise are blended smoothly into the background. No vocals, purely instrumental, 105 BPM, Key of D minor, [High-fidelity studio mastering, professional grade audio]',
   'iced-oolong-tea': 'A mellow and warm lo-fi jazzhop track evoking a peaceful Sunday afternoon inside a quiet bedroom. A warm, clean acoustic guitar gently plays repetitive warm jazzy seven-chords with soft fingerpicked details and subtle slides. A deep, woody acoustic upright double bass follows the progression with a slow, laid-back syncopated groove. The drums are minimal and organic, consisting of a dusty vinyl snare on the backbeat and a quiet brushed snare pattern with crisp, warm hi-hats. Faint tea pouring foley, pages turning, soft wind chimes, and a constant warm vinyl crackle with tape hiss texture the soundstage to create an inspiring study background music. Cozy room acoustics and a nostalgic vibe, 78 BPM, instrumental only, no vocals, [High-fidelity studio mastering, professional grade audio]',
@@ -15,7 +17,7 @@ const OFFICIAL_PRESETS_MAP: Record<string, string> = {
   'joseon-hip-hop': 'Joseon hip hop, gugak fusion rap, traditional Korean instruments, gayageum pluck, daegeum flute, heavy boom bap beat, epic brass, raw expressive rap, East Asian scale, key of E minor, 85 BPM, spacious room reverb, featuring warm Fender Rhodes chords, [High-fidelity studio mastering, professional grade audio], key of A major, 102 BPM, subtle cassette tape hiss, featuring smooth saxophone riffs, 혼성 보컬, 판소리식 꺾기와 멜로딕 훅, 웅장한 브라스 스탭'
 }
 
-const SYSTEM_PROMPT = `You are a professional music producer and prompt engineering expert for "Suno v5.5 Pro".
+const SYSTEM_PROMPT = `You are a professional music producer and prompt engineering expert for "Suno V6".
 Your task is to transform the user's natural language music description into an exceptionally high-quality, professional "Style Prompt" of 800–950 characters optimized specifically for the "Style of Music" field.
 
 RULES:
@@ -39,7 +41,7 @@ If the input mentions "Joseon", "Gugak", "조선", "국악", or Korean tradition
 Reference Quality Goal:
 1950s 1960s authentic retro French chanson, melancholic and elegant, vintage romantic Paris night atmosphere, clear expressive female vocal, intimate vocal close to mic, lyrics sung in French, cinematic old cafe ambience, slow 3/4 waltz rhythm, traditional acoustic instrumentation, soft accordion melody, warm grand piano chords, acoustic upright bass, delicate brushed drums, emotional passionate chorus, nostalgic and poetic mood, retro analog mastering, warm vinyl texture, lo-fi hiss and crackle, no instrumental-only, no EDM, no rap, no modern pop, no autotune, no electronic synths, no electric guitar, no famous artist imitation, [High-fidelity studio mastering, professional grade audio]`
 
-const SYSTEM_PROMPT_VIRAL = `You are a professional music producer specializing in creating viral TikTok/Shorts parody songs and TV commercial jingles on "Suno v5.5 Pro".
+const SYSTEM_PROMPT_VIRAL = `You are a professional music producer specializing in creating viral TikTok/Shorts parody songs and TV commercial jingles on "Suno V6".
 Your task is to transform the user's natural language music description into a highly optimized, descriptive "Style Prompt" of 250–350 characters.
 
 RULES:
@@ -165,10 +167,7 @@ export async function POST(request: NextRequest) {
       console.warn('[PromptOptimize] Failed to fetch liked & retention preferences:', dbErr)
     }
 
-    const SUNO_API_KEY = process.env.SUNO_API_KEY ?? ''
-    const SUNO_API_URL = (process.env.SUNO_API_URL || 'https://api.302.ai').replace(/\/+$/, '')
-
-    if (!OPENAI_API_KEY && !SUNO_API_KEY) {
+    if (!OPENAI_API_KEY) {
       // Mock 모드: 간단한 규칙 기반 확장
       const mockOptimized = `${prompt}, professional studio production, warm analog mix, dynamic arrangement, detailed instrumentation, cinematic atmosphere, [High-fidelity studio mastering, professional grade audio]`
       return NextResponse.json({ optimized: mockOptimized })
@@ -216,21 +215,22 @@ The user skipped tracks containing these styles very quickly (under 3 seconds). 
                 { role: 'system', content: finalSystemPrompt },
                 { role: 'user', content: prompt },
               ],
-              temperature: 0.8,
-              max_tokens: 400,
+              reasoning_effort: 'low',
+              max_completion_tokens: 4096,
             }),
+            signal: AbortSignal.timeout(45_000),
           })
 
           if (!response.ok) {
-            const errorBody = await response.text()
-            lastError = `${model}: HTTP ${response.status} - ${errorBody}`
+            lastError = `${model}: HTTP ${response.status}`
             console.warn(`[PromptOptimize] ${lastError}`)
             continue
           }
 
           const data = await response.json()
-          const content = data.choices?.[0]?.message?.content?.trim() ?? prompt
-          return { optimized: content, model }
+          const content = data.choices?.[0]?.message?.content?.trim()
+          if (content) return { optimized: content, model }
+          lastError = `${model}: empty response`
         } catch (fetchError: any) {
           lastError = `${model}: ${fetchError.message || fetchError}`
           console.warn(`[PromptOptimize] Fetch error for ${model}:`, fetchError)
@@ -240,20 +240,8 @@ The user skipped tracks containing these styles very quickly (under 3 seconds). 
       return null
     }
 
-    let result = null
-
-    // 1단계: 302.ai 프록시 API (302.AI 전용 모델 gpt-5.5 / gpt-5.4 / gpt-5-mini)
-    if (SUNO_API_KEY) {
-      const PROXY_URL = `${SUNO_API_URL}/v1/chat/completions`
-      const PROXY_MODEL_CHAIN = ['gpt-5.5', 'gpt-5.4', 'gpt-5-mini', 'gpt-4o', 'gpt-4o-mini']
-      result = await attemptCall(SUNO_API_KEY, PROXY_URL, PROXY_MODEL_CHAIN)
-    }
-
-    // 2단계: 실패 시 공식 OpenAI API 백업 시도 (OpenAI 공식 최신 플래그십 gpt-5.6-sol / gpt-5.6-terra / gpt-5.6-luna)
-    if (!result && OPENAI_API_KEY) {
-      const OFFICIAL_MODEL_CHAIN = ['gpt-5.6-sol', 'gpt-5.6-terra', 'gpt-5.6-luna', 'gpt-4o', 'gpt-4o-mini']
-      result = await attemptCall(OPENAI_API_KEY, OPENAI_API_URL, OFFICIAL_MODEL_CHAIN)
-    }
+    const OFFICIAL_MODEL_CHAIN = ['gpt-5.6-sol']
+    const result = await attemptCall(OPENAI_API_KEY, OPENAI_API_URL, OFFICIAL_MODEL_CHAIN)
 
     if (result && result.optimized && result.optimized.trim().length > 0) {
       optimized = result.optimized

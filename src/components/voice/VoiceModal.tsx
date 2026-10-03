@@ -18,7 +18,8 @@ export function VoiceModal() {
     setActiveVoice,
     updateVoice,
     deleteVoice,
-    toggleFavorite
+    toggleFavorite,
+    openCreateModal,
   } = useVoice();
 
   const [tab, setTab] = useState<"my" | "favorites">("my");
@@ -181,27 +182,26 @@ export function VoiceModal() {
           </div>
         </div>
 
-        {/* 실제 목소리 등록은 준비 중 */}
+        {/* Suno V6 custom voice registration */}
         <div className="px-6 mt-3">
           <button
             type="button"
-            disabled
-            title="목소리 녹음·업로드 등록 기능은 준비 중입니다."
-            className="w-full relative overflow-hidden rounded-2xl p-4 flex items-center justify-between border border-white/10 bg-zinc-900/60 text-left opacity-70 cursor-not-allowed"
+            onClick={() => { closeVoiceModal(); openCreateModal(); }}
+            className="w-full relative overflow-hidden rounded-2xl p-4 flex items-center justify-between border border-fuchsia-500/25 bg-fuchsia-950/20 text-left hover:bg-fuchsia-950/35 cursor-pointer transition-colors"
           >
             <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-2xl bg-white/5 flex items-center justify-center text-zinc-500 shrink-0">
+              <div className="w-11 h-11 rounded-2xl bg-fuchsia-500/15 flex items-center justify-center text-fuchsia-300 shrink-0">
                 <Plus className="w-6 h-6 stroke-[2.5]" />
               </div>
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="font-bold text-zinc-300 text-base">목소리 등록</span>
-                  <span className="rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-300 border border-amber-500/20">준비 중</span>
+                  <span className="font-bold text-white text-base">목소리 등록</span>
+                  <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300 border border-emerald-500/20">Suno V6</span>
                 </div>
-                <p className="text-xs text-zinc-500 mt-0.5">녹음·업로드 기반 실제 목소리 등록은 아직 사용할 수 없습니다.</p>
+                <p className="text-xs text-zinc-400 mt-0.5">노래 샘플과 검증 문구 녹음으로 등록합니다.</p>
               </div>
             </div>
-            <ChevronRight className="w-5 h-5 text-zinc-600" />
+            <ChevronRight className="w-5 h-5 text-fuchsia-300" />
           </button>
         </div>
 

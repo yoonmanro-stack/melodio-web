@@ -1,98 +1,56 @@
-import { unstable_cache } from 'next/cache'
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { buildPublicViralVideoRows } from '@/lib/video/publicViralVideos'
 
-function parseMetadata(raw: unknown): Record<string, unknown> {
-  if (typeof raw !== 'string') return {}
-  try {
-    return JSON.parse(raw) as Record<string, unknown>
-  } catch {
-    return {}
+// Visibility changes and deleted generations must apply on the next read.
+export const dynamic = 'force-dynamic'
+const GENERATION_FIELDS = 'id,user_id,title,status,is_public,license_hash,created_at,cover_art_url'
+const JOB_FIELDS = 'user_id,status,updated_at,track_id:state->audio->>trackId,video_url:state->>videoUrl,poster_url:state->shots->0->>keyframeUrl'
+const PAGE_SIZE = 500
+
+type Row = Record<string, unknown>
+async function readPages(query: (from: number, to: number) => PromiseLike<{ data: unknown; error: unknown }>): Promise<Row[]> {
+  const rows: Row[] = []
+  for (let from = 0; ; from += PAGE_SIZE) {
+    const { data, error } = await query(from, from + PAGE_SIZE - 1)
+    if (error || !Array.isArray(data)) throw new Error('PUBLIC_VIDEO_READ_FAILED')
+    rows.push(...data as Row[])
+    if (data.length < PAGE_SIZE) return rows
   }
 }
-
-function readString(...values: unknown[]): string {
-  const value = values.find((item) => typeof item === 'string' && item.trim().length > 0)
-  return typeof value === 'string' ? value.trim() : ''
-}
-
-function readNumber(...values: unknown[]): number {
-  for (const value of values) {
-    const parsed = typeof value === 'number' ? value : Number(value)
-    if (Number.isFinite(parsed) && parsed >= 0) return parsed
-  }
-  return 0
-}
-
-const getCachedViralVideoRows = unstable_cache(
-  async () => {
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
-    if (!supabaseUrl || !serviceRoleKey) {
-      throw new Error('Supabase environment variables are missing')
-    }
-
-    const supabase = createClient(supabaseUrl, serviceRoleKey, {
-      auth: { persistSession: false },
-    })
-
-    const { data, error } = await supabase
-      .from('generations')
-      .select('id,title,status,license_hash,created_at,cover_art_url')
-      .eq('status', 'completed')
-      .order('created_at', { ascending: false })
-      .limit(240)
-
-    if (error) throw error
-
-    return ((data || []) as Array<Record<string, unknown>>).flatMap((row) => {
-      const metadata = parseMetadata(row.license_hash)
-      const source = readString(metadata.sourceMenu).toLowerCase()
-      const videoUrl = readString(metadata.video_url, metadata.grok_video_url, metadata.videoUrl)
-      const isViral = metadata.viralMode === true || source === 'viral' || source === 'viral-cf'
-
-      if (metadata.isPublic === false || !isViral || !videoUrl) return []
-
-      return [{
-        id: row.id,
-        title: row.title,
-        status: row.status,
-        is_public: true,
-        created_at: row.created_at,
-        play_count: readNumber(metadata.play_count, metadata.viewCount, metadata.view_count),
-        cover_art_url: row.cover_art_url,
-        license_hash: JSON.stringify({
-          sourceMenu: source,
-          viralMode: true,
-          video_url: videoUrl,
-          presetId: metadata.presetId,
-          tab_type: metadata.tab_type,
-          genCategory: metadata.genCategory,
-          genre: metadata.genre,
-          styleName: metadata.styleName,
-          brand_name: metadata.brand_name,
-        }),
-      }]
-    })
-  },
-  ['viral-video-library-v2'],
-  { revalidate: 30, tags: ['viral-video-library'] }
-)
 
 export async function GET() {
   try {
-    const generations = await getCachedViralVideoRows()
-    return NextResponse.json(
-      { generations },
-      {
-        headers: {
-          'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=300',
-        },
-      }
-    )
-  } catch (error) {
-    console.error('[api/viral-videos]', error)
-    return NextResponse.json({ error: 'Failed to load viral videos' }, { status: 500 })
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+    if (!url || !key) throw new Error('PUBLIC_VIDEO_CONFIGURATION')
+    const supabase = createClient(url, key, { auth: { persistSession: false } })
+    // Prefilter viral metadata before pagination; unrelated music cannot evict videos.
+    const [generations, jobs] = await Promise.all([
+      readPages((from, to) => supabase.from('generations').select(GENERATION_FIELDS)
+        .eq('status', 'completed').ilike('license_hash', '%viral%')
+        .order('created_at', { ascending: false }).order('id', { ascending: false }).range(from, to)),
+      readPages((from, to) => supabase.from('viral_pet_jobs').select(JOB_FIELDS)
+        .eq('status', 'completed').order('updated_at', { ascending: false })
+        .order('id', { ascending: false }).range(from, to)),
+    ])
+    const known = new Set(generations.map(row => row.id))
+    const trackIds = [...new Set(jobs.map(job => job.track_id)
+      .filter((id): id is string => typeof id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) && !known.has(id)))]
+    // Existing audio rows are authoritative for ownership, deletion and publication.
+    for (let offset = 0; offset < trackIds.length; offset += 100) {
+      const { data, error } = await supabase.from('generations').select(GENERATION_FIELDS)
+        .eq('status', 'completed').in('id', trackIds.slice(offset, offset + 100))
+      if (error) throw new Error('PUBLIC_VIDEO_READ_FAILED')
+      generations.push(...(data || []) as Row[])
+    }
+    return NextResponse.json({ generations: buildPublicViralVideoRows(generations, jobs) }, {
+      headers: { 'Cache-Control': 'no-store' },
+    })
+  } catch {
+    console.error('[api/viral-videos] PUBLIC_VIDEO_READ_FAILED')
+    return NextResponse.json({ error: 'Failed to load viral videos' }, {
+      status: 503, headers: { 'Cache-Control': 'no-store' },
+    })
   }
 }

@@ -6,7 +6,7 @@ import type { Preset } from '@/types'
 import { supabase } from '@/lib/supabase'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { MASTER_NICHE_SEEDS } from '@/data/nicheMasterSeeds'
-import { CHANNEL_CONCEPTS } from '@/app/(app)/style-library/page'
+import { CHANNEL_CONCEPTS } from '@/data/channelConcepts'
 
 interface CreatePresetModalProps {
   isOpen: boolean
@@ -19,6 +19,35 @@ interface CreatePresetModalProps {
 
 const EMOJIS = ['🎵', '📚', '🌧️', '☕', '🍷', '🚗', '🌙', '🎤', '🎬', '🏃', '🌿', '🔥', '💗', '🎸', '🎹', '🎧', '🎷', '🛸', '🌊', '✨']
 const SAMPLE_COLORS = ['#584072']
+
+interface PresetThumbnailConcept {
+  name: string
+  desc: string
+  inferredGenre: string
+  customPrompt: string
+  additionalRequest: string
+  videoPrompt?: string
+}
+
+function buildPresetThumbnailPrompt(concept: PresetThumbnailConcept): string {
+  const details = [
+    concept.name.trim() ? `Preset concept name: ${concept.name.trim()}` : '',
+    concept.desc.trim() ? `Concept description: ${concept.desc.trim()}` : '',
+    concept.inferredGenre.trim() ? `Music genre: ${concept.inferredGenre.trim()}` : '',
+    concept.customPrompt.trim() ? `Music style, instrumentation and mood: ${concept.customPrompt.trim()}` : '',
+    concept.additionalRequest.trim() ? `User requirements: ${concept.additionalRequest.trim()}` : '',
+  ].filter(Boolean)
+
+  if (details.length === 0) return ''
+
+  return [
+    'Create a still thumbnail that faithfully represents this specific preset concept through appropriate places, landscapes, people, activities and emotional atmosphere. Preserve explicitly requested subjects and locations. Audio style tags guide the mood only; musical instruments and equipment are optional and must not be added merely because those tags mention them. Depict only physically plausible details that belong naturally in the concept.',
+    ...details,
+    concept.videoPrompt?.trim()
+      ? `Secondary scene reference (use compatible scene details; the preset concept and user requirements above take priority over conflicting details or camera motion): ${concept.videoPrompt.trim()}`
+      : '',
+  ].filter(Boolean).join('\n')
+}
 
 // 3가지 프리셋용 고유 단색 (밝고 세련된 프리미엄 컬러셋)
 const compressImage = (base64Str: string, maxWidth = 600, maxHeight = 600, quality = 0.7): Promise<string> => {
@@ -184,7 +213,9 @@ export default function CreatePresetModal({
     }
   }
 
-  const generateSafeThumbnail = async (promptText: string) => {
+  const generateSafeThumbnail = async (concept: PresetThumbnailConcept) => {
+    const promptText = buildPresetThumbnailPrompt(concept)
+    if (!promptText) return
     setIsGeneratingThumbnail(true)
     try {
       const res = await fetch('/api/autopilot/generate-image', {
@@ -271,7 +302,7 @@ export default function CreatePresetModal({
   }
 
   const analyzeImagesForMusic = async (targetImages: string[]) => {
-    if (targetImages.length === 0) return
+    if (targetImages.length === 0 || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail) return
     setIsAnalyzingImage(true)
     try {
       // Vercel 4.5MB 페이로드 제한 우회 및 전송 효율을 위해 이미지 압축 진행
@@ -284,6 +315,10 @@ export default function CreatePresetModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           images: compressedImages,
+          conceptName: name.trim() || undefined,
+          desc: desc.trim() || undefined,
+          inferredGenre: inferredGenre.trim() || undefined,
+          customPrompt: customPrompt.trim() || undefined,
           additionalRequest: additionalRequest.trim() || undefined,
           locale: language
         })
@@ -291,19 +326,28 @@ export default function CreatePresetModal({
       if (res.ok) {
         const data = await res.json()
         if (data.preset) {
-          setName(data.preset.name || '')
-          setDesc(data.preset.desc || '')
+          const analyzedConcept: PresetThumbnailConcept = {
+            name: data.preset.name || name,
+            desc: data.preset.desc || desc,
+            inferredGenre: data.preset.inferred_genre || inferredGenre,
+            customPrompt: data.preset.dynamic_elements
+              ? data.preset.customPrompt || data.preset.dynamic_elements.audio_system?.music_layer?.base_prompt || customPrompt
+              : data.preset.customPrompt || data.preset.custom_prompt || data.preset.prompt || data.preset.stylePrompt || customPrompt,
+            additionalRequest,
+            videoPrompt: data.preset.dynamic_elements?.visual_system?.base_video_prompt,
+          }
+          setName(analyzedConcept.name)
+          setDesc(analyzedConcept.desc)
           setEmoji(data.preset.emoji || '🔮')
           setCategory(data.preset.category || 'healing')
-          setInferredGenre(data.preset.inferred_genre || '')
+          setInferredGenre(analyzedConcept.inferredGenre)
+          setCustomPrompt(analyzedConcept.customPrompt)
           if (data.preset.color) {
             setGradient(data.preset.color)
           }
           if (data.preset.dynamic_elements) {
             setDynamicElements(data.preset.dynamic_elements)
-            setCustomPrompt(data.preset.customPrompt || data.preset.dynamic_elements.audio_system?.music_layer?.base_prompt || '')
           } else {
-            setCustomPrompt(data.preset.customPrompt || data.preset.custom_prompt || data.preset.prompt || data.preset.stylePrompt || '')
             setDynamicElements(null)
           }
 
@@ -316,9 +360,7 @@ export default function CreatePresetModal({
           })
           setTranslations(newTrans)
 
-          // 비디오 프롬프트 혹은 설명을 바탕으로 저작권 없는 AI 썸네일 생성 수행
-          const imgPrompt = data.preset.dynamic_elements?.visual_system?.base_video_prompt || data.preset.desc || data.preset.name || 'cozy lofi vibe'
-          generateSafeThumbnail(imgPrompt)
+          await generateSafeThumbnail(analyzedConcept)
         }
       }
     } catch (err) {
@@ -329,7 +371,7 @@ export default function CreatePresetModal({
   }
 
   const analyzeTextForMusic = async () => {
-    if (!name.trim()) return
+    if (!name.trim() || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail) return
     setIsAnalyzingText(true)
     try {
       const res = await fetch('/api/style-library/analyze-image', {
@@ -337,27 +379,38 @@ export default function CreatePresetModal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           conceptName: name,
+          desc: desc.trim() || undefined,
+          inferredGenre: inferredGenre.trim() || undefined,
+          customPrompt: customPrompt.trim() || undefined,
+          additionalRequest: additionalRequest.trim() || undefined,
           locale: language
         })
       })
       if (res.ok) {
         const data = await res.json()
         if (data.preset) {
-          if (data.preset.name) {
-            setName(data.preset.name)
+          const analyzedConcept: PresetThumbnailConcept = {
+            name: data.preset.name || name,
+            desc: data.preset.desc || desc,
+            inferredGenre: data.preset.inferred_genre || inferredGenre,
+            customPrompt: data.preset.dynamic_elements
+              ? data.preset.customPrompt || data.preset.dynamic_elements.audio_system?.music_layer?.base_prompt || customPrompt
+              : data.preset.customPrompt || data.preset.custom_prompt || data.preset.prompt || data.preset.stylePrompt || customPrompt,
+            additionalRequest,
+            videoPrompt: data.preset.dynamic_elements?.visual_system?.base_video_prompt,
           }
-          setDesc(data.preset.desc || '')
+          setName(analyzedConcept.name)
+          setDesc(analyzedConcept.desc)
           setEmoji(data.preset.emoji || '🔮')
           setCategory(data.preset.category || 'healing')
-          setInferredGenre(data.preset.inferred_genre || '')
+          setInferredGenre(analyzedConcept.inferredGenre)
+          setCustomPrompt(analyzedConcept.customPrompt)
           if (data.preset.color) {
             setGradient(data.preset.color)
           }
           if (data.preset.dynamic_elements) {
             setDynamicElements(data.preset.dynamic_elements)
-            setCustomPrompt(data.preset.customPrompt || data.preset.dynamic_elements.audio_system?.music_layer?.base_prompt || '')
           } else {
-            setCustomPrompt(data.preset.customPrompt || data.preset.custom_prompt || data.preset.prompt || data.preset.stylePrompt || '')
             setDynamicElements(null)
           }
 
@@ -370,9 +423,7 @@ export default function CreatePresetModal({
           })
           setTranslations(newTrans)
 
-          // 비디오 프롬프트 혹은 설명을 바탕으로 저작권 없는 AI 썸네일 생성 수행
-          const imgPrompt = data.preset.dynamic_elements?.visual_system?.base_video_prompt || data.preset.desc || data.preset.name || 'cozy lofi vibe'
-          generateSafeThumbnail(imgPrompt)
+          await generateSafeThumbnail(analyzedConcept)
         }
       }
     } catch (err) {
@@ -412,6 +463,7 @@ export default function CreatePresetModal({
         setCustomPrompt(editingPreset.customPrompt || '')
         setRefImages(editingPreset.metadata?.thumbnail_url ? [editingPreset.metadata.thumbnail_url] : [])
         setAiGeneratedThumbnailUrl(editingPreset.metadata?.thumbnail_url || '')
+        setAiGeneratedThumbnailUrls(editingPreset.metadata?.thumbnail_urls || [])
         setAdditionalRequest('')
       } else {
         setName('')
@@ -422,6 +474,7 @@ export default function CreatePresetModal({
         setCustomPrompt(currentStylePrompt)
         setRefImages([])
         setAiGeneratedThumbnailUrl('')
+        setAiGeneratedThumbnailUrls([])
         setAdditionalRequest('')
       }
     }
@@ -622,6 +675,7 @@ export default function CreatePresetModal({
                         <button
                           type="button"
                           onClick={() => handleRemoveImage(index)}
+                          disabled={isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
                           className="absolute top-1 right-1 bg-black/70 hover:bg-black/90 text-red-400 hover:text-red-300 rounded-full p-1 text-[10px] w-4 h-4 flex items-center justify-center font-bold transition-all shadow"
                           title="제거"
                         >
@@ -640,7 +694,7 @@ export default function CreatePresetModal({
                           accept="image/*"
                           onChange={handleUploadImages}
                           className="hidden"
-                          disabled={isAnalyzingImage}
+                          disabled={isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
                         />
                       </label>
                     );
@@ -661,14 +715,14 @@ export default function CreatePresetModal({
                       maxLength={200}
                       className="w-full px-3 py-2.5 bg-black/40 border border-white/10 rounded-xl text-[12px] font-normal text-zinc-300 placeholder-zinc-600 focus:outline-none focus:border-purple-500/50 transition-colors disabled:opacity-75"
                       placeholder="예: 헤드폰을 쓴 젊은 여성이 창밖 설산을 보며 여행하는 감성적인 일러스트"
-                      disabled={isAnalyzingImage}
+                      disabled={isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
                     />
                   </div>
 
                   <button
                     type="button"
                     onClick={() => analyzeImagesForMusic(refImages)}
-                    disabled={isAnalyzingImage}
+                    disabled={isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
                     className="w-full mt-3.5 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-[0_0_15px_rgba(192,38,211,0.25)] transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isAnalyzingImage ? (
@@ -702,13 +756,13 @@ export default function CreatePresetModal({
                   className="w-full pl-3.5 pr-24 py-2 bg-black/40 border border-white/10 rounded-xl text-[13px] font-normal text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-fuchsia-500/50 transition-colors disabled:opacity-75 resize-none h-[56px] leading-normal"
                   placeholder="예: 비 내리는 늦은 밤, 어두운 방 창가에 앉아 마시는 따뜻한 커피와 깊은 생각 (자세할수록 고품질 컨셉이 생성됩니다)"
                   maxLength={50}
-                  disabled={isReadOnly || isAnalyzingText}
+                  disabled={isReadOnly || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
                 />
                 {name.trim().length > 0 && !isReadOnly && (
                   <button
                     type="button"
                     onClick={analyzeTextForMusic}
-                    disabled={isAnalyzingText || isAnalyzingImage}
+                    disabled={isAnalyzingText || isAnalyzingImage || isGeneratingThumbnail}
                     className="absolute right-2 top-1/2 -translate-y-1/2 px-2.5 py-1.5 rounded-lg text-[10px] font-extrabold text-white bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 shadow-sm transition-all active:scale-95 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isAnalyzingText ? (
@@ -743,7 +797,7 @@ export default function CreatePresetModal({
                 className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-[15px] font-normal text-zinc-400 placeholder-zinc-600 focus:outline-none focus:border-fuchsia-500/50 transition-colors disabled:opacity-75"
                 placeholder="예: Lofi, Jazz Lullaby, Ambient Synth"
                 maxLength={50}
-                disabled={isReadOnly}
+                disabled={isReadOnly || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
               />
             </div>
 
@@ -758,7 +812,7 @@ export default function CreatePresetModal({
                 className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-[15px] font-normal text-zinc-400 placeholder-zinc-600 focus:outline-none focus:border-fuchsia-500/50 transition-colors h-24 resize-y leading-normal font-sans disabled:opacity-75"
                 placeholder="예: 비스듬히 내리쬐는 주황빛 노을빛이 창틀에 스며들고, 오래된 나무 책상 위에 놓인 따뜻한 홍차에서 피어오르는 온기가 아늑한 실내를 감싸 안습니다. 낡은 LP 턴테이블이 만드는 미세한 먼지 노이즈와 은은한 일렉트릭 피아노의 리버브 선율이 조화롭게 섞여 들어가며, 일상에 지쳐있던 마음을 어루만져 주는 편안하고 노스탤지어 가득한 로파이 BGM입니다."
                 maxLength={300}
-                disabled={isReadOnly}
+                disabled={isReadOnly || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
               />
             </div>
 
@@ -797,7 +851,7 @@ export default function CreatePresetModal({
                 className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-[13px] font-normal text-zinc-400 placeholder-zinc-600 focus:outline-none focus:border-fuchsia-500/50 transition-colors font-mono leading-relaxed h-32 resize-y disabled:opacity-75"
                 placeholder="예: ambient lofi, rainy day, warm felt piano, slow tempo, 72 BPM, cozy atmosphere"
                 maxLength={1000}
-                disabled={isReadOnly}
+                disabled={isReadOnly || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
               />
               <p className="text-[10px] text-zinc-500 mt-1 leading-normal font-sans">
                 음악 생성기에 반영할 분위기, 악기, 템포 등의 쉼표(,) 구분 태그 목록입니다.
@@ -994,9 +1048,24 @@ export default function CreatePresetModal({
             </div>
           ) : (
             <div className="flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => generateSafeThumbnail({
+                  name,
+                  desc,
+                  inferredGenre,
+                  customPrompt,
+                  additionalRequest,
+                  videoPrompt: dynamicElements?.visual_system?.base_video_prompt,
+                })}
+                disabled={!name.trim() || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
+                className="w-full py-2.5 bg-white/5 hover:bg-white/10 border border-white/5 text-zinc-300 text-[13px] font-semibold rounded-xl transition-all disabled:opacity-50 disabled:pointer-events-none"
+              >
+                {isGeneratingThumbnail ? '썸네일 생성 중...' : '현재 컨셉으로 썸네일 생성'}
+              </button>
               <button 
                 onClick={handleSave}
-                disabled={isAnalyzingImage || isAnalyzingText}
+                disabled={isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
                 className="w-full py-2.5 bg-gradient-to-r from-fuchsia-600 to-cyan-500 text-white text-[13px] font-semibold rounded-xl hover:shadow-[0_0_15px_rgba(192,38,211,0.4)] transition-all disabled:opacity-50 disabled:pointer-events-none"
               >
                 {isAnalyzingImage 

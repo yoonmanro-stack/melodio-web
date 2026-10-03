@@ -5,9 +5,10 @@ const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const BASE = "https://www.googleapis.com/youtube/v3";
 const OPENAI_API_URL = "https://api.openai.com/v1/chat/completions";
 
-const MODEL_CHAIN = ['gpt-4o', 'gpt-4o-mini'];
+const MODEL_CHAIN = ['gpt-5.6-sol'];
+export const maxDuration = 180;
 
-async function callOpenAI(systemPrompt: string, userPrompt: string, temperature = 0.7) {
+async function callOpenAI(systemPrompt: string, userPrompt: string) {
   let lastError = "";
   for (const model of MODEL_CHAIN) {
     try {
@@ -25,25 +26,29 @@ async function callOpenAI(systemPrompt: string, userPrompt: string, temperature 
             { role: "user", content: userPrompt },
           ],
           response_format: { type: "json_object" },
-          temperature,
+          reasoning_effort: 'high',
+          max_completion_tokens: 16384,
         }),
+        signal: AbortSignal.timeout(150_000),
       });
 
       if (!response.ok) {
-        const errText = await response.text();
-        lastError = `${model}: HTTP ${response.status} - ${errText}`;
+        await response.body?.cancel();
+        lastError = `${model}: HTTP ${response.status}`;
         console.warn(`[YouTube API Route] ${lastError}`);
         continue;
       }
 
       const data = await response.json();
-      return data.choices[0]?.message?.content ?? "{}";
+      const content = data.choices?.[0]?.message?.content;
+      if (content?.trim()) return content;
+      lastError = `${model}: empty response`;
     } catch (err: any) {
-      lastError = `${model}: ${err.message || err}`;
-      console.warn(`[YouTube API Route] Error with model ${model}:`, err);
+      lastError = `${model}: request unavailable`;
+      console.warn(`[YouTube API Route] ${lastError}`);
     }
   }
-  throw new Error(`All models failed: ${lastError}`);
+  throw new Error(`GPT-5.6 Sol request failed: ${lastError}`);
 }
 
 function getStaticKeywords(region: string): any[] {
@@ -334,7 +339,7 @@ export async function GET(req: NextRequest) {
       const region = searchParams.get("regionCode") || "KR";
       
       if (!OPENAI_API_KEY) {
-        return NextResponse.json({ groups: getStaticKeywords(region) });
+        return NextResponse.json({ groups: getStaticKeywords(region), source: 'static-keywords', aiGenerated: false });
       }
 
       try {
@@ -369,15 +374,15 @@ Guidelines:
 
         const userPrompt = `Recommend 24-30 high-traffic music keywords categorized into 3 groups for region: ${region}`;
 
-        const content = await callOpenAI(systemPrompt, userPrompt, 0.8);
+        const content = await callOpenAI(systemPrompt, userPrompt);
         const parsed = JSON.parse(content);
         if (parsed.groups && Array.isArray(parsed.groups)) {
           return NextResponse.json({ groups: parsed.groups });
         }
         throw new Error("Invalid structure from OpenAI");
-      } catch (err) {
-        console.warn("[recommend_keywords] Failed to generate dynamic keywords, falling back to static list.", err);
-        return NextResponse.json({ groups: getStaticKeywords(region) });
+      } catch {
+        console.warn("[recommend_keywords] Dynamic keywords unavailable; using static list.");
+        return NextResponse.json({ groups: getStaticKeywords(region), source: 'static-keywords', aiGenerated: false });
       }
     }
 
@@ -669,7 +674,7 @@ export async function POST(req: NextRequest) {
 
     try {
       const body = await req.json();
-      const { keyword, videos, isShorts, mode, categoryName, regionName, publishedAfter } = body;
+      const { keyword, videos, isShorts, mode, categoryName, regionName } = body;
 
       const topVideos = (videos || []).slice(0, 10);
       const videoSummaries = topVideos.map((v: any, i: number) => 
@@ -707,76 +712,14 @@ ${videoSummaries}
 - visualConcept: 썸네일과 영상의 배경(일러스트, 애니메이션 루프, 밤 풍경 등) 및 UI 기획 영감
 `;
 
-      let parsed;
-      try {
-        const resultText = await callOpenAI(systemPrompt, userPrompt, 0.7);
-        parsed = JSON.parse(resultText);
-      } catch (apiErr) {
-        console.warn("OpenAI API call failed or quota exceeded, using mock fallback report.", apiErr);
-        const searchKeyword = keyword || "Lofi Playlist";
-
-        // ── 동적 수치 및 내용 계산 ──
-        const videoList = videos || [];
-        const videoCount = videoList.length;
-        const avgSubs = videoCount > 0 ? (videoList.reduce((sum: number, v: any) => sum + (v.subscriberCount || 0), 0) / videoCount) : 0;
-        const avgViews = videoCount > 0 ? (videoList.reduce((sum: number, v: any) => sum + (v.viewCount || 0), 0) / videoCount) : 0;
-
-        let compScore = 35;
-        if (avgSubs > 500000) compScore += 25;
-        else if (avgSubs > 100000) compScore += 15;
-        else if (avgSubs > 10000) compScore += 8;
-
-        if (avgViews > 1000000) compScore += 20;
-        else if (avgViews > 200000) compScore += 12;
-        else if (avgViews > 50000) compScore += 5;
-
-        // Add variance based on keyword length to make values feel alive
-        compScore += (searchKeyword.length % 7);
-        compScore = Math.max(12, Math.min(96, compScore));
-
-        let compLevel = "낮음";
-        if (compScore > 75) compLevel = "매우 높음";
-        else if (compScore > 55) compLevel = "높음";
-        else if (compScore > 35) compLevel = "중";
-
-        const compDetail = compLevel === "매우 높음" || compLevel === "높음"
-          ? `대기업 및 고구독 메가 채널(평균 구독자 ${(avgSubs / 10000).toFixed(1)}만명)이 상위를 선점하고 있어 진입 장벽이 다소 높은 시장입니다.`
-          : `상위 노출 영상들의 채널 평균 구독자 규모(${(avgSubs / 1000).toFixed(0)}K)가 크지 않아 틈새 테마와 특정 무드를 결합하면 빠른 성장을 기대할 수 있는 시장입니다.`;
-
-        let periodText = "최근 2주간";
-        if (publishedAfter === "1day") periodText = "최근 24시간 동안";
-        else if (publishedAfter === "1week") periodText = "최근 1주일간";
-        else if (publishedAfter === "1month") periodText = "최근 1개월간";
-        else if (publishedAfter === "3months") periodText = "최근 3개월간";
-        else if (publishedAfter === "6months") periodText = "최근 6개월간";
-        else if (publishedAfter === "1year") periodText = "최근 1년간";
-
-        const videoTags = Array.from(new Set(videoList.flatMap((v: any) => v.tags || []))).slice(0, 5);
-        const tags = Array.from(new Set([searchKeyword.replace(/\s+/g, ""), ...videoTags, "lofi", "lofibeats", "studybeats", isShorts ? "shorts" : "longform"])).slice(0, 10);
-
-        parsed = {
-          searchVolume: `${periodText} "${searchKeyword}" 관련 검색 유입이 ${isShorts ? '34.2%' : '18.7%'} 급증하였으며, 특히 퇴근 후 시간대와 주말 오전에 공부나 코딩에 최적화된 오디오 소비 패턴이 발견됩니다.`,
-          competition: `경쟁 강도는 '${compLevel}'입니다. ${compDetail}`,
-          competitionScore: compScore,
-          musicStyle: `🎵 장르: Lofi Hip Hop / Chillhop / Cozy Jazz\nBPM: 70-85의 잔잔한 다운템포\n편곡: 빈티지 피아노 코드 진행, 가벼운 리코드판 크랙 잡음, 어쿠스틱 드럼 브러시 사운드 결합.`,
-          visualConcept: `🎨 배경: 일러스트/애니메이션 루프 영상 (비 오는 다락방, 빗방울이 흐르는 카페 창가)\n썸네일: 따뜻한 톤의 레트로 일러스트 및 간결한 화이트 캘리그래피 타이틀 배치\n화면 구성: 한쪽에 간결한 실시간 플레이리스트 곡 제목 목록을 표기.`,
-          tags: tags,
-          titles: [
-            `${searchKeyword} 🎧 집중할 때 들으면 기분 좋아지는 플레이리스트`,
-            `Late Night ${searchKeyword} 💻 밤샘 작업자를 위한 감성 칠홉 비트`,
-            `Rainy Day ${searchKeyword} ☕ 잔잔하게 비 오는 오후, 독서와 일에 최적화된 분위기`,
-            `Deep Sleep ${searchKeyword} 🌙 피곤한 밤, 긴장을 풀어주는 릴랙싱 음악`,
-            `Cozy Room ${searchKeyword} 📚 방 안에 조용히 흐르는 나만의 공부 음악 플레이리스트`
-          ],
-          strategy: `- 트랙 첫 곡의 초반 15초 내에 가장 임팩트 있는 리프를 배치해 시청 이탈률을 5% 미만으로 제어하십시오.\n- 플레이리스트 제목에 구체적인 TPO(예: '비 오는 날 카페', '밤샘 코딩')를 명시해 검색 노출을 최적화하세요.\n- 일러스트와 음원 스타일의 일관성(Mood Consistency)을 극대화하여 구독자 충성도를 빌드하십시오.`
-        };
-      }
+      const resultText = await callOpenAI(systemPrompt, userPrompt);
+      const parsed = JSON.parse(resultText);
 
       // Add double space for spacing if needed
       
       return NextResponse.json(parsed);
-    } catch (err: any) {
-      return NextResponse.json({ error: err.message }, { status: 500 });
+    } catch {
+      return NextResponse.json({ error: 'GPT-5.6 Sol 트렌드 분석을 완료하지 못했습니다.' }, { status: 500 });
     }
   }
 
@@ -823,20 +766,12 @@ ${combinedComments}
 blendedVisualPrompt 역시 8초 비디오 생성기(Veo 3.1)에 적합한 loopable, cinematic 비주얼 영어 프롬프트로 작성해 주세요.
 `;
 
-      const resultText = await callOpenAI(systemPrompt, userPrompt, 0.7);
+      const resultText = await callOpenAI(systemPrompt, userPrompt);
       const parsed = JSON.parse(resultText);
       return NextResponse.json({ success: true, analysis: parsed });
-    } catch (err: any) {
-      console.error("OpenAI Comment Analysis failed, using fallback mock.", err);
-      const mockAnalysis = {
-        moodSummary: "바쁘고 지친 일상 속에서 잠시 비 내리는 창가를 바라보며 마음을 차분히 정리하는 위로와 고독의 감성입니다.",
-        keyKeywords: ["위로", "빗소리", "차분한 집중", "고독", "새벽감성"],
-        suggestedInstruments: ["Warm felt piano", "Acoustic nylon guitar", "Rain and vinyl crackle ambient noise", "Subtle double bass"],
-        suggestedBpm: "60-70 BPM (Slow tempo)",
-        blendedStylePrompt: "A cozy lofi beat with soft felt piano chords, warm vinyl crackle, gentle rain ambient sounds in the background, a smooth acoustic nylon-string guitar playing a nostalgic melody, slow relaxed hip hop drums, emotional and soothing mood, perfect for late night study, 65 BPM, clean mix",
-        blendedVisualPrompt: "Cinematic lo-fi animation loop, a cozy room at night, rain droplets sliding down a large glass window, a steaming cup of tea on a wooden desk, warm amber lighting inside, dark city skyline visible in the background, seamless loop, 1080p, detailed and atmospheric style"
-      };
-      return NextResponse.json({ success: true, analysis: mockAnalysis });
+    } catch {
+      console.warn('GPT-5.6 Sol comment analysis unavailable');
+      return NextResponse.json({ error: 'GPT-5.6 Sol 댓글 분석을 완료하지 못했습니다.' }, { status: 500 });
     }
   }
 

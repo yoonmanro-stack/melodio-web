@@ -87,17 +87,16 @@ function adminClient() {
 }
 
 async function generateSquareCover(prompt: string): Promise<Buffer> {
-  const apiKey = process.env.SUNO_API_KEY
-  const apiUrl = (process.env.SUNO_API_URL || 'https://api.302.ai').replace(/\/+$/, '')
+  const apiKey = process.env.OPENAI_API_KEY
   if (!apiKey) throw new ChannelSystemPersistenceError('이미지 생성 API 키가 설정되지 않았습니다.')
-  const response = await fetch(`${apiUrl}/v1/images/generations`, {
+  const response = await fetch('https://api.openai.com/v1/images/generations', {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({
       model: 'gpt-image-2', prompt, n: 1, size: '1024x1024', output_format: 'png',
     }),
   })
-  if (!response.ok) throw new ChannelSystemPersistenceError(`커버 이미지 생성 실패: ${await response.text()}`)
+  if (!response.ok) throw new ChannelSystemPersistenceError(`커버 이미지 생성 실패: HTTP ${response.status}`)
   const data = await response.json() as { data?: Array<{ b64_json?: string; url?: string }> }
   const result = data.data?.[0]
   if (result?.b64_json) return Buffer.from(result.b64_json, 'base64')

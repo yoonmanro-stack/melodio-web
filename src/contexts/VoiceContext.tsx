@@ -1,6 +1,8 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import { studioVoiceFields as buildStudioVoiceFields } from "@/lib/voice/studio-selection";
+import { INITIAL_SYSTEM_VOICES } from "@/data/vocalStyles";
+import React, { createContext, useCallback, useContext, useState, useEffect } from "react";
 
 export interface VoiceItem {
   id: string;
@@ -18,6 +20,8 @@ export interface VoiceItem {
   createdAt: string;
   avatarGradient?: string;
   voice_model_id?: string;
+  /** Melodio registration ID. Provider Voice IDs remain server-side. */
+  customVoiceId?: string;
   is100PercentSync?: boolean;
   physicalLayers?: {
     pitch?: number;
@@ -37,85 +41,15 @@ export interface VoiceItem {
 }
 
 // 초기 기본 시스템 프리셋 Voices
-const INITIAL_SYSTEM_VOICES: VoiceItem[] = [
-  {
-    id: "voice-anna-kim",
-    name: "Anna Kim",
-    desc: "Tender and Warm Pop Balladeer with Airy Highs",
-    gender: "female",
-    language: "Korean",
-    category: "Singing/Music",
-    tags: ["Pop Ballad", "Warm", "Airy", "Soprano"],
-    audioUrl: "/assets/voices/vd-2001.mp3",
-    sourceType: "default",
-    stylePrompt: "female vocals, tender and warm pop balladeer, clear crystal high notes, emotional delivery, airy breathy tone",
-    isFavorite: true,
-    createdAt: "2026-08-20T00:00:00Z",
-    avatarGradient: "linear-gradient(135deg, #a855f7, #ec4899)",
-  },
-  {
-    id: "voice-kaelen-soul",
-    name: "Kaelen",
-    desc: "Deep & Rich Soul Baritone with Husky Texture",
-    gender: "male",
-    language: "English",
-    category: "Singing/Music",
-    tags: ["R&B/Soul", "Baritone", "Smoky", "Husky"],
-    audioUrl: "/assets/voices/vd-3802.mp3",
-    sourceType: "default",
-    stylePrompt: "male vocals, deep and rich soul baritone, smoky textured timbre, velvet chest resonance, melancholic groove",
-    isFavorite: false,
-    createdAt: "2026-08-20T00:00:00Z",
-    avatarGradient: "linear-gradient(135deg, #3b82f6, #14b8a6)",
-  },
-  {
-    id: "voice-moe-jpop",
-    name: "Moe",
-    desc: "Sweet & Bright Kawaii J-Pop Vocalist",
-    gender: "female",
-    language: "Japanese",
-    category: "Singing/Music",
-    tags: ["J-Pop", "Kawaii", "High-Pitch", "Energetic"],
-    audioUrl: "/assets/voices/vd-7705.mp3",
-    sourceType: "default",
-    stylePrompt: "female vocals, sweet and bright kawaii anime J-Pop, energetic high-pitch, crisp clear head resonance",
-    isFavorite: false,
-    createdAt: "2026-08-20T00:00:00Z",
-    avatarGradient: "linear-gradient(135deg, #ec4899, #f43f5e)",
-  },
-  {
-    id: "voice-yeontaek-rock",
-    name: "Yeon Taek",
-    desc: "Vintage Smoky Rock Baritone with Raw Power",
-    gender: "male",
-    language: "Korean",
-    category: "Singing/Music",
-    tags: ["Rock", "Baritone", "Gravelly", "Powerful"],
-    audioUrl: "/assets/voices/vd-2002.mp3",
-    sourceType: "default",
-    stylePrompt: "male vocals, raw powerful rock baritone, vintage gravelly distortion, aggressive chest voice",
-    isFavorite: false,
-    createdAt: "2026-08-20T00:00:00Z",
-    avatarGradient: "linear-gradient(135deg, #f59e0b, #eab308)",
-  },
-  {
-    id: "voice-aria-soprano",
-    name: "Aria",
-    desc: "Tender, Calm and Clear Soprano for Dream Pop",
-    gender: "female",
-    language: "English",
-    category: "Singing/Music",
-    tags: ["Dream Pop", "Clear", "Ethereal", "Soprano"],
-    audioUrl: "/assets/voices/vd-1004.mp3",
-    sourceType: "default",
-    stylePrompt: "female vocals, ethereal dream pop soprano, silky smooth texture, heavenly clear reverb delivery",
-    isFavorite: true,
-    createdAt: "2026-08-20T00:00:00Z",
-    avatarGradient: "linear-gradient(135deg, #f43f5e, #fb923c)",
-  },
-];
+
+
+export type StudioVocalGender = "mixed" | "female" | "male" | "duet";
 
 interface VoiceContextProps {
+  refreshVoices: () => void;
+  studioGender: StudioVocalGender;
+  setStudioGender: (gender: StudioVocalGender) => void;
+  studioVoiceFields: Record<string, unknown>;
   voices: VoiceItem[];
   activeVoice: VoiceItem | null;
   favorites: VoiceItem[];
@@ -127,12 +61,42 @@ interface VoiceContextProps {
   closeCreateModal: () => void;
   setActiveVoice: (voice: VoiceItem | null) => void;
   addVoice: (voice: Omit<VoiceItem, "id" | "createdAt">) => VoiceItem;
+  syncRegisteredVoice: (voice: Omit<VoiceItem, "id" | "createdAt"> & { customVoiceId: string }) => void;
   updateVoice: (id: string, updates: Partial<VoiceItem>) => void;
   deleteVoice: (id: string) => void;
   toggleFavorite: (id: string) => void;
 }
 
 const VoiceContext = createContext<VoiceContextProps | undefined>(undefined);
+
+function registeredVoiceItem(value: unknown): VoiceItem | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+  if (row.status !== "ready" || typeof row.id !== "string" || !/^[0-9a-f-]{36}$/i.test(row.id)
+    || typeof row.name !== "string" || (row.gender !== "female" && row.gender !== "male")) return null;
+  const style = typeof row.style === "string" ? row.style : "";
+  return {
+    id: `custom-voice-${row.id}`,
+    customVoiceId: row.id,
+    name: row.name,
+    desc: typeof row.description === "string" ? row.description : "Suno V6 등록 목소리",
+    gender: row.gender,
+    language: typeof row.language === "string" ? row.language : "ko",
+    category: "Registered Voice",
+    tags: ["Suno Voice", style || "Custom"],
+    sourceType: row.sourceType === "recorded" ? "recorded" : "uploaded",
+    stylePrompt: style || `${row.gender} vocals, preserve the registered singer identity and natural expression`,
+    createdAt: typeof row.createdAt === "string" ? row.createdAt : new Date().toISOString(),
+    isFavorite: false,
+    audioUrl: "",
+    audioUrlB: undefined,
+    voice_model_id: undefined,
+    is100PercentSync: false,
+    avatarGradient: row.gender === "female"
+      ? "linear-gradient(135deg, #fb7185, #a855f7)"
+      : "linear-gradient(135deg, #22d3ee, #6366f1)",
+  };
+}
 
 // Helper to persist only custom voice-style metadata safely.
 // Module scope keeps the localStorage migration stable across provider renders.
@@ -142,7 +106,7 @@ function persistCustomVoices(allVoices: VoiceItem[]) {
       .filter((v) => v && typeof v === "object" && v.sourceType !== "default")
       .map((v) => ({
         ...v,
-        // 음성 복제 엔진이 준비되기 전에는 재실행 트리거가 될 수 있는 필드를 저장하지 않는다.
+        // Provider Voice ID와 원본 음성 URL은 브라우저 저장소에 남기지 않는다.
         audioUrl: "",
         audioUrlB: undefined,
         voice_model_id: undefined,
@@ -154,12 +118,16 @@ function persistCustomVoices(allVoices: VoiceItem[]) {
         gender: v.gender || "female",
       }));
     localStorage.setItem("melodio_user_voices", JSON.stringify(customOnly));
+    localStorage.setItem("melodio_voice_favorites", JSON.stringify(allVoices.filter(v => v.isFavorite).map(v => v.id)));
   } catch (err) {
     console.warn("Failed to persist user voices to localStorage", err);
   }
 }
 
 export function VoiceProvider({ children }: { children: React.ReactNode }) {
+  const [voiceRefresh, setVoiceRefresh] = useState(0);
+  const refreshVoices = () => setVoiceRefresh(n => n + 1);
+  const [studioGender, setStudioGender] = useState<StudioVocalGender>("mixed");
   const [voices, setVoices] = useState<VoiceItem[]>(INITIAL_SYSTEM_VOICES);
   const [activeVoice, setActiveVoiceState] = useState<VoiceItem | null>(null);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
@@ -168,6 +136,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   // 로컬스토리지 복원
   useEffect(() => {
     try {
+      const favoriteIds = JSON.parse(localStorage.getItem("melodio_voice_favorites") || "null");
+      if (Array.isArray(favoriteIds)) setVoices(current => current.map(v => ({ ...v, isFavorite: favoriteIds.includes(v.id) })));
       const saved = localStorage.getItem("melodio_user_voices");
       if (saved) {
         const parsed = JSON.parse(saved);
@@ -203,12 +173,15 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
                 createdAt: v.createdAt || new Date().toISOString(),
                 avatarGradient: v.avatarGradient || (gender === "female" ? "linear-gradient(135deg, #ec4899, #8b5cf6)" : "linear-gradient(135deg, #06b6d4, #3b82f6)"),
                 voice_model_id: undefined,
+                customVoiceId: typeof v.customVoiceId === "string" && /^[0-9a-f-]{36}$/i.test(v.customVoiceId)
+                  ? v.customVoiceId
+                  : undefined,
                 is100PercentSync: false,
                 physicalLayers: v.physicalLayers,
               };
             });
-          setVoices([...INITIAL_SYSTEM_VOICES, ...customOnly]);
-          persistCustomVoices(customOnly);
+          setVoices([...INITIAL_SYSTEM_VOICES, ...customOnly].map(v => ({ ...v, isFavorite: Array.isArray(favoriteIds) ? favoriteIds.includes(v.id) : v.isFavorite })));
+
         }
       }
 
@@ -226,6 +199,46 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       console.warn("Failed to load voices from localStorage", e);
     }
   }, []);
+
+  // Refresh once per selection-modal opening, including on another device.
+  useEffect(() => {
+    if (!isVoiceModalOpen && voiceRefresh === 0) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch("/api/voice/custom", { cache: "no-store", signal: controller.signal });
+        // Only an authenticated successful list is authoritative for deletions.
+        if (!response.ok) return;
+        const data = await response.json();
+        if (controller.signal.aborted || !Array.isArray(data.voices)) return;
+        const registered = new Map<string, VoiceItem>();
+        for (const row of data.voices) {
+          const voice = registeredVoiceItem(row);
+          if (voice?.customVoiceId) registered.set(voice.customVoiceId, voice);
+        }
+        setVoices((prev) => {
+          const previous = new Map(prev.filter((voice) => voice.customVoiceId).map((voice) => [voice.customVoiceId, voice]));
+          const ready = [...registered.values()].map((voice) => {
+            const existing = previous.get(voice.customVoiceId);
+            return existing ? { ...voice, createdAt: existing.createdAt, isFavorite: existing.isFavorite } : voice;
+          });
+          const updated = [...ready, ...prev.filter((voice) => !voice.customVoiceId)];
+          persistCustomVoices(updated);
+          return updated;
+        });
+        setActiveVoiceState((current) => {
+          if (!current?.customVoiceId) return current;
+          const refreshed = registered.get(current.customVoiceId);
+          if (refreshed) return { ...refreshed, createdAt: current.createdAt, isFavorite: current.isFavorite };
+          try { localStorage.removeItem("melodio_active_voice_id"); } catch {}
+          return null;
+        });
+      } catch {
+        // Keep local choices when signed out, offline, or the request is cancelled.
+      }
+    })();
+    return () => controller.abort();
+  }, [isVoiceModalOpen, voiceRefresh]);
 
   const openVoiceModal = () => setIsVoiceModalOpen(true);
   const closeVoiceModal = () => setIsVoiceModalOpen(false);
@@ -251,7 +264,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     const gender = voiceData.gender || "female";
     const newVoice: VoiceItem = {
       ...voiceData,
-      // 등록 UI가 다시 연결되더라도 실제 음성/모델 실행 정보는 컨텍스트에 유입시키지 않는다.
+      // 원본 음성과 provider ID는 컨텍스트에 유입시키지 않는다.
       audioUrl: "",
       audioUrlB: undefined,
       voice_model_id: undefined,
@@ -275,6 +288,29 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
     return newVoice;
   };
 
+  const syncRegisteredVoice = useCallback((voiceData: Omit<VoiceItem, "id" | "createdAt"> & { customVoiceId: string }) => {
+    if (!/^[0-9a-f-]{36}$/i.test(voiceData.customVoiceId)) return;
+    const registered: VoiceItem = {
+      ...voiceData,
+      id: `custom-voice-${voiceData.customVoiceId}`,
+      createdAt: new Date().toISOString(),
+      audioUrl: "",
+      audioUrlB: undefined,
+      voice_model_id: undefined,
+      is100PercentSync: false,
+    };
+    setVoices((prev) => {
+      const exists = prev.some((item) => item.customVoiceId === voiceData.customVoiceId);
+      const updated = exists
+        ? prev.map((item) => item.customVoiceId === voiceData.customVoiceId
+          ? { ...item, ...registered, createdAt: item.createdAt, isFavorite: item.isFavorite }
+          : item)
+        : [registered, ...prev];
+      persistCustomVoices(updated);
+      return updated;
+    });
+  }, []);
+
   const updateVoice = (id: string, updates: Partial<VoiceItem>) => {
     const safeUpdates: Partial<VoiceItem> = {
       ...updates,
@@ -294,6 +330,16 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteVoice = (id: string) => {
+    const target = voices.find((voice) => voice.id === id);
+    if (target?.customVoiceId) {
+      void fetch('/api/voice/custom', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: target.customVoiceId }),
+      }).then((response) => {
+        if (!response.ok) console.warn('Failed to delete registered voice from server');
+      }).catch(() => console.warn('Failed to delete registered voice from server'));
+    }
     setVoices((prev) => {
       const updated = prev.filter((v) => v && v.id !== id);
       persistCustomVoices(updated);
@@ -320,6 +366,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   return (
     <VoiceContext.Provider
       value={{
+        refreshVoices, studioGender, setStudioGender,
+        studioVoiceFields: buildStudioVoiceFields(studioGender, activeVoice),
         voices,
         activeVoice,
         favorites,
@@ -331,6 +379,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         closeCreateModal,
         setActiveVoice,
         addVoice,
+        syncRegisteredVoice,
         updateVoice,
         deleteVoice,
         toggleFavorite,
@@ -345,6 +394,10 @@ export function useVoice() {
   const context = useContext(VoiceContext);
   if (!context) {
     return {
+      refreshVoices: () => {},
+      studioGender: "mixed" as StudioVocalGender,
+      setStudioGender: (_gender: StudioVocalGender) => {},
+      studioVoiceFields: {} as Record<string, unknown>,
       voices: INITIAL_SYSTEM_VOICES,
       activeVoice: null,
       favorites: INITIAL_SYSTEM_VOICES.filter(v => v.isFavorite),
@@ -356,6 +409,7 @@ export function useVoice() {
       closeCreateModal: () => {},
       setActiveVoice: () => {},
       addVoice: () => ({ id: 'fallback', name: 'Fallback', gender: 'female', tags: [], stylePrompt: '' } as any),
+      syncRegisteredVoice: () => {},
       updateVoice: () => {},
       deleteVoice: () => {},
       toggleFavorite: () => {},

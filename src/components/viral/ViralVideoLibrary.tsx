@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Film, Pause, Play, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { registerActiveAudio } from '@/lib/globalAudio'
 
-export type ViralCategory = 'drama' | 'pet' | 'relationship' | 'human' | 'trend' | 'challenge' | 'brand' | 'history' | 'parenting' | 'food_diet' | 'horror_mystery' | 'ai_future'
+export type ViralCategory = 'drama' | 'pet' | 'relationship' | 'human' | 'trend' | 'challenge' | 'brand' | 'history' | 'parenting' | 'food_diet' | 'horror_mystery' | 'ai_future' | 'dance_challenge'
 
 export type ViralVideo = {
   id: string
@@ -30,10 +30,12 @@ const CATEGORIES: Array<{ id: ViralCategory; label: string }> = [
   { id: 'parenting', label: '육아·잼민이 월드' },
   { id: 'food_diet', label: '야식·다이어트' },
   { id: 'horror_mystery', label: '이불킥·흑역사' },
+  { id: 'dance_challenge', label: '댄스·챌린지' },
   { id: 'ai_future', label: 'AI·미래 판타지' },
 ]
 
 const CATEGORY_KEYWORDS: Record<ViralCategory, string[]> = {
+  dance_challenge: [],
   drama: ['드라마', '명대사', '연진', '넷플릭스'],
   pet: ['강아지', '고양이', '집사', '댕냥이', '사료'],
   relationship: ['연애', '카톡', '읽씹', '남녀', '심리', '이별'],
@@ -49,7 +51,6 @@ const CATEGORY_KEYWORDS: Record<ViralCategory, string[]> = {
 }
 
 const FALLBACK_POSTER = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'
-const VIDEO_CACHE_KEY = 'melodio_viral_video_library_v2'
 
 function parseMetadata(raw: unknown): Record<string, unknown> {
   if (!raw) return {}
@@ -76,10 +77,10 @@ function readNumber(...values: unknown[]): number {
 }
 
 function resolveCategory(item: Record<string, unknown>, meta: Record<string, unknown>): ViralCategory {
-  const rawCategory = readString(meta.presetId, meta.tab_type, meta.genCategory, item.preset_id, item.category)
-  if (CATEGORIES.some((category) => category.id === rawCategory)) {
-    return rawCategory as ViralCategory
-  }
+  const rawCategory = [meta.presetId, meta.tab_type, meta.genCategory, item.preset_id, item.category]
+    .map((value) => readString(value))
+    .find((value) => CATEGORIES.some((category) => category.id === value))
+  if (rawCategory) return rawCategory as ViralCategory
 
   const haystack = `${item.title || ''} ${item.prompt || ''} ${item.lyrics_prompt || ''}`.toLowerCase()
   const match = Object.entries(CATEGORY_KEYWORDS).find(([, keywords]) => keywords.some((keyword) => haystack.includes(keyword)))
@@ -88,7 +89,7 @@ function resolveCategory(item: Record<string, unknown>, meta: Record<string, unk
 
 function toViralVideo(item: Record<string, unknown>): ViralVideo | null {
   const title = readString(item.title)
-  if (item.status !== 'completed' || item.is_public === false || title.endsWith(' (2)')) return null
+  if (item.status !== 'completed' || item.is_public === false) return null
 
   const licenseMeta = parseMetadata(item.license_hash)
   const metadata = { ...parseMetadata(item.metadata), ...licenseMeta }
@@ -114,19 +115,21 @@ function toViralVideo(item: Record<string, unknown>): ViralVideo | null {
   }
 }
 
-const ITEMS_PER_PAGE = 12
+const ITEMS_PER_PAGE = 22
 
 export function readCachedViralVideos(): ViralVideo[] {
-  if (typeof window === 'undefined') return []
-  try {
-    const cached = JSON.parse(localStorage.getItem(VIDEO_CACHE_KEY) || '[]')
-    return Array.isArray(cached) ? cached : []
-  } catch {
-    return []
-  }
+  // Previously public URLs must be revalidated before cards or TOP 20 render.
+  return []
 }
 
-export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?: (videos: ViralVideo[]) => void }) {
+export default function ViralVideoLibrary({ onVideosLoaded, onCreateFormat, creationDisabled = false, refreshKey, excludedVideoIds, excludedVideoUrls }: {
+  onVideosLoaded?: (videos: ViralVideo[]) => void
+  onCreateFormat: (category: ViralCategory) => void
+  creationDisabled?: boolean
+  refreshKey?: string | null
+  excludedVideoIds?: ReadonlySet<string>
+  excludedVideoUrls?: ReadonlySet<string>
+}) {
   const [videos, setVideos] = useState<ViralVideo[]>(readCachedViralVideos)
   const [isLoading, setIsLoading] = useState(() => readCachedViralVideos().length === 0)
   const [searchQuery, setSearchQuery] = useState('')
@@ -135,11 +138,14 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
   const [activeVideoId, setActiveVideoId] = useState<string | null>(null)
   const videoRefs = useRef(new Map<string, HTMLVideoElement>())
 
+  const loadRevision = useRef(0)
   const loadVideos = useCallback(async () => {
+    const revision = ++loadRevision.current
     try {
-      const response = await fetch('/api/viral-videos?coverVersion=2', { cache: 'no-store' })
+      const response = await fetch('/api/viral-videos?coverVersion=3', { cache: 'no-store' })
       if (!response.ok) throw new Error('영상 목록을 불러오지 못했습니다.')
       const payload = await response.json() as { generations?: unknown[] }
+      if (revision !== loadRevision.current) return
       const seenVideos = new Set<string>()
       const nextVideos = (Array.isArray(payload.generations) ? payload.generations : [])
         .map((item) => item && typeof item === 'object' ? toViralVideo(item as Record<string, unknown>) : null)
@@ -150,16 +156,13 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
         })
       setVideos(nextVideos)
       onVideosLoaded?.(nextVideos)
-      try {
-        localStorage.setItem(VIDEO_CACHE_KEY, JSON.stringify(nextVideos))
-      } catch {
-        // Storage can be unavailable in private browsing mode.
-      }
     } catch (error) {
+      if (revision !== loadRevision.current) return
       console.error('[ViralVideoLibrary]', error)
       setVideos([])
+      onVideosLoaded?.([])
     } finally {
-      setIsLoading(false)
+      if (revision === loadRevision.current) setIsLoading(false)
     }
   }, [onVideosLoaded])
 
@@ -167,18 +170,20 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
     loadVideos()
     const mountedVideos = videoRefs.current
     return () => {
+      loadRevision.current += 1
       mountedVideos.forEach((video) => video.pause())
     }
-  }, [loadVideos])
+  }, [loadVideos, refreshKey])
 
   const filteredVideos = useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase()
     return videos.filter((video) => {
+      if (excludedVideoIds?.has(video.id) || excludedVideoUrls?.has(video.videoUrl)) return false
       if (selectedCategory !== 'all' && video.category !== selectedCategory) return false
       if (!normalizedQuery) return true
       return `${video.title} ${video.genre} ${video.creator}`.toLowerCase().includes(normalizedQuery)
     })
-  }, [searchQuery, selectedCategory, videos])
+  }, [searchQuery, selectedCategory, videos, excludedVideoIds, excludedVideoUrls])
 
   const totalPages = Math.max(1, Math.ceil(filteredVideos.length / ITEMS_PER_PAGE))
   const activePage = Math.min(currentPage, totalPages)
@@ -211,7 +216,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
   }, [])
 
   return (
-    <section aria-labelledby="viral-video-library-title" className="rounded-3xl border border-white/10 bg-zinc-950/60 p-4 shadow-xl backdrop-blur-md sm:p-5">
+    <section aria-labelledby="viral-video-library-title" className="flex-1 rounded-3xl border border-white/10 bg-zinc-950/60 p-4 shadow-xl backdrop-blur-md sm:p-5">
       <div className="flex flex-col gap-3 border-b border-white/10 pb-4">
         <div className="flex items-center gap-2">
           <div>
@@ -221,7 +226,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
               </span>
               <div>
                 <h2 id="viral-video-library-title" className="text-sm font-black text-white">완성된 바이럴 숏폼</h2>
-                <p className="text-[11px] text-zinc-500">영상과 음원이 결합된 콘텐츠만 표시됩니다.</p>
+                <p className="text-[11px] text-zinc-400">TOP 20을 제외한 공개 완성 영상을 보여드립니다.</p>
               </div>
             </div>
           </div>
@@ -230,7 +235,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
         <div className="relative w-full">
           <label className="block w-full">
             <span className="sr-only">바이럴 영상 검색</span>
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-400" />
             <input
               type="search"
               value={searchQuery}
@@ -244,7 +249,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
             onClick={loadVideos}
             disabled={isLoading}
             aria-label="영상 목록 새로고침"
-            className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg p-2 text-zinc-400 transition hover:bg-white/10 hover:text-white disabled:opacity-50"
+            className="absolute right-1 top-1/2 -translate-y-1/2 rounded-lg p-2 text-zinc-300 transition hover:bg-white/10 hover:text-white disabled:cursor-wait"
           >
             <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
@@ -258,7 +263,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
             className={`col-span-3 min-h-10 rounded-xl px-2.5 py-2 text-[11px] font-extrabold leading-tight transition ${
               selectedCategory === 'all'
                 ? 'bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-950/50'
-                : 'border border-white/10 bg-black/40 text-zinc-400 hover:text-white'
+                : 'border border-white/10 bg-black/40 text-zinc-300 hover:text-white'
             }`}
           >
             전체
@@ -272,7 +277,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
               className={`min-h-11 rounded-xl px-1.5 py-2 text-[9px] font-extrabold leading-tight transition sm:px-2 sm:text-[10px] ${
                 selectedCategory === category.id
                   ? 'bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-950/50'
-                  : 'border border-white/10 bg-black/40 text-zinc-400 hover:text-white'
+                  : 'border border-white/10 bg-black/40 text-zinc-300 hover:text-white'
               }`}
             >
               {category.label}
@@ -282,7 +287,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
       </div>
 
       {isLoading ? (
-        <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-sm text-zinc-500">
+        <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-sm text-zinc-400">
           <RefreshCw className="h-6 w-6 animate-spin" />
           완성 영상을 불러오는 중입니다.
         </div>
@@ -292,15 +297,15 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
             <Film className="h-6 w-6" />
           </span>
           <div>
-            <p className="text-sm font-black text-white">공개된 완성 영상이 없습니다.</p>
-            <p className="mt-1 text-xs text-zinc-500">음원과 영상 합성이 완료된 숏폼만 이곳에 표시됩니다.</p>
+            <p className="text-sm font-black text-white">표시할 영상이 없습니다.</p>
+            <p className="mt-1 text-xs text-zinc-400">TOP 20 영상은 위에서 확인해 주세요. 검색 조건을 바꾸면 다른 공개 영상을 볼 수 있습니다.</p>
           </div>
           <a href="#viral-studio" className="inline-flex items-center gap-1.5 rounded-xl bg-fuchsia-600 px-4 py-2 text-xs font-black text-white transition hover:bg-fuchsia-500">
-            <Sparkles className="h-3.5 w-3.5" /> 첫 숏폼 만들기
+            <Sparkles className="h-3.5 w-3.5" /> 숏폼 만들기
           </a>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 pt-4 sm:grid-cols-2">
           {paginatedVideos.map((video) => {
             const isActive = activeVideoId === video.id
             return (
@@ -347,7 +352,10 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
                     <h3 className="line-clamp-2 text-sm font-black leading-snug text-white">{video.title}</h3>
                     <p className="mt-1 text-[10px] font-bold text-zinc-300">{video.creator} · {video.genre}</p>
                   </div>
-                  <a href="#viral-studio" tabIndex={isActive ? -1 : 0} className={`flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/80 bg-white/88 px-3 py-2 text-[11px] font-black text-fuchsia-700 shadow-md backdrop-blur-sm transition hover:bg-white ${isActive ? 'pointer-events-none' : 'pointer-events-auto'}`}>
+                  <a href="#viral-studio" tabIndex={isActive || creationDisabled ? -1 : 0} aria-disabled={isActive || creationDisabled} onClick={(event) => {
+                    if (isActive || creationDisabled) { event.preventDefault(); return }
+                    onCreateFormat(video.category)
+                  }} className={`flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/80 bg-white/88 px-3 py-2 text-[11px] font-black text-fuchsia-700 shadow-md backdrop-blur-sm transition hover:bg-white ${isActive ? 'pointer-events-none' : 'pointer-events-auto'}`}>
                     <Sparkles className="h-3.5 w-3.5" /> 이 포맷으로 만들기
                   </a>
                   </div>
@@ -362,7 +370,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
                 onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
                 disabled={activePage === 1}
                 aria-label="이전 페이지"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-zinc-400 transition hover:text-white disabled:opacity-30"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-zinc-300 transition hover:text-white disabled:opacity-30"
               >
                 <ChevronLeft className="h-4 w-4" />
               </button>
@@ -372,7 +380,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
                   type="button"
                   onClick={() => setCurrentPage(page)}
                   aria-current={activePage === page ? 'page' : undefined}
-                  className={`h-8 min-w-8 rounded-lg px-2 text-xs font-black transition ${activePage === page ? 'bg-fuchsia-500 text-white' : 'border border-white/10 text-zinc-400 hover:text-white'}`}
+                  className={`h-8 min-w-8 rounded-lg px-2 text-xs font-black transition ${activePage === page ? 'bg-fuchsia-500 text-white' : 'border border-white/10 text-zinc-300 hover:text-white'}`}
                 >
                   {page}
                 </button>
@@ -382,7 +390,7 @@ export default function ViralVideoLibrary({ onVideosLoaded }: { onVideosLoaded?:
                 onClick={() => setCurrentPage((page) => Math.min(totalPages, page + 1))}
                 disabled={activePage === totalPages}
                 aria-label="다음 페이지"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-zinc-400 transition hover:text-white disabled:opacity-30"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/10 text-zinc-300 transition hover:text-white disabled:opacity-30"
               >
                 <ChevronRight className="h-4 w-4" />
               </button>

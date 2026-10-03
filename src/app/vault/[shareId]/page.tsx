@@ -29,36 +29,36 @@ const AI_COVER_PRESETS = [
 
 const SHOWCASE_STATIC_TRACKS_MAP: Record<string, any> = {
   // Viral & Trend Zone Showcase Tracks
-  "viral-omg": { title: "OMG 2.0", genre: "viral trap", audioUrl: "https://file.302.ai/gpt/imgs/20260722/6614e2045fdbef25fd4ad2f8aaf77240.mp3", thumbnailUrl: AI_COVER_PRESETS[0] },
-  "viral-chidori": { title: "千鳥", genre: "japanese lofi", audioUrl: "https://file.302.ai/gpt/imgs/20260721/846366722c5740689ce76d827b7f8083.mp3", thumbnailUrl: AI_COVER_PRESETS[1] },
-  "viral-money": { title: "Money for my son 💸", genre: "narrative hiphop", audioUrl: "https://file.302.ai/gpt/imgs/20260721/c50d906c878145a1abcf9a9acd87c6af.mp3", thumbnailUrl: AI_COVER_PRESETS[3] },
-  "viral-girlfriend": { title: "Whole Day", genre: "emo rock", audioUrl: "https://file.302.ai/gpt/imgs/20260721/80c471b756dc4fc397daa5ad1b45bbd2.mp3", thumbnailUrl: AI_COVER_PRESETS[0] },
-  "viral-fan": { title: "I am your fan", genre: "korean study beat", audioUrl: "https://file.302.ai/gpt/imgs/20260721/a09182e8758936a6da62992dc14b5d40.mp3", thumbnailUrl: AI_COVER_PRESETS[2] },
-  "viral-react": { title: "Don't react", genre: "dramatic synth pop", audioUrl: "https://file.302.ai/gpt/imgs/20260721/6b6b16e458a284549c23450e69b74b75.mp3", thumbnailUrl: AI_COVER_PRESETS[1] },
-  "viral-paycheck": { title: "Paycheck Gone", genre: "lofi hiphop", audioUrl: "https://file.302.ai/gpt/imgs/20260721/2d05615eaa0a9128e122dcb61d836969.mp3", thumbnailUrl: AI_COVER_PRESETS[2] },
-  "viral-ghosted": { title: "Left on Read 👻", genre: "rnb soul", audioUrl: "https://file.302.ai/gpt/imgs/20260721/ff29bbfec047fcfcec08931f70e87563.mp3", thumbnailUrl: AI_COVER_PRESETS[4] },
-  "viral-monday": { title: "Monday Alarm Sucks", genre: "heavy metal punk", audioUrl: "https://file.302.ai/gpt/imgs/20260721/454d845f5e0f5eab08c467f9c44239fe.mp3", thumbnailUrl: AI_COVER_PRESETS[3] },
-  "viral-diet-fail": { title: "Salad is a Lie 🥗", genre: "funky disco pop", audioUrl: "https://file.302.ai/gpt/imgs/20260721/e3328e686cfc49d885d500980fae81bd.mp3", thumbnailUrl: AI_COVER_PRESETS[6] },
-  "viral-wifi": { title: "No Signal Panic", genre: "glitch hop synth", audioUrl: "https://file.302.ai/gpt/imgs/20260721/bc3a2a5f8bccbbd366d2cebbd99cd130.mp3", thumbnailUrl: AI_COVER_PRESETS[0] },
-  "viral-gym": { title: "Pre-Workout Rage", genre: "cyberpunk gym", audioUrl: "https://file.302.ai/gpt/imgs/20260721/a98e47c8e72532ec9bedf58c7706ec0b.mp3", thumbnailUrl: AI_COVER_PRESETS[3] },
-  "viral-cooking": { title: "Microwave Gourmet", genre: "lofi satire", audioUrl: "https://file.302.ai/gpt/imgs/20260721/cfd533909f68a8ddbf28204ad7782803.mp3", thumbnailUrl: AI_COVER_PRESETS[2] },
-  "viral-crypto": { title: "Buy the Dip", genre: "hyperpop crash", audioUrl: "https://file.302.ai/gpt/imgs/20260721/77a0f845cfc0ee3c394ccddba0d58638.mp3", thumbnailUrl: AI_COVER_PRESETS[6] },
-  "viral-cat": { title: "Zoomies at 3AM", genre: "bouncy house", audioUrl: "https://file.302.ai/gpt/imgs/20260720/d931b9e82957a5086edb678d27e1ae05.mp3", thumbnailUrl: AI_COVER_PRESETS[2] },
-  "viral-shopping": { title: "Cart Abandoner", genre: "indie pop electro", audioUrl: "https://file.302.ai/gpt/imgs/20260720/b40f8b7f9a424573be49fb22c0fd2957.mp3", thumbnailUrl: AI_COVER_PRESETS[6] },
-  "viral-coffee": { title: "Liquid Sanity", genre: "chill jazz lofi", audioUrl: "https://file.302.ai/gpt/imgs/20260720/d4d5ab6094f165fcaa8f4b4b91da3284.mp3", thumbnailUrl: AI_COVER_PRESETS[4] },
-  "viral-travel": { title: "Gate Delays", genre: "melodic house trance", audioUrl: "https://file.302.ai/gpt/imgs/20260720/30c4712a4c654d68c3b3c38659845b91.mp3", thumbnailUrl: AI_COVER_PRESETS[1] },
+  "viral-omg": { title: "OMG 2.0", genre: "viral trap", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/43/43f0b640703d53eb76f9b4b5df5cb2ebd85ccc795911f53b7a4f7e0286a6408f.mp3", thumbnailUrl: AI_COVER_PRESETS[0] },
+  "viral-chidori": { title: "千鳥", genre: "japanese lofi", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/25/2522b6e359794ed01fa8179412f44bc174498cbfecbc367ecdcb754e4c684def.mp3", thumbnailUrl: AI_COVER_PRESETS[1] },
+  "viral-money": { title: "Money for my son 💸", genre: "narrative hiphop", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/ce/ce13a7101bd69a7e2c08b420172fee4e0e1bde037959236e45563340a0346a22.mp3", thumbnailUrl: AI_COVER_PRESETS[3] },
+  "viral-girlfriend": { title: "Whole Day", genre: "emo rock", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/4a/4a6c654a8c11a0881b1e32e3b4ff70b3106538a1b66c43f316106c822642a5b3.mp3", thumbnailUrl: AI_COVER_PRESETS[0] },
+  "viral-fan": { title: "I am your fan", genre: "korean study beat", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/7f/7f90177ce8aca2291db8ad8e204c2f4144a3c48cbcbd6ef8aa3a4d714e67914d.mp3", thumbnailUrl: AI_COVER_PRESETS[2] },
+  "viral-react": { title: "Don't react", genre: "dramatic synth pop", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/f9/f92d546702730e7cae1b2781ea74330e84900840118278d753605d0c9ddb36db.mp3", thumbnailUrl: AI_COVER_PRESETS[1] },
+  "viral-paycheck": { title: "Paycheck Gone", genre: "lofi hiphop", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/aa/aabbe3a0b0a5dfc865cdd7cb507d3853b84ad7f79347f9a26036de7330ef0c0b.mp3", thumbnailUrl: AI_COVER_PRESETS[2] },
+  "viral-ghosted": { title: "Left on Read 👻", genre: "rnb soul", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/fa/fa86b22e7e6a2eeba9501b3c35318653758edfa1c63ced8ae3d8a41abf33c1e2.mp3", thumbnailUrl: AI_COVER_PRESETS[4] },
+  "viral-monday": { title: "Monday Alarm Sucks", genre: "heavy metal punk", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/74/749c99145fc43ea14cae4dd06b0729dbfad433f683c5069c8496aaf678ee3b89.mp3", thumbnailUrl: AI_COVER_PRESETS[3] },
+  "viral-diet-fail": { title: "Salad is a Lie 🥗", genre: "funky disco pop", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/88/88b4fe879d01d0400c27481dbd7aa18a46d2c0c4df2ac2aaf8e1686fc9d9bbcf.mp3", thumbnailUrl: AI_COVER_PRESETS[6] },
+  "viral-wifi": { title: "No Signal Panic", genre: "glitch hop synth", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/22/2275a6c91e243bf4d3a98201935242b522d2ce3770159adb1e1262089d137aa3.mp3", thumbnailUrl: AI_COVER_PRESETS[0] },
+  "viral-gym": { title: "Pre-Workout Rage", genre: "cyberpunk gym", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/a2/a20d04cfcdff0a85e933cec5c79cf6ca09da15763810c83ab42b6f97ca565519.mp3", thumbnailUrl: AI_COVER_PRESETS[3] },
+  "viral-cooking": { title: "Microwave Gourmet", genre: "lofi satire", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/6f/6f3962b624589acc4591872a5f99bee43ea28ac2d918288287dfe8108f1fb5c9.mp3", thumbnailUrl: AI_COVER_PRESETS[2] },
+  "viral-crypto": { title: "Buy the Dip", genre: "hyperpop crash", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/6e/6e68ef637932eb407f7cb7ca3dbaf48388cc0fd4a784b5741a2ebb95e0b24439.mp3", thumbnailUrl: AI_COVER_PRESETS[6] },
+  "viral-cat": { title: "Zoomies at 3AM", genre: "bouncy house", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/4a/4a562cbca1b159282175477d9d6b424cf39f905bace093f591008d2110df083b.mp3", thumbnailUrl: AI_COVER_PRESETS[2] },
+  "viral-shopping": { title: "Cart Abandoner", genre: "indie pop electro", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/69/691768c11acaaa1e4848ccdc63e0b55f74c08cffbf47b1755325d66061d70e7a.mp3", thumbnailUrl: AI_COVER_PRESETS[6] },
+  "viral-coffee": { title: "Liquid Sanity", genre: "chill jazz lofi", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/38/387ff2601f73331f250df6352bf3877f384149de05cb6c2e62e696b0f6c941ac.mp3", thumbnailUrl: AI_COVER_PRESETS[4] },
+  "viral-travel": { title: "Gate Delays", genre: "melodic house trance", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/08/086f1a4715f9591625115afa9bab326ffedf8fc193026eaad0797e22ee525e77.mp3", thumbnailUrl: AI_COVER_PRESETS[1] },
 
   // Style Library Showcase Tracks
-  "showcase-lofi": { title: "Cozy Rain Drops", genre: "Lo-Fi", audioUrl: "https://file.302.ai/gpt/imgs/20260721/846366722c5740689ce76d827b7f8083.mp3", thumbnailUrl: AI_COVER_PRESETS[2] },
-  "showcase-synth": { title: "Neon Horizon", genre: "Synthwave", audioUrl: "https://file.302.ai/gpt/imgs/20260722/6614e2045fdbef25fd4ad2f8aaf77240.mp3", thumbnailUrl: AI_COVER_PRESETS[1] },
-  "showcase-rock": { title: "Thunder Distortion", genre: "Rock", audioUrl: "https://file.302.ai/gpt/imgs/20260721/80c471b756dc4fc397daa5ad1b45bbd2.mp3", thumbnailUrl: AI_COVER_PRESETS[0] },
-  "showcase-kpop": { title: "Supernova Pulse", genre: "K-Pop", audioUrl: "https://file.302.ai/gpt/imgs/20260721/a09182e8758936a6da62992dc14b5d40.mp3", thumbnailUrl: AI_COVER_PRESETS[1] },
-  "showcase-classical": { title: "Serenade of Spring", genre: "Classical", audioUrl: "https://file.302.ai/gpt/imgs/20260721/6b6b16e458a284549c23450e69b74b75.mp3", thumbnailUrl: AI_COVER_PRESETS[5] },
-  "showcase-hiphop": { title: "Concrete Jungle", genre: "Hip Hop", audioUrl: "https://file.302.ai/gpt/imgs/20260721/c50d906c878145a1abcf9a9acd87c6af.mp3", thumbnailUrl: AI_COVER_PRESETS[3] },
+  "showcase-lofi": { title: "Cozy Rain Drops", genre: "Lo-Fi", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/25/2522b6e359794ed01fa8179412f44bc174498cbfecbc367ecdcb754e4c684def.mp3", thumbnailUrl: AI_COVER_PRESETS[2] },
+  "showcase-synth": { title: "Neon Horizon", genre: "Synthwave", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/43/43f0b640703d53eb76f9b4b5df5cb2ebd85ccc795911f53b7a4f7e0286a6408f.mp3", thumbnailUrl: AI_COVER_PRESETS[1] },
+  "showcase-rock": { title: "Thunder Distortion", genre: "Rock", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/4a/4a6c654a8c11a0881b1e32e3b4ff70b3106538a1b66c43f316106c822642a5b3.mp3", thumbnailUrl: AI_COVER_PRESETS[0] },
+  "showcase-kpop": { title: "Supernova Pulse", genre: "K-Pop", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/7f/7f90177ce8aca2291db8ad8e204c2f4144a3c48cbcbd6ef8aa3a4d714e67914d.mp3", thumbnailUrl: AI_COVER_PRESETS[1] },
+  "showcase-classical": { title: "Serenade of Spring", genre: "Classical", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/f9/f92d546702730e7cae1b2781ea74330e84900840118278d753605d0c9ddb36db.mp3", thumbnailUrl: AI_COVER_PRESETS[5] },
+  "showcase-hiphop": { title: "Concrete Jungle", genre: "Hip Hop", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/ce/ce13a7101bd69a7e2c08b420172fee4e0e1bde037959236e45563340a0346a22.mp3", thumbnailUrl: AI_COVER_PRESETS[3] },
 
   // Prompt-based vocal tone style demos (internal VD IDs are retained)
-  "VD-1004": { title: "Aria 보컬 음색 스타일 데모", genre: "보컬 음색 스타일 (프롬프트 기반)", audioUrl: "https://file.302.ai/gpt/imgs/20260721/846366722c5740689ce76d827b7f8083.mp3", thumbnailUrl: AI_COVER_PRESETS[4] },
-  "VD-2001": { title: "Kenji 보컬 음색 스타일 데모", genre: "보컬 음색 스타일 (프롬프트 기반)", audioUrl: "https://file.302.ai/gpt/imgs/20260721/a09182e8758936a6da62992dc14b5d40.mp3", thumbnailUrl: AI_COVER_PRESETS[1] }
+  "VD-1004": { title: "Aria 보컬 음색 스타일 데모", genre: "보컬 음색 스타일 (프롬프트 기반)", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/25/2522b6e359794ed01fa8179412f44bc174498cbfecbc367ecdcb754e4c684def.mp3", thumbnailUrl: AI_COVER_PRESETS[4] },
+  "VD-2001": { title: "Kenji 보컬 음색 스타일 데모", genre: "보컬 음색 스타일 (프롬프트 기반)", audioUrl: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/legacy_302/v1/7f/7f90177ce8aca2291db8ad8e204c2f4144a3c48cbcbd6ef8aa3a4d714e67914d.mp3", thumbnailUrl: AI_COVER_PRESETS[1] }
 };
 
 async function getGenerationByPrefix(shareId: string) {
@@ -127,20 +127,9 @@ async function getGenerationByPrefix(shareId: string) {
     console.warn('[Vault] Database prefix search error:', err)
   }
 
-  // 4. Guaranteed Ultimate Fallback for any unknown share ID (NEVER 404!)
-  const rawName = prefix.replace(/^(viral|showcase|preset)-/, '');
-  const formattedTitle = rawName.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-  return {
-    id: shareId,
-    title: formattedTitle || 'Melodio AI Track',
-    genre: 'AI Music Track',
-    audio_url: 'https://file.302.ai/gpt/imgs/20260722/6614e2045fdbef25fd4ad2f8aaf77240.mp3',
-    cover_art_url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&q=80',
-    prompt: '[Hyper-Realistic 24-bit 96kHz, studio master production] Melodio AI Music Track',
-    created_at: new Date().toISOString(),
-    status: 'completed',
-    is_public: true
-  }
+  // An unknown share ID must not masquerade as a completed track or play a
+  // retired provider's sample audio.
+  return null
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ shareId: string }> }) {

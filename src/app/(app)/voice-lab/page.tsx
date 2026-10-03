@@ -24,8 +24,8 @@ const VOICE_SOURCE_OPTIONS: ReadonlyArray<{
   disabled: boolean;
 }> = [
   { id: "default", label: "속성으로 설계", desc: "프롬프트 기반 음색 스타일", disabled: false },
-  { id: "record", label: "목소리 녹음", desc: "준비 중", disabled: true },
-  { id: "upload", label: "음성 업로드", desc: "준비 중", disabled: true },
+  { id: "record", label: "목소리 녹음", desc: "Suno V6 목소리 등록", disabled: false },
+  { id: "upload", label: "음성 업로드", desc: "Suno V6 목소리 등록", disabled: false },
   { id: "blend", label: "스타일 혼합", desc: "기존 음색 스타일 조합", disabled: false },
 ];
 
@@ -322,21 +322,6 @@ const EXPLORE_VOICES = [
 
 // DEMO_LYRICS is now imported from @/data/demo-lyrics
 
-const DEMO_AUDIO_TRACKS: Record<"female" | "male", Record<"ballad" | "pop" | "rnb" | "rock", string>> = {
-  female: {
-    ballad: "https://file.302.ai/gpt/imgs/20260721/bfe3e4d9f67efae7ebec1dd50b696ee3.mp3",
-    pop: "https://file.302.ai/gpt/imgs/20260721/db2d8d80f833a695bcefa7b4b1a43a05.mp3",
-    rnb: "https://file.302.ai/gpt/imgs/20260721/6b4fb245781a700084f7bbd743a18a99.mp3",
-    rock: "https://file.302.ai/gpt/imgs/20260721/f8430ea6c836ec4ff4995f6efdf2a16d.mp3"
-  },
-  male: {
-    ballad: "https://file.302.ai/gpt/imgs/20260721/9ceee5c56cbfccdf46ebddc932bfbc63.mp3",
-    pop: "https://file.302.ai/gpt/imgs/20260721/3c2a38210fe522646d6b2b6241c2c31e.mp3",
-    rnb: "https://file.302.ai/gpt/imgs/20260721/e3328e686cfc49d885d500980fae81bd.mp3",
-    rock: "https://file.302.ai/gpt/imgs/20260721/bc3a2a5f8bccbbd366d2cebbd99cd130.mp3"
-  }
-};
-
 export default function VoiceDnaStudio() {
   const { language } = useLanguage();
   const { 
@@ -348,6 +333,7 @@ export default function VoiceDnaStudio() {
     deleteVoice, 
     toggleFavorite,
     openVoiceModal,
+    openCreateModal,
   } = useVoice();
   const [loadedVoiceId, setLoadedVoiceId] = useState<string | null>(null);
   const [loadedVoiceAudioUrl, setLoadedVoiceAudioUrl] = useState<string | null>(null);
@@ -1472,6 +1458,7 @@ export default function VoiceDnaStudio() {
     if (overwrite && loadedVoiceId) {
       updateVoice(loadedVoiceId, {
         name: finalName,
+        stylePrompt: `${gender} vocals, pitch ${pitch}, brightness ${brightness}, chest resonance ${chestResonance}, head resonance ${headResonance}, ${selectedTextures.join(', ')}`,
         gender,
         tags: [...selectedTextures, ...selectedEmotions],
         physicalLayers: {
@@ -1947,7 +1934,7 @@ export default function VoiceDnaStudio() {
       <header className="mb-8 border-b border-white/10 pb-6 flex flex-col md:flex-row md:justify-between md:items-center gap-4">
         <div>
           <h1 className="text-4xl font-bold text-white mb-2">보컬 음색 스타일 스튜디오</h1>
-          <p className="text-zinc-400 text-sm">보컬 특성을 프롬프트 스타일로 설계하고 저장합니다. 실제 목소리 등록·복제 기능은 준비 중입니다.</p>
+          <p className="text-zinc-400 text-sm">보컬 특성을 설계하거나, 본인 확인을 거쳐 Suno V6에서 사용할 목소리를 등록합니다.</p>
         </div>
 
         {/* Action controls */}
@@ -1994,18 +1981,18 @@ export default function VoiceDnaStudio() {
             곡에 어울리는 보컬의 음색 방향을 설계하세요
           </h2>
           <p className="text-xs text-zinc-300 max-w-xl leading-relaxed">
-            피치·밝기·질감·감정 같은 속성을 생성 프롬프트에 반영합니다. 특정 인물의 목소리를 등록하거나 그대로 복제하는 기능은 아닙니다.
+            피치·밝기·질감·감정은 프롬프트 음색으로 설계합니다. 실제 보컬을 쓰려면 목소리 등록에서 본인 확인을 진행하세요.
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3 shrink-0">
           <button
             type="button"
-            disabled
-            className="px-5 py-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 text-amber-200/70 font-bold text-sm transition-all flex items-center gap-2 cursor-not-allowed"
+            onClick={openCreateModal}
+            className="px-5 py-3 rounded-2xl border border-rose-500/40 bg-rose-500/10 hover:bg-rose-500/20 text-rose-200 font-bold text-sm transition-all flex items-center gap-2 cursor-pointer"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
-            <span>목소리 등록 · 준비 중</span>
+            <span>목소리 등록</span>
           </button>
 
           <button
@@ -2726,7 +2713,11 @@ export default function VoiceDnaStudio() {
                       type="button"
                       disabled={t.disabled}
                       onClick={() => {
-                        if (!t.disabled) setVoiceType(t.id);
+                        if (t.id === "record" || t.id === "upload") {
+                          openCreateModal();
+                        } else if (!t.disabled) {
+                          setVoiceType(t.id);
+                        }
                       }}
                       className={`p-3 rounded-xl border text-left transition-all ${
                         t.disabled
@@ -2749,8 +2740,8 @@ export default function VoiceDnaStudio() {
                   ))}
                 </div>
 
-                <p className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[10px] leading-relaxed text-amber-200/80">
-                  목소리 녹음·음성 업로드·실제 보컬 복제는 준비 중이며, 현재는 마이크나 파일에 접근하지 않습니다. 아래 기능은 생성 프롬프트에 반영할 보컬 음색 스타일을 설계합니다.
+                <p className="mb-4 rounded-xl border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-[10px] leading-relaxed text-cyan-100/80">
+                  속성 설계는 프롬프트 기반 음색을 만들고, 녹음·업로드는 검증 문구 확인 후 Suno V6 등록 목소리를 만듭니다.
                 </p>
 
                 {/* Dynamic Content based on Voice Source */}
@@ -3664,11 +3655,11 @@ export default function VoiceDnaStudio() {
                   </div>
                   <button
                     type="button"
-                    disabled
-                    className="px-3.5 py-1.5 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-200/60 text-xs font-bold transition-all flex items-center gap-1.5 cursor-not-allowed"
+                    onClick={openCreateModal}
+                    className="px-3.5 py-1.5 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    <span>목소리 등록 준비 중</span>
+                    <span>목소리 등록</span>
                   </button>
                 </div>
 
@@ -3685,11 +3676,11 @@ export default function VoiceDnaStudio() {
                     </div>
                     <button
                       type="button"
-                      disabled
-                      className="mt-2 px-4 py-2 rounded-xl border border-amber-500/20 bg-amber-500/5 text-amber-200/60 text-xs font-bold transition-all flex items-center gap-1.5 cursor-not-allowed"
+                      onClick={openCreateModal}
+                      className="mt-2 px-4 py-2 rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>목소리 녹음·업로드 준비 중</span>
+                      <span>목소리 녹음·업로드</span>
                     </button>
                   </div>
                 ) : (
@@ -3700,6 +3691,9 @@ export default function VoiceDnaStudio() {
                       const isEquipped = activeVoice?.id === voice.id;
 
                       const getSourceBadge = () => {
+                        if (voice.customVoiceId) {
+                          return { label: '🎤 Suno V6 등록 보컬', color: 'bg-emerald-500/10 text-emerald-300 border-emerald-500/20' };
+                        }
                         switch (voice.sourceType) {
                           case 'recorded':
                             return { label: '🎤 이전 녹음 기반 스타일', color: 'bg-rose-500/10 text-rose-400 border-rose-500/20' };

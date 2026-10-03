@@ -1,4 +1,5 @@
 'use client'
+import { SUNO_VERSIONS, currentSunoVersion } from '@/lib/suno-models'
 
 import { useState, useMemo, useEffect, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -38,9 +39,8 @@ function buildLyricsPrompt(sections: LyricsSection[]): string {
     .join('\n\n')
 }
 
-/** 엔진 자동 선택 — 보컬 없으면 Lyria 3, 보컬 있으면 Suno V5 */
+/** Lyria 3가 제공되지 않는 동안 자동 선택은 Suno를 사용한다. */
 function autoSelectEngine(selections: TagSelections, isInstrumental: boolean): MusicEngine {
-  // Always default to suno_v5 for auto, so that users get real AI generation rather than mock Lyria tracks
   return 'suno_v5'
 }
 
@@ -67,7 +67,7 @@ export default function PromptBuilder({
   const [lyricsSections, setLyricsSections] = useState<LyricsSection[]>([])
   const [isInstrumental, setIsInstrumental] = useState(false)
   const [engine, setEngine] = useState<MusicEngine>('auto')
-  const [sunoVersion, setSunoVersion] = useState<string>('v5.5')
+  const [sunoVersion, setSunoVersion] = useState<string>('v6')
   const [isSunoDropdownOpen, setIsSunoDropdownOpen] = useState(false)
   const [trackCount, setTrackCount] = useState<number>(2)
   const [isGenerating, setIsGenerating] = useState(false)
@@ -122,11 +122,10 @@ export default function PromptBuilder({
   // ─── VoiceDNA Integration ──────────────────────────────────────────
   const [selectedVdCode, setSelectedVdCode] = useState<string>('auto')
   const [vdOptions, setVdOptions] = useState<{ code: string; name: string }[]>([])
-  const [isVdDropdownOpen, setIsVdDropdownOpen] = useState(false)
 
   const { user } = useAuth()
   const { saveHistory } = useHistory()
-  const { voices, activeVoice, setActiveVoice } = useVoice()
+  const { voices, activeVoice, setActiveVoice, studioVoiceFields } = useVoice()
 
   // activeVoice 변경 시 selectedVdCode 동기화
   useEffect(() => {
@@ -400,8 +399,8 @@ export default function PromptBuilder({
 
           // 기본 설정 복구
           setIsInstrumental(!!meta.isInstrumental)
-          if (meta.engine) setEngine(meta.engine)
-          if (meta.sunoVersion) setSunoVersion(meta.sunoVersion)
+          if (meta.engine) setEngine(meta.engine === 'lyria3' ? 'auto' : meta.engine)
+          if (meta.sunoVersion) setSunoVersion(currentSunoVersion(meta.sunoVersion))
           
           // 제목 복구
           if (gen.title) {
@@ -667,7 +666,7 @@ export default function PromptBuilder({
     setLyricsSections([])
     setIsInstrumental(false)
     setEngine('auto')
-    setSunoVersion('v5.5')
+    setSunoVersion('v6')
     setTrackCount(2)
     setTitle('')
     setYoutubeTags('')
@@ -746,13 +745,9 @@ export default function PromptBuilder({
 
   // 엔진 변경 및 트랙 수 동기화
   const handleEngineChange = (newEngine: MusicEngine) => {
+    if (newEngine === 'lyria3') return
     setEngine(newEngine)
-    if (newEngine === 'lyria3') {
-      if (trackCount === 2) {
-        setTrackCount(1)
-        setIsPlaylistMode(false)
-      }
-    } else if (newEngine === 'suno_v5') {
+    if (newEngine === 'suno_v5') {
       if (trackCount === 1) {
         setTrackCount(2)
         setIsPlaylistMode(false)
@@ -904,6 +899,7 @@ export default function PromptBuilder({
               activeVoice: targetVoice || undefined,
               vocalGender: targetVocalGender,
               sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
+              ...studioVoiceFields,
               isPublic: isPublic,
             }),
           })
@@ -976,12 +972,18 @@ export default function PromptBuilder({
               stylePrompt: finalStyle,
               topic,
               language,
-              vocalGender,
+              vocalGender: studioVoiceFields.vocalGender,
               presetId: selectedPresetId,
               durationSeconds: targetDuration,
             })
           })
           const lyricData = await lyricRes.json()
+          if (!lyricRes.ok || !lyricData.success) {
+            throw new Error(lyricData.error || '가사 생성을 완료하지 못했습니다. 다시 시도해 주세요.')
+          }
+          if (!isInstrumental && (!Array.isArray(lyricData.sections) || !lyricData.sections.some((section: LyricsSection) => section.content?.trim()))) {
+            throw new Error('생성된 가사를 확인하지 못했습니다. 다시 시도해 주세요.')
+          }
           if (lyricData.success) {
             if (lyricData.title) {
               finalTitle = lyricData.title
@@ -1064,6 +1066,7 @@ export default function PromptBuilder({
             activeVoice: targetVoice || undefined,
             vocalGender: targetVocalGender,
             sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
+              ...studioVoiceFields,
             isPublic: isPublic,
           }),
         })
@@ -1287,14 +1290,12 @@ export default function PromptBuilder({
             🔄 Auto
           </button>
           <button
-            onClick={() => handleEngineChange('lyria3')}
-            className={`px-3 py-1.5 rounded-lg border text-xs transition-all ${
-              engine === 'lyria3'
-                ? 'border-melodio-accent bg-melodio-accent/20 text-melodio-accent-light'
-                : 'border-melodio-border text-melodio-muted hover:border-melodio-accent/50'
-            }`}
+            type="button"
+            disabled
+            title="Lyria 3는 현재 사용할 수 없습니다. Suno를 선택해 주세요."
+            className="px-3 py-1.5 rounded-lg border border-melodio-border text-melodio-muted/50 text-xs cursor-not-allowed"
           >
-            🟢 Lyria 3
+            Lyria 3 · 현재 이용 불가
           </button>
 
           {/* Suno Button & Dropdown */}
@@ -1325,7 +1326,7 @@ export default function PromptBuilder({
                   onClick={() => setIsSunoDropdownOpen(false)}
                 />
                 <div className="absolute left-0 mt-1 w-28 bg-[#1a1515] border border-melodio-border rounded-lg shadow-xl z-50 py-1 text-xs">
-                  {['v5.5', 'v5', 'v4.5+', 'v4.5', 'v4.5-all', 'v4'].map((v) => (
+                  {SUNO_VERSIONS.map((v) => (
                     <button
                       key={v}
                       onClick={() => {
@@ -1545,69 +1546,7 @@ export default function PromptBuilder({
                     onToggle={handleToggle(cat.id)}
                     singleSelect={isSingleSelect(cat.id)}
                   />
-                  {cat.id === 'vocal' && (
-                    <div className="section-card border border-cyan-500/20 bg-cyan-950/5 flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 animate-fade-in">
-                      <div>
-                        <h4 className="text-xs font-bold text-cyan-400 uppercase tracking-wider flex items-center gap-1.5 mb-1">
-                          <Mic2 className="w-3.5 h-3.5" /> 보컬 음색 스타일
-                        </h4>
-                        <p className="text-[10px] text-zinc-400 leading-normal">
-                          선택한 음색 특성을 프롬프트용 보컬 스타일 가이드로 반영합니다. 특정 목소리를 복제하거나 1:1로 변환하지 않습니다.
-                        </p>
-                      </div>
 
-                      <div className="relative shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => setIsVdDropdownOpen(!isVdDropdownOpen)}
-                          className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold transition-all ${
-                            selectedVdCode !== 'auto'
-                              ? 'border-cyan-500 bg-cyan-500/20 text-cyan-200 shadow-lg shadow-cyan-500/10'
-                              : 'border-zinc-700 bg-black/40 text-zinc-400 hover:border-cyan-500/50'
-                          }`}
-                        >
-                          <span>음색 스타일: {selectedVdCode === 'auto' ? 'Auto (기본 음색)' : vdOptions.find(o => o.code === selectedVdCode)?.name || selectedVdCode}</span>
-                          <span className="text-[9px] opacity-70">▼</span>
-                        </button>
-
-                        {isVdDropdownOpen && (
-                          <>
-                            <div
-                              className="fixed inset-0 z-40"
-                              onClick={() => setIsVdDropdownOpen(false)}
-                            />
-                            <div className="absolute right-0 mt-1 w-56 bg-[#1a1515] border border-zinc-800 rounded-lg shadow-2xl z-50 py-1 text-xs max-h-60 overflow-y-auto">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setSelectedVdCode('auto');
-                                  setIsVdDropdownOpen(false);
-                                }}
-                                className="w-full text-left px-3 py-2 hover:bg-cyan-500/15 hover:text-cyan-300 flex items-center justify-between text-zinc-300 border-b border-white/5"
-                              >
-                                <span>Auto (기본 음색)</span>
-                                {selectedVdCode === 'auto' && <span className="text-cyan-400">✓</span>}
-                              </button>
-                              {vdOptions.map((opt) => (
-                                <button
-                                  key={opt.code}
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedVdCode(opt.code);
-                                    setIsVdDropdownOpen(false);
-                                  }}
-                                  className="w-full text-left px-3 py-2 hover:bg-cyan-500/15 hover:text-cyan-300 flex items-center justify-between text-zinc-300"
-                                >
-                                  <span className="truncate">{opt.name}</span>
-                                  {selectedVdCode === opt.code && <span className="text-cyan-400">✓</span>}
-                                </button>
-                              ))}
-                            </div>
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ))}
           </div>

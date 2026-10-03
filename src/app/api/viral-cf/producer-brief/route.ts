@@ -1,5 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import {
+  createPetEpisode,
+  PetPlannerError,
+  petRecentFingerprints,
+  petLyricsSyllables,
+  PET_LYRIC_TOTAL_MIN,
+  PET_LYRIC_TOTAL_MAX,
+} from '@/lib/vle/petPlanner';
 import { loadVLEMasterPrompt } from '@/lib/vle/vleEngine';
 import {
   getCategoryMatrix,
@@ -30,7 +39,8 @@ import {
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? '';
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions';
-const MODEL_CHAIN = ['gpt-5.6-sol', 'gpt-5.5', 'gpt-4o', 'gpt-4o-mini'];
+const MODEL_CHAIN = ['gpt-5.6-sol'];
+export const maxDuration = 300;
 
 /**
  * v2 스펙 기반 시스템 프롬프트.
@@ -154,9 +164,11 @@ async function callModelV2(
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
       ],
-      temperature: 0.9,
+      reasoning_effort: 'high',
+      max_completion_tokens: 16384,
       response_format: { type: 'json_object' },
     }),
+    signal: AbortSignal.timeout(40_000),
   });
 
   if (!response.ok) return null;
@@ -166,10 +178,10 @@ async function callModelV2(
 
   const parsed = JSON.parse(content);
   const structure = normalizeStructureV2(parsed.lyricsStructure);
-  if (!structure) return null;
+  if (!structure || typeof parsed.title !== 'string' || !parsed.title.trim()) return null;
 
   return {
-    title: typeof parsed.title === 'string' ? parsed.title.trim() : '',
+    title: parsed.title.trim(),
     lyricsStructure: structure,
   };
 }
@@ -208,7 +220,7 @@ async function handleV2(spec: CategorySpecV2, seed?: number, overrides?: StyleOv
     return NextResponse.json({
       success: true,
       brief: {
-        title: brief.title || spec.goldenExample.title,
+        title: brief.title,
         hook: brief.lyricsStructure.hook[0] || '',
         memoryAnchor: brief.lyricsStructure.memoryAnchor,
         memeToken,
@@ -236,7 +248,7 @@ async function handleV2(spec: CategorySpecV2, seed?: number, overrides?: StyleOv
   };
 
   if (!OPENAI_API_KEY) {
-    return respond(spec.goldenExample, 'golden example (no API key)');
+    return NextResponse.json({ success: false, error: 'OpenAI API 키가 설정되지 않았습니다.' }, { status: 503 });
   }
 
   const systemPrompt = buildSystemPromptV2(
@@ -258,11 +270,11 @@ async function handleV2(spec: CategorySpecV2, seed?: number, overrides?: StyleOv
         break;
       }
     } catch {
-      console.warn(`[producer-brief:v2] ${model} 실패, 다음 모델 시도`);
+      console.warn(`[producer-brief:v2] ${model} 기획을 완료하지 못했습니다.`);
     }
   }
 
-  if (!brief) return respond(spec.goldenExample, 'golden example (all models failed)');
+  if (!brief) return NextResponse.json({ success: false, error: 'GPT-5.6 Sol 기획을 완료하지 못했습니다.' }, { status: 502 });
 
   /*
    * 교정 재요청.
@@ -395,6 +407,8 @@ async function handleLegacy(category: string, seed?: number) {
       categoryId: matrix.id,
       categoryName: matrix.name,
       specVersion: 'legacy',
+      source: 'category-template',
+      aiGenerated: false,
       note: '이 카테고리는 아직 v2 스펙으로 이관되지 않았습니다.',
     },
   });
@@ -405,6 +419,9 @@ export async function POST(request: NextRequest) {
     const body = (await request.json()) as {
       category?: string;
       seed?: number;
+      topic?: string;
+      species?: 'cat' | 'dog';
+      pov?: 'owner_inner_voice' | 'pet_inner_voice';
       // Step 2 사용자 선택. 없으면 카테고리 기본 사운드를 쓴다.
       vocalEn?: string;
       genreEn?: string;
@@ -424,6 +441,53 @@ export async function POST(request: NextRequest) {
 
     if (!user) {
       return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
+    }
+
+    // The pet pilot owns a separate story contract. Other categories retain their existing handlers.
+    if (category === 'pet') {
+      let historyAvailable = false;
+      let recent: ReturnType<typeof petRecentFingerprints> = [];
+      try {
+        // This pilot table is migrated independently from the generated central DB types.
+        const { data, error } = await (supabase as unknown as SupabaseClient)
+          .from('viral_pet_jobs').select('episode').eq('user_id', user.id).eq('status', 'completed')
+          .order('created_at', { ascending: false }).limit(10);
+        historyAvailable = !error;
+        if (!error) recent = petRecentFingerprints(data);
+      } catch {
+        // A missing table or transient history read must be visible, without replacing the story.
+      }
+      const planningStartedAt = Date.now();
+      try {
+        const episode = await createPetEpisode({ topic: body.topic, ...overrides, species: body.species, pov: body.pov, recent });
+        console.info('[pet-planner]', JSON.stringify({ event: 'completed', elapsedMs: Date.now() - planningStartedAt, models: episode.models }));
+        return NextResponse.json({
+          success: true,
+          brief: {
+            title: episode.title,
+            hook: episode.shots[0].caption,
+            lyrics: episode.lyrics,
+            stylePrompt: episode.stylePrompt,
+            sourceTopic: episode.sourceTopic,
+            episode,
+            models: episode.models,
+            categoryId: 'pet',
+            categoryName: '댕냥이 집사속마음',
+            specVersion: 'pet-v3',
+            targetSeconds: '30',
+            // Duration is a production target; syllables alone cannot verify a generated song.
+            syllableBudget: { sung: petLyricsSyllables(episode.lyrics), min: PET_LYRIC_TOTAL_MIN, max: PET_LYRIC_TOTAL_MAX },
+            historyAvailable,
+            styleWarnings: historyAvailable ? [] : ['최근 제작 이력을 읽지 못해 이번 기획의 이력 중복 검사는 제한됩니다.'],
+          },
+        });
+      } catch (error) {
+        if (error instanceof PetPlannerError) {
+          console.warn('[pet-planner]', JSON.stringify({ event: 'failed', code: error.code, status: error.status, elapsedMs: Date.now() - planningStartedAt, diagnostics: error.diagnostics, completedModelCalls: error.models.length }));
+          return NextResponse.json({ success: false, error: error.message, code: error.code, models: error.models, issues: error.issues, diagnostics: error.diagnostics }, { status: error.status });
+        }
+        return NextResponse.json({ success: false, error: '댕냥이 기획 처리 중 오류가 발생했습니다.', code: 'pet_planner_error' }, { status: 500 });
+      }
     }
 
     const spec = getCategorySpec(category);
