@@ -96,6 +96,7 @@ function DashboardPetProductionList({ history, userId }: { history: Generation[]
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return [];
       meta = parsed as Record<string, unknown>;
     } catch { return []; }
+    if (meta.dashboardPetProductionHidden === true) return [];
     if (meta.sourceMenu !== 'viral' && meta.sourceMenu !== 'viral-cf') return [];
     const videoCandidates: unknown[] = [item.video_url, meta.video_url, meta.grok_video_url, meta.videoUrl];
     return [{
