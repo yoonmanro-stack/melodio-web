@@ -1,3 +1,4 @@
+import { resolveMusicDuration } from '@/lib/music-duration'
 import { resolveOfficialVoice } from '@/lib/voice/official-voice-selection'
 import { officialVoicePersona } from '@/lib/voice/official-voice-registry'
 import { suppressIneligibleVoice } from "@/lib/voice/studio-selection"
@@ -18,7 +19,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { GoogleAuth } from 'google-auth-library'
 import { titlePlaybooks } from '@/data/titlePlaybooks'
 import { scrubConflictingVocalTags } from '@/lib/voice-dna-scrubber'
-import { submitKieSunoJob, kieTaskReference, sunoVersionLabel, resolveDurationSeconds } from '../../../../worker/suno-provider'
+import { submitKieSunoJob, kieTaskReference, sunoVersionLabel } from '../../../../worker/suno-provider'
 import { validatePetEpisode, type PetEpisode } from '@/lib/vle/petEpisode'
 import { registeredVoicePersona } from '@/lib/voice/custom-voice-integrity'
 import { readCustomVoice } from '@/lib/voice/custom-voice-repository'
@@ -208,16 +209,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     }
   }
 
-  // ── [Duration Control Injection] ──────────────────────────────────────────
-  const isShortsTrack = (payload as any).isViral || (payload as any).isViralTrack || baseStylePrompt.toLowerCase().includes('viral') || baseStylePrompt.toLowerCase().includes('short') || baseStylePrompt.toLowerCase().includes('parody');
-
-  if (!effectiveStylePrompt.toLowerCase().includes('fade out') && !effectiveStylePrompt.toLowerCase().includes('clean ending')) {
-    if (isShortsTrack) {
-      effectiveStylePrompt = `${effectiveStylePrompt}, target duration 0:28, clean 0:28 ending, abrupt finish`
-    } else {
-      effectiveStylePrompt = `${effectiveStylePrompt}, target duration 3:15, fade out at 3:20, clean ending`
-    }
-  }
+  const durationPlan = resolveMusicDuration(payload)
 
   // ── [Suno V6 Selective Engine Fidelity Cap Injection] ───────────────────────
   // 기존 프롬프트를 100% 보존하면서, 최상단 헤더 캡만 얇게 주입하여 고음 뭉개짐(Slop) 방어
@@ -243,7 +235,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     }
   }
 
-  const isViralTrack = !payload.isInstrumental && ((payload as any).isViral || baseStylePrompt.toLowerCase().includes('viral') || baseStylePrompt.toLowerCase().includes('parody') || baseStylePrompt.toLowerCase().includes('comical') || baseStylePrompt.toLowerCase().includes('vocal-centric'));
+  const isViralTrack = !payload.isInstrumental && durationPlan.mode === 'short-form';
   if (isViralTrack && !effectiveStylePrompt.toLowerCase().startsWith('vocal-centric mix')) {
     effectiveStylePrompt = `vocal-centric mix, dry upfront vocals close to mic, minimal backing beat, crystal clear vocal delivery, ${effectiveStylePrompt}`;
   }
@@ -275,11 +267,14 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     }
   }
 
+  // Keep the duration instruction inside the provider's style limit.
+  const targetClock = `${Math.floor(durationPlan.seconds / 60)}:${String(Math.round(durationPlan.seconds % 60)).padStart(2, '0')}`
+  effectiveStylePrompt = `Target duration ${durationPlan.seconds} seconds (${targetClock}); ${durationPlan.mode === 'full-song' ? 'complete full-length song; perform all supplied lyric sections' : 'complete song; finish the final sung phrase'}; natural ending. ${effectiveStylePrompt}`
+
   if (effectiveStylePrompt.length > 1000) {
     effectiveStylePrompt = effectiveStylePrompt.slice(0, 1000)
   }
 
-  const metadata = payload.metadata as PromptPayload['metadata'] & { durationSeconds?: number; duration?: string }
   const result = await submitKieSunoJob({
     style: effectiveStylePrompt,
     lyrics: finalLyricsPrompt,
@@ -290,10 +285,10 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     vocalGender,
     personaId,
     personaModel,
-    durationSeconds: isShortsTrack ? 28 : resolveDurationSeconds(metadata?.durationSeconds || metadata?.duration),
+    durationSeconds: durationPlan.seconds,
   })
   console.log(`[API/generate] Kie Suno 제출 성공 (model: ${result.model})`)
-  return result
+  return { ...result, requestedDurationSeconds: durationPlan.seconds, durationMode: durationPlan.mode, durationSource: durationPlan.source }
 }
 
 // ─── 앨범 커버 생성은 melodio-worker 로 이관됨 ────────────────────────────────
@@ -568,7 +563,7 @@ export async function POST(request: NextRequest) {
     if (!coverArtUrl2) coverArtUrl2 = defaultFallback;
 
     // ─── Suno: 비동기 제출 ────────────────────────────────────────────────────
-    const { taskId, model } = await submitSunoJob(payload, matchedPlaybook, officialPersonaId || registeredVoicePersonaId, officialPersonaId ? 'style_persona' : 'voice_persona')
+    const { taskId, model, requestedDurationSeconds, durationMode, durationSource } = await submitSunoJob(payload, matchedPlaybook, officialPersonaId || registeredVoicePersonaId, officialPersonaId ? 'style_persona' : 'voice_persona')
     sunoTaskAccepted = true
 
     // DB에 'generating' 상태로 저장 (워커가 폴링하여 완료 처리)
@@ -609,7 +604,10 @@ export async function POST(request: NextRequest) {
       customVoiceName: registeredVoiceName || null,
       lyricsSections: lyricsSections || [],
       duration: rawBody.metadata?.duration || '',
-      durationSeconds: rawBody.metadata?.durationSeconds || null,
+      durationSeconds: requestedDurationSeconds,
+      requestedDurationSeconds,
+      requestedDurationMode: durationMode,
+      requestedDurationSource: durationSource,
       coverArtUrl2: coverArtUrl2, // 두 번째 곡용 커버 이미지 보관
       description: generatedDescription,
       tags: generatedTags,
