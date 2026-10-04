@@ -10,6 +10,7 @@ export interface SunoJobOptions {
   vocalGender?: string;
   /** Server-resolved Kie/Suno Voice ID. */
   personaId?: string;
+  personaModel?: 'style_persona' | 'voice_persona';
 }
 export interface SunoConfig { apiKey: string; apiBaseUrl: string }
 export interface SunoClip {

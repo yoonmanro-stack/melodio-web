@@ -58,6 +58,9 @@ function buildKieSunoRequest(options) {
   if (!style) throw new Error('음악 스타일 프롬프트를 입력해 주세요.');
   if (lyrics.length > 5000) throw new Error('Suno V6 가사는 5,000자 이내로 입력해 주세요.');
   const customMode = instrumental || lyrics.length > 0;
+  const requestedPersona = String(options.personaId || '').trim();
+  if (!instrumental && requestedPersona && !customMode) throw new Error('목소리 참조를 사용하려면 가사가 필요합니다.');
+  if (options.personaModel && !['style_persona', 'voice_persona'].includes(options.personaModel)) throw new Error('목소리 참조 유형이 올바르지 않습니다.');
   const input = {
     model: resolveSunoModel(options.model),
     custom_mode: customMode,
@@ -74,7 +77,7 @@ function buildKieSunoRequest(options) {
     if (!instrumental && personaId) {
       if (!/^[A-Za-z0-9_-]{6,160}$/.test(personaId)) throw new Error('등록 목소리 ID 형식이 올바르지 않습니다.');
       input.persona_id = personaId;
-      input.persona_model = 'voice_persona';
+      input.persona_model = options.personaModel || 'voice_persona';
     }
   }
   return { model: KIE_MODEL, input };

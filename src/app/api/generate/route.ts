@@ -1,3 +1,5 @@
+import { resolveOfficialVoice } from '@/lib/voice/official-voice-selection'
+import { officialVoicePersona } from '@/lib/voice/official-voice-registry'
 import { suppressIneligibleVoice } from "@/lib/voice/studio-selection"
 /**
  * Melodio — 음악 생성 API Route (비동기 아키텍처)
@@ -172,7 +174,7 @@ Output ONLY valid raw JSON.`
 }
 
 // ─── Suno 작업 제출 (폴링 없이 task_id만 반환) ──────────────────────────────────
-async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, personaId?: string) {
+async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, personaId?: string, personaModel?: 'style_persona' | 'voice_persona') {
   // Kie has a dedicated negative_tags field; keep exclusions out of positive style.
   const baseStylePrompt = payload.stylePrompt
 
@@ -287,6 +289,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     exclude: payload.excludePrompt,
     vocalGender,
     personaId,
+    personaModel,
     durationSeconds: isShortsTrack ? 28 : resolveDurationSeconds(metadata?.durationSeconds || metadata?.duration),
   })
   console.log(`[API/generate] Kie Suno 제출 성공 (model: ${result.model})`)
@@ -392,6 +395,20 @@ export async function POST(request: NextRequest) {
     // 길이가 1분 이상 벌어지는 사례가 확인됐다.
     if (rawBody.sourceMenu === 'japan' && !payload.isInstrumental && !canonicalLyricsPrompt) {
       return NextResponse.json({ error: '보컬곡 가사가 비어 있습니다. 가사를 먼저 생성해주세요.' }, { status: 400 })
+    }
+
+    let officialVoice: ReturnType<typeof resolveOfficialVoice> = null
+    let officialPersonaId: string | undefined
+    try {
+      officialVoice = resolveOfficialVoice(rawBody)
+      if (officialVoice) {
+        officialPersonaId = officialVoicePersona(officialVoice.id)
+        rawBody.voicePrompt = officialVoice.stylePrompt
+        rawBody.activeVoice = { id: officialVoice.id, officialVoiceId: officialVoice.id, gender: officialVoice.gender, stylePrompt: officialVoice.stylePrompt }
+      }
+    } catch (error) {
+      const unavailable = error instanceof Error && error.message === 'official_voice_not_ready'
+      return NextResponse.json({ error: unavailable ? '선택한 보컬의 연결을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.' : error instanceof Error ? error.message : '보컬 선택을 확인해 주세요.' }, { status: unavailable ? 503 : 400 })
     }
 
     // Apply Voice Prompt / Voice DNA
@@ -551,7 +568,7 @@ export async function POST(request: NextRequest) {
     if (!coverArtUrl2) coverArtUrl2 = defaultFallback;
 
     // ─── Suno: 비동기 제출 ────────────────────────────────────────────────────
-    const { taskId, model } = await submitSunoJob(payload, matchedPlaybook, registeredVoicePersonaId)
+    const { taskId, model } = await submitSunoJob(payload, matchedPlaybook, officialPersonaId || registeredVoicePersonaId, officialPersonaId ? 'style_persona' : 'voice_persona')
     sunoTaskAccepted = true
 
     // DB에 'generating' 상태로 저장 (워커가 폴링하여 완료 처리)
@@ -583,7 +600,9 @@ export async function POST(request: NextRequest) {
       vocal: inferVocalLabel(payload, selections, vdCode),
       voiceDna: storedVoiceStyleCode,
       vocalToneStyleCode: vdCode || null,
-      voiceFeatureMode: registeredVoicePersonaId ? 'suno_voice_persona' : 'prompt_style_only',
+      officialVoiceId: officialVoice?.id || null,
+      officialVoiceName: officialVoice?.name || null,
+      voiceFeatureMode: officialPersonaId ? 'suno_style_persona' : registeredVoicePersonaId ? 'suno_voice_persona' : 'prompt_style_only',
       auto_voice_convert: false,
       voice_model_id: null,
       customVoiceRegistrationId: registeredVoicePersonaId ? requestedCustomVoiceId : null,

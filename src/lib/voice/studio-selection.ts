@@ -14,5 +14,6 @@ export function suppressIneligibleVoice(body: Record<string, any>) {
     delete body.voicePrompt
     delete body.vdCode
     delete body.customVoiceId
+    delete body.officialVoiceId
   }
 }

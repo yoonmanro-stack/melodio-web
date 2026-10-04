@@ -1,7 +1,9 @@
 import type { VoiceItem } from "@/contexts/VoiceContext"
+import officialCatalog from "./officialVocalCatalog.json"
 
 // Authored style catalog v2. Samples are references, not identity guarantees.
 export const INITIAL_SYSTEM_VOICES: VoiceItem[] = [
+  ...(officialCatalog as VoiceItem[]),
   {
     id: "voice-anna-kim",
     name: "Anna Kim",

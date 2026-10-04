@@ -22,6 +22,10 @@ export interface VoiceItem {
   voice_model_id?: string;
   /** Melodio registration ID. Provider Voice IDs remain server-side. */
   customVoiceId?: string;
+  /** Public catalog ID. Provider persona IDs remain server-side. */
+  officialVoiceId?: string;
+  reviewStatus?: "selected" | "trial";
+  shortDescription?: string;
   is100PercentSync?: boolean;
   physicalLayers?: {
     pitch?: number;
