@@ -1,0 +1,84 @@
+{
+  "phase": "voice-registration-ux-production-verification",
+  "date_kst": "2026-10-05",
+  "deployment": {
+    "id": "dpl_9v94KskRwxicuEETKgs97sDDvPAz",
+    "status": "READY",
+    "url": "https://melodio-571ta0533-whaleloops-projects.vercel.app",
+    "alias": "https://melodio.app",
+    "code_commit": "202cf15"
+  },
+  "changes": [
+    "Separate sample upload, identity recording, and verification/saving stages with dynamic titles",
+    "Wait for existing registration state before rendering a form; stale reopening responses cannot replace current state",
+    "Spoken phrase recording is primary; existing verification file selection is collapsed and explicitly labeled",
+    "Preview selected verification audio before submission",
+    "Upload guide distinguishes Suno recording advice from Melodio file and duration limits",
+    "Portal dialog focus management and main/body scroll lock",
+    "Discard stale recording callbacks and changed-registration verification files; stop modal preview audio before registration"
+  ],
+  "verification": {
+    "custom_voice_suite_passed": 92,
+    "final_scoped_tests_passed": 18,
+    "post_review_modal_tests_passed": 7,
+    "release_typecheck": "passed",
+    "production_build": "passed",
+    "live_phase": "phrase_ready",
+    "live_title": "본인 목소리 확인",
+    "active_step": "2 본인 확인 녹음",
+    "existing_voice_name": "QR.Yoon",
+    "existing_source_submit_status": "shown as already submitted",
+    "verification_file_option_collapsed": true,
+    "verification_file_option_expand": "passed",
+    "source_upload_controls_on_verification_screen": 0,
+    "dialog_bounds": {
+      "top": 60.75,
+      "bottom": 727.25,
+      "viewport_height": 788
+    },
+    "body_and_main_scroll_lock": "applied and restored after Escape close",
+    "console_error_count": 0
+  },
+  "official_sources": [
+    {
+      "url": "https://help.suno.com/en/articles/11362369",
+      "document_date": "2026-05-01",
+      "supports": [
+        "Singing or speech recordings accepted; clean acapella recommended",
+        "Source duration 15 seconds to 4 minutes; select best 2 minutes",
+        "Read displayed phrase aloud; compared against source singing recording"
+      ]
+    },
+    {
+      "url": "https://suno.com/voices",
+      "supports": [
+        "Record singing in target language and style; rap sample for rap"
+      ]
+    },
+    {
+      "url": "https://help.suno.com/en/articles/13924993",
+      "document_date": "2026-09-09",
+      "supports": [
+        "v6 model documented; separate from older FAQ v5.5 wording"
+      ]
+    },
+    {
+      "url": "https://docs.kie.ai/suno-api/suno-voice-validate",
+      "supports": [
+        "Source sample analysis followed by a displayed phrase and separate verification recording"
+      ]
+    }
+  ],
+  "limit_provenance": {
+    "melodio_limits": "40 MiB per file; selected source duration 6 to 120 seconds; MP3/WAV recommended; M4A/AAC/OGG/WebM dependent on browser support",
+    "official_scope": "Reviewed Suno Voices guide does not specify a file-size or enumerated format limit; Melodio limits are not presented as Suno v6 official limits"
+  },
+  "scope_notes": [
+    "No source recording, file upload, identity submission, paid generation, deletion, or registration reset was performed during verification.",
+    "Live existing registration was restored read-only; successful personal voice verification/saving was not newly tested.",
+    "Source form tested through offline component tests; live account resumed its existing verification step."
+  ],
+  "evidence": [
+    "artifacts/dashboard-playback-20261005/voice-registration-verify-final.png"
+  ]
+}
