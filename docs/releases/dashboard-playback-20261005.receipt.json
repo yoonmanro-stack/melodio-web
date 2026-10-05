@@ -1,0 +1,63 @@
+{
+  "status": "production_ready",
+  "verifiedAt": "2026-10-05T04:27:43.444087+00:00",
+  "scope": [
+    "dashboard list loading",
+    "dashboard playback interruption prevention",
+    "voice discovery preview dock"
+  ],
+  "commits": [
+    "187d5f9",
+    "eae92df"
+  ],
+  "deployment": {
+    "id": "dpl_Bvvy53T4cH6nGbih9zpveHHV5RCK",
+    "status": "READY",
+    "url": "https://melodio-me6lyea70-whaleloops-projects.vercel.app",
+    "alias": "https://melodio.app"
+  },
+  "changes": [
+    "Serialized and owner-scoped debounced history refresh; preserve visible list on refresh and error; retry action",
+    "Parallel projected pet-video enrichment with 4-second timeout",
+    "Defer stem context, signing, fetch and decode to explicit play; cancel stale pending play",
+    "Duration badges use stored metadata without audio preload",
+    "Explicit main/stem switching instead of stale-state pause effect",
+    "Voice preview portal fixed to viewport bottom; close control and content clearance"
+  ],
+  "checks": {
+    "typecheck": "passed",
+    "productionBuild": "passed",
+    "nodeRegressionTests": 23,
+    "apiPrivacyAndEnrichmentCases": 16,
+    "allPassed": true
+  },
+  "live": {
+    "voiceDock": {
+      "position": "fixed",
+      "bottomPx": 788,
+      "viewportHeightPx": 788,
+      "voicesVerified": [
+        "Maren",
+        "Avel"
+      ],
+      "previewStopsAtSeconds": 30
+    },
+    "dashboard": {
+      "firstTrackSecondsObserved": 38.2,
+      "secondTrackSecondsObserved": 24.4,
+      "trackSwitch": "passed",
+      "stemIdleLabel": "재생하면 스템을 불러옵니다",
+      "idleStoredStemDuration": "3:32"
+    }
+  },
+  "observedLimits": [
+    "Earlier intermittent multi-track stoppage did not reproduce during investigation; prevention addresses stale playback-state race and unnecessary background audio loads."
+  ],
+  "screenshots": [
+    "artifacts/dashboard-playback-20261005/voice-player-bottom.png",
+    "artifacts/dashboard-playback-20261005/dashboard-playback.png"
+  ],
+  "providerGenerationRequests": 0,
+  "newGenerationCredits": 0,
+  "nextAction": "User refreshes the existing voice-lab tab to load the deployed client bundle."
+}
