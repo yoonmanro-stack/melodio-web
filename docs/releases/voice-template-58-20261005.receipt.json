@@ -1,0 +1,44 @@
+{
+  "verifiedAt": "2026-10-05T05:20:33.994171+00:00",
+  "commit": "422e47c",
+  "deploymentId": "dpl_CKUqAw8wZqY65ayfmUzGQ3aCN1kJ",
+  "deploymentUrl": "https://melodio-fdpi81fwz-whaleloops-projects.vercel.app",
+  "alias": "https://melodio.app",
+  "deploymentStatus": "READY",
+  "checks": {
+    "typescript": "passed",
+    "offlineRegressions": 44,
+    "generationPrivacyAndLineage": 24,
+    "productionBuild": "passed"
+  },
+  "liveChecks": {
+    "desktopPlayerHeightPx": 58,
+    "playerBottomPx": 788,
+    "viewportHeightPx": 788,
+    "playerBackground": "rgb(34, 34, 37)",
+    "sampleElapsedSecondsObserved": 11.6,
+    "template": "Golden Retro Soul",
+    "templateNavigatesAndFocusesDesigner": true,
+    "visiblePitch": 52,
+    "visibleBrightness": 54,
+    "visibleChest": 80,
+    "missingActualSampleShowsNotice": true
+  },
+  "changes": [
+    "8 distinct editable recipes",
+    "shared preview/save prompt compiler",
+    "complete recipe persistence",
+    "remove oscillator and DSP sample substitutes",
+    "private explicit 30-second preview requests",
+    "exact sibling generation/task/clip lineage",
+    "58px desktop preview dock"
+  ],
+  "limitations": [
+    "New paid samples were not generated or assessed by listening in this task.",
+    "Templates describe vocal style, not guaranteed identical singer identity."
+  ],
+  "evidence": [
+    "artifacts/dashboard-playback-20261005/voice-player-58.png",
+    "artifacts/dashboard-playback-20261005/quick-template-applied.png"
+  ]
+}
