@@ -3176,12 +3176,12 @@ export default function VoiceDnaStudio() {
               <div className="pt-4 border-t border-white/5">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 flex items-center gap-1.5">
                   <span className="w-1 h-3.5 bg-rose-500 rounded-full" />
-                  찜한 음색 스타일
+                  즐겨찾기 음색 스타일
                 </h3>
                 {favVoices.length === 0 ? (
                   <div className="py-8 text-center rounded-xl border border-dashed border-zinc-800 bg-black/10">
                     <Heart className="w-6 h-6 text-zinc-600 mx-auto mb-2" />
-                    <span className="text-[11px] text-zinc-500 block">찜한 음색 스타일이 없습니다. 마음에 드는 스타일의 하트를 눌러보세요.</span>
+                    <span className="text-[11px] text-zinc-500 block">즐겨찾기에 추가한 음색 스타일이 없습니다. 마음에 드는 스타일의 하트를 눌러보세요.</span>
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

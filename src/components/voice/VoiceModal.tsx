@@ -158,7 +158,7 @@ export function VoiceModal() {
                   : "text-zinc-400 hover:text-zinc-200"
               }`}
             >
-              찜한 스타일 ({favorites.length})
+              즐겨찾기 ({favorites.length})
             </button>
           </div>
 
@@ -346,7 +346,7 @@ export function VoiceModal() {
                           ? "text-amber-400 hover:text-amber-300 bg-amber-400/10"
                           : "text-zinc-500 hover:text-zinc-300 hover:bg-white/5"
                       }`}
-                      title={voice.isFavorite ? "찜 해제" : "찜하기"}
+                      title={voice.isFavorite ? "즐겨찾기 해제" : "즐겨찾기 추가"}
                     >
                       <Star className={`w-4 h-4 ${voice.isFavorite ? "fill-amber-400" : ""}`} />
                     </button>
