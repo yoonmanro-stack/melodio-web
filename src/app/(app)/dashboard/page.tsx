@@ -2066,7 +2066,7 @@ export default function Home() {
                 hasLoadError={audio.hasLoadError}
                 isPlaying={audio.isPlaying}
                 currentTime={audio.currentTime}
-                duration={audio.duration}
+                duration={audio.allLoaded ? audio.duration : getStoredTrackDuration(activeSplitTrack)}
                 originalWavUrls={audio.originalWavUrls}
                 originalWavRefs={{
                   vocals: activeSplitTrack.stem_vocals_url || null,
