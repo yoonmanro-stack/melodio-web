@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { useVoice, VoiceItem } from "@/contexts/VoiceContext";
 import { motion } from "framer-motion";
+import { getSingingSampleUrl } from "@/lib/voice/singing-sample-url";
 
 export function VoiceModal() {
   const {
@@ -29,6 +30,7 @@ export function VoiceModal() {
   const [editingVoiceId, setEditingVoiceId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState("");
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const playbackRequestRef = useRef(0);
 
   // 탭 및 검색어 필터링
   const sourceList = tab === "my" ? (voices || []) : (favorites || []);
@@ -48,10 +50,14 @@ export function VoiceModal() {
 
   // Unmount cleanup for the preview audio element.
   useEffect(() => {
-    return () => audioRef.current?.pause();
+    return () => {
+      playbackRequestRef.current += 1;
+      audioRef.current?.pause();
+    };
   }, []);
 
   const handleStopAudio = () => {
+    playbackRequestRef.current += 1;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
@@ -67,26 +73,23 @@ export function VoiceModal() {
   const handlePlayToggle = (voice: VoiceItem) => {
     if (playingId === voice.id) {
       handleStopAudio();
-    } else {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-      if (voice.audioUrl) {
-        if (!audioRef.current) {
-          audioRef.current = new Audio();
-        }
-        audioRef.current.src = voice.audioUrl;
-        audioRef.current.play().catch(() => {});
-        audioRef.current.onended = () => setPlayingId(null);
-        setPlayingId(voice.id);
-      } else {
-        // 데모 오디오가 없을 경우 가상 청음 피드백
-        setPlayingId(voice.id);
-        setTimeout(() => {
-          setPlayingId((curr) => (curr === voice.id ? null : curr));
-        }, 3000);
-      }
+      return;
     }
+    const sample = getSingingSampleUrl(voice.audioUrl);
+    if (!sample) return;
+    handleStopAudio();
+    const request = ++playbackRequestRef.current;
+    const audio = audioRef.current || new Audio();
+    audioRef.current = audio;
+    audio.src = sample;
+    const clearPlayback = () => {
+      if (request === playbackRequestRef.current) setPlayingId(null);
+    };
+    audio.onended = clearPlayback;
+    audio.onerror = clearPlayback;
+    void audio.play().then(() => {
+      if (request === playbackRequestRef.current) setPlayingId(voice.id);
+    }).catch(clearPlayback);
   };
 
   const handleSelectVoice = (voice: VoiceItem) => {
@@ -221,6 +224,7 @@ export function VoiceModal() {
             filteredList.map((voice) => {
               const isPlaying = playingId === voice.id;
               const isActive = activeVoice?.id === voice.id;
+              const hasSample = Boolean(getSingingSampleUrl(voice.audioUrl));
 
               return (
                 <div
@@ -235,18 +239,22 @@ export function VoiceModal() {
                   <div className="flex items-center gap-3 min-w-0 flex-1">
                     <div
                       style={{ background: voice.avatarGradient || "linear-gradient(135deg, #a855f7, #ec4899)" }}
-                      className="relative w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold shrink-0 shadow-md overflow-hidden cursor-pointer"
-                      onClick={() => handlePlayToggle(voice)}
+                      className="relative w-11 h-11 rounded-xl flex items-center justify-center text-white font-bold shrink-0 shadow-md overflow-hidden"
                     >
                       <button
-                        className="absolute inset-0 bg-black/30 flex items-center justify-center hover:bg-black/50 transition-colors"
-                        title={isPlaying ? "일시정지" : "미리듣기"}
+                        type="button"
+                        disabled={!hasSample}
+                        onClick={() => handlePlayToggle(voice)}
+                        aria-label={`${voice.name} ${hasSample ? isPlaying ? "가창 샘플 일시정지" : "가창 샘플 듣기" : "가창 샘플 없음"}`}
+                        className="absolute inset-0 bg-black/30 flex items-center justify-center hover:bg-black/50 transition-colors disabled:cursor-not-allowed disabled:opacity-40"
+                        title={hasSample ? isPlaying ? "일시정지" : "미리듣기" : "가창 샘플 없음"}
                       >
                         {isPlaying ? <Pause className="w-5 h-5 fill-white" /> : <Play className="w-5 h-5 fill-white ml-0.5" />}
                       </button>
                     </div>
 
                     <div className="min-w-0 flex-1">
+                      {!hasSample && <p className="text-[10px] text-zinc-500">가창 샘플 없음 · 음색 설정만 적용</p>}
                       <div className="flex items-center gap-2">
                         {editingVoiceId === voice.id ? (
                           <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>

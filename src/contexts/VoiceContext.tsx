@@ -4,8 +4,10 @@ import { studioVoiceFields as buildStudioVoiceFields } from "@/lib/voice/studio-
 import { INITIAL_SYSTEM_VOICES } from "@/data/vocalStyles";
 import { discoveryVoiceItem } from "@/data/discoveryVoices";
 import { restoreDesignAttributes } from "@/lib/voice/restore-design-attributes";
+import { resolveLegacyGeneratedSample } from "@/lib/voice/generated-sample-selection";
+import { fetchGeneratedSamplePreview, isGenerationId } from "@/lib/voice/generated-sample-preview";
 import type { VoiceDnaRecord } from "@/lib/voice-dna-scrubber";
-import React, { createContext, useCallback, useContext, useState, useEffect } from "react";
+import React, { createContext, useCallback, useContext, useState, useEffect, useRef } from "react";
 
 export interface VoiceItem {
   id: string;
@@ -165,6 +167,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [activeVoice, setActiveVoiceState] = useState<VoiceItem | null>(null);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const legacySampleHints = useRef(new Map<string, { generationId: string; expectedAudioUrl: string; sampleVersion: 'A' | 'B' }>());
+  const sampleRevisions = useRef(new Map<string, number>());
 
   // 로컬스토리지 복원
   useEffect(() => {
@@ -174,6 +178,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       const favoriteIds = JSON.parse(localStorage.getItem("melodio_voice_favorites") || "null");
       if (Array.isArray(favoriteIds)) setVoices(current => current.map(v => ({ ...v, isFavorite: favoriteIds.includes(v.id) })));
       const saved = localStorage.getItem("melodio_user_voices");
+      let legacyDnas: unknown = [];
+      try { legacyDnas = JSON.parse(localStorage.getItem("custom_voice_dnas") || "[]"); } catch { /* Older settings may not exist. */ }
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
@@ -189,6 +195,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
               const prompt = typeof v.stylePrompt === "string" ? v.stylePrompt : "";
               const tags = Array.isArray(v.tags) ? v.tags : ["Custom", gender];
               const genderLabel = gender === "female" ? "여성" : gender === "male" ? "남성" : "듀엣";
+              const legacyHint = resolveLegacyGeneratedSample(v, legacyDnas, process.env.NEXT_PUBLIC_SUPABASE_URL || "");
+              if (legacyHint && typeof v.id === 'string') legacySampleHints.current.set(v.id, legacyHint);
               
               let stylePrompt = prompt;
               if (!prompt.trim()) {
@@ -218,10 +226,10 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
                   : undefined,
                 designedVoiceId: typeof v.designedVoiceId === "string" && /^[0-9a-f-]{36}$/i.test(v.designedVoiceId) ? v.designedVoiceId : undefined,
                 sampleGenerationId: typeof v.sampleGenerationId === "string" && /^[0-9a-f-]{36}$/i.test(v.sampleGenerationId) ? v.sampleGenerationId : undefined,
-                sampleVersion: v.sampleVersion === 'B' ? 'B' : 'A',
-                sampleDurationSeconds: v.designedVoiceId ? 30 : undefined,
+                sampleVersion: legacyHint?.sampleVersion || (v.sampleVersion === 'B' ? 'B' : 'A'),
+                sampleDurationSeconds: v.designedVoiceId || v.sampleGenerationId || legacyHint ? 30 : undefined,
                 previewStartSeconds: v.designedVoiceId ? 0 : undefined,
-                previewStatus: v.designedVoiceId ? 'ready' : undefined,
+                previewStatus: v.designedVoiceId ? 'ready' : v.sampleGenerationId || legacyHint ? 'pending' : undefined,
                 is100PercentSync: false,
                 physicalLayers: v.physicalLayers,
                 designAttributes: restoreDesignAttributes(v.designAttributes),
@@ -250,6 +258,60 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       console.warn("Failed to load voices from localStorage", e);
     }
   }, []);
+
+  // Template samples are generated tracks, not registered singer personas.
+  // Persist IDs only and recover their canonical audio from the authenticated API.
+  const templateSampleKey = JSON.stringify(voices.filter(voice => voice.sourceType === 'dna_designed'
+    && !voice.designedVoiceId && !voice.customVoiceId && !voice.discoveryVoiceId && !voice.officialVoiceId)
+    .map(voice => [voice.id, voice.sampleGenerationId || legacySampleHints.current.get(voice.id)?.generationId || null]));
+  useEffect(() => {
+    const controller = new AbortController();
+    const candidates = voices.filter(voice => voice.sourceType === 'dna_designed'
+      && !voice.designedVoiceId && !voice.customVoiceId && !voice.discoveryVoiceId && !voice.officialVoiceId
+      && !voice.audioUrl && (isGenerationId(voice.sampleGenerationId) || legacySampleHints.current.has(voice.id)));
+    if (!candidates.length) return () => controller.abort();
+    void (async () => {
+      const results = new Map<string, { requestedId?: string; revision: number; recipe: string; preview: Awaited<ReturnType<typeof fetchGeneratedSamplePreview>> }>();
+      let index = 0;
+      await Promise.all(Array.from({ length: Math.min(4, candidates.length) }, async () => {
+        while (index < candidates.length && !controller.signal.aborted) {
+          const voice = candidates[index++];
+          const hint = !voice.sampleGenerationId ? legacySampleHints.current.get(voice.id) : undefined;
+          const generationId = voice.sampleGenerationId || hint?.generationId;
+          if (!generationId) continue;
+          const revision = sampleRevisions.current.get(voice.id) || 0;
+          const recipe = JSON.stringify([voice.designAttributes, voice.sampleVersion]);
+          try {
+            const preview = await fetchGeneratedSamplePreview(generationId, hint?.expectedAudioUrl, {
+              fetcher: fetch, signal: AbortSignal.any([controller.signal, AbortSignal.timeout(10000)]),
+              supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+            });
+            if (preview && revision === (sampleRevisions.current.get(voice.id) || 0)) {
+              results.set(voice.id, { requestedId: voice.sampleGenerationId, revision, recipe, preview });
+            }
+          } catch { /* Keep saved settings usable; retry when the voice picker is opened again. */ }
+        }
+      }));
+      if (controller.signal.aborted || !results.size) return;
+      const apply = (voice: VoiceItem): VoiceItem => {
+        const result = results.get(voice.id);
+        if (!result?.preview || voice.sampleGenerationId !== result.requestedId
+          || result.revision !== (sampleRevisions.current.get(voice.id) || 0)
+          || result.recipe !== JSON.stringify([voice.designAttributes, voice.sampleVersion])) return voice;
+        legacySampleHints.current.delete(voice.id);
+        return { ...voice, ...result.preview, audioUrlB: undefined, previewStatus: 'ready', sampleDurationSeconds: 30, previewStartSeconds: 0 };
+      };
+      setVoices(previous => {
+        const next = previous.map(apply);
+        persistCustomVoices(next);
+        return next;
+      });
+      setActiveVoiceState(previous => previous ? apply(previous) : null);
+    })();
+    return () => controller.abort();
+  // Audio hydration must not restart merely because a playback URL was attached.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [templateSampleKey, voiceRefresh, isVoiceModalOpen]);
 
   // Refresh once per selection-modal opening, including on another device.
   useEffect(() => {
@@ -431,24 +493,32 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateVoice = (id: string, updates: Partial<VoiceItem>) => {
-    const safeUpdates: Partial<VoiceItem> = {
-      ...updates,
-      audioUrl: "",
-      audioUrlB: undefined,
-      voice_model_id: undefined,
-      is100PercentSync: false,
+    if (['designAttributes', 'sampleGenerationId', 'sampleVersion'].some(key => Object.prototype.hasOwnProperty.call(updates, key))) {
+      legacySampleHints.current.delete(id);
+      sampleRevisions.current.set(id, (sampleRevisions.current.get(id) || 0) + 1);
+    }
+    const applyUpdates = (voice: VoiceItem): VoiceItem => {
+      const merged = { ...voice, ...updates };
+      const unchangedSample = isGenerationId(voice.sampleGenerationId) && voice.sampleGenerationId === merged.sampleGenerationId;
+      return { ...merged,
+        audioUrl: unchangedSample ? voice.audioUrl : '', audioUrlB: undefined,
+        voice_model_id: undefined, is100PercentSync: false,
+        previewStatus: unchangedSample ? voice.previewStatus : merged.sampleGenerationId ? 'pending' : undefined,
+      };
     };
     setVoices((prev) => {
-      const updated = prev.map((v) => (v && v.id === id ? { ...v, ...safeUpdates } : v));
+      const updated = prev.map((v) => (v && v.id === id ? applyUpdates(v) : v));
       persistCustomVoices(updated);
       return updated;
     });
     if (activeVoice?.id === id) {
-      setActiveVoiceState((prev) => (prev ? { ...prev, ...safeUpdates } : null));
+      setActiveVoiceState((prev) => (prev ? applyUpdates(prev) : null));
     }
   };
 
   const deleteVoice = (id: string) => {
+    legacySampleHints.current.delete(id);
+    sampleRevisions.current.set(id, (sampleRevisions.current.get(id) || 0) + 1);
     const target = voices.find((voice) => voice.id === id);
     if (target?.customVoiceId) {
       void fetch('/api/voice/custom', {

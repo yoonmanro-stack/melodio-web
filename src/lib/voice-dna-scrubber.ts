@@ -5,6 +5,8 @@ export interface VoiceDnaRecord {
   name: string
   audio_url?: string
   audio_url_b?: string
+  sample_generation_id?: string
+  sample_generation_id_b?: string
   physical_layers: {
     gender?: 'female' | 'male' | 'duet'
     age?: 'young' | 'mature' | 'childish'

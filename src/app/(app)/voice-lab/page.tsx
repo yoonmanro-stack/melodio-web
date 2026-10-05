@@ -18,6 +18,7 @@ import { VoiceDiscovery } from "@/components/voice/VoiceDiscovery";
 import { CustomVoiceDesigner } from "@/components/voice/CustomVoiceDesigner";
 import { QUICK_START_TEMPLATES, type QuickStartTemplateId } from "@/lib/voice/quick-start-templates";
 import { restoreDesignAttributes } from "@/lib/voice/restore-design-attributes";
+import { getSingingSampleUrl } from "@/lib/voice/singing-sample-url";
 
 type VoiceType = "default" | "record" | "upload" | "blend";
 
@@ -387,6 +388,11 @@ export default function VoiceDnaStudio() {
   // Custom vocal tone style presets (legacy storage key kept for compatibility)
   const [customVoices, setCustomVoices] = useState<VoiceDnaRecord[]>([]);
   const [lastSavedDna, setLastSavedDna] = useState<string | null>(null);
+  const [saveNameRequest, setSaveNameRequest] = useState<{ overwrite: boolean } | null>(null);
+  const [saveNameInput, setSaveNameInput] = useState("");
+  const [saveNameError, setSaveNameError] = useState<string | null>(null);
+  const saveNameDialogRef = useRef<HTMLDialogElement | null>(null);
+  const saveNameInputRef = useRef<HTMLInputElement | null>(null);
 
   const demoAudioRef = useRef<HTMLAudioElement | null>(null);
   const demoTimersRef = useRef<NodeJS.Timeout[]>([]);
@@ -414,6 +420,8 @@ export default function VoiceDnaStudio() {
   const currentDesignSignatureRef = useRef("");
   const demoRequestRef = useRef(0);
   const demoCompletedSignatureRef = useRef<string | null>(null);
+  const demoGenerationIdRef = useRef<string | null>(null);
+  const demoGenerationIdBRef = useRef<string | null>(null);
   const [selectedVocalVersion, setSelectedVocalVersion] = useState<"A" | "B">("A");
   const [isDemoPlaying, setIsDemoPlaying] = useState(false);
   const [demoProgress, setDemoProgress] = useState(0);
@@ -468,9 +476,37 @@ export default function VoiceDnaStudio() {
   const exploreAudioRef = useRef<HTMLAudioElement | null>(null);
   const [voicePreviewNotice, setVoicePreviewNotice] = useState<string | null>(null);
 
+  const getStoredVoiceSampleUrl = (voice: any): string | null => {
+    const primary = voice.audioUrl || voice.audio_url || voice.physical_layers?.audio_url;
+    const secondary = voice.audioUrlB || voice.audio_url_b || voice.physical_layers?.audio_url_b;
+    const version = voice.sampleVersion || voice.sample_version;
+    const sample = version === "B" ? secondary || primary : primary;
+    return getSingingSampleUrl(sample);
+  };
+
+  const renderStoredVoiceSampleControl = (voice: any, isPlaying: boolean) => {
+    const sample = getStoredVoiceSampleUrl(voice);
+    return <div className="flex flex-col gap-1 shrink-0">
+      <button
+        type="button"
+        disabled={!sample && !isPlaying}
+        aria-label={`${voice.name || "저장된 음색"} 보컬 샘플 ${isPlaying ? "재생 중지" : "듣기"}`}
+        onClick={() => {
+          if (isPlaying) stopExploreVoiceDemo();
+          else if (sample) playExploreVoiceDemo({ ...voice, audioUrl: sample });
+        }}
+        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {isPlaying ? <Pause aria-hidden="true" className="h-3.5 w-3.5" /> : <Play aria-hidden="true" className="h-3.5 w-3.5" />}
+        <span>{isPlaying ? "중지" : sample ? "듣기" : "샘플 없음"}</span>
+      </button>
+      {!sample && <span className="max-w-36 text-[10px] leading-snug text-zinc-500">재생할 실제 보컬 샘플이 아직 연결되지 않았습니다.</span>}
+    </div>;
+  };
+
   const playExploreVoiceDemo = (voice: any) => {
     stopExploreVoiceDemo();
-    const realAudioUrl = voice.audioUrl || voice.audio_url || voice.physical_layers?.audio_url;
+    const realAudioUrl = getStoredVoiceSampleUrl(voice);
     if (!realAudioUrl) {
       setVoicePreviewNotice("아직 실제 보컬 샘플이 없습니다. 데모를 생성한 후 확인해 주세요.");
       return;
@@ -563,6 +599,9 @@ export default function VoiceDnaStudio() {
     setLastSavedDna(null);
     setDemoAudioUrl(null);
     setDemoAudioUrlB(null);
+    demoCompletedSignatureRef.current = null;
+    demoGenerationIdRef.current = null;
+    demoGenerationIdBRef.current = null;
     setSelectedVocalVersion("A");
     setIsDemoPlaying(false);
     setDemoProgress(0);
@@ -570,7 +609,7 @@ export default function VoiceDnaStudio() {
     setVoicePreviewNotice(null);
     setVoiceType("default");
     const template = QUICK_START_TEMPLATES[type];
-    setStageName(template.name);
+    setStageName(template.displayName);
     setSelectedGenre(template.genre);
     setGender(template.physical_layers.gender);
     setAge(template.physical_layers.age);
@@ -699,6 +738,8 @@ export default function VoiceDnaStudio() {
     exploreAudioRef.current?.pause();
     exploreAudioRef.current = null;
     demoCompletedSignatureRef.current = null;
+    demoGenerationIdRef.current = null;
+    demoGenerationIdBRef.current = null;
     setIsDemoPlaying(false);
     setDemoProgress(0);
     setDemoAudioUrl(null);
@@ -728,6 +769,8 @@ export default function VoiceDnaStudio() {
     const request = ++demoRequestRef.current;
     const submittedSignature = currentDesignSignature;
     demoCompletedSignatureRef.current = null;
+    demoGenerationIdRef.current = null;
+    demoGenerationIdBRef.current = null;
     setIsDemoGenerating(true);
     setDemoGenerateStep(0);
     setDemoAudioUrl(null);
@@ -834,8 +877,10 @@ export default function VoiceDnaStudio() {
               // Attach only an actual completed sample of the submitted recipe.
               setDemoGenerateStep(3);
               setDemoAudioUrl(gen.audio_url);
+              demoGenerationIdRef.current = typeof gen.id === "string" && /^[0-9a-f-]{36}$/i.test(gen.id) ? gen.id : null;
               if (pollData.sibling?.status === 'completed' && pollData.sibling?.audio_url) {
                 setDemoAudioUrlB(pollData.sibling.audio_url);
+                demoGenerationIdBRef.current = typeof pollData.sibling.id === "string" && /^[0-9a-f-]{36}$/i.test(pollData.sibling.id) ? pollData.sibling.id : null;
               }
               setIsDemoGenerating(false);
               return;
@@ -939,11 +984,11 @@ export default function VoiceDnaStudio() {
   const canOverwriteLoadedVoice = Boolean(loadedVoiceRecord
     && !loadedVoiceRecord.officialVoiceId && !loadedVoiceRecord.discoveryVoiceId
     && !loadedVoiceRecord.customVoiceId && !loadedVoiceRecord.designedVoiceId);
-  const handleSaveDna = (overwrite: boolean = false) => {
+  const handleSaveDna = (overwrite: boolean = false, explicitName?: string) => {
     const vdCode = `VD-${Math.floor(Math.random() * 9000 + 1000)}`;
-    const finalName = stageName.trim() || `보컬 음색 스타일 ${vdCode}`;
+    const saveName = (explicitName ?? stageName).trim();
+    if (!saveName || saveName.length > 80) return;
     const overwriteExisting = overwrite && canOverwriteLoadedVoice;
-    const saveName = overwriteExisting ? finalName : (loadedVoiceId && !finalName.includes("v2") && !finalName.includes("튜닝") ? `${finalName} (v2)` : finalName);
 
     const designAttributes = buildCurrentVoiceDna(vdCode, saveName);
     const { tags: voicePrompt } = buildVoicePromptFromAttributes(designAttributes, noiseEntropy);
@@ -951,15 +996,18 @@ export default function VoiceDnaStudio() {
     const audioA = hasMatchingSample ? demoAudioUrl : undefined;
     const audioB = hasMatchingSample ? demoAudioUrlB : undefined;
     const sampleVersion: "A" | "B" = selectedVocalVersion === "B" && audioB ? "B" : "A";
+    const generationA = hasMatchingSample && audioA ? demoGenerationIdRef.current : undefined;
+    const generationB = hasMatchingSample && audioB ? demoGenerationIdBRef.current : undefined;
     const newDna: VoiceDnaRecord = {
       ...designAttributes, audio_url: audioA || undefined, audio_url_b: audioB || undefined, sample_version: sampleVersion,
+      sample_generation_id: generationA || undefined, sample_generation_id_b: generationB || undefined,
     };
 
     const updated = [newDna, ...customVoices];
     setCustomVoices(updated);
     setCustomPage(1);
     localStorage.setItem("custom_voice_dnas", JSON.stringify(updated));
-    setLastSavedDna(vdCode);
+    setLastSavedDna(saveName);
 
     const voiceSettings = {
       name: saveName, gender, language: voiceLanguageName,
@@ -967,11 +1015,14 @@ export default function VoiceDnaStudio() {
       designAttributes,
       physicalLayers: { ...designAttributes.physical_layers, roughness: noiseEntropy, vibrato },
       sampleVersion: sampleVersion as "A" | "B",
+      sampleGenerationId: (sampleVersion === "B" ? generationB : generationA) || undefined,
+      audioUrl: (sampleVersion === "B" ? audioB : audioA) || '',
+      audioUrlB: audioB || undefined,
     };
     if (overwriteExisting && loadedVoiceId) {
       updateVoice(loadedVoiceId, voiceSettings);
       const previous = voices.find(voice => voice.id === loadedVoiceId);
-      if (previous) setActiveVoice({ ...previous, ...voiceSettings, audioUrl: "", audioUrlB: undefined });
+      if (previous) setActiveVoice({ ...previous, ...voiceSettings });
     } else {
       addVoice({ ...voiceSettings,
         desc: `${gender === 'male' ? '남성' : '여성'} 보컬 (${selectedTextures.join(', ') || 'Custom'})`,
@@ -996,6 +1047,33 @@ export default function VoiceDnaStudio() {
       });
     }
   };
+
+  const openSaveNameDialog = (overwrite: boolean) => {
+    setSaveNameInput(stageName.trim() || "나의 보컬 음색");
+    setSaveNameError(null);
+    setSaveNameRequest({ overwrite });
+  };
+  const confirmSaveName = (event: { preventDefault: () => void }) => {
+    event.preventDefault();
+    const name = saveNameInput.trim();
+    if (!name || name.length > 80) {
+      setSaveNameError("보컬 이름을 1~80자로 입력해 주세요.");
+      return;
+    }
+    if (!saveNameRequest) return;
+    handleSaveDna(saveNameRequest.overwrite, name);
+    setStageName(name);
+    setSaveNameRequest(null);
+  };
+  useEffect(() => {
+    const dialog = saveNameDialogRef.current;
+    if (!dialog) return;
+    if (saveNameRequest) {
+      if (!dialog.open) dialog.showModal();
+      saveNameInputRef.current?.focus();
+      saveNameInputRef.current?.select();
+    } else if (dialog.open) dialog.close();
+  }, [saveNameRequest]);
 
   const saveVoiceName = (code: string, newName: string) => {
     if (!newName.trim()) return;
@@ -1073,6 +1151,8 @@ export default function VoiceDnaStudio() {
     demoCompletedSignatureRef.current = null;
     setDemoAudioUrl(null);
     setDemoAudioUrlB(null);
+    demoGenerationIdRef.current = null;
+    demoGenerationIdBRef.current = null;
     setSelectedVocalVersion("A");
     setLastSavedDna(null);
     setVoicePreviewNotice("음색 설정을 불러왔습니다. 현재 설정의 실제 보컬 샘플은 데모를 생성해 확인해 주세요.");
@@ -1436,7 +1516,7 @@ export default function VoiceDnaStudio() {
                 className="px-4 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center gap-2 text-xs font-semibold shadow-lg shadow-emerald-500/5 z-[70]"
               >
                 <CheckCircle className="w-4 h-4" />
-                <span>성공적으로 저장되었습니다! 코드: {lastSavedDna}</span>
+                <span>“{lastSavedDna}” 이름으로 저장되었습니다.</span>
               </motion.div>
             )}
           </AnimatePresence>
@@ -2701,7 +2781,7 @@ export default function VoiceDnaStudio() {
                                 <Play className="w-3 h-3 fill-current ml-0.5" />
                               )}
                             </button>
-                            
+
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center justify-between">
                                 <span className="text-[11px] font-bold">Vocal Version A</span>
@@ -2746,7 +2826,7 @@ export default function VoiceDnaStudio() {
                                   <Play className="w-3 h-3 fill-current ml-0.5" />
                                 )}
                               </button>
-                              
+
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between">
                                   <span className="text-[11px] font-bold">Vocal Version B</span>
@@ -2813,14 +2893,14 @@ export default function VoiceDnaStudio() {
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
-                        onClick={() => handleSaveDna(true)}
+                        onClick={() => openSaveNameDialog(true)}
                         className="py-2.5 px-3 rounded-xl bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold text-xs flex items-center justify-center transition-all shadow-lg cursor-pointer whitespace-nowrap"
                       >
                         기존 음색 스타일에 덮어쓰기
                       </button>
                       <button
                         type="button"
-                        onClick={() => handleSaveDna(false)}
+                        onClick={() => openSaveNameDialog(false)}
                         className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer whitespace-nowrap"
                       >
                         새 음색 스타일로 저장 (v2)
@@ -2829,7 +2909,7 @@ export default function VoiceDnaStudio() {
                   ) : (
                     <button
                       id="save-btn"
-                      onClick={() => handleSaveDna(false)}
+                      onClick={() => openSaveNameDialog(false)}
                       className="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white font-bold text-xs flex items-center justify-center transition-all shadow-lg shadow-fuchsia-600/10 cursor-pointer whitespace-nowrap"
                     >
                       보컬 음색 스타일 저장
@@ -2847,8 +2927,6 @@ export default function VoiceDnaStudio() {
         {/* TAB 2: COLLECTIONS (My Collections) */}
         {activeTab === "collections" && (() => {
           const userCreatedVoices = (voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default' && v.sourceType !== 'discovered');
-          const signatureCodes = ['VD-1004', 'VD-3802', 'VD-7705'];
-          const signatureVoices = signatureCodes.map(code => EXPLORE_VOICES.find(ev => ev.code === code)).filter(Boolean);
           const favVoices = (voices || []).filter(v => v && v.isFavorite);
 
           return (
@@ -2967,17 +3045,11 @@ export default function VoiceDnaStudio() {
                           {/* Main Row: Avatar & Name/Details */}
                           <div className="flex items-start gap-3">
                             <div
-                              className="relative w-12 h-12 rounded-2xl shrink-0 border border-white/10 shadow-md flex items-center justify-center overflow-hidden cursor-pointer group/avatar"
+                              className="relative w-12 h-12 rounded-2xl shrink-0 border border-white/10 shadow-md flex items-center justify-center overflow-hidden group/avatar"
                               style={{ background: voice.avatarGradient || 'linear-gradient(135deg, #a855f7, #ec4899)' }}
-                              onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
+
                             >
-                              <div className="absolute inset-0 bg-black/40 flex items-center justify-center hover:bg-black/60 transition-colors">
-                                {isPlaying ? (
-                                  <Pause className="w-4 h-4 fill-white text-white" />
-                                ) : (
-                                  <Play className="w-4 h-4 fill-white text-white ml-0.5" />
-                                )}
-                              </div>
+                              <Mic2 aria-hidden="true" className="h-4 w-4 text-white/80" />
                               {isPlaying && (
                                 <span className="absolute bottom-1 flex items-end gap-[1.5px] h-2.5">
                                   <span className="w-[2px] bg-white animate-[eq_0.8s_ease-in-out_infinite]" />
@@ -3063,28 +3135,7 @@ export default function VoiceDnaStudio() {
 
                           {/* Footer Actions: Equip for Generation */}
                           <div className="flex items-center gap-2 pt-1 border-t border-white/5">
-                            <button
-                              type="button"
-                              onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
-                              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer shrink-0 ${
-                                isPlaying
-                                  ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 hover:bg-rose-500/30 shadow-[0_0_12px_rgba(244,63,94,0.3)]'
-                                  : 'bg-white/5 hover:bg-white/10 text-zinc-300 border border-white/10'
-                              }`}
-                              title={isPlaying ? "재생 멈추기" : "미리듣기"}
-                            >
-                              {isPlaying ? (
-                                <>
-                                  <Pause className="w-3.5 h-3.5 fill-rose-400 text-rose-400" />
-                                  <span>중지</span>
-                                </>
-                              ) : (
-                                <>
-                                  <Play className="w-3.5 h-3.5 fill-zinc-300 text-zinc-300 ml-0.5" />
-                                  <span>듣기</span>
-                                </>
-                              )}
-                            </button>
+                            {renderStoredVoiceSampleControl(voice, isPlaying)}
 
                             <button
                               onClick={() => {
@@ -3121,78 +3172,6 @@ export default function VoiceDnaStudio() {
                 )}
               </div>
 
-              {/* Section 2: Signature System Presets */}
-              <div className="pt-4 border-t border-white/5">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 flex items-center gap-1.5">
-                  <span className="w-1 h-3.5 bg-fuchsia-500 rounded-full" />
-                  추천 보컬 음색 스타일
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {signatureVoices.map(voice => {
-                    if (!voice) return null;
-                    const isPlaying = explorePlayingVoiceId === voice.code && explorePlaying;
-                    
-                    return (
-                      <div 
-                        key={voice.code} 
-                        className="glass-panel p-4 hover:border-fuchsia-500/30 transition-all duration-300 flex flex-col justify-between gap-3 relative overflow-hidden"
-                      >
-                        {/* Code Tag & Play Action in Header */}
-                        <div className="flex justify-between items-center">
-                          <span className="px-2 py-0.5 rounded bg-fuchsia-500/10 border border-fuchsia-500/20 text-[9px] text-fuchsia-400 font-bold font-mono tracking-wider">
-                            {voice.code}
-                          </span>
-                          <button
-                            onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
-                            className="w-7 h-7 rounded-full bg-white/5 hover:bg-fuchsia-500/20 border border-white/10 flex items-center justify-center text-fuchsia-400 hover:text-fuchsia-300 transition-all cursor-pointer shadow"
-                            title="목소리 들어보기"
-                          >
-                            {isPlaying ? (
-                              <VolumeX className="w-3.5 h-3.5" />
-                            ) : (
-                              <Play className="w-3.5 h-3.5 ml-0.5" />
-                            )}
-                          </button>
-                        </div>
-
-                        {/* Main Info Row: Circle Avatar & Texts Side-by-Side */}
-                        <div className="flex items-start gap-3">
-                          <div 
-                            className="w-10 h-10 rounded-full border border-white/10 shrink-0 shadow-inner flex items-center justify-center overflow-hidden"
-                            style={{ background: voice.gradient }}
-                          >
-                            {isPlaying && (
-                              <span className="flex items-end gap-[1.5px] h-3.5 mb-[2.5px]">
-                                <span className="w-[2px] bg-white animate-[eq_0.8s_ease-in-out_infinite]" />
-                                <span className="w-[2px] bg-white animate-[eq_0.5s_ease-in-out_infinite_0.2s]" />
-                                <span className="w-[2px] bg-white animate-[eq_0.7s_ease-in-out_infinite_0.4s]" />
-                              </span>
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1">
-                              <span className="text-[12px] leading-none">{voice.flag}</span>
-                              <h4 className="text-sm font-bold text-white truncate">{voice.name}</h4>
-                            </div>
-                            <p className="text-[10px] text-zinc-400 leading-snug mt-1 line-clamp-2" title={voice.desc}>
-                              {voice.desc}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Load DNA Action Button */}
-                        <button 
-                          onClick={() => loadPresetToSliders(defaultSystemVoices[voice.code as keyof typeof defaultSystemVoices])}
-                          className="w-full py-2 rounded-lg bg-white/5 hover:bg-fuchsia-500/20 text-fuchsia-300 text-[11px] font-bold transition-all border border-white/5 hover:border-fuchsia-500/40 cursor-pointer"
-                        >
-                          이 톤 가져와서 수정하기
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
               {/* Section 3: Favorited Voices */}
               <div className="pt-4 border-t border-white/5">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-zinc-400 mb-3 flex items-center gap-1.5">
@@ -3214,17 +3193,11 @@ export default function VoiceDnaStudio() {
                           className="glass-panel p-3 px-4 hover:border-rose-500/20 transition-all duration-300 group flex items-center gap-3 relative overflow-hidden animate-in fade-in duration-200"
                         >
                           <div 
-                            className="relative w-11 h-11 shrink-0 rounded-full overflow-hidden flex items-center justify-center border border-white/10 transition-transform group-hover:scale-105 cursor-pointer shadow-md"
+                            className="relative w-11 h-11 shrink-0 rounded-full overflow-hidden flex items-center justify-center border border-white/10 transition-transform group-hover:scale-105 shadow-md"
                             style={{ background: voice.avatarGradient || 'linear-gradient(135deg, #ec4899, #8b5cf6)' }}
-                            onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
+
                           >
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                              {isPlaying ? (
-                                <Pause className="w-3.5 h-3.5 fill-white text-white" />
-                              ) : (
-                                <Play className="w-3.5 h-3.5 fill-white text-white ml-0.5" />
-                              )}
-                            </div>
+                            <Mic2 aria-hidden="true" className="h-4 w-4 text-white/80" />
                           </div>
 
                           <div className="flex-1 min-w-0 pr-4">
@@ -3237,22 +3210,7 @@ export default function VoiceDnaStudio() {
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
-                            <button
-                              type="button"
-                              onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
-                              className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                                isPlaying
-                                  ? 'bg-rose-500/20 text-rose-300 border-rose-500/40 shadow-[0_0_8px_rgba(244,63,94,0.3)]'
-                                  : 'bg-white/5 text-zinc-400 border-white/10 hover:text-white hover:bg-white/10'
-                              }`}
-                              title={isPlaying ? "재생 멈추기" : "미리듣기"}
-                            >
-                              {isPlaying ? (
-                                <Pause className="w-3.5 h-3.5 fill-rose-400 text-rose-400" />
-                              ) : (
-                                <Play className="w-3.5 h-3.5 fill-current ml-0.5" />
-                              )}
-                            </button>
+                            {renderStoredVoiceSampleControl(voice, isPlaying)}
                             <button
                               onClick={() => toggleFavorite(voice.id)}
                               className="text-amber-400 hover:text-amber-300 p-1.5 cursor-pointer"
@@ -3409,6 +3367,39 @@ export default function VoiceDnaStudio() {
           </div>
         )}
 
+      <dialog
+        ref={saveNameDialogRef}
+        aria-labelledby="save-voice-name-title"
+        aria-describedby="save-voice-name-description"
+        onCancel={() => setSaveNameRequest(null)}
+        onClose={() => setSaveNameRequest(null)}
+        className="m-auto w-[min(92vw,28rem)] rounded-2xl border border-purple-500/30 bg-zinc-950 p-6 text-white shadow-2xl backdrop:bg-black/70"
+      >
+        <form onSubmit={confirmSaveName} className="flex flex-col gap-4">
+          <h2 id="save-voice-name-title" className="text-lg font-bold">저장할 보컬 이름</h2>
+          <p id="save-voice-name-description" className="text-sm text-zinc-400">보관함과 스튜디오에 표시할 이름을 입력해 주세요.</p>
+          <div className="flex flex-col gap-2">
+            <label htmlFor="save-voice-name" className="text-sm font-semibold">보컬 이름</label>
+            <input
+              ref={saveNameInputRef}
+              id="save-voice-name"
+              value={saveNameInput}
+              onChange={event => { setSaveNameInput(event.target.value); setSaveNameError(null); }}
+              maxLength={80}
+              required
+              aria-invalid={!!saveNameError}
+              aria-describedby={saveNameError ? "save-voice-name-error" : undefined}
+              className="rounded-xl border border-white/15 bg-white/5 px-3 py-2 outline-none focus:border-purple-400"
+            />
+            {saveNameError && <p id="save-voice-name-error" role="alert" className="text-sm text-rose-400">{saveNameError}</p>}
+          </div>
+          <div className="flex justify-end gap-2">
+            <button type="button" onClick={() => setSaveNameRequest(null)} className="rounded-xl border border-white/10 px-4 py-2 text-sm text-zinc-300">취소</button>
+            <button type="submit" className="rounded-xl bg-purple-600 px-4 py-2 text-sm font-bold hover:bg-purple-500">이 이름으로 저장</button>
+          </div>
+        </form>
+      </dialog>
+
       {/* Floating Success Toast */}
       <AnimatePresence>
         {lastSavedDna && (
@@ -3424,7 +3415,7 @@ export default function VoiceDnaStudio() {
                 <h5 className="text-xs font-bold text-emerald-400">보컬 음색 스타일 저장 완료!</h5>
                 <p className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
                   설계한 보컬 음색 스타일이 성공적으로 저장되었습니다.<br />
-                  코드: <strong className="font-mono text-white">{lastSavedDna}</strong>
+                  이름: <strong className="text-white">{lastSavedDna}</strong>
                 </p>
               </div>
             </div>

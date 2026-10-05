@@ -9,10 +9,11 @@ function loadTs(relative, mocks = {}) {
   const module = { exports: {} };
   const text = fs.readFileSync(path.join(__dirname, '..', relative), 'utf8');
   const js = ts.transpileModule(text, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
-  vm.runInNewContext(js, { module, exports: module.exports, require: name => mocks[name] || require(name) });
+  vm.runInNewContext(js, { module, exports: module.exports, URL, require: name => mocks[name] || require(name) });
   return module.exports;
 }
 const { QUICK_START_TEMPLATES } = loadTs('src/lib/voice/quick-start-templates.ts');
+const { getSingingSampleUrl } = loadTs('src/lib/voice/singing-sample-url.ts');
 const { buildVoicePromptFromAttributes } = loadTs('src/lib/voice-dna-scrubber.ts', { '@supabase/supabase-js': {} });
 
 const source = fs.readFileSync(path.join(__dirname, '../src/app/(app)/voice-lab/page.tsx'), 'utf8');
@@ -31,9 +32,9 @@ assert.ok(handler && navigation && templateFieldset);
 function evaluate(node, globals) {
   const module = { exports: {} };
   const js = ts.transpileModule(`module.exports = ${node.getText(file)};`, {
-    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
-  vm.runInNewContext(js, { module, ...globals });
+  vm.runInNewContext(js, { module, exports: module.exports, require, URL, ...globals });
   return module.exports;
 }
 function fixture(generating = false) {
@@ -46,6 +47,8 @@ function fixture(generating = false) {
   const unexpected = () => assert.fail('Quick settings must not generate or save');
   const globals = {
     QUICK_START_TEMPLATES,
+    demoCompletedSignatureRef: { current: "old-recipe" },
+    demoGenerationIdRef: { current: "old-a" }, demoGenerationIdBRef: { current: "old-b" },
     isDemoGenerating: generating, selectedGenre: 'ballad',
     demoAudioRef: { current: { pause() { calls.pause += 1; } } },
     demoTimersRef: { current: ['old-timer-a', 'old-timer-b'] },
@@ -77,7 +80,7 @@ const templates = [
 for (const [template, name, gender, genre] of templates) test(`${template} loads design settings and clears unrelated saved identity/sample`, () => {
   const f = fixture();
   f.click(template);
-  assert.equal(f.state.StageName, name);
+  assert.equal(f.state.StageName, QUICK_START_TEMPLATES[template].displayName);
   assert.equal(f.state.Gender, gender);
   assert.equal(f.state.SelectedGenre, genre);
   assert.equal(f.state.ActiveTab, 'design');
@@ -176,6 +179,7 @@ test('save uses compiled recipe and selected language, never unrelated source/te
     Object.assign(g, {
       stageName: 'Golden Retro Soul', loadedVoiceId: null, canOverwriteLoadedVoice: false, voices: [], customVoices: [],
       buildVoicePromptFromAttributes, currentDesignSignature: 'current-recipe',
+      demoGenerationIdRef: { current: "550e8400-e29b-41d4-a716-446655440000" }, demoGenerationIdBRef: { current: "550e8400-e29b-41d4-a716-446655440001" },
       demoCompletedSignatureRef: { current: matching ? 'current-recipe' : 'old-recipe' },
       demoAudioUrl: 'https://fixture.invalid/generated-A', demoAudioUrlB: 'https://fixture.invalid/generated-B',
       selectedVocalVersion: 'B', loadedVoiceAudioUrl: 'UNRELATED_TEST_SOURCE', voiceLanguageName: 'Japanese',
@@ -193,6 +197,9 @@ test('save uses compiled recipe and selected language, never unrelated source/te
     assert.equal(studioGender, 'female');
     assert.equal(added[0].audioUrl, matching ? 'https://fixture.invalid/generated-B' : '');
     assert.equal(added[0].sampleVersion, matching ? 'B' : 'A');
+    assert.equal(added[0].sampleGenerationId, matching ? g.demoGenerationIdBRef.current : undefined);
+    assert.equal(cache[0][0].sample_generation_id, matching ? g.demoGenerationIdRef.current : undefined);
+    assert.equal(cache[0][0].sample_generation_id_b, matching ? g.demoGenerationIdBRef.current : undefined);
     assert.equal(added[0].designAttributes.audio_url, undefined);
     assert.equal(JSON.stringify(cache).includes('UNRELATED_TEST_SOURCE'), false);
     assert.deepEqual(plain(inserts[0].performance), plain(QUICK_START_TEMPLATES.soul.performance));
@@ -204,6 +211,7 @@ test('explicit demo action submits a private 30-second request containing the sh
   const g = recipeGlobals('diva'), requests = [], timers = [];
   Object.assign(g, {
     isDemoGenerating: false, demoRequestRef: { current: 0 }, demoCompletedSignatureRef: { current: null },
+    demoGenerationIdRef: { current: null }, demoGenerationIdBRef: { current: null },
     currentDesignSignature: 'diva-recipe', demoAudioRef: { current: null }, demoTimersRef: { current: [] },
     buildVoicePromptFromAttributes, stageName: 'Crystal Pop Diva', voiceLanguageName: 'Japanese', lyricIndex: 0,
     DEMO_LYRICS: { ja: { female: { pop: ['fixture lyrics'] } } },
@@ -247,6 +255,7 @@ test('all recipe changes invalidate both samples without cancelling accepted gen
   const values = {}, g = {
     demoAudioRef: { current: { pause() {} } }, exploreAudioRef: { current: { pause() {} } },
     demoCompletedSignatureRef: { current: 'old' },
+    demoGenerationIdRef: { current: 'old-a' }, demoGenerationIdBRef: { current: 'old-b' },
     clearTimeout() { assert.fail('Accepted job polling must continue'); },
     setIsDemoGenerating() { assert.fail('Accepted job must remain active'); },
   };
@@ -268,7 +277,7 @@ test('all recipe changes invalidate both samples without cancelling accepted gen
 test('zero-valued saved controls and actual age restore without replacing them with defaults', () => {
   const values = {}, g = {
     isDemoGenerating: false, stopExploreVoiceDemo() {},
-    demoCompletedSignatureRef: { current: 'old' }, selectedGenre: 'pop',
+    demoCompletedSignatureRef: { current: 'old' }, demoGenerationIdRef: { current: 'old-a' }, demoGenerationIdBRef: { current: 'old-b' }, selectedGenre: 'pop',
   };
   const loader = named('loadPresetToSliders');
   function setters(node) {
@@ -297,6 +306,7 @@ test('late playback promises and old sample events cannot control a newer sample
       play() { return new Promise(resolve => { this.resolve = resolve; }); }
     },
   };
+  g.getStoredVoiceSampleUrl = evaluate(named('getStoredVoiceSampleUrl'), { getSingingSampleUrl });
   g.stopExploreVoiceDemo = evaluate(named('stopExploreVoiceDemo'), g);
   const play = evaluate(named('playExploreVoiceDemo'), g);
   play({ id: 'old', audioUrl: 'https://fixture.invalid/old' });
@@ -311,4 +321,94 @@ test('late playback promises and old sample events cannot control a newer sample
   audios[1].resolve();
   await Promise.resolve();
   assert.equal(playing.at(-1), true);
+});
+
+test('all save actions require a name confirmation and preserve the exact visible name', () => {
+  const values = {}, saves = [];
+  const g = {
+    stageName: QUICK_START_TEMPLATES.belter.displayName,
+    setSaveNameInput(value) { values.name = value; }, setSaveNameError(value) { values.error = value; },
+    setSaveNameRequest(value) { values.request = value; }, setStageName(value) { values.savedName = value; },
+    handleSaveDna(...args) { saves.push(args); },
+  };
+  const open = evaluate(named('openSaveNameDialog'), g);
+  open(true);
+  assert.equal(values.name, '파워풀 락 보컬 (Steel Belter)');
+  assert.equal(values.request.overwrite, true);
+  assert.equal(saves.length, 0);
+  const confirm = evaluate(named('confirmSaveName'), { ...g, saveNameInput: '내 락 보컬', saveNameRequest: values.request });
+  confirm({ preventDefault() {} });
+  assert.deepEqual(saves, [[true, '내 락 보컬']]);
+  assert.equal(values.savedName, '내 락 보컬');
+  assert.equal(values.request, null);
+  evaluate(named('confirmSaveName'), { ...g, saveNameInput: '  ', saveNameRequest: { overwrite: false } })({ preventDefault() {} });
+  assert.equal(saves.length, 1);
+  assert.match(values.error, /1~80/);
+  assert.equal((source.match(/onClick=\{\(\) => openSaveNameDialog\((?:true|false)\)\}/g) || []).length, 3);
+  assert.doesNotMatch(source, /onClick=\{\(\) => handleSaveDna/);
+  assert.match(source, /<dialog[\s\S]*?aria-labelledby="save-voice-name-title"/);
+  assert.match(source, /<label htmlFor="save-voice-name"/);
+  assert.doesNotMatch(named('handleSaveDna').getText(file), /\(v2\)|setLastSavedDna\(vdCode\)/);
+});
+
+test('saved cards expose one accessible sample control and never play legacy spoken examples', () => {
+  const getStoredVoiceSampleUrl = evaluate(named('getStoredVoiceSampleUrl'), { getSingingSampleUrl });
+  for (const audioUrl of ['/assets/voices/vd1004.mp3', 'https://melodio.app/assets/voices/vd3802.mp3?v=2', 'https://melodio.app/assets/voices/%76d7705.mp3']) {
+    assert.equal(getStoredVoiceSampleUrl({ audioUrl }), null);
+  }
+  assert.equal(getStoredVoiceSampleUrl({ audio_url: 'https://fixture.invalid/A', audio_url_b: 'https://fixture.invalid/B', sample_version: 'B' }), 'https://fixture.invalid/B');
+  const calls = [], render = evaluate(named('renderStoredVoiceSampleControl'), {
+    getStoredVoiceSampleUrl, Play() {}, Pause() {}, stopExploreVoiceDemo() { calls.push('stop'); },
+    playExploreVoiceDemo(voice) { calls.push(voice.audioUrl); },
+  });
+  const missing = render({ name: 'Saved', audioUrl: '/assets/voices/vd1004.mp3' }, false);
+  const absentButton = missing.props.children[0];
+  assert.equal(absentButton.props.disabled, true);
+  assert.equal(absentButton.props['aria-label'], 'Saved 보컬 샘플 듣기');
+  assert.ok(missing.props.children[1], 'Missing actual audio must have a visible explanation');
+  const ready = render({ name: 'Generated', audioUrl: 'https://fixture.invalid/B', sampleVersion: 'B' }, false);
+  ready.props.children[0].props.onClick();
+  render({ name: 'Generated', audioUrl: 'https://fixture.invalid/B' }, true).props.children[0].props.onClick();
+  assert.deepEqual(calls, ['https://fixture.invalid/B', 'stop']);
+  const collection = source.slice(source.indexOf('{activeTab === "collections" &&'), source.indexOf('{activeTab === "decoder" &&'));
+  assert.equal((collection.match(/renderStoredVoiceSampleControl\(voice, isPlaying\)/g) || []).length, 2);
+  assert.doesNotMatch(collection, /playExploreVoiceDemo\(voice\)|signatureVoices|추천 보컬 음색 스타일/);
+});
+
+test('completion records independent actual A/B generation IDs only for completed matching samples', async () => {
+  for (const bCompleted of [false, true]) {
+    const g = recipeGlobals('belter'), timers = [], requests = [], values = {};
+    const aId = '550e8400-e29b-41d4-a716-446655440000', bId = '550e8400-e29b-41d4-a716-446655440001';
+    Object.assign(g, {
+      isDemoGenerating: false, demoRequestRef: { current: 0 }, demoCompletedSignatureRef: { current: null },
+      demoGenerationIdRef: { current: 'old-a' }, demoGenerationIdBRef: { current: 'old-b' },
+      currentDesignSignature: 'recipe', currentDesignSignatureRef: { current: 'recipe' },
+      demoAudioRef: { current: null }, demoTimersRef: { current: [] }, buildVoicePromptFromAttributes,
+      stageName: QUICK_START_TEMPLATES.belter.displayName, voiceLanguageName: 'Japanese', lyricIndex: 0,
+      DEMO_LYRICS: { ja: { male: { rock: ['fixture lyrics'] } } },
+      clearTimeout() {}, setTimeout(run) { timers.push(run); return timers.length; }, alert() { assert.fail('Unexpected error'); },
+      async fetch(url) {
+        requests.push(url);
+        return { ok: true, json: async () => url === '/api/generate' ? { success: true, track: { id: aId } } : {
+          generation: { id: aId, status: 'completed', audio_url: 'https://fixture.invalid/A' },
+          sibling: { id: bId, status: bCompleted ? 'completed' : 'generating', audio_url: 'https://fixture.invalid/B' },
+        } };
+      },
+    });
+    const demo = named('handleGenerateDemo');
+    function setters(node) {
+      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && /^set[A-Z]/.test(node.expression.text) && node.expression.text !== 'setTimeout') g[node.expression.text] = value => { values[node.expression.text] = value; };
+      ts.forEachChild(node, setters);
+    }
+    setters(demo);
+    await evaluate(demo, g)();
+    assert.equal(g.demoGenerationIdRef.current, null);
+    assert.equal(g.demoGenerationIdBRef.current, null);
+    await timers[0]();
+    assert.equal(g.demoGenerationIdRef.current, aId);
+    assert.equal(g.demoGenerationIdBRef.current, bCompleted ? bId : null);
+    assert.equal(values.setDemoAudioUrl, 'https://fixture.invalid/A');
+    assert.equal(values.setDemoAudioUrlB, bCompleted ? 'https://fixture.invalid/B' : null);
+    assert.deepEqual(requests, ['/api/generate', `/api/generations?id=${aId}`]);
+  }
 });
