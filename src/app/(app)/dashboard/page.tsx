@@ -9,6 +9,7 @@ import {
   Volume2, VolumeX, ThumbsUp, ThumbsDown, Link as LinkIcon, ListPlus
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
+import { getTrackCoverFallback, resolveTrackCoverUrl } from "@/lib/track-cover";
 import { trackEngineLabel } from "@/lib/track-engine-label";
 import { getAudioPlaybackError, getExpiredAudioPlaybackError, getStoredTrackDuration } from "@/lib/audio-playback";
 import DashboardViralCarousel, { type DashboardViralVideo } from "@/components/dashboard/DashboardViralCarousel";
@@ -157,7 +158,7 @@ const AI_PRESET_THUMBNAILS: Record<string, string> = {
   sleep: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png"
 };
 
-const getFallbackCoverArt = (item: Generation): string => {
+const getLegacyFallbackCoverArt = (item: Generation): string => {
   let styleText = "";
   if (item.license_hash) {
     try {
@@ -187,6 +188,8 @@ const getFallbackCoverArt = (item: Generation): string => {
   
   return AI_PRESET_THUMBNAILS.sleep;
 };
+
+const getFallbackCoverArt = (item: Generation): string => getTrackCoverFallback(item, getLegacyFallbackCoverArt(item));
 
 // ─── Track Library 데이터 로딩용 스켈레톤 컴포넌트 ───
 const TrackLibrarySkeleton = () => {
@@ -1285,7 +1288,7 @@ export default function Home() {
         id: item.id,
         title: item.title || 'Untitled Viral Short',
         videoUrl: item.video_url || meta.video_url || meta.grok_video_url || meta.videoUrl || '',
-        posterUrl: item.cover_art_url || getFallbackCoverArt(item),
+        posterUrl: resolveTrackCoverUrl(item, getFallbackCoverArt(item)),
         createdAt: item.created_at,
         isPublic: meta.isPublic !== false,
       };
@@ -1693,7 +1696,7 @@ export default function Home() {
                     >
                       {/* 앨범 커버 이미지 또는 장르 컨셉 자동 매핑 (대안 B) 및 AI 재생성 트리거 */}
                       <FadeInImage 
-                        src={(item.cover_art_url && !item.cover_art_url.includes('unsplash.com')) ? item.cover_art_url : getFallbackCoverArt(item)}
+                        src={resolveTrackCoverUrl(item, getFallbackCoverArt(item))}
                         alt={item.title || 'Track Art'} 
                         className="absolute inset-0 w-full h-full object-cover object-top"
                       />
@@ -2277,7 +2280,7 @@ export default function Home() {
                 <div className="flex justify-center flex-shrink-0 py-2">
                   <div className="w-48 h-48 rounded-xl overflow-hidden border border-white/10 shadow-lg relative bg-black/40">
                     <img 
-                      src={detailItem.cover_art_url || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&q=80'} 
+                      src={resolveTrackCoverUrl(detailItem, getFallbackCoverArt(detailItem))}
                       alt={detailItem.title || 'Track Art'} 
                       className="w-full h-full object-cover object-top"
                     />
@@ -2770,7 +2773,7 @@ export default function Home() {
                   {/* Blurry artwork background */}
                   <div 
                     className="absolute inset-0 bg-cover bg-center pointer-events-none opacity-40 blur-[30px] scale-110"
-                    style={{ backgroundImage: `url(${sharingTrack.cover_art_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop'})` }}
+                    style={{ backgroundImage: `url(${resolveTrackCoverUrl(sharingTrack, getFallbackCoverArt(sharingTrack))})` }}
                   />
 
                   {/* Frosted glass preview content */}
@@ -2778,7 +2781,7 @@ export default function Home() {
                     {/* Cover Art */}
                     <div className="w-full aspect-square rounded-xl overflow-hidden shadow-md">
                       <img 
-                        src={sharingTrack.cover_art_url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=600&auto=format&fit=crop'} 
+                        src={resolveTrackCoverUrl(sharingTrack, getFallbackCoverArt(sharingTrack))}
                         alt={sharingTrack.title || 'Track Cover'} 
                         className="w-full h-full object-cover select-none"
                       />
@@ -2873,7 +2876,7 @@ export default function Home() {
           }
         }
 
-        const coverUrl = currentDashboardTrack.cover_art_url || getFallbackCoverArt(currentDashboardTrack);
+        const coverUrl = resolveTrackCoverUrl(currentDashboardTrack, getFallbackCoverArt(currentDashboardTrack));
 
         return (
           <div className="fixed bottom-0 left-0 right-0 w-full z-[100] bg-[#0c0d12]/95 border-t border-white/10 backdrop-blur-2xl px-4 md:px-8 py-3 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] flex items-center justify-between">

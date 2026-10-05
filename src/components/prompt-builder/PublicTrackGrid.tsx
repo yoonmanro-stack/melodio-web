@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { registerActiveAudio } from '@/lib/globalAudio'
+import { getTrackCoverFallback, resolveTrackCoverUrl } from '@/lib/track-cover'
 import { getAudioPlaybackError, getExpiredAudioPlaybackError, getStoredTrackDuration } from '@/lib/audio-playback'
 
 interface PublicTrackGridProps {
@@ -401,7 +402,7 @@ export default function PublicTrackGrid({
     'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png'
   ];
 
-  const getFallbackCover = (style: any) => {
+  const getLegacyFallbackCover = (style: any) => {
     const promptText = (style.title || style.tags || style.license_hash || '').toLowerCase();
     if (promptText.includes('lo-fi') || promptText.includes('lofi') || promptText.includes('tea') || promptText.includes('healing')) {
       return AI_GRID_PRESETS[0];
@@ -420,6 +421,8 @@ export default function PublicTrackGrid({
     }
     return AI_GRID_PRESETS[5];
   }
+
+  const getFallbackCover = (track: any) => getTrackCoverFallback(track, getLegacyFallbackCover(track))
 
   const isCurrentPlaying = (trackId: string) => {
     if (useExternalPlayer) {
@@ -534,8 +537,7 @@ export default function PublicTrackGrid({
               <div className="flex gap-4 overflow-x-auto scrollbar-none pb-2 pt-1 snap-x snap-mandatory">
                 {searchedTracks.map((track) => {
                   const playing = isCurrentPlaying(track.id)
-                  const rawCover = track.cover_art_url || track.image_url
-                  const coverUrl = (rawCover && !rawCover.includes('unsplash.com')) ? rawCover : getFallbackCover(track)
+                  const coverUrl = resolveTrackCoverUrl(track, getFallbackCover(track))
                   
                   let genre = 'BGM'
                   let vocal = 'No Vocal'
@@ -626,8 +628,7 @@ export default function PublicTrackGrid({
             <div className={columns === 1 ? "grid grid-cols-1 gap-3" : "grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"}>
               {paginated.map((track) => {
                 const playing = isCurrentPlaying(track.id)
-                const rawCover = track.cover_art_url || track.image_url
-                const coverUrl = (rawCover && !rawCover.includes('unsplash.com')) ? rawCover : getFallbackCover(track)
+                const coverUrl = resolveTrackCoverUrl(track, getFallbackCover(track))
                 
                 let genre = 'BGM'
                 let vocal = 'No Vocal'
@@ -765,7 +766,7 @@ export default function PublicTrackGrid({
             {/* Track Info (Left) */}
             {(() => {
               const meta = getTrackMeta(localPlayingTrack)
-              const coverUrl = localPlayingTrack.cover_art_url || getFallbackCover(localPlayingTrack)
+              const coverUrl = resolveTrackCoverUrl(localPlayingTrack, getFallbackCover(localPlayingTrack))
               return (
                 <div className="flex items-center gap-3 w-1/4 min-w-0">
                   <div className="w-12 h-12 rounded-lg overflow-hidden shrink-0 bg-zinc-900 border border-white/10 shadow-md">
