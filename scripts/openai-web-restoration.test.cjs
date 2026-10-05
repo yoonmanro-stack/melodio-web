@@ -45,7 +45,7 @@ function load(file, probe, extra = {}) {
   const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { fileName: filename, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText
   vm.runInNewContext(source, {
     module, exports: module.exports,
-    require(name) { if (Object.hasOwn(modules, name)) return modules[name]; if (name.startsWith('node:')) return require(name); throw new Error(`Unmocked module: ${name}`) },
+    require(name) { if (Object.hasOwn(modules, name)) return modules[name]; if (name === '@/lib/preset-concept-analysis') return load('src/lib/preset-concept-analysis.ts', probe); if (name.startsWith('node:')) return require(name); throw new Error(`Unmocked module: ${name}`) },
     process: { env: probe.env }, fetch: probe.fetch, console: { log() {}, warn(...args) { probe.logs.push(args.join(' ')) }, error(...args) { probe.logs.push(args.join(' ')) } },
     Buffer, URL, Date, Error, SyntaxError, TypeError, AbortSignal, AbortController, setTimeout: fn => { fn(); return 0 }, clearTimeout() {},
   }, { filename })

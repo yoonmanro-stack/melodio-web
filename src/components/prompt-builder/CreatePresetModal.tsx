@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { X, Sparkles, Upload, Lock, Pencil, Trash2, Heart, Copy, Info, Palette, Shuffle, Check } from 'lucide-react'
 import type { Preset } from '@/types'
 import { supabase } from '@/lib/supabase'
@@ -27,6 +27,19 @@ interface PresetThumbnailConcept {
   customPrompt: string
   additionalRequest: string
   videoPrompt?: string
+}
+
+interface NicheDraftBaseline {
+  name: string
+  desc: string
+  inferredGenre: string
+  customPrompt: string
+  translations: Record<string, string>
+  dynamicElements: any
+  emoji: string
+  gradient: string
+  thumbnailUrl: string
+  thumbnailUrls: string[]
 }
 
 function buildPresetThumbnailPrompt(concept: PresetThumbnailConcept): string {
@@ -162,16 +175,18 @@ export default function CreatePresetModal({
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false)
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false)
   const [isAnalyzingText, setIsAnalyzingText] = useState(false)
+  const [analysisError, setAnalysisError] = useState('')
   const [dynamicElements, setDynamicElements] = useState<any>(null)
   const [category, setCategory] = useState<string>('healing')
 
   // 🎲 모달 전용 AI 틈새 아이디어 셔플 상태
   const [modalNicheSeeds, setModalNicheSeeds] = useState<{ label: string; value: string }[]>([])
-  const [selectedModalNicheTag, setSelectedModalNicheTag] = useState<string | null>(null)
+  const [selectedNicheReference, setSelectedNicheReference] = useState<{ label: string; value: string } | null>(null)
+  const nicheDraftBaseline = useRef<NicheDraftBaseline | null>(null)
   const [isModalShuffling, setIsModalShuffling] = useState(false)
 
   const getRandomModalNicheChips = useCallback((catKey: string) => {
-    const masterPool = MASTER_NICHE_SEEDS[catKey] || []
+    const masterPool = MASTER_NICHE_SEEDS[catKey === 'cinematic' ? 'story' : catKey] || []
     const fallbackConcept = CHANNEL_CONCEPTS.find((c: any) => c.id === catKey)
     const fallbackPool = fallbackConcept ? fallbackConcept.nicheSeeds : []
     const pool = masterPool.length > 0 ? masterPool : fallbackPool
@@ -182,7 +197,6 @@ export default function CreatePresetModal({
 
   useEffect(() => {
     setModalNicheSeeds(getRandomModalNicheChips(category))
-    setSelectedModalNicheTag(null)
   }, [category, getRandomModalNicheChips])
 
   const handleShuffleModalNiche = () => {
@@ -194,23 +208,47 @@ export default function CreatePresetModal({
   }
 
   const handleModalNicheClick = (seed: { label: string; value: string }) => {
-    if (selectedModalNicheTag === seed.value) {
-      setSelectedModalNicheTag(null)
+    if (isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail) return
+    setAnalysisError('')
+    if (!nicheDraftBaseline.current) {
+      nicheDraftBaseline.current = {
+        name, desc, inferredGenre, customPrompt, translations, dynamicElements, emoji, gradient,
+        thumbnailUrl: aiGeneratedThumbnailUrl, thumbnailUrls: aiGeneratedThumbnailUrls,
+      }
     } else {
-      setSelectedModalNicheTag(seed.value)
-      // 1클릭 컨셉명 & 스타일 태그 자동 주입
-      const cleanLabel = seed.label.replace(/^🔥\s*\[[^\]]+\]\s*/, '').trim()
-      if (cleanLabel) {
-        handleNameChange(cleanLabel.slice(0, 48))
-      }
-      if (seed.value) {
-        setCustomPrompt(prev => {
-          if (!prev) return seed.value
-          if (prev.includes(seed.value)) return prev
-          return `${prev}, ${seed.value}`
-        })
-      }
+      restoreNicheDraft()
     }
+    if (selectedNicheReference?.value === seed.value) {
+      setSelectedNicheReference(null)
+      nicheDraftBaseline.current = null
+      return
+    }
+    // Display labels may contain literal ellipses. The complete reference stays
+    // separate from the user's title and musical style requirements.
+    setSelectedNicheReference(seed)
+  }
+
+  const restoreNicheDraft = () => {
+    const baseline = nicheDraftBaseline.current
+    if (!baseline) return
+    setName(baseline.name)
+    setDesc(baseline.desc)
+    setInferredGenre(baseline.inferredGenre)
+    setCustomPrompt(baseline.customPrompt)
+    setTranslations(baseline.translations)
+    setDynamicElements(baseline.dynamicElements)
+    setEmoji(baseline.emoji)
+    setGradient(baseline.gradient)
+    setAiGeneratedThumbnailUrl(baseline.thumbnailUrl)
+    setAiGeneratedThumbnailUrls(baseline.thumbnailUrls)
+  }
+
+  const handleCategoryChange = (nextCategory: string) => {
+    restoreNicheDraft()
+    nicheDraftBaseline.current = null
+    setSelectedNicheReference(null)
+    setAnalysisError('')
+    setCategory(nextCategory)
   }
 
   const generateSafeThumbnail = async (concept: PresetThumbnailConcept) => {
@@ -304,6 +342,7 @@ export default function CreatePresetModal({
   const analyzeImagesForMusic = async (targetImages: string[]) => {
     if (targetImages.length === 0 || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail) return
     setIsAnalyzingImage(true)
+    setAnalysisError('')
     try {
       // Vercel 4.5MB 페이로드 제한 우회 및 전송 효율을 위해 이미지 압축 진행
       const compressedImages = await Promise.all(
@@ -316,6 +355,8 @@ export default function CreatePresetModal({
         body: JSON.stringify({ 
           images: compressedImages,
           conceptName: name.trim() || undefined,
+          conceptReference: selectedNicheReference?.value,
+          category,
           desc: desc.trim() || undefined,
           inferredGenre: inferredGenre.trim() || undefined,
           customPrompt: customPrompt.trim() || undefined,
@@ -323,8 +364,9 @@ export default function CreatePresetModal({
           locale: language
         })
       })
+      const data = await res.json()
+      if (!res.ok || !data.preset) throw new Error(data.error || '컨셉을 분석하지 못했습니다. 다시 시도해 주세요.')
       if (res.ok) {
-        const data = await res.json()
         if (data.preset) {
           const analyzedConcept: PresetThumbnailConcept = {
             name: data.preset.name || name,
@@ -365,20 +407,24 @@ export default function CreatePresetModal({
       }
     } catch (err) {
       console.error('[CreatePresetModal] Image analysis failed:', err)
+      setAnalysisError(err instanceof Error ? err.message : '컨셉을 분석하지 못했습니다. 다시 시도해 주세요.')
     } finally {
       setIsAnalyzingImage(false)
     }
   }
 
   const analyzeTextForMusic = async () => {
-    if (!name.trim() || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail) return
+    if ((!name.trim() && !selectedNicheReference) || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail) return
     setIsAnalyzingText(true)
+    setAnalysisError('')
     try {
       const res = await fetch('/api/style-library/analyze-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           conceptName: name,
+          conceptReference: selectedNicheReference?.value,
+          category,
           desc: desc.trim() || undefined,
           inferredGenre: inferredGenre.trim() || undefined,
           customPrompt: customPrompt.trim() || undefined,
@@ -386,8 +432,9 @@ export default function CreatePresetModal({
           locale: language
         })
       })
+      const data = await res.json()
+      if (!res.ok || !data.preset) throw new Error(data.error || '컨셉을 분석하지 못했습니다. 다시 시도해 주세요.')
       if (res.ok) {
-        const data = await res.json()
         if (data.preset) {
           const analyzedConcept: PresetThumbnailConcept = {
             name: data.preset.name || name,
@@ -428,6 +475,7 @@ export default function CreatePresetModal({
       }
     } catch (err) {
       console.error('[CreatePresetModal] Text concept analysis failed:', err)
+      setAnalysisError(err instanceof Error ? err.message : '컨셉을 분석하지 못했습니다. 다시 시도해 주세요.')
     } finally {
       setIsAnalyzingText(false)
     }
@@ -438,6 +486,10 @@ export default function CreatePresetModal({
   useEffect(() => {
     if (isOpen) {
       setIsAnalyzingImage(false)
+      setIsAnalyzingText(false)
+      setAnalysisError('')
+      setSelectedNicheReference(null)
+      nicheDraftBaseline.current = null
       setDynamicElements(editingPreset?.metadata?.dynamic_elements || null)
       setCategory(editingPreset?.metadata?.category || 'healing')
       let genre = editingPreset?.metadata?.inferred_genre || ''
@@ -505,6 +557,7 @@ export default function CreatePresetModal({
       metadata: {
         ...(editingPreset?.metadata || {}),
         category: category,
+        concept_reference: selectedNicheReference?.value || null,
         inferred_genre: inferredGenre,
         thumbnail_url: aiGeneratedThumbnailUrl || (refImages.length > 0 ? refImages[0] : undefined),
         thumbnail_urls: aiGeneratedThumbnailUrls.length > 0 
@@ -588,19 +641,19 @@ export default function CreatePresetModal({
                 <button
                   type="button"
                   onClick={handleShuffleModalNiche}
-                  disabled={isModalShuffling}
+                  disabled={isModalShuffling || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
                   className="px-2.5 py-1 bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white rounded-lg text-[10.5px] font-bold transition-all shadow-[0_0_10px_rgba(217,70,239,0.3)] flex items-center gap-1.5 active:scale-95 disabled:opacity-50"
                 >
                   <Shuffle className={`w-3 h-3 ${isModalShuffling ? 'animate-spin' : ''}`} />
-                  <span>🎲 AI 틈새 아이디어 셔플</span>
+                  <span>추천 아이디어 새로 보기</span>
                 </button>
               )}
             </div>
 
             <select
               value={category}
-              onChange={e => setCategory(e.target.value)}
-              disabled={isReadOnly}
+              onChange={e => handleCategoryChange(e.target.value)}
+              disabled={isReadOnly || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
               className="w-full px-3.5 py-2.5 bg-zinc-900/80 border border-white/10 rounded-xl text-[13px] font-medium text-zinc-200 focus:outline-none focus:border-fuchsia-500/60 focus:ring-1 focus:ring-fuchsia-500/30 transition-all disabled:opacity-75 disabled:cursor-not-allowed"
             >
               <option value="healing">👼 마음의 위로 & 힐링 (Healing & Chill)</option>
@@ -617,29 +670,44 @@ export default function CreatePresetModal({
               <div className="pt-2 border-t border-white/5 space-y-1.5">
                 <div className="flex items-center justify-between text-[10.5px]">
                   <span className="text-zinc-300 font-bold flex items-center gap-1">
-                    🎯 틈새 타겟팅 추천 칩 (클릭 시 컨셉명 & 태그 자동 주입):
+                    🎯 추천 아이디어 (하나 선택 후 AI 분석):
                   </span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {modalNicheSeeds.map((seed) => {
-                    const isSelected = selectedModalNicheTag === seed.value;
+                    const isSelected = selectedNicheReference?.value === seed.value;
+                    const referenceLabel = `${seed.label.match(/^🔥\s*\[[^\]]+\]\s*/)?.[0] || ''}${seed.value}`;
                     return (
                       <button
                         key={seed.value}
                         type="button"
                         onClick={() => handleModalNicheClick(seed)}
+                        aria-pressed={isSelected}
+                        aria-label={`추천 아이디어: ${seed.value}`}
+                        title={seed.value}
+                        disabled={isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
                         className={`px-2 py-1 rounded-lg text-[10.5px] font-medium transition-all border flex items-center gap-1 text-left ${
                           isSelected
                             ? 'bg-gradient-to-r from-fuchsia-600 to-purple-600 border-fuchsia-400 text-white font-bold shadow-[0_0_10px_rgba(217,70,239,0.5)] scale-105'
                             : 'border-fuchsia-500/20 bg-fuchsia-500/10 text-fuchsia-200 hover:text-white hover:bg-fuchsia-500/20'
                         }`}
                       >
-                        <span className="truncate max-w-[220px]">{seed.label}</span>
+                        <span className="truncate max-w-[220px]">{referenceLabel}</span>
                         {isSelected && <Check className="w-3 h-3 text-fuchsia-200 shrink-0" />}
                       </button>
                     );
                   })}
                 </div>
+                {selectedNicheReference && (
+                  <div role="region" aria-label="선택한 추천 아이디어" className="mt-3 rounded-xl border border-fuchsia-500/20 bg-black/30 p-3 space-y-2">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-[11px] font-semibold text-fuchsia-200">선택한 추천 아이디어 · 원문</span>
+                      <button type="button" onClick={() => handleModalNicheClick(selectedNicheReference)} disabled={isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail} className="text-[11px] text-zinc-400 hover:text-white disabled:opacity-50">선택 해제</button>
+                    </div>
+                    <p className="text-[12px] text-zinc-200 leading-relaxed break-words">{selectedNicheReference.value}</p>
+                    <p className="text-[11px] text-zinc-400 leading-relaxed">아래 AI 분석을 누르면 원문을 참고해 컨셉명·설명·음악 태그를 만듭니다. 다른 추천을 선택하면 이전 추천의 분석 결과를 교체합니다.</p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -754,11 +822,12 @@ export default function CreatePresetModal({
                   value={name}
                   onChange={e => handleNameChange(e.target.value)}
                   className="w-full pl-3.5 pr-24 py-2 bg-black/40 border border-white/10 rounded-xl text-[13px] font-normal text-zinc-200 placeholder-zinc-600 focus:outline-none focus:border-fuchsia-500/50 transition-colors disabled:opacity-75 resize-none h-[56px] leading-normal"
-                  placeholder="예: 비 내리는 늦은 밤, 어두운 방 창가에 앉아 마시는 따뜻한 커피와 깊은 생각 (자세할수록 고품질 컨셉이 생성됩니다)"
+                  aria-label="컨셉명"
+                  placeholder={selectedNicheReference ? 'AI 분석으로 추천 아이디어에 맞는 이름을 만드세요' : '예: 잔잔한 바다의 휴식, 비 오는 카페'}
                   maxLength={50}
                   disabled={isReadOnly || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
                 />
-                {name.trim().length > 0 && !isReadOnly && (
+                {(name.trim().length > 0 || selectedNicheReference) && !isReadOnly && (
                   <button
                     type="button"
                     onClick={analyzeTextForMusic}
@@ -781,8 +850,9 @@ export default function CreatePresetModal({
               </div>
               <p className="text-[10px] text-zinc-500 mt-1.5 leading-normal font-sans flex items-center gap-1">
                 <Info className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
-                <span>시간, 날씨, 장소, 현재 느끼는 감정 등을 상세히 묘사할수록 더욱 환상적인 컨셉과 음악이 디자인됩니다.</span>
+                <span>컨셉명은 짧고 알아보기 쉽게 적어 주세요. 장소·분위기·사용 목적은 아래 컨셉 설명에 적으면 분석에 반영됩니다.</span>
               </p>
+              {analysisError && <p role="alert" className="mt-2 text-[12px] text-red-300">{analysisError}</p>}
             </div>
 
             {/* 음악 장르 */}
@@ -793,6 +863,7 @@ export default function CreatePresetModal({
               <input 
                 type="text" 
                 value={inferredGenre}
+                aria-label="음악 장르"
                 onChange={e => setInferredGenre(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-[15px] font-normal text-zinc-400 placeholder-zinc-600 focus:outline-none focus:border-fuchsia-500/50 transition-colors disabled:opacity-75"
                 placeholder="예: Lofi, Jazz Lullaby, Ambient Synth"
@@ -808,9 +879,10 @@ export default function CreatePresetModal({
               </label>
               <textarea 
                 value={desc}
+                aria-label="컨셉 설명"
                 onChange={e => handleDescChange(e.target.value)}
                 className="w-full px-3.5 py-2.5 bg-black/40 border border-white/10 rounded-xl text-[15px] font-normal text-zinc-400 placeholder-zinc-600 focus:outline-none focus:border-fuchsia-500/50 transition-colors h-24 resize-y leading-normal font-sans disabled:opacity-75"
-                placeholder="예: 비스듬히 내리쬐는 주황빛 노을빛이 창틀에 스며들고, 오래된 나무 책상 위에 놓인 따뜻한 홍차에서 피어오르는 온기가 아늑한 실내를 감싸 안습니다. 낡은 LP 턴테이블이 만드는 미세한 먼지 노이즈와 은은한 일렉트릭 피아노의 리버브 선율이 조화롭게 섞여 들어가며, 일상에 지쳐있던 마음을 어루만져 주는 편안하고 노스탤지어 가득한 로파이 BGM입니다."
+                placeholder="예: 잔잔한 파도 소리와 부드러운 피아노가 어우러지는 휴식용 음악. 느린 템포와 차분한 분위기를 원합니다."
                 maxLength={300}
                 disabled={isReadOnly || isAnalyzingImage || isAnalyzingText || isGeneratingThumbnail}
               />
