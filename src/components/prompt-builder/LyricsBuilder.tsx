@@ -8,6 +8,7 @@ import {
   PenTool, Users, User, X, Plus, Star, Mic2
 } from 'lucide-react'
 import { useVoice } from '@/contexts/VoiceContext'
+import { matchesStudioVoice } from '@/lib/voice/studio-selection'
 import type { LyricsSection, LyricsSectionType } from '@/types'
 import type { PlaylistTrack } from '@/types/playlist'
 
@@ -46,6 +47,8 @@ interface LyricsBuilderProps {
   onActiveTrackIdxChange: (idx: number) => void
   presetId?: string
   isJapanCampaign?: boolean
+  lyricLanguage?: string
+  onLyricLanguageChange?: (language: string) => void
 
   // Voice DNA
   selectedVdCode?: string
@@ -96,24 +99,31 @@ export default function LyricsBuilder({
   onActiveTrackIdxChange,
   presetId,
   isJapanCampaign = false,
+  lyricLanguage,
+  onLyricLanguageChange,
   selectedVdCode = 'auto',
   onSelectedVdCodeChange,
   vdOptions = [],
 }: LyricsBuilderProps) {
   const [topic, setTopic] = useState('')
-  const [language, setLanguage] = useState<'ko' | 'en' | 'ja' | 'ko-en' | 'ja-en' | 'fr' | 'zh' | 'es' | 'pt' | 'de' | 'ru' | 'ar'>(isJapanCampaign ? 'ja' : 'ko')
-  const { studioGender: vocalGender, setStudioGender: setVocalGender } = useVoice()
+  const [localLanguage, setLocalLanguage] = useState(isJapanCampaign ? 'ja' : 'ko')
+  const language = lyricLanguage ?? localLanguage
+  const setLanguage = (value: string) => {
+    if (lyricLanguage === undefined) setLocalLanguage(value)
+    onLyricLanguageChange?.(value)
+  }
+  const { activeVoice, studioGender: vocalGender, setStudioGender: setVocalGender } = useVoice()
   const [isGenerating, setIsGenerating] = useState(false)
   const [autoTitle, setAutoTitle] = useState(true) // 제목 자동생성 토글 (기본: ON)
   const [autoTopic, setAutoTopic] = useState(true) // 주제 자동생성 토글 (기본: ON)
-  const { activeVoice } = useVoice()
 
-  // activeVoice가 변경되었을 때 selectedVdCode 자동 동기화
+  // 가사 언어와 가창 성별에 맞는 보이스만 선택 코드에 반영한다.
   useEffect(() => {
-    if (activeVoice && activeVoice.gender === vocalGender && selectedVdCode !== activeVoice.id) {
-      onSelectedVdCodeChange?.(activeVoice.id)
+    const nextCode = activeVoice && matchesStudioVoice(vocalGender, activeVoice, language) ? activeVoice.id : 'auto'
+    if (selectedVdCode !== nextCode) {
+      onSelectedVdCodeChange?.(nextCode)
     }
-  }, [activeVoice])
+  }, [activeVoice, vocalGender, language, selectedVdCode, onSelectedVdCodeChange])
 
   // 복사 피드백 상태
   const [copiedYT, setCopiedYT] = useState(false)
@@ -421,7 +431,7 @@ export default function LyricsBuilder({
                   </label>
                   <select
                     value={language}
-                    onChange={(e) => setLanguage(e.target.value as any)}
+                    onChange={(e) => setLanguage(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg text-sm bg-black/40 border border-melodio-border text-melodio-text
                                focus:outline-none focus:border-melodio-accent font-sans"
                   >
@@ -467,7 +477,7 @@ export default function LyricsBuilder({
                   </select>
                 </div>
 
-                <div className="md:col-span-2"><StudioVoicePicker /></div>
+                <div className="md:col-span-2"><StudioVoicePicker language={language} /></div>
               </div>
               <div className="flex justify-center mt-1">
                 <button

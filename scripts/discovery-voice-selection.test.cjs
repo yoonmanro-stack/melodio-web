@@ -38,7 +38,7 @@ const studio = load('src/lib/voice/studio-selection.ts');
 const duration = load('src/lib/music-duration.ts');
 const designCompiler = load('src/lib/voice/voice-design-prompt.ts');
 const scrubber = loadSource(extract('scrubConflictingVocalTags', 'src/lib/voice-dna-scrubber.ts'));
-const official = load('src/lib/voice/official-voice-selection.ts', { '@/data/officialVocalCatalog.json': officialCatalog });
+const official = load('src/lib/voice/official-voice-selection.ts', { '@/data/officialVocalCatalog.json': officialCatalog, '@/lib/voice/studio-selection': studio });
 function selection(catalog = [ready]) {
   return load('src/lib/voice/discovery-voice-selection.ts', {
     '@/data/discoveryVoices.json': catalog, '@/data/officialVocalCatalog.json': officialCatalog,

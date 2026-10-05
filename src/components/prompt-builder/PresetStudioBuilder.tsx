@@ -12,6 +12,7 @@ import { presets } from '@/data/presets'
 import { useAuth } from '@/hooks/useAuth'
 import { useHistory } from '@/hooks/useHistory'
 import { useVoice } from '@/contexts/VoiceContext'
+import { studioVoiceFields as resolveStudioVoiceFields } from '@/lib/voice/studio-selection'
 import { composeStylePrompt, enforceSingleSelect, resolveRotationPrompt } from '@/lib/prompt-compositor'
 import { supabase } from '@/lib/supabase'
 import GenreSelector from './GenreSelector'
@@ -63,6 +64,7 @@ export default function PromptBuilder({
 }: PromptBuilderProps = {}) {
   const [selections, setSelections] = useState<TagSelections>({})
   const [lyricsSections, setLyricsSections] = useState<LyricsSection[]>([])
+  const [lyricsLanguage, setLyricsLanguage] = useState('ko')
   const [isInstrumental, setIsInstrumental] = useState(false)
   const [engine, setEngine] = useState<MusicEngine>('auto')
   const [sunoVersion, setSunoVersion] = useState<string>('v6')
@@ -118,7 +120,8 @@ export default function PromptBuilder({
 
   const { user } = useAuth()
   const { saveHistory } = useHistory()
-  const { activeVoice, studioVoiceFields } = useVoice()
+  const { activeVoice, studioGender } = useVoice()
+  const studioVoiceFields = resolveStudioVoiceFields(studioGender, activeVoice, lyricsLanguage)
 
   const [isPro, setIsPro] = useState(false)
   const [customPresets, setCustomPresets] = useState<Preset[]>([])
@@ -874,11 +877,8 @@ export default function PromptBuilder({
               lyricsSections: track.sections,
               presetId: selectedPresetId,
               presetName: selectedPresetName,
-              vdCode: selectedVdCode !== 'auto' ? selectedVdCode : (activeVoice?.id || undefined),
-              voicePrompt: activeVoice?.stylePrompt || undefined,
-              activeVoice: activeVoice || undefined,
               sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
-              ...studioVoiceFields,
+            ...studioVoiceFields,
               isPublic: isPublic,
             }),
           })
@@ -923,20 +923,6 @@ export default function PromptBuilder({
 
         if (isPresetDefault) {
           const targetDuration = 180; // 표준 곡 길이 180초 (3분 ~ 3분 30초 최적화)
-          let language: 'ko' | 'en' | 'ja' | 'ko-en' | 'ja-en' | 'fr' = 'ko';
-          if (selectedPresetId === 'french-vintage-chanson') {
-            language = 'fr';
-          } else if (stylePrompt.toLowerCase().includes('japanese') || (currentPreset && (currentPreset.name.includes('일본') || currentPreset.name.includes('도쿄') || currentPreset.name.includes('교토')))) {
-            language = 'ja';
-          } else if (stylePrompt.toLowerCase().includes('english') || stylePrompt.toLowerCase().includes('american') || stylePrompt.toLowerCase().includes('british')) {
-            language = 'en';
-          }
-
-          const vocalGender: 'mixed' | 'female' | 'male' | 'duet' =
-            stylePrompt.toLowerCase().includes('female') ? 'female' :
-            stylePrompt.toLowerCase().includes('male') ? 'male' :
-            stylePrompt.toLowerCase().includes('duet') ? 'duet' : 'mixed';
-
           const topic = currentPreset?.desc || currentPreset?.name || '자유로운 감성곡';
 
           const lyricRes = await fetch('/api/lyrics/generate', {
@@ -945,7 +931,7 @@ export default function PromptBuilder({
             body: JSON.stringify({
               stylePrompt: finalStyle,
               topic,
-              language,
+              language: lyricsLanguage,
               vocalGender: studioVoiceFields.vocalGender,
               presetId: selectedPresetId,
               durationSeconds: targetDuration,
@@ -1031,11 +1017,8 @@ export default function PromptBuilder({
             lyricsSections: finalSections,
             presetId: selectedPresetId,
             presetName: selectedPresetName,
-            vdCode: selectedVdCode !== 'auto' ? selectedVdCode : (activeVoice?.id || undefined),
-            voicePrompt: activeVoice?.stylePrompt || undefined,
-            activeVoice: activeVoice || undefined,
             sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
-              ...studioVoiceFields,
+            ...studioVoiceFields,
             isPublic: isPublic,
           }),
         })
@@ -1111,6 +1094,8 @@ export default function PromptBuilder({
                 setSnsHashtags(sns)
               }}
               sections={lyricsSections}
+              lyricLanguage={lyricsLanguage}
+              onLyricLanguageChange={setLyricsLanguage}
               onSectionsChange={setLyricsSections}
               playlistTitle={playlistTitle}
               onPlaylistTitleChange={setPlaylistTitle}
@@ -1547,6 +1532,8 @@ export default function PromptBuilder({
                   setSnsHashtags(sns)
                 }}
                 sections={lyricsSections}
+                lyricLanguage={lyricsLanguage}
+                onLyricLanguageChange={setLyricsLanguage}
                 onSectionsChange={setLyricsSections}
                 playlistTitle={playlistTitle}
                 onPlaylistTitleChange={setPlaylistTitle}
