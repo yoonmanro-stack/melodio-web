@@ -11,7 +11,7 @@ const provider = require(path.join(root, 'worker/suno-provider.js'));
 const ready = {
   id: 'discovery-offline-female', name: 'Offline singer', shortDescription: 'Clear solo', gender: 'female', language: 'fr',
   stylePrompt: 'female vocals, resonant clear middle register, precise French articulation',
-  audioUrl: '/assets/voices/discovery-20261005/offline-female.mp3', previewStatus: 'ready',
+  audioUrl: '/assets/voices/discovery-20261005/offline-female.mp3', previewStatus: 'ready', reuseStatus: 'ready',
 };
 const designedId = '00000000-0000-4000-8000-000000000032';
 const savedDesign = { id: designedId, userId: 'offline-user', name: 'Owned design', status: 'ready',
@@ -141,6 +141,65 @@ test('pending, missing audio, legacy TTS, official samples and absent personas r
     assert.equal(response.status, 503);
     assert.equal(calls.provider.length + calls.rows.length + calls.metadata, 0);
   }
+});
+
+test('pending catalog reuse throws before any external work even with a registry entry and forged browser-ready flags', async () => {
+  for (const reuseStatus of ['pending', undefined]) {
+    const voice = { ...ready, reuseStatus };
+    const input = body({ activeVoice: { id: ready.id, discoveryVoiceId: ready.id, previewStatus: 'ready', reuseStatus: 'ready' } });
+    assert.throws(() => selection([voice]).resolveDiscoveryVoice(input), /discovery_voice_not_ready/);
+    const { response, calls } = await request(input, { catalog: [voice] });
+    assert.equal(response.status, 503);
+    assert.equal(calls.provider.length + calls.rows.length + calls.metadata, 0);
+  }
+});
+
+test('shared selection and restoration eligibility uses canonical Discovery readiness and preserves other voice types', () => {
+  const id = 'discovery-v2-f-001';
+  let canonical = { ...ready, id, discoveryVoiceId: id, reuseStatus: 'pending' };
+  const { selectableVoice } = loadSource(`import { discoveryVoiceItem } from 'offline-catalog';\n${extract('selectableVoice', 'src/contexts/VoiceContext.tsx')}\nexport { selectableVoice };`, {
+    'offline-catalog': { discoveryVoiceItem: value => value === id ? canonical : null },
+  });
+  const forged = { ...canonical, reuseStatus: 'ready', previewStatus: 'ready', stylePrompt: 'browser override', isFavorite: true };
+  assert.equal(selectableVoice(forged), null);
+  assert.equal(selectableVoice({ ...forged, discoveryVoiceId: undefined }), null);
+  canonical = { ...canonical, reuseStatus: 'ready', previewStatus: 'pending' };
+  assert.equal(selectableVoice(forged), null);
+  canonical = { ...canonical, previewStatus: 'ready', audioUrl: '' };
+  assert.equal(selectableVoice(forged), null);
+  canonical = { ...canonical, audioUrl: ready.audioUrl };
+  assert.deepEqual(selectableVoice(forged), { ...canonical, isFavorite: true });
+  for (const other of [officialCatalog[0], { id: 'owned-custom', customVoiceId: designedId }, { id: 'owned-design', designedVoiceId: designedId }]) assert.equal(selectableVoice(other), other);
+});
+
+test('v2 first-A registry binding survives browser clip overrides without requiring a listening approval', async () => {
+  for (const language of ['en', 'ko', 'ja', 'fr']) for (const gender of ['female', 'male']) {
+    const id = `discovery-v2-${gender === 'female' ? 'f-001' : 'm-120'}`;
+    const voice = { ...ready, id, discoveryVoiceId: id, gender, language,
+      stylePrompt: `${gender} vocals, dry close middle register, precise connected vowels`,
+      audioUrl: `/assets/voices/discovery-v2-20261005/${id}-A.mp3`, sampleVersion: 'A',
+      reuseStatus: 'ready', designStatus: 'verified', qualityReview: 'unreviewed' };
+    const { response, calls } = await request(body({ vocalGender: gender,
+      activeVoice: { id, discoveryVoiceId: id, sampleVersion: 'B', personaId: 'browser_second_b_persona', stylePrompt: 'browser-overridden' },
+    }), { catalog: [voice], registry: { [id]: 'offline_registered_first_a_persona' } });
+    assert.equal(response.status, 200);
+    assert.equal(calls.provider.length, 1);
+    assert.equal(calls.provider[0].persona_id, 'offline_registered_first_a_persona');
+    assert.equal(calls.provider[0].persona_model, 'style_persona');
+    assert.equal(calls.provider[0].vocal_gender, gender === 'female' ? 'f' : 'm');
+    assert.ok(calls.provider[0].style.includes(voice.stylePrompt));
+    assert.ok(!calls.provider[0].style.includes('browser-overridden'));
+    assert.equal(JSON.parse(calls.rows[0].license_hash).discoveryVoiceId, id);
+  }
+});
+
+test('a generated v2 A sample and verified written design cannot substitute for a registered persona', async () => {
+  const id = 'discovery-v2-f-120';
+  const voice = { ...ready, id, discoveryVoiceId: id, sampleVersion: 'A', reuseStatus: 'ready',
+    audioUrl: `/assets/voices/discovery-v2-20261005/${id}-A.mp3`, designStatus: 'verified', qualityReview: 'unreviewed' };
+  const { response, calls } = await request(body({ activeVoice: { id, discoveryVoiceId: id } }), { catalog: [voice], registry: {} });
+  assert.equal(response.status, 503);
+  assert.equal(calls.provider.length + calls.rows.length + calls.metadata, 0);
 });
 
 test('official, Discovery and custom selections are mutually exclusive before any external work', async () => {

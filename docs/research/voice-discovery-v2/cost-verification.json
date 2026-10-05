@@ -1,0 +1,19 @@
+{
+  "checkedAt": "2026-10-05T01:31:00.557Z",
+  "generation": {
+    "actualFirst12Credits": 144,
+    "perRequestCredits": 12,
+    "estimated240Credits": 2880,
+    "source": "provider durable status"
+  },
+  "persona": {
+    "creditsPerRequest": 0,
+    "usdPerRequest": 0,
+    "source": "https://kie.ai/pricing",
+    "observedPricingRow": "Suno Generate Persona:0 credits per request,$0"
+  },
+  "contract": "https://docs.kie.ai/suno-api/generate-persona",
+  "selectedOutput": "first-A",
+  "retentionGuarantee": "not_confirmed",
+  "sameSingerGuarantee": false
+}

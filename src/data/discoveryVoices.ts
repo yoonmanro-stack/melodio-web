@@ -5,7 +5,11 @@ import catalog from './discoveryVoices.json'
 export type DiscoveryVoice = VoiceItem & {
   discoveryVoiceId: string
   gender: 'female' | 'male'
+  /** Language of this audition, not a guarantee about future lyric languages. */
   language: 'en' | 'ko' | 'ja' | 'fr'
+  /** Written-design validation is separate from listening review and persona readiness. */
+  designStatus?: 'draft' | 'verified'
+  qualityReview?: 'unreviewed' | 'reviewed'
   previewStatus: 'pending' | 'ready'
   reuseStatus: 'pending' | 'ready'
   previewStartSeconds: number

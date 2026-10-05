@@ -41,7 +41,7 @@ export function resolveDiscoveryVoice(body: Body) {
   if (model !== 'V6') throw new Error('탐색 보컬은 Suno V6에서 사용해 주세요.')
   if (typeof body.lyricsPrompt !== 'string' || !body.lyricsPrompt.trim()) throw new Error('탐색 보컬을 사용하려면 가사를 먼저 준비해 주세요.')
   // A ready flag cannot turn a legacy speech sample or an official audition into Discovery audio.
-  if (voice.previewStatus !== 'ready' || !/^\/assets\/voices\/discovery(?:-[A-Za-z0-9-]+)?\/[A-Za-z0-9_-]+\.(?:mp3|wav|m4a|webm|ogg)$/.test(voice.audioUrl || '')) {
+  if (voice.previewStatus !== 'ready' || voice.reuseStatus !== 'ready' || !/^\/assets\/voices\/discovery(?:-[A-Za-z0-9-]+)?\/[A-Za-z0-9_-]+\.(?:mp3|wav|m4a|webm|ogg)$/.test(voice.audioUrl || '')) {
     throw new Error('discovery_voice_not_ready')
   }
   return voice

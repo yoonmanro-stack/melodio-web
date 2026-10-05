@@ -1,0 +1,36 @@
+{
+  "createdAt": "2026-10-05T01:45:53.844Z",
+  "phase": "preview_ready_reference_approval_required",
+  "designs": 240,
+  "female": 120,
+  "male": 120,
+  "sampleLanguageCounts": {
+    "en": 60,
+    "ko": 60,
+    "ja": 60,
+    "fr": 60
+  },
+  "selectionPolicy": "first-A-only",
+  "generatedRequests": 240,
+  "generatedClips": 480,
+  "verifiedFirstASamples": 240,
+  "registeredReferences": 0,
+  "knownGenerationCredits": 2880,
+  "personaPricingCredits": 0,
+  "personaPricingSource": "https://kie.ai/pricing",
+  "qualityReview": "unreviewed",
+  "sameSingerGuarantee": false,
+  "registrationHeldReason": "auto_review_requires_explicit_Kie_destination_payload_approval_and_unconfirmed_retention",
+  "sourceManifest": "artifacts/discovery-vocals-v2-20261005/rollout-240.json",
+  "sourceManifestSha256": "e181d42d873c25f09f740fcba40ce462dd44f63c0ac1b4f5b82682178e46811a",
+  "verifiedChecks": {
+    "tests": 64,
+    "typecheck": true,
+    "localMockBuild": true,
+    "duplicateSampleHashes": 0
+  },
+  "deployment": {
+    "status": "not_deployed_yet"
+  },
+  "nextAction": "await_Kie_registration_approval"
+}

@@ -86,6 +86,13 @@ interface VoiceContextProps {
 
 const VoiceContext = createContext<VoiceContextProps | undefined>(undefined);
 
+function selectableVoice(voice: VoiceItem): VoiceItem | null {
+  const canonical = discoveryVoiceItem(voice.discoveryVoiceId || voice.id);
+  if (!voice.discoveryVoiceId && !canonical) return voice;
+  if (!canonical || canonical.previewStatus !== 'ready' || canonical.reuseStatus !== 'ready' || !canonical.audioUrl) return null;
+  return { ...canonical, isFavorite: voice.isFavorite };
+}
+
 function registeredVoiceItem(value: unknown): VoiceItem | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const row = value as Record<string, unknown>;
@@ -224,9 +231,10 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         setTimeout(() => {
           setVoices((current) => {
             const found = current.find((v) => v && v.id === savedActiveId);
-            if (found) {
-              setActiveVoiceState(found);
-              if (!savedGender && (found.gender === 'female' || found.gender === 'male')) setStudioGenderState(found.gender);
+            const selected = found ? selectableVoice(found) : null;
+            if (selected) {
+              setActiveVoiceState(selected);
+              if (!savedGender && (selected.gender === 'female' || selected.gender === 'male')) setStudioGenderState(selected.gender);
             }
             return current;
           });
@@ -322,10 +330,12 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const closeCreateModal = () => setIsCreateModalOpen(false);
 
   const setActiveVoice = (voice: VoiceItem | null) => {
-    setActiveVoiceState(voice);
-    if (voice) {
+    const selected = voice ? selectableVoice(voice) : null;
+    if (voice && !selected) return;
+    setActiveVoiceState(selected);
+    if (selected) {
       try {
-        localStorage.setItem("melodio_active_voice_id", voice.id);
+        localStorage.setItem("melodio_active_voice_id", selected.id);
       } catch {}
     } else {
       try {

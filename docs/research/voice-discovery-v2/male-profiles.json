@@ -1,0 +1,2162 @@
+[
+  {
+    "id": "discovery-v2-m-001",
+    "gender": "male",
+    "family": "smoky_grain",
+    "provisionalName": "모르안",
+    "shortDescription": "둥근 저음에 고운 연기결",
+    "audibleAnchors": [
+      "넓고 둥근 저음 흉성",
+      "중심음 둘레의 가는 연기결"
+    ],
+    "signatureBehavior": "낮은 음을 부드럽게 연결하고 끝에서만 숨결을 풀어 줍니다.",
+    "register": "low bass-baritone",
+    "body": "broad rounded chest body",
+    "texture": "fine smoky grain around a voiced center",
+    "resonance": "dark open vowels with a soft upper halo",
+    "stylePrompt": "Adult male solo singing. low bass-baritone; broad rounded chest body. fine smoky grain around a voiced center; dark open vowels with a soft upper halo. Connect low notes smoothly; release a little breath only after the sustained pitch. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-002",
+    "gender": "male",
+    "family": "smoky_grain",
+    "provisionalName": "세로빈",
+    "shortDescription": "매트한 중음과 촘촘한 스모크",
+    "audibleAnchors": [
+      "촘촘한 중음 몸통",
+      "광택 없는 전방 공명"
+    ],
+    "signatureBehavior": "짧게 시작한 중음을 한 박자 뒤로 끌며 연기결을 유지합니다.",
+    "register": "middle baritone",
+    "body": "compact medium-weight body",
+    "texture": "close dense smoky fuzz at medium intensity",
+    "resonance": "matte forward vowels with little high ring",
+    "stylePrompt": "Adult male solo singing. middle baritone; compact medium-weight body. close dense smoky fuzz at medium intensity; matte forward vowels with little high ring. Use brief soft onsets and hold middle notes slightly behind the beat without losing the smoke. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-003",
+    "gender": "male",
+    "family": "smoky_grain",
+    "provisionalName": "누아렉",
+    "shortDescription": "가볍고 공기 섞인 낮은 테너",
+    "audibleAnchors": [
+      "가벼운 낮은 테너 중심",
+      "공기와 섞인 얇은 스모키 테두리"
+    ],
+    "signatureBehavior": "작은 상행 음을 이어 부른 뒤 자음을 또렷하게 닫습니다.",
+    "register": "low tenor",
+    "body": "lean light body",
+    "texture": "airy smoky edge with a clear thin core",
+    "resonance": "narrow oval vowels with gentle nasal color",
+    "stylePrompt": "Adult male solo singing. low tenor; lean light body. airy smoky edge with a clear thin core; narrow oval vowels with gentle nasal color. Link small rising intervals, then close the consonants clearly while the thin voiced core remains. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-004",
+    "gender": "male",
+    "family": "smoky_grain",
+    "provisionalName": "도르엘",
+    "shortDescription": "깊은 울림과 무거운 안개결",
+    "audibleAnchors": [
+      "넓은 공동이 느껴지는 저음",
+      "무겁지만 부드러운 안개 질감"
+    ],
+    "signatureBehavior": "긴 낮은 모음을 붙잡고 강도를 줄여도 울림 바닥을 남깁니다.",
+    "register": "low bass",
+    "body": "large chest weight with a resonant floor",
+    "texture": "thick soft smoky border without coarse rasp",
+    "resonance": "hollow spacious low vowels",
+    "stylePrompt": "Adult male solo singing. low bass; large chest weight with a resonant floor. thick soft smoky border without coarse rasp; hollow spacious low vowels. Hold long low vowels; preserve the resonant floor as intensity gradually decreases. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-005",
+    "gender": "male",
+    "family": "smoky_grain",
+    "provisionalName": "카이몬",
+    "shortDescription": "밝은 테너의 미세한 스모크",
+    "audibleAnchors": [
+      "가늘고 탄력 있는 고중음",
+      "밝은 중심에 붙는 미세한 연기결"
+    ],
+    "signatureBehavior": "짧은 당김음을 가볍게 넘긴 뒤 직선 유지음으로 결을 들려줍니다.",
+    "register": "upper-middle tenor",
+    "body": "slender elastic body",
+    "texture": "very fine smoky friction along sustained vowels",
+    "resonance": "bright forward ring with little bass bloom",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; slender elastic body. very fine smoky friction along sustained vowels; bright forward ring with little bass bloom. Skip lightly through short syncopations, then expose the fine grain on a straight sustained note. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-006",
+    "gender": "male",
+    "family": "smoky_grain",
+    "provisionalName": "레우찬",
+    "shortDescription": "둥근 바리톤과 거친 숨의 결",
+    "audibleAnchors": [
+      "둥근 중저음 흉성",
+      "굵은 숨 실이 둘러싼 중심음"
+    ],
+    "signatureBehavior": "말하듯 시작한 문장을 긴 모음으로 바꾸며 숨의 결을 넓힙니다.",
+    "register": "low-middle baritone",
+    "body": "rounded medium chest weight",
+    "texture": "coarser smoky breath threads around a solid pitch",
+    "resonance": "warm open rounded vowels",
+    "stylePrompt": "Adult male solo singing. low-middle baritone; rounded medium chest weight. coarser smoky breath threads around a solid pitch; warm open rounded vowels. Begin conversationally and broaden into a long vowel with audible smoke around the pitch. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-007",
+    "gender": "male",
+    "family": "smoky_grain",
+    "provisionalName": "이르온",
+    "shortDescription": "콧등에 모인 어두운 스모크",
+    "audibleAnchors": [
+      "작고 단단한 중음 몸통",
+      "어둡고 좁은 비성 공명"
+    ],
+    "signatureBehavior": "모음을 좁게 유지한 채 짧은 음 사이를 부드럽게 미끄러집니다.",
+    "register": "middle tenor",
+    "body": "small compact body with little chest weight",
+    "texture": "soft smoky surface with restrained breath leakage",
+    "resonance": "covered nasal focus and muted upper harmonics",
+    "stylePrompt": "Adult male solo singing. middle tenor; small compact body with little chest weight. soft smoky surface with restrained breath leakage; covered nasal focus and muted upper harmonics. Keep narrow vowels through short gentle slides, with a soft smoky surface and precise pitch. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-008",
+    "gender": "male",
+    "family": "smoky_grain",
+    "provisionalName": "하르벤",
+    "shortDescription": "넓은 흉성과 희미한 숨 그늘",
+    "audibleAnchors": [
+      "두툼하고 매끄러운 흉성",
+      "넓은 중음에 드문드문 남는 연기결"
+    ],
+    "signatureBehavior": "중음에서 위로 올라가도 가슴 울림과 가는 숨 그늘을 함께 남깁니다.",
+    "register": "baritone with connected upper notes",
+    "body": "substantial smooth chest body",
+    "texture": "light intermittent smoky grain",
+    "resonance": "wide open midrange with a mellow upper edge",
+    "stylePrompt": "Adult male solo singing. baritone with connected upper notes; substantial smooth chest body. light intermittent smoky grain; wide open midrange with a mellow upper edge. Rise from the middle into connected upper notes while retaining chest body and a slight smoky shadow. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-009",
+    "gender": "male",
+    "family": "smoky_grain",
+    "provisionalName": "에이란",
+    "shortDescription": "스모키한 두성과 가는 맑은 중심",
+    "audibleAnchors": [
+      "가늘지만 이어지는 두성 중심",
+      "둥근 고음에 내려앉는 숨 먼지"
+    ],
+    "signatureBehavior": "두성 유지음을 곧게 세운 뒤 마지막 두 음을 조용히 낮춥니다.",
+    "register": "connected upper head register",
+    "body": "light floating body with a thin voiced core",
+    "texture": "delicate smoky breath dust without whispering",
+    "resonance": "rounded head resonance and soft silver overtones",
+    "stylePrompt": "Adult male solo singing. connected upper head register; light floating body with a thin voiced core. delicate smoky breath dust without whispering; rounded head resonance and soft silver overtones. Hold a straight connected head note, then descend quietly for the last two notes without whispering. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-010",
+    "gender": "male",
+    "family": "smoky_grain",
+    "provisionalName": "마르준",
+    "shortDescription": "목질 저음에 마른 연기결",
+    "audibleAnchors": [
+      "목질성의 마른 저음 몸통",
+      "공기 소음이 적은 건조한 연기결"
+    ],
+    "signatureBehavior": "짧은 낮은 음을 담백하게 끊고 마지막 모음만 길게 남깁니다.",
+    "register": "low baritone",
+    "body": "lean woody chest body",
+    "texture": "dry smoky grain with very little airy hiss",
+    "resonance": "small dark forward resonance",
+    "stylePrompt": "Adult male solo singing. low baritone; lean woody chest body. dry smoky grain with very little airy hiss; small dark forward resonance. Clip short low phrases plainly, then let only the final vowel carry a dry smoky sustain. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-011",
+    "gender": "male",
+    "family": "dry_coarse_husky",
+    "provisionalName": "로헨",
+    "shortDescription": "두꺼운 바리톤의 사포결",
+    "audibleAnchors": [
+      "조밀하고 두꺼운 중음 흉성",
+      "유지음 전체에 남는 사포 질감"
+    ],
+    "signatureBehavior": "보통 세기로 음을 짧게 시작하고 거친 결을 일정하게 밀어 줍니다.",
+    "register": "middle baritone",
+    "body": "dense compact chest body",
+    "texture": "coarse dry sandpaper grain across sustained notes",
+    "resonance": "focused warm midrange with little air halo",
+    "stylePrompt": "Adult male solo singing. middle baritone; dense compact chest body. coarse dry sandpaper grain across sustained notes; focused warm midrange with little air halo. Use short firm onsets at ordinary volume and maintain an even coarse grain through the vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-012",
+    "gender": "male",
+    "family": "dry_coarse_husky",
+    "provisionalName": "칼루안",
+    "shortDescription": "얇고 부서지는 높은 허스키",
+    "audibleAnchors": [
+      "가늘고 높은 리드성 중심",
+      "잘게 부서지는 마른 거친 결"
+    ],
+    "signatureBehavior": "고음을 짧게 붙잡은 뒤 한 음씩 끊어 내려와 거친 테두리를 드러냅니다.",
+    "register": "high tenor",
+    "body": "thin reed-like body",
+    "texture": "brittle dry rasp around a slender pitched core",
+    "resonance": "bright narrow upper focus",
+    "stylePrompt": "Adult male solo singing. high tenor; thin reed-like body. brittle dry rasp around a slender pitched core; bright narrow upper focus. Hold short high notes, then descend in separate steps with brittle friction around the thin core. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-013",
+    "gender": "male",
+    "family": "dry_coarse_husky",
+    "provisionalName": "브모르",
+    "shortDescription": "낮고 속이 빈 굵은 허스키",
+    "audibleAnchors": [
+      "넓고 빈 공동의 낮은 울림",
+      "숨 안개가 없는 굵은 입자"
+    ],
+    "signatureBehavior": "낮은 모음을 넓게 열어 두고 자음 뒤에서 천천히 결을 드러냅니다.",
+    "register": "low bass-baritone",
+    "body": "broad hollow body",
+    "texture": "large dry rough granules with no breath haze",
+    "resonance": "dark cavernous rounded vowels",
+    "stylePrompt": "Adult male solo singing. low bass-baritone; broad hollow body. large dry rough granules with no breath haze; dark cavernous rounded vowels. Open broad low vowels and let the coarse texture emerge slowly after each consonant. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-014",
+    "gender": "male",
+    "family": "dry_coarse_husky",
+    "provisionalName": "제르온",
+    "shortDescription": "콧등에 붙는 건조한 거친 중음",
+    "audibleAnchors": [
+      "날씬하고 단단한 중음 몸통",
+      "콧등에 모인 긁히는 질감"
+    ],
+    "signatureBehavior": "리듬을 짧게 쪼개되 모음 끝마다 같은 긁히는 결을 남깁니다.",
+    "register": "middle tenor",
+    "body": "lean compact body",
+    "texture": "dry scratchy fine grain with a firm center",
+    "resonance": "pointed nose-forward resonance",
+    "stylePrompt": "Adult male solo singing. middle tenor; lean compact body. dry scratchy fine grain with a firm center; pointed nose-forward resonance. Divide the rhythm into short phrases and retain the same scratchy grain on each vowel ending. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-015",
+    "gender": "male",
+    "family": "dry_coarse_husky",
+    "provisionalName": "타루빈",
+    "shortDescription": "따뜻한 저중음과 굵은 마찰",
+    "audibleAnchors": [
+      "따뜻하고 무게 있는 저중음",
+      "매트한 굵은 마찰과 매끈한 중심"
+    ],
+    "signatureBehavior": "낮게 연결한 음에서 한 번만 강도를 올려 거친 외곽을 넓힙니다.",
+    "register": "low-middle baritone",
+    "body": "rounded weighty body",
+    "texture": "coarse matte husk with a smooth inner pitch",
+    "resonance": "warm covered resonance with a soft high edge",
+    "stylePrompt": "Adult male solo singing. low-middle baritone; rounded weighty body. coarse matte husk with a smooth inner pitch; warm covered resonance with a soft high edge. Connect low notes, then use one modest swell to broaden the rough outer edge while the inner pitch stays smooth. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-016",
+    "gender": "male",
+    "family": "dry_coarse_husky",
+    "provisionalName": "베누락",
+    "shortDescription": "금속 중심을 감싼 마른 허스키",
+    "audibleAnchors": [
+      "팽팽한 고중음 몸통",
+      "금속 중심 주위의 촘촘한 입자"
+    ],
+    "signatureBehavior": "상행 구절에서 음을 곧게 세우고 강음도 소리 지르지 않고 짧게 유지합니다.",
+    "register": "upper-middle tenor",
+    "body": "medium taut body",
+    "texture": "tight dry granular husk",
+    "resonance": "small metallic upper ring above neutral vowels",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; medium taut body. tight dry granular husk; small metallic upper ring above neutral vowels. Keep ascending notes straight and sustain short stronger notes without shouting. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-017",
+    "gender": "male",
+    "family": "dry_coarse_husky",
+    "provisionalName": "오르겐",
+    "shortDescription": "낮은 베이스의 납작한 거친 결",
+    "audibleAnchors": [
+      "납작하고 조밀한 낮은 중심",
+      "보컬 프라이에 묻히지 않는 마른 거친 결"
+    ],
+    "signatureBehavior": "낮은 음을 말보다 길게 유지하고 끝을 단단하게 닫습니다.",
+    "register": "low bass",
+    "body": "dense flat chest core",
+    "texture": "dry coarse rasp on low vowels with no fry dominance",
+    "resonance": "low matte resonance with restrained cavity bloom",
+    "stylePrompt": "Adult male solo singing. low bass; dense flat chest core. dry coarse rasp on low vowels with no fry dominance; low matte resonance with restrained cavity bloom. Sustain low pitched notes longer than speech and close the endings firmly without falling into continuous fry. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-018",
+    "gender": "male",
+    "family": "dry_coarse_husky",
+    "provisionalName": "루이산",
+    "shortDescription": "가벼운 테너의 거친 허스키 테두리",
+    "audibleAnchors": [
+      "가볍고 유연한 테너 몸통",
+      "열린 맑은 모음 테두리의 거친 마찰"
+    ],
+    "signatureBehavior": "빠른 음 연결 뒤 긴 끝음을 놓아 가벼운 중심과 거친 외곽을 함께 들려줍니다.",
+    "register": "middle-to-upper tenor",
+    "body": "light flexible body",
+    "texture": "coarse breathless rasp at the vowel rim",
+    "resonance": "open clear vowels with little dark weight",
+    "stylePrompt": "Adult male solo singing. middle-to-upper tenor; light flexible body. coarse breathless rasp at the vowel rim; open clear vowels with little dark weight. Link notes quickly, then leave a long ending that exposes a light core and a coarse outer rim. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-019",
+    "gender": "male",
+    "family": "dry_coarse_husky",
+    "provisionalName": "노르담",
+    "shortDescription": "목질 바리톤의 까슬한 허스키",
+    "audibleAnchors": [
+      "건조한 목질 중음",
+      "콧소리 적은 구강의 까슬한 결"
+    ],
+    "signatureBehavior": "작은 음정 도약마다 자음을 세우고 모음은 짧고 거칠게 남깁니다.",
+    "register": "middle baritone",
+    "body": "dry woody medium body",
+    "texture": "uneven bristly grain at ordinary volume",
+    "resonance": "tight oral resonance with minimal nasal color",
+    "stylePrompt": "Adult male solo singing. middle baritone; dry woody medium body. uneven bristly grain at ordinary volume; tight oral resonance with minimal nasal color. Mark small interval leaps with precise consonants and leave short bristly vowels. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-020",
+    "gender": "male",
+    "family": "dry_coarse_husky",
+    "provisionalName": "아르멜",
+    "shortDescription": "어두운 고음의 촘촘한 허스키",
+    "audibleAnchors": [
+      "가늘고 압축된 고중음 몸통",
+      "어두운 모음 위의 촘촘한 마른 허스키"
+    ],
+    "signatureBehavior": "고음을 덮인 모음으로 유지하다 끝에서만 모음을 조금 열어 줍니다.",
+    "register": "upper-middle tenor",
+    "body": "slender compressed body",
+    "texture": "fine dense dry husk without large gravel",
+    "resonance": "dark covered upper vowels with a small bright edge",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; slender compressed body. fine dense dry husk without large gravel; dark covered upper vowels with a small bright edge. Sustain upper notes on covered vowels and open the vowel slightly only at the release. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-021",
+    "gender": "male",
+    "family": "sustained_crackle",
+    "provisionalName": "그로안",
+    "shortDescription": "깊은 저음의 굵은 지속 균열",
+    "audibleAnchors": [
+      "무겁고 넓은 저음 흉성",
+      "유지음 전체의 굵은 균열"
+    ],
+    "signatureBehavior": "낮은 긴 음에서 강도를 줄여도 갈라진 결을 끝까지 이어 갑니다.",
+    "register": "low bass-baritone",
+    "body": "broad heavy chest body",
+    "texture": "coarse continuous crackle through voiced sustain",
+    "resonance": "dark open low vowels",
+    "stylePrompt": "Adult male solo singing. low bass-baritone; broad heavy chest body. coarse continuous crackle through voiced sustain; dark open low vowels. Hold long low notes and keep the coarse crackle audible through a gentle decrease in volume. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-022",
+    "gender": "male",
+    "family": "sustained_crackle",
+    "provisionalName": "토레빈",
+    "shortDescription": "중음에 촘촘히 남는 잔균열",
+    "audibleAnchors": [
+      "작고 단단한 중음 중심",
+      "건조한 구강 공명에 남는 잔균열"
+    ],
+    "signatureBehavior": "짧은 시작 뒤 곧은 음을 길게 유지하며 잔균열의 밀도를 고정합니다.",
+    "register": "middle baritone",
+    "body": "compact firm body",
+    "texture": "fine steady crackle along sustained pitches",
+    "resonance": "dry focused oral resonance",
+    "stylePrompt": "Adult male solo singing. middle baritone; compact firm body. fine steady crackle along sustained pitches; dry focused oral resonance. Use a short clean onset followed by a long straight pitch with a consistent fine crackle density. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-023",
+    "gender": "male",
+    "family": "sustained_crackle",
+    "provisionalName": "리오헨",
+    "shortDescription": "얇고 밝은 테너의 미세 균열",
+    "audibleAnchors": [
+      "얇고 밝은 고음 리드",
+      "굵은 자갈 대신 잘게 부서지는 균열"
+    ],
+    "signatureBehavior": "고음을 가볍게 잡은 뒤 짧은 상행 굴림에도 미세한 균열을 유지합니다.",
+    "register": "high tenor",
+    "body": "slender light body",
+    "texture": "tiny brittle sustained fractures without heavy gravel",
+    "resonance": "bright narrow reed resonance",
+    "stylePrompt": "Adult male solo singing. high tenor; slender light body. tiny brittle sustained fractures without heavy gravel; bright narrow reed resonance. Take high notes lightly and retain tiny fractures through a short rising vowel bend. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-024",
+    "gender": "male",
+    "family": "sustained_crackle",
+    "provisionalName": "바르로",
+    "shortDescription": "낮고 둥근 몸통의 불규칙 균열",
+    "audibleAnchors": [
+      "둥글고 풍부한 저중음 몸통",
+      "매끈한 중심을 둘러싼 불규칙한 균열"
+    ],
+    "signatureBehavior": "긴 모음을 일정한 음으로 두고 바깥 균열만 느리게 강약을 바꿉니다.",
+    "register": "low baritone",
+    "body": "rounded full body",
+    "texture": "irregular medium crackle around a smooth voiced core",
+    "resonance": "warm broad oval vowels",
+    "stylePrompt": "Adult male solo singing. low baritone; rounded full body. irregular medium crackle around a smooth voiced core; warm broad oval vowels. Keep a long vowel on a steady pitch while the irregular outer crackle changes slowly in intensity. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-025",
+    "gender": "male",
+    "family": "sustained_crackle",
+    "provisionalName": "엔도르",
+    "shortDescription": "코앞에 붙은 마른 균열 중음",
+    "audibleAnchors": [
+      "저음 부피가 작은 날씬한 중음",
+      "전방 비성에 촘촘히 붙은 균열"
+    ],
+    "signatureBehavior": "박자보다 조금 일찍 자음을 넣고 모음의 균열은 끊지 않습니다.",
+    "register": "middle tenor",
+    "body": "lean small body",
+    "texture": "dry tightly spaced crackle",
+    "resonance": "forward nasal focus with little low bloom",
+    "stylePrompt": "Adult male solo singing. middle tenor; lean small body. dry tightly spaced crackle; forward nasal focus with little low bloom. Place consonants a little ahead of the beat while keeping crackled vowels continuous. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-026",
+    "gender": "male",
+    "family": "sustained_crackle",
+    "provisionalName": "세루크",
+    "shortDescription": "두툼한 고중음의 넓은 균열",
+    "audibleAnchors": [
+      "흉성으로 이어지는 두툼한 고중음",
+      "열린 모음에 넓게 퍼지는 균열"
+    ],
+    "signatureBehavior": "중음에서 위로 연결하며 각 유지음에 넓은 균열을 남깁니다.",
+    "register": "upper-middle tenor",
+    "body": "substantial chest-connected body",
+    "texture": "broad intermittent crackle that persists at medium volume",
+    "resonance": "open bright vowels with a mellow center",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; substantial chest-connected body. broad intermittent crackle that persists at medium volume; open bright vowels with a mellow center. Connect middle into upper notes and retain broad crackle on each sustained vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-027",
+    "gender": "male",
+    "family": "sustained_crackle",
+    "provisionalName": "무르칸",
+    "shortDescription": "속이 빈 베이스의 얇은 파열결",
+    "audibleAnchors": [
+      "큰 공동 속의 안정된 낮은 음",
+      "표면만 얇고 빠르게 갈라지는 결"
+    ],
+    "signatureBehavior": "낮은 모음을 넓게 남기고 표면의 잔파열을 조용히 이어 갑니다.",
+    "register": "low bass",
+    "body": "large hollow body with a light surface",
+    "texture": "thin rapid crackling skin over resonant low pitch",
+    "resonance": "spacious cavity resonance",
+    "stylePrompt": "Adult male solo singing. low bass; large hollow body with a light surface. thin rapid crackling skin over resonant low pitch; spacious cavity resonance. Leave a broad resonant low vowel and carry quiet rapid surface crackle without thickening it into a growl. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-028",
+    "gender": "male",
+    "family": "sustained_crackle",
+    "provisionalName": "데이론",
+    "shortDescription": "매트한 바리톤의 느린 균열",
+    "audibleAnchors": [
+      "부드러운 외곽의 중음 몸통",
+      "어두운 모음에 드문드문 생기는 균열"
+    ],
+    "signatureBehavior": "길게 잇는 중음에 균열을 드문드문 남기고 끝은 깨끗하게 닫습니다.",
+    "register": "middle baritone",
+    "body": "medium soft-edged body",
+    "texture": "sparse slow crackle events along a voiced sustain",
+    "resonance": "muted dark oral resonance",
+    "stylePrompt": "Adult male solo singing. middle baritone; medium soft-edged body. sparse slow crackle events along a voiced sustain; muted dark oral resonance. Leave sparse crackle events in a long connected middle note and finish on a clean pitched release. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-029",
+    "gender": "male",
+    "family": "sustained_crackle",
+    "provisionalName": "키르엠",
+    "shortDescription": "은빛 두성에 붙는 잘게 갈라진 결",
+    "audibleAnchors": [
+      "가늘고 은빛으로 모인 두성",
+      "숨 소음 적은 미세 지속 균열"
+    ],
+    "signatureBehavior": "두성에서 작은 하행 계단을 밟을 때도 결을 잃지 않습니다.",
+    "register": "connected upper head register",
+    "body": "thin floating body",
+    "texture": "fine persistent crackle with little breath noise",
+    "resonance": "silvery focused head resonance",
+    "stylePrompt": "Adult male solo singing. connected upper head register; thin floating body. fine persistent crackle with little breath noise; silvery focused head resonance. Step down gently in connected head voice while retaining fine crackle and a clear pitched center. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-030",
+    "gender": "male",
+    "family": "sustained_crackle",
+    "provisionalName": "파로벤",
+    "shortDescription": "목질 중저음의 거친 균열",
+    "audibleAnchors": [
+      "두꺼운 목질 중저음",
+      "좁은 구강 울림의 거친 균열"
+    ],
+    "signatureBehavior": "짧은 리듬 구절 다음 긴 끝음에서만 균열을 전면에 둡니다.",
+    "register": "low-middle baritone",
+    "body": "dry thick woody body",
+    "texture": "rough medium crackle within long vowels",
+    "resonance": "tight neutral oral resonance",
+    "stylePrompt": "Adult male solo singing. low-middle baritone; dry thick woody body. rough medium crackle within long vowels; tight neutral oral resonance. Follow a short rhythmic phrase with one long ending that brings the persistent crackle forward. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-031",
+    "gender": "male",
+    "family": "frayed_onset",
+    "provisionalName": "크로렌",
+    "shortDescription": "넓은 베이스와 굵게 헤진 시작음",
+    "audibleAnchors": [
+      "넓고 열린 베이스 흉성",
+      "시작에만 짧게 나타나는 굵은 헤짐"
+    ],
+    "signatureBehavior": "굵게 갈라진 시작음 뒤에는 낮은 모음을 매끈하게 길게 잇습니다.",
+    "register": "low bass",
+    "body": "large open chest body",
+    "texture": "thick short frayed grain only at onsets",
+    "resonance": "hollow rounded low resonance",
+    "stylePrompt": "Adult male solo singing. low bass; large open chest body. thick short frayed grain only at onsets; hollow rounded low resonance. Begin with a brief thick frayed edge, then settle into a long smooth resonant low vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-032",
+    "gender": "male",
+    "family": "frayed_onset",
+    "provisionalName": "아누르",
+    "shortDescription": "매트한 바리톤과 가는 헤진 어택",
+    "audibleAnchors": [
+      "촘촘한 중음 몸통",
+      "가는 마른 실처럼 헤진 시작"
+    ],
+    "signatureBehavior": "각 문장의 첫 음만 가볍게 헤지게 하고 나머지 음은 곧게 연결합니다.",
+    "register": "middle baritone",
+    "body": "compact medium body",
+    "texture": "fine dry fraying only at phrase beginnings",
+    "resonance": "matte forward oral focus",
+    "stylePrompt": "Adult male solo singing. middle baritone; compact medium body. fine dry fraying only at phrase beginnings; matte forward oral focus. Fray only the first note of each phrase lightly, then connect the remaining notes in straight tone. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-033",
+    "gender": "male",
+    "family": "frayed_onset",
+    "provisionalName": "로크안",
+    "shortDescription": "낮고 단단한 바리톤의 갈라진 어택",
+    "audibleAnchors": [
+      "낮고 단단한 흉성 중심",
+      "짧게 갈라지는 굵은 시작 질감"
+    ],
+    "signatureBehavior": "박자 뒤에서 낮은 음을 끊어 시작한 뒤 중심음을 곧게 세웁니다.",
+    "register": "low baritone",
+    "body": "dense grounded chest body",
+    "texture": "coarse clipped fracture at the start of notes",
+    "resonance": "dark covered compact vowels",
+    "stylePrompt": "Adult male solo singing. low baritone; dense grounded chest body. coarse clipped fracture at the start of notes; dark covered compact vowels. Enter behind the beat with a clipped fractured onset, then stand the low central pitch straight. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-034",
+    "gender": "male",
+    "family": "frayed_onset",
+    "provisionalName": "티르온",
+    "shortDescription": "높은 테너의 부서지는 가는 어택",
+    "audibleAnchors": [
+      "가늘고 팽팽한 높은 테너",
+      "밝은 고음 시작에서 부서지는 가는 결"
+    ],
+    "signatureBehavior": "높은 짧은 음은 잘게 헤지게 시작하고 끝음은 맑고 가늘게 남깁니다.",
+    "register": "high tenor",
+    "body": "slender taut body",
+    "texture": "brittle thin frayed onset with clean sustain",
+    "resonance": "bright needle-like upper resonance",
+    "stylePrompt": "Adult male solo singing. high tenor; slender taut body. brittle thin frayed onset with clean sustain; bright needle-like upper resonance. Start short high notes with brittle fraying and leave the final sustain clean and slender. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-035",
+    "gender": "male",
+    "family": "frayed_onset",
+    "provisionalName": "버르단",
+    "shortDescription": "둥근 중음에 번지는 짧은 마찰",
+    "audibleAnchors": [
+      "풍부하고 둥근 중음 몸통",
+      "넓게 번졌다 곧 걷히는 시작 마찰"
+    ],
+    "signatureBehavior": "모음을 부드럽게 열되 시작 직후 마찰을 걷어 둥근 울림을 드러냅니다.",
+    "register": "middle baritone",
+    "body": "rounded full body",
+    "texture": "broad soft fraying that clears quickly after attack",
+    "resonance": "warm open vowel resonance",
+    "stylePrompt": "Adult male solo singing. middle baritone; rounded full body. broad soft fraying that clears quickly after attack; warm open vowel resonance. Open vowels softly, then clear the broad fraying quickly to reveal a rounded resonant sustain. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-036",
+    "gender": "male",
+    "family": "frayed_onset",
+    "provisionalName": "오네렉",
+    "shortDescription": "콧등 중음의 날카로운 헤짐",
+    "audibleAnchors": [
+      "날씬하게 모인 중음 중심",
+      "좁은 비성에 붙는 날카로운 시작 긁힘"
+    ],
+    "signatureBehavior": "짧은 당김음마다 날카로운 어택을 넣고 다음 모음은 깨끗하게 넘깁니다.",
+    "register": "middle tenor",
+    "body": "lean focused body",
+    "texture": "short sharp scratch at vowel onset",
+    "resonance": "narrow nasal buzz with little chest darkness",
+    "stylePrompt": "Adult male solo singing. middle tenor; lean focused body. short sharp scratch at vowel onset; narrow nasal buzz with little chest darkness. Give short syncopated notes a sharp scratchy onset and move cleanly into the next vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-037",
+    "gender": "male",
+    "family": "frayed_onset",
+    "provisionalName": "무이벤",
+    "shortDescription": "어두운 저음에 가볍게 헤진 가장자리",
+    "audibleAnchors": [
+      "무게를 덜어 낸 어두운 공동 저음",
+      "가볍게 헤지는 공기 섞인 시작"
+    ],
+    "signatureBehavior": "낮은 시작을 가볍게 흩트린 뒤 볼륨을 키우지 않고 긴 음을 이어 갑니다.",
+    "register": "bass-baritone",
+    "body": "medium hollow body with restrained weight",
+    "texture": "light airy frayed starts over a stable low core",
+    "resonance": "dark spacious cavity without boom",
+    "stylePrompt": "Adult male solo singing. bass-baritone; medium hollow body with restrained weight. light airy frayed starts over a stable low core; dark spacious cavity without boom. Scatter the low onset lightly, then sustain without increasing volume or losing the low pitch. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-038",
+    "gender": "male",
+    "family": "frayed_onset",
+    "provisionalName": "겔로안",
+    "shortDescription": "금속 고중음과 두 겹의 헤진 어택",
+    "audibleAnchors": [
+      "흉성으로 이어지는 금속 고중음",
+      "시작에 두 번 짧게 걸리는 입자"
+    ],
+    "signatureBehavior": "강한 음 시작에서 짧은 두 단계 마찰을 거친 뒤 맑은 금속음을 세웁니다.",
+    "register": "upper-middle tenor",
+    "body": "medium chest-connected body",
+    "texture": "brief two-stage granular fray at onset",
+    "resonance": "clear metallic upper ring",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; medium chest-connected body. brief two-stage granular fray at onset; clear metallic upper ring. Use a brief two-stage granular start, then establish a clear ringing upper note at medium intensity. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-039",
+    "gender": "male",
+    "family": "frayed_onset",
+    "provisionalName": "세르노",
+    "shortDescription": "목질 저중음의 뭉툭한 헤짐",
+    "audibleAnchors": [
+      "두꺼운 목질 저중음 몸통",
+      "유지음으로 번지지 않는 뭉툭한 헤짐"
+    ],
+    "signatureBehavior": "자음 다음 모음을 뭉툭하게 걸고 끝은 짧고 매끈하게 닫습니다.",
+    "register": "low-middle baritone",
+    "body": "thick woody body",
+    "texture": "blunt dry frayed onset without sustained rasp",
+    "resonance": "small warm oral resonance",
+    "stylePrompt": "Adult male solo singing. low-middle baritone; thick woody body. blunt dry frayed onset without sustained rasp; small warm oral resonance. Catch the vowel after the consonant with a blunt frayed start and close the phrase briefly and smoothly. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-040",
+    "gender": "male",
+    "family": "frayed_onset",
+    "provisionalName": "에누찬",
+    "shortDescription": "둥근 두성의 가는 균열 시작",
+    "audibleAnchors": [
+      "가볍고 둥근 두성 몸통",
+      "부드러운 시작에 붙는 가는 균열 실"
+    ],
+    "signatureBehavior": "두성 첫 음에만 가는 균열을 남기고 작은 도약을 매끈하게 잇습니다.",
+    "register": "connected head-register tenor",
+    "body": "light rounded head body",
+    "texture": "fine cracked thread only at phrase-opening head onsets",
+    "resonance": "mellow focused head resonance",
+    "stylePrompt": "Adult male solo singing. connected head-register tenor; light rounded head body. fine cracked thread only at phrase-opening head onsets; mellow focused head resonance. Leave a fine cracked thread on the first head note, then connect small leaps smoothly. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-041",
+    "gender": "male",
+    "family": "creaking_endings",
+    "provisionalName": "그루멜",
+    "shortDescription": "깊은 베이스의 무거운 끝 균열",
+    "audibleAnchors": [
+      "넓고 조밀한 베이스 흉성",
+      "끝에만 무겁게 갈라지는 모음"
+    ],
+    "signatureBehavior": "낮은 긴 음을 깨끗하게 유지하다 마지막 순간에만 굵은 삐걱임을 남깁니다.",
+    "register": "low bass",
+    "body": "broad dense chest body",
+    "texture": "coarse creak confined to the last part of a vowel",
+    "resonance": "dark open low cavity",
+    "stylePrompt": "Adult male solo singing. low bass; broad dense chest body. coarse creak confined to the last part of a vowel; dark open low cavity. Keep a long low vowel clean, then add a brief coarse creak only at its final moment. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-042",
+    "gender": "male",
+    "family": "creaking_endings",
+    "provisionalName": "도르핸",
+    "shortDescription": "건조한 바리톤의 짧은 끝 삐걱임",
+    "audibleAnchors": [
+      "날씬하고 촘촘한 중음 몸통",
+      "좁은 구강 울림의 짧은 끝 삐걱임"
+    ],
+    "signatureBehavior": "짧은 리듬 구절은 깨끗이 부르고 끝음에만 가는 삐걱임을 붙입니다.",
+    "register": "middle baritone",
+    "body": "lean compact body",
+    "texture": "short fine dry creak at releases",
+    "resonance": "tight forward oral resonance",
+    "stylePrompt": "Adult male solo singing. middle baritone; lean compact body. short fine dry creak at releases; tight forward oral resonance. Sing short rhythmic phrases cleanly and attach a fine creak only to the final release. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-043",
+    "gender": "male",
+    "family": "creaking_endings",
+    "provisionalName": "마로크",
+    "shortDescription": "어두운 저중음과 갈라진 여운",
+    "audibleAnchors": [
+      "둥글고 무게 있는 어두운 저중음",
+      "끝 모음에 남는 불규칙한 부드러운 균열"
+    ],
+    "signatureBehavior": "낮은 직선음을 길게 끌다가 끝에서 강도를 천천히 줄이며 거친 여운을 남깁니다.",
+    "register": "low baritone",
+    "body": "rounded weighty body",
+    "texture": "soft uneven creaking grain at the vowel tail",
+    "resonance": "warm covered low-mid resonance",
+    "stylePrompt": "Adult male solo singing. low baritone; rounded weighty body. soft uneven creaking grain at the vowel tail; warm covered low-mid resonance. Draw out a straight low note, then reduce intensity gradually into a soft uneven creaking tail. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-044",
+    "gender": "male",
+    "family": "creaking_endings",
+    "provisionalName": "치르안",
+    "shortDescription": "가늘고 높은 테너의 부서진 끝음",
+    "audibleAnchors": [
+      "가늘고 높은 리드 중심",
+      "고음 끝에서 잘게 부서지는 삐걱임"
+    ],
+    "signatureBehavior": "밝은 고음을 곧게 붙잡고 끝음만 가볍게 깨뜨리며 내려옵니다.",
+    "register": "high tenor",
+    "body": "thin reed-like body",
+    "texture": "brittle small creaks at upper-note releases",
+    "resonance": "bright narrow upper focus",
+    "stylePrompt": "Adult male solo singing. high tenor; thin reed-like body. brittle small creaks at upper-note releases; bright narrow upper focus. Hold a bright high pitch straight and break only the ending into a light creaking descent. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-045",
+    "gender": "male",
+    "family": "creaking_endings",
+    "provisionalName": "알루벤",
+    "shortDescription": "스모키 중음과 마른 끝 균열",
+    "audibleAnchors": [
+      "가볍고 매트한 저중음",
+      "얇은 연기결 뒤의 마른 끝 균열"
+    ],
+    "signatureBehavior": "매트한 중음을 조용히 이어 부르고 자음 직전에만 마른 삐걱임을 드러냅니다.",
+    "register": "low-middle tenor",
+    "body": "light medium body",
+    "texture": "faint smoky surface with a dry tail creak",
+    "resonance": "matte oval vowels",
+    "stylePrompt": "Adult male solo singing. low-middle tenor; light medium body. faint smoky surface with a dry tail creak; matte oval vowels. Connect matte middle notes quietly and expose a dry creak only just before the final consonant. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-046",
+    "gender": "male",
+    "family": "creaking_endings",
+    "provisionalName": "부르네",
+    "shortDescription": "속이 빈 저음의 길어진 끝 파열",
+    "audibleAnchors": [
+      "중간 무게의 빈 공동 저음",
+      "유지음 마지막 구간의 느린 삐걱임"
+    ],
+    "signatureBehavior": "넓은 낮은 모음을 길게 남겨 마지막 구간의 느린 파열을 충분히 들려줍니다.",
+    "register": "bass-baritone",
+    "body": "hollow medium-weight body",
+    "texture": "loose slow creak in the last quarter of a sustain",
+    "resonance": "spacious rounded cavity resonance",
+    "stylePrompt": "Adult male solo singing. bass-baritone; hollow medium-weight body. loose slow creak in the last quarter of a sustain; spacious rounded cavity resonance. Leave a broad low vowel long enough to reveal a slow creak in its last quarter. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-047",
+    "gender": "male",
+    "family": "creaking_endings",
+    "provisionalName": "카르모",
+    "shortDescription": "금속 테너의 날카로운 끝 균열",
+    "audibleAnchors": [
+      "팽팽한 금속 고중음",
+      "끝음에만 튀는 짧고 날카로운 균열"
+    ],
+    "signatureBehavior": "선명한 상행음 뒤 마지막 모음을 짧게 눌러 거친 끝을 만듭니다.",
+    "register": "upper-middle tenor",
+    "body": "taut medium body",
+    "texture": "short sharp creaking flecks only at endings",
+    "resonance": "bright metallic ring over neutral vowels",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; taut medium body. short sharp creaking flecks only at endings; bright metallic ring over neutral vowels. Follow clear ascending notes with a briefly pressed final vowel carrying sharp creaking flecks. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-048",
+    "gender": "male",
+    "family": "creaking_endings",
+    "provisionalName": "노이겐",
+    "shortDescription": "목질 바리톤의 둔한 끝 삐걱임",
+    "audibleAnchors": [
+      "두껍고 건조한 목질 중음",
+      "광택 없는 모음 끝의 둔한 삐걱임"
+    ],
+    "signatureBehavior": "문장을 말하듯 일정하게 부른 뒤 끝 모음을 낮게 걸어 둡니다.",
+    "register": "middle baritone",
+    "body": "thick dry woody body",
+    "texture": "blunt low creak at phrase endings",
+    "resonance": "muted neutral oral resonance",
+    "stylePrompt": "Adult male solo singing. middle baritone; thick dry woody body. blunt low creak at phrase endings; muted neutral oral resonance. Keep the phrase conversational and even, then catch its final vowel on a blunt low creak. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-049",
+    "gender": "male",
+    "family": "creaking_endings",
+    "provisionalName": "이르단",
+    "shortDescription": "콧등 테너의 빠른 끝 파열",
+    "audibleAnchors": [
+      "가늘게 모인 비성 중음",
+      "짧은 끝에서 빠르게 갈라지는 결"
+    ],
+    "signatureBehavior": "빠른 음절을 또렷하게 넘기고 마지막 짧은 모음에 빠른 균열을 남깁니다.",
+    "register": "middle tenor",
+    "body": "slender focused body",
+    "texture": "rapid fine creak at clipped releases",
+    "resonance": "small pointed nasal resonance",
+    "stylePrompt": "Adult male solo singing. middle tenor; slender focused body. rapid fine creak at clipped releases; small pointed nasal resonance. Articulate quick syllables clearly and leave rapid fine creak on the last short vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-050",
+    "gender": "male",
+    "family": "creaking_endings",
+    "provisionalName": "루아멜",
+    "shortDescription": "둥근 두성에서 꺼지는 가는 균열",
+    "audibleAnchors": [
+      "부드럽고 둥근 열린 두성",
+      "조용한 끝에 드문드문 남는 가는 균열"
+    ],
+    "signatureBehavior": "두성 끝음을 조용히 낮추며 짧은 균열 뒤 자연스러운 유성음을 남깁니다.",
+    "register": "connected upper head register",
+    "body": "soft light rounded body",
+    "texture": "fine intermittent creak near quiet endings",
+    "resonance": "mellow open head resonance",
+    "stylePrompt": "Adult male solo singing. connected upper head register; soft light rounded body. fine intermittent creak near quiet endings; mellow open head resonance. Lower the head-voice ending quietly and retain a natural voiced tone after a brief fine creak. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-051",
+    "gender": "male",
+    "family": "pitched_gravel",
+    "provisionalName": "바로겐",
+    "shortDescription": "낮고 굵은 자갈성 베이스",
+    "audibleAnchors": [
+      "크고 조밀한 낮은 흉성",
+      "명확한 중심음을 둘러싼 굵은 자갈결"
+    ],
+    "signatureBehavior": "낮은 모음을 일정하게 유지하고 보통 세기에서도 자갈결을 드러냅니다.",
+    "register": "low bass",
+    "body": "large dense chest body",
+    "texture": "coarse pitched gravel surrounding a clear low center",
+    "resonance": "broad dark open vowels",
+    "stylePrompt": "Adult male solo singing. low bass; large dense chest body. coarse pitched gravel surrounding a clear low center; broad dark open vowels. Hold a steady low vowel and reveal coarse gravel at ordinary volume without replacing pitch with growl. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-052",
+    "gender": "male",
+    "family": "pitched_gravel",
+    "provisionalName": "드로안",
+    "shortDescription": "단단한 바리톤의 촘촘한 자갈결",
+    "audibleAnchors": [
+      "작고 무게 있는 중음 몸통",
+      "좁은 구강 울림의 촘촘한 자갈결"
+    ],
+    "signatureBehavior": "짧게 시작한 중음에 촘촘한 결을 유지하다 끝은 매끈하게 닫습니다.",
+    "register": "middle baritone",
+    "body": "compact weighty body",
+    "texture": "fine packed pitched gravel",
+    "resonance": "tight neutral oral resonance",
+    "stylePrompt": "Adult male solo singing. middle baritone; compact weighty body. fine packed pitched gravel; tight neutral oral resonance. Begin middle notes briefly, maintain packed gravel through the sustain and finish on a smooth release. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-053",
+    "gender": "male",
+    "family": "pitched_gravel",
+    "provisionalName": "테르빈",
+    "shortDescription": "얇은 고음의 날카로운 입자",
+    "audibleAnchors": [
+      "가늘고 단단한 높은 중심",
+      "좁은 금속 공명 주위의 날카로운 입자"
+    ],
+    "signatureBehavior": "짧은 고음을 이어 부르며 거친 입자를 남기되 소리의 두께를 키우지 않습니다.",
+    "register": "high tenor",
+    "body": "slender hard-edged body",
+    "texture": "tiny sharp gravel flecks around connected upper pitch",
+    "resonance": "bright narrow metallic resonance",
+    "stylePrompt": "Adult male solo singing. high tenor; slender hard-edged body. tiny sharp gravel flecks around connected upper pitch; bright narrow metallic resonance. Connect short high notes with sharp gravel flecks while keeping the body slender. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-054",
+    "gender": "male",
+    "family": "pitched_gravel",
+    "provisionalName": "구르헨",
+    "shortDescription": "속이 빈 저음과 느슨한 자갈결",
+    "audibleAnchors": [
+      "적당한 무게의 큰 공동 저음",
+      "모음 가장자리의 느슨한 굵은 입자"
+    ],
+    "signatureBehavior": "넓은 낮은 모음을 느리게 열고 입자의 밀도를 바꾸며 중심음을 고정합니다.",
+    "register": "bass-baritone",
+    "body": "large hollow body with moderate weight",
+    "texture": "loose coarse pitched gravel at the vowel rim",
+    "resonance": "spacious rounded low cavity",
+    "stylePrompt": "Adult male solo singing. bass-baritone; large hollow body with moderate weight. loose coarse pitched gravel at the vowel rim; spacious rounded low cavity. Open broad low vowels slowly; vary the gravel density while keeping the central pitch steady. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-055",
+    "gender": "male",
+    "family": "pitched_gravel",
+    "provisionalName": "모이락",
+    "shortDescription": "스모키 저중음의 부드러운 자갈",
+    "audibleAnchors": [
+      "따뜻하고 둥근 저중음 몸통",
+      "연기결과 섞인 부드러운 굵은 입자"
+    ],
+    "signatureBehavior": "부드러운 연결음 사이에서 한 끝음만 길게 남겨 입자와 연기결을 드러냅니다.",
+    "register": "low-middle baritone",
+    "body": "rounded medium chest body",
+    "texture": "soft coarse gravel mixed with slight smoky grain",
+    "resonance": "warm covered rounded resonance",
+    "stylePrompt": "Adult male solo singing. low-middle baritone; rounded medium chest body. soft coarse gravel mixed with slight smoky grain; warm covered rounded resonance. Connect notes softly and leave one long ending exposing soft gravel mixed with smoke. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-056",
+    "gender": "male",
+    "family": "pitched_gravel",
+    "provisionalName": "제르멜",
+    "shortDescription": "콧등 중음의 마른 작은 자갈",
+    "audibleAnchors": [
+      "작고 날씬한 중음 몸통",
+      "공기 안개 없는 전방 비성 자갈결"
+    ],
+    "signatureBehavior": "당김음을 짧게 잘라 부르고 각 짧은 모음에도 작은 입자를 남깁니다.",
+    "register": "middle tenor",
+    "body": "lean small body",
+    "texture": "dry small pitched gravel with no airy halo",
+    "resonance": "pointed forward nasal resonance",
+    "stylePrompt": "Adult male solo singing. middle tenor; lean small body. dry small pitched gravel with no airy halo; pointed forward nasal resonance. Clip syncopated phrases and retain small pitched gravel even on short vowels. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-057",
+    "gender": "male",
+    "family": "pitched_gravel",
+    "provisionalName": "코르안",
+    "shortDescription": "두툼한 테너의 밝은 자갈 테두리",
+    "audibleAnchors": [
+      "두툼하게 이어지는 고중음 흉성",
+      "밝고 열린 모음의 굵은 자갈 테두리"
+    ],
+    "signatureBehavior": "중음에서 위로 올라가는 긴 모음에도 중심을 유지하며 거친 테두리를 넓힙니다.",
+    "register": "upper-middle tenor",
+    "body": "substantial chest-connected body",
+    "texture": "medium coarse gravel around clean sustained pitch",
+    "resonance": "open bright resonance with a mellow core",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; substantial chest-connected body. medium coarse gravel around clean sustained pitch; open bright resonance with a mellow core. Rise on a long vowel from middle to upper notes, retaining pitch while broadening the gravel rim. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-058",
+    "gender": "male",
+    "family": "pitched_gravel",
+    "provisionalName": "누르벤",
+    "shortDescription": "납작한 저음의 둔한 자갈결",
+    "audibleAnchors": [
+      "큰 공동 없는 납작한 저음 중심",
+      "매트한 모음의 둔하고 굵은 입자"
+    ],
+    "signatureBehavior": "일정한 낮은 음을 말하듯 반복하되 모든 모음에 둔한 입자를 붙입니다.",
+    "register": "low baritone",
+    "body": "flat dense body with little cavity bloom",
+    "texture": "blunt coarse granular friction at medium volume",
+    "resonance": "matte low oral resonance",
+    "stylePrompt": "Adult male solo singing. low baritone; flat dense body with little cavity bloom. blunt coarse granular friction at medium volume; matte low oral resonance. Repeat even low melodic notes conversationally with blunt gravel on each vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-059",
+    "gender": "male",
+    "family": "pitched_gravel",
+    "provisionalName": "리칸온",
+    "shortDescription": "머리 울림의 미세한 자갈 고음",
+    "audibleAnchors": [
+      "가늘게 모인 은빛 두성",
+      "숨 소음 적은 미세 자갈결"
+    ],
+    "signatureBehavior": "작은 상행 도약을 두성으로 잇고 고음 중심 주위에 미세 입자를 남깁니다.",
+    "register": "connected head-register tenor",
+    "body": "light thin body",
+    "texture": "fine pitched gravel with minimal breath leakage",
+    "resonance": "focused silver head resonance",
+    "stylePrompt": "Adult male solo singing. connected head-register tenor; light thin body. fine pitched gravel with minimal breath leakage; focused silver head resonance. Connect small upward leaps in head voice and leave fine gravel around the upper pitch. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-060",
+    "gender": "male",
+    "family": "pitched_gravel",
+    "provisionalName": "아르덴",
+    "shortDescription": "목질 바리톤의 거친 점 입자",
+    "audibleAnchors": [
+      "건조한 목질 중음 몸통",
+      "작고 어두운 울림 속의 드문 굵은 입자"
+    ],
+    "signatureBehavior": "긴 모음을 담백하게 유지하며 드문 입자를 천천히 드러냅니다.",
+    "register": "middle baritone",
+    "body": "dry woody medium body",
+    "texture": "distinct sparse gravel grains inside a stable sustain",
+    "resonance": "small dark forward oral resonance",
+    "stylePrompt": "Adult male solo singing. middle baritone; dry woody medium body. distinct sparse gravel grains inside a stable sustain; small dark forward oral resonance. Keep a long vowel plain and steady while exposing sparse distinct gravel grains slowly. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-061",
+    "gender": "male",
+    "family": "hollow_low_resonance",
+    "provisionalName": "루모르",
+    "shortDescription": "넓은 공동의 부드러운 베이스",
+    "audibleAnchors": [
+      "큰 공동과 안정된 낮은 바닥음",
+      "어둡고 넓은 모음에 옅은 솔결"
+    ],
+    "signatureBehavior": "낮은 모음을 넓게 펼친 뒤 여운을 길게 남겨 공동의 크기를 들려줍니다.",
+    "register": "low bass",
+    "body": "large hollow body with a stable floor",
+    "texture": "smooth surface with faint brushed grain",
+    "resonance": "broad dark open low cavity",
+    "stylePrompt": "Adult male solo singing. low bass; large hollow body with a stable floor. smooth surface with faint brushed grain; broad dark open low cavity. Spread low vowels broadly and leave a long resonant ending that exposes the large cavity. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-062",
+    "gender": "male",
+    "family": "hollow_low_resonance",
+    "provisionalName": "데르몬",
+    "shortDescription": "마른 공동과 가는 베이스바리톤",
+    "audibleAnchors": [
+      "흉성 부피가 적은 가는 저음",
+      "전방의 작은 공동과 좁은 낮은 모음"
+    ],
+    "signatureBehavior": "짧은 저음 사이에 작은 간격을 두어 마른 공동이 또렷하게 남게 합니다.",
+    "register": "bass-baritone",
+    "body": "lean hollow body with little chest bulk",
+    "texture": "dry clean texture with tiny intermittent grain",
+    "resonance": "small forward cavity and narrow low vowels",
+    "stylePrompt": "Adult male solo singing. bass-baritone; lean hollow body with little chest bulk. dry clean texture with tiny intermittent grain; small forward cavity and narrow low vowels. Leave small gaps between short low notes so the dry focused cavity remains audible. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-063",
+    "gender": "male",
+    "family": "hollow_low_resonance",
+    "provisionalName": "모네락",
+    "shortDescription": "속이 빈 중저음과 연기 테두리",
+    "audibleAnchors": [
+      "따뜻한 타원형 공동의 중저음",
+      "깨끗한 유지음 주위의 가는 연기결"
+    ],
+    "signatureBehavior": "낮은 음을 부드럽게 잇고 마지막 모음에만 연기결을 조금 더합니다.",
+    "register": "low baritone",
+    "body": "medium hollow rounded body",
+    "texture": "fine smoky edge around clean sustain",
+    "resonance": "warm spacious oval vowel cavity",
+    "stylePrompt": "Adult male solo singing. low baritone; medium hollow rounded body. fine smoky edge around clean sustain; warm spacious oval vowel cavity. Connect low notes softly and add a little more smoke only on the final hollow vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-064",
+    "gender": "male",
+    "family": "hollow_low_resonance",
+    "provisionalName": "구르엘",
+    "shortDescription": "무거운 바닥과 짧은 거친 공동음",
+    "audibleAnchors": [
+      "무거운 흉성 위의 깊은 공동",
+      "시작에만 짧은 굵은 마찰"
+    ],
+    "signatureBehavior": "짧은 거친 시작 뒤 낮은 음을 매끈하게 유지해 바닥과 공동을 함께 드러냅니다.",
+    "register": "low bass",
+    "body": "large hollow body over a heavy chest floor",
+    "texture": "short coarse grain at onsets",
+    "resonance": "deep open cavity with restrained upper ring",
+    "stylePrompt": "Adult male solo singing. low bass; large hollow body over a heavy chest floor. short coarse grain at onsets; deep open cavity with restrained upper ring. After a short coarse onset, sustain smoothly to expose both the heavy floor and the deep cavity. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-065",
+    "gender": "male",
+    "family": "hollow_low_resonance",
+    "provisionalName": "키로안",
+    "shortDescription": "얇은 테너의 빈 중저음 울림",
+    "audibleAnchors": [
+      "가느다란 중심의 빈 중저음",
+      "희미한 비성과 광택 없는 구강 공동"
+    ],
+    "signatureBehavior": "말하듯 짧게 시작한 모음을 길게 늘려 가벼운 빈 울림을 들려줍니다.",
+    "register": "low-middle tenor",
+    "body": "light hollow body with a slender core",
+    "texture": "clean dry surface without coarse grain",
+    "resonance": "muted hollow low-middle oral resonance with a slight nasal edge",
+    "stylePrompt": "Adult male solo singing. low-middle tenor; light hollow body with a slender core. clean dry surface without coarse grain; muted hollow low-middle oral resonance with a slight nasal edge. Begin conversationally, then lengthen the vowel to reveal a light hollow low-middle color. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-066",
+    "gender": "male",
+    "family": "hollow_low_resonance",
+    "provisionalName": "바누겐",
+    "shortDescription": "둥근 바리톤과 어두운 공동결",
+    "audibleAnchors": [
+      "둥근 중간 무게의 공동 몸통",
+      "어두운 덮인 울림 위의 약한 밝음"
+    ],
+    "signatureBehavior": "중저음 모음을 덮어 부르다 끝에서 조금 열어 공동 색의 변화를 들려줍니다.",
+    "register": "low-middle baritone",
+    "body": "rounded medium-weight hollow body",
+    "texture": "soft brushed texture with little breath hiss",
+    "resonance": "covered dark cavity under a mild upper glow",
+    "stylePrompt": "Adult male solo singing. low-middle baritone; rounded medium-weight hollow body. soft brushed texture with little breath hiss; covered dark cavity under a mild upper glow. Sing covered low-middle vowels and open them slightly at the end to reveal the cavity color changing. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-067",
+    "gender": "male",
+    "family": "hollow_low_resonance",
+    "provisionalName": "우르한",
+    "shortDescription": "콧등에 모인 낮은 공동음",
+    "audibleAnchors": [
+      "저음 무게를 덜어 낸 작은 공동",
+      "좁은 둥근 모음의 전방 비성"
+    ],
+    "signatureBehavior": "낮은 리듬 구절을 짧게 정리하며 자음 뒤에 빈 울림을 남깁니다.",
+    "register": "bass-baritone",
+    "body": "compact hollow body with restrained bass weight",
+    "texture": "tight dry fine grain",
+    "resonance": "nose-forward cavity resonance with narrow rounded vowels",
+    "stylePrompt": "Adult male solo singing. bass-baritone; compact hollow body with restrained bass weight. tight dry fine grain; nose-forward cavity resonance with narrow rounded vowels. Keep low rhythmic phrases short and leave the focused hollow resonance after each consonant. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-068",
+    "gender": "male",
+    "family": "hollow_low_resonance",
+    "provisionalName": "에르노",
+    "shortDescription": "밝은 테두리를 가진 넓은 저중음",
+    "audibleAnchors": [
+      "넓은 공동 속의 가는 중심",
+      "낮은 울림 위의 선명한 밝은 테두리"
+    ],
+    "signatureBehavior": "낮은 유지음에서 강도를 살짝 올려 밝은 테두리를 드러낸 뒤 조용히 풀어 줍니다.",
+    "register": "low baritone",
+    "body": "broad hollow body with a lean central core",
+    "texture": "smooth clear texture",
+    "resonance": "open low cavity with a distinct bright upper rim",
+    "stylePrompt": "Adult male solo singing. low baritone; broad hollow body with a lean central core. smooth clear texture; open low cavity with a distinct bright upper rim. Use a small swell on a low sustain to reveal the bright rim, then release quietly. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-069",
+    "gender": "male",
+    "family": "hollow_low_resonance",
+    "provisionalName": "투르멜",
+    "shortDescription": "나무통 같은 마른 베이스 공동",
+    "audibleAnchors": [
+      "두꺼운 목질성의 짧은 공동",
+      "긴 잔향 없이 남는 매트한 거친 표면"
+    ],
+    "signatureBehavior": "낮은 음을 길게 이어도 잔향을 늘리지 않고 나무통 같은 몸통을 유지합니다.",
+    "register": "low bass",
+    "body": "thick woody hollow body",
+    "texture": "coarse matte surface with stable pitch",
+    "resonance": "short dark cavity with little ringing sustain",
+    "stylePrompt": "Adult male solo singing. low bass; thick woody hollow body. coarse matte surface with stable pitch; short dark cavity with little ringing sustain. Connect low notes without adding reverberant bloom and preserve the dry wooden cavity. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-070",
+    "gender": "male",
+    "family": "hollow_low_resonance",
+    "provisionalName": "리우단",
+    "shortDescription": "가벼운 저음의 둥근 빈 울림",
+    "audibleAnchors": [
+      "얇고 둥근 저음 공동",
+      "부드러운 상부 배음과 가는 공기 테두리"
+    ],
+    "signatureBehavior": "작은 하행음을 매끈하게 이으며 마지막 저음에 빈 울림을 남깁니다.",
+    "register": "low tenor",
+    "body": "thin rounded hollow body",
+    "texture": "gentle fine airy edge with a voiced center",
+    "resonance": "soft open low-register cavity with mellow upper overtones",
+    "stylePrompt": "Adult male solo singing. low tenor; thin rounded hollow body. gentle fine airy edge with a voiced center; soft open low-register cavity with mellow upper overtones. Connect small descending notes smoothly and leave the final low note lightly hollow. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-071",
+    "gender": "male",
+    "family": "dense_dark_chest",
+    "provisionalName": "도르칸",
+    "shortDescription": "조밀하고 깊은 흉성 베이스",
+    "audibleAnchors": [
+      "아주 조밀한 낮은 흉성 중심",
+      "넓게 퍼지지 않는 어두운 덮인 모음"
+    ],
+    "signatureBehavior": "긴 낮은 음을 작게 시작해도 밀도를 유지하고 끝을 단단하게 닫습니다.",
+    "register": "low bass",
+    "body": "very dense grounded chest body",
+    "texture": "dry smooth center with faint low grain",
+    "resonance": "dark compact covered vowels",
+    "stylePrompt": "Adult male solo singing. low bass; very dense grounded chest body. dry smooth center with faint low grain; dark compact covered vowels. Start long low notes quietly while retaining chest density and close the ending firmly. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-072",
+    "gender": "male",
+    "family": "dense_dark_chest",
+    "provisionalName": "그레몬",
+    "shortDescription": "굵은 바리톤의 어두운 사포 흉성",
+    "audibleAnchors": [
+      "두꺼운 압축 흉성 몸통",
+      "높은 광택을 줄인 어두운 전방 공명"
+    ],
+    "signatureBehavior": "짧은 문장을 낮게 반복하며 사포결을 모음 전체에 남깁니다.",
+    "register": "low baritone",
+    "body": "thick compressed chest body",
+    "texture": "coarse dry grain at ordinary volume",
+    "resonance": "dark forward oral resonance with muted highs",
+    "stylePrompt": "Adult male solo singing. low baritone; thick compressed chest body. coarse dry grain at ordinary volume; dark forward oral resonance with muted highs. Repeat short low melodic phrases with coarse grain throughout the vowels and muted high ring. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-073",
+    "gender": "male",
+    "family": "dense_dark_chest",
+    "provisionalName": "부르안",
+    "shortDescription": "넓고 묵직한 중음 흉성",
+    "audibleAnchors": [
+      "넓고 묵직한 중음 흉성",
+      "따뜻하고 열린 어두운 모음"
+    ],
+    "signatureBehavior": "중음을 길게 연결하다 한 음만 넓게 열어 몸통의 크기를 들려줍니다.",
+    "register": "middle baritone",
+    "body": "broad heavy chest body",
+    "texture": "smooth surface with a small smoky edge",
+    "resonance": "warm dark open resonance",
+    "stylePrompt": "Adult male solo singing. middle baritone; broad heavy chest body. smooth surface with a small smoky edge; warm dark open resonance. Connect middle notes for a long phrase and open one vowel broadly to reveal the chest body's size. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-074",
+    "gender": "male",
+    "family": "dense_dark_chest",
+    "provisionalName": "라모겐",
+    "shortDescription": "좁고 단단한 저음의 건조한 흉성",
+    "audibleAnchors": [
+      "작지만 촘촘한 저음 흉성",
+      "약한 비성이 섞인 좁고 어두운 모음"
+    ],
+    "signatureBehavior": "짧고 단정한 자음 뒤 낮은 모음을 좁게 붙잡습니다.",
+    "register": "bass-baritone",
+    "body": "small tightly packed chest body",
+    "texture": "very dry fine grain",
+    "resonance": "narrow dark vowels with a subtle nasal focus",
+    "stylePrompt": "Adult male solo singing. bass-baritone; small tightly packed chest body. very dry fine grain; narrow dark vowels with a subtle nasal focus. Follow short precise consonants with narrowly held low vowels and tightly packed chest weight. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-075",
+    "gender": "male",
+    "family": "dense_dark_chest",
+    "provisionalName": "고르벤",
+    "shortDescription": "깊은 바리톤과 매트한 거친 테두리",
+    "audibleAnchors": [
+      "깊고 둥근 조밀한 흉성",
+      "금속 광택 없는 굵은 허스키 테두리"
+    ],
+    "signatureBehavior": "중저음을 보통 세기로 길게 밀며 중심은 깨끗하게 두고 거친 외곽을 고정합니다.",
+    "register": "low-middle baritone",
+    "body": "dense rounded chest body",
+    "texture": "matte coarse husk around a clean firm center",
+    "resonance": "dark oval vowels with little metallic ring",
+    "stylePrompt": "Adult male solo singing. low-middle baritone; dense rounded chest body. matte coarse husk around a clean firm center; dark oval vowels with little metallic ring. Sustain low-middle notes at ordinary volume, keeping the center clean and the matte coarse rim constant. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-076",
+    "gender": "male",
+    "family": "dense_dark_chest",
+    "provisionalName": "에크로",
+    "shortDescription": "고중음까지 이어지는 어두운 흉성",
+    "audibleAnchors": [
+      "고중음에 이어지는 두터운 흉성",
+      "덮인 모음 위의 작은 강철 테두리"
+    ],
+    "signatureBehavior": "중음에서 위로 올라가도 몸통을 남기며 마지막 고음만 짧게 엽니다.",
+    "register": "upper-middle tenor",
+    "body": "substantial connected chest body",
+    "texture": "fine gritty surface that stays controlled",
+    "resonance": "covered dark upper vowels with a small steel edge",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; substantial connected chest body. fine gritty surface that stays controlled; covered dark upper vowels with a small steel edge. Rise from middle to upper notes without losing chest body and open only the final high vowel briefly. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-077",
+    "gender": "male",
+    "family": "dense_dark_chest",
+    "provisionalName": "투르한",
+    "shortDescription": "낮고 납작한 흉성의 둔한 균열",
+    "audibleAnchors": [
+      "공동 부피를 줄인 납작한 저음 흉성",
+      "어두운 구강 울림의 둔한 균열"
+    ],
+    "signatureBehavior": "낮은 반복음에 드문 짧은 균열을 넣고 다음 음은 단단하게 곧게 세웁니다.",
+    "register": "low bass",
+    "body": "flat dense chest body with restrained cavity size",
+    "texture": "blunt brief cracking accents",
+    "resonance": "matte dark low oral resonance",
+    "stylePrompt": "Adult male solo singing. low bass; flat dense chest body with restrained cavity size. blunt brief cracking accents; matte dark low oral resonance. Add occasional blunt cracked accents to repeated low notes and set the next note straight and firm. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-078",
+    "gender": "male",
+    "family": "dense_dark_chest",
+    "provisionalName": "노루멜",
+    "shortDescription": "목질 중음의 무거운 어두운 흉성",
+    "audibleAnchors": [
+      "두꺼운 목질 흉성 몸통",
+      "공기 소음 적은 어두운 까슬한 표면"
+    ],
+    "signatureBehavior": "작은 음정 도약을 무겁게 연결하고 끝음은 짧게 정리합니다.",
+    "register": "middle baritone",
+    "body": "thick woody chest body",
+    "texture": "dry bristly texture with minimal breath",
+    "resonance": "dark compact oral resonance",
+    "stylePrompt": "Adult male solo singing. middle baritone; thick woody chest body. dry bristly texture with minimal breath; dark compact oral resonance. Connect small interval leaps with woody chest weight and keep the ending brief. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-079",
+    "gender": "male",
+    "family": "dense_dark_chest",
+    "provisionalName": "카드온",
+    "shortDescription": "단단한 테너의 낮은 흉성 그림자",
+    "audibleAnchors": [
+      "중간 무게의 압축 흉성 연결",
+      "맑은 전방 중심 아래의 어두운 배음"
+    ],
+    "signatureBehavior": "중음 프레이즈를 또렷하게 세우되 작은 하행에서 어두운 몸통을 드러냅니다.",
+    "register": "middle tenor",
+    "body": "medium compressed chest-connected body",
+    "texture": "smooth low grain beneath a clean top",
+    "resonance": "dark lower overtones with a clear forward center",
+    "stylePrompt": "Adult male solo singing. middle tenor; medium compressed chest-connected body. smooth low grain beneath a clean top; dark lower overtones with a clear forward center. Set middle phrases clearly and reveal dark chest overtones on small downward movements. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-080",
+    "gender": "male",
+    "family": "dense_dark_chest",
+    "provisionalName": "바우렉",
+    "shortDescription": "부드럽지만 무거운 저중음 흉성",
+    "audibleAnchors": [
+      "부드러운 외곽의 무거운 저중음 흉성",
+      "고음 광택이 적은 따뜻한 덮인 울림"
+    ],
+    "signatureBehavior": "낮은 음을 작게 이어 부르고 강도를 줄일 때도 무게를 남깁니다.",
+    "register": "low baritone",
+    "body": "dense soft-edged chest body",
+    "texture": "soft smoky grain with a firm voiced center",
+    "resonance": "covered warm resonance and restrained upper shine",
+    "stylePrompt": "Adult male solo singing. low baritone; dense soft-edged chest body. soft smoky grain with a firm voiced center; covered warm resonance and restrained upper shine. Connect low notes quietly and preserve chest weight even as intensity falls. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-081",
+    "gender": "male",
+    "family": "woody_matte",
+    "provisionalName": "하루겐",
+    "shortDescription": "마른 목질 바리톤의 단단한 중심",
+    "audibleAnchors": [
+      "촘촘하고 마른 목질 중음",
+      "광택이 적은 전방 구강 울림"
+    ],
+    "signatureBehavior": "자음을 짧게 세운 뒤 중음 모음을 담백하고 곧게 남깁니다.",
+    "register": "middle baritone",
+    "body": "compact dry woody body",
+    "texture": "fine bristly matte surface",
+    "resonance": "neutral forward oral resonance with little ring",
+    "stylePrompt": "Adult male solo singing. middle baritone; compact dry woody body. fine bristly matte surface; neutral forward oral resonance with little ring. Mark consonants briefly, then leave middle vowels plain and straight with little ringing sheen. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-082",
+    "gender": "male",
+    "family": "woody_matte",
+    "provisionalName": "누르찬",
+    "shortDescription": "가벼운 낮은 테너의 빈 목질",
+    "audibleAnchors": [
+      "가볍고 빈 목질 저중음 몸통",
+      "작고 둥근 공동의 건조한 매트 질감"
+    ],
+    "signatureBehavior": "말하듯 시작한 음을 한 박자 길게 남겨 가벼운 목질 울림을 드러냅니다.",
+    "register": "low tenor",
+    "body": "lean hollow woody body",
+    "texture": "dry clean matte texture",
+    "resonance": "small rounded cavity with restrained nasal color",
+    "stylePrompt": "Adult male solo singing. low tenor; lean hollow woody body. dry clean matte texture; small rounded cavity with restrained nasal color. Begin speech-like and hold one note a beat longer to expose the lean hollow wooden body. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-083",
+    "gender": "male",
+    "family": "woody_matte",
+    "provisionalName": "그루안",
+    "shortDescription": "두꺼운 베이스의 어두운 나무결",
+    "audibleAnchors": [
+      "두껍게 바닥을 받치는 목질 베이스",
+      "짧은 어두운 공동의 굵은 매트결"
+    ],
+    "signatureBehavior": "낮은 음을 길게 이어도 울림을 부풀리지 않고 짧은 공동을 유지합니다.",
+    "register": "low bass",
+    "body": "thick grounded woody chest body",
+    "texture": "coarse low matte grain",
+    "resonance": "dark short cavity with minimal bright overtones",
+    "stylePrompt": "Adult male solo singing. low bass; thick grounded woody chest body. coarse low matte grain; dark short cavity with minimal bright overtones. Connect long low notes without inflating the cavity and retain a short dark woody resonance. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-084",
+    "gender": "male",
+    "family": "woody_matte",
+    "provisionalName": "레모단",
+    "shortDescription": "둥근 중저음의 부드러운 목질",
+    "audibleAnchors": [
+      "둥근 중간 무게의 목질 저음",
+      "따뜻한 타원형 모음의 부드러운 솔결"
+    ],
+    "signatureBehavior": "낮은 두 음을 매끈하게 연결한 뒤 마지막 모음을 둥글게 열어 줍니다.",
+    "register": "low baritone",
+    "body": "rounded medium woody body",
+    "texture": "soft brushed matte texture",
+    "resonance": "warm open oval resonance",
+    "stylePrompt": "Adult male solo singing. low baritone; rounded medium woody body. soft brushed matte texture; warm open oval resonance. Connect two low notes smoothly and open the final vowel into a rounded warm shape. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-085",
+    "gender": "male",
+    "family": "woody_matte",
+    "provisionalName": "키르노",
+    "shortDescription": "가느다란 테너의 마른 리드목질",
+    "audibleAnchors": [
+      "가느다란 리드 같은 목질 고중음",
+      "금속 광택 없는 좁고 밝은 구강 공명"
+    ],
+    "signatureBehavior": "빠른 작은 상행음을 짧게 세우고 끝음을 가늘게 곧게 남깁니다.",
+    "register": "upper-middle tenor",
+    "body": "slender reed-woody body",
+    "texture": "very fine dry matte friction",
+    "resonance": "narrow bright oral focus without metallic sheen",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; slender reed-woody body. very fine dry matte friction; narrow bright oral focus without metallic sheen. Set quick small rising notes briefly and leave a slender straight ending without metallic sheen. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-086",
+    "gender": "male",
+    "family": "woody_matte",
+    "provisionalName": "도이렉",
+    "shortDescription": "콧등 바리톤의 까슬한 목질",
+    "audibleAnchors": [
+      "각지고 날씬한 목질 중음",
+      "저음 부피 적은 전방 비성의 까슬한 표면"
+    ],
+    "signatureBehavior": "당김음을 짧게 끊으며 자음 뒤마다 까슬한 모음 결을 들려줍니다.",
+    "register": "middle baritone",
+    "body": "lean angular woody body",
+    "texture": "rough bristly dry surface",
+    "resonance": "pointed nasal focus with muted low bloom",
+    "stylePrompt": "Adult male solo singing. middle baritone; lean angular woody body. rough bristly dry surface; pointed nasal focus with muted low bloom. Clip syncopations and expose bristly vowel texture after each consonant. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-087",
+    "gender": "male",
+    "family": "woody_matte",
+    "provisionalName": "오르산",
+    "shortDescription": "납작한 저중음의 고운 매트목질",
+    "audibleAnchors": [
+      "납작하고 단단한 목질 저음 중심",
+      "공동이 부풀지 않는 어두운 구강 공명"
+    ],
+    "signatureBehavior": "낮은 음을 일정하게 반복하며 작은 끝음만 천천히 접습니다.",
+    "register": "bass-baritone",
+    "body": "flat compact wooden body",
+    "texture": "fine even matte grain",
+    "resonance": "covered dark oral resonance without hollow bloom",
+    "stylePrompt": "Adult male solo singing. bass-baritone; flat compact wooden body. fine even matte grain; covered dark oral resonance without hollow bloom. Repeat even low notes and fold only the final ending down slowly. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-088",
+    "gender": "male",
+    "family": "woody_matte",
+    "provisionalName": "버루멜",
+    "shortDescription": "넓은 바리톤의 따뜻한 목질 스모크",
+    "audibleAnchors": [
+      "넓고 부드러운 목질 중음 몸통",
+      "광택 없이 따뜻하게 펼치는 약한 연기결"
+    ],
+    "signatureBehavior": "긴 중음 구절에서 모음을 넓게 연결하고 마지막 자음을 조용히 닫습니다.",
+    "register": "middle baritone",
+    "body": "broad soft-edged woody body",
+    "texture": "subtle smoky grain over a matte core",
+    "resonance": "warm spacious midrange without glossy highs",
+    "stylePrompt": "Adult male solo singing. middle baritone; broad soft-edged woody body. subtle smoky grain over a matte core; warm spacious midrange without glossy highs. Connect broad vowels in a long middle phrase and close the final consonant quietly. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-089",
+    "gender": "male",
+    "family": "woody_matte",
+    "provisionalName": "아네르",
+    "shortDescription": "얇은 두성의 건조한 목질 색",
+    "audibleAnchors": [
+      "가늘고 촘촘한 두성 중심",
+      "은빛 광택이 적은 건조한 목질 표면"
+    ],
+    "signatureBehavior": "작은 두성 도약을 곧게 잇고 고음 끝에 건조한 결을 남깁니다.",
+    "register": "connected head-register tenor",
+    "body": "thin compact head body",
+    "texture": "dry fine-grained matte surface",
+    "resonance": "focused mellow head resonance with little silver shine",
+    "stylePrompt": "Adult male solo singing. connected head-register tenor; thin compact head body. dry fine-grained matte surface; focused mellow head resonance with little silver shine. Connect small head-voice leaps in straight tone and leave dry matte texture at the high ending. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-090",
+    "gender": "male",
+    "family": "woody_matte",
+    "provisionalName": "세루담",
+    "shortDescription": "밀도 있는 고중음의 둔한 목질",
+    "audibleAnchors": [
+      "짧은 울림의 밀도 있는 목질 고중음",
+      "열린 구강 모음의 둔하고 굵은 매트결"
+    ],
+    "signatureBehavior": "중음에서 고음으로 연결할 때 모음은 열되 목질의 짧은 울림을 유지합니다.",
+    "register": "upper-middle tenor",
+    "body": "substantial short-resonance woody body",
+    "texture": "coarse matte surface around a firm pitch",
+    "resonance": "muted open oral resonance",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; substantial short-resonance woody body. coarse matte surface around a firm pitch; muted open oral resonance. Open the vowel while connecting middle to upper notes, preserving the body's short woody resonance. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-091",
+    "gender": "male",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "티모안",
+    "shortDescription": "가늘고 마른 비성 테너",
+    "audibleAnchors": [
+      "가늘고 날씬한 중음 몸통",
+      "작고 밝게 모인 마른 비성 리드"
+    ],
+    "signatureBehavior": "짧은 음절을 빠르게 세우고 끝음을 가늘게 곧게 남깁니다.",
+    "register": "middle tenor",
+    "body": "slender lean body",
+    "texture": "clean dry texture with minimal breath",
+    "resonance": "small bright nasal reed focus",
+    "stylePrompt": "Adult male solo singing. middle tenor; slender lean body. clean dry texture with minimal breath; small bright nasal reed focus. Set short syllables quickly and leave a slender straight ending with a bright nasal reed focus. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-092",
+    "gender": "male",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "그네르",
+    "shortDescription": "낮고 목질적인 비성 바리톤",
+    "audibleAnchors": [
+      "낮고 촘촘한 목질 중심",
+      "어두운 저음 위의 뾰족한 비성"
+    ],
+    "signatureBehavior": "낮은 리듬 구절을 짧게 끊되 모음마다 뾰족한 공명을 남깁니다.",
+    "register": "low baritone",
+    "body": "compact woody body",
+    "texture": "fine matte grain",
+    "resonance": "pointed dark nasal resonance above a low core",
+    "stylePrompt": "Adult male solo singing. low baritone; compact woody body. fine matte grain; pointed dark nasal resonance above a low core. Clip low rhythmic phrases and retain pointed nasal focus on each vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-093",
+    "gender": "male",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "레우모",
+    "shortDescription": "따뜻한 둥근 몸통과 좁은 비성",
+    "audibleAnchors": [
+      "둥근 중간 무게의 중음 몸통",
+      "풍부한 모음 속의 좁고 따뜻한 비성"
+    ],
+    "signatureBehavior": "넓은 모음을 부드럽게 연결하면서 코앞의 좁은 중심을 고정합니다.",
+    "register": "middle baritone",
+    "body": "rounded medium body",
+    "texture": "smooth voiced surface",
+    "resonance": "narrow warm nasal resonance inside full vowels",
+    "stylePrompt": "Adult male solo singing. middle baritone; rounded medium body. smooth voiced surface; narrow warm nasal resonance inside full vowels. Connect full vowels softly while keeping a narrow nose-forward center stable. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-094",
+    "gender": "male",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "키로렉",
+    "shortDescription": "높고 부서지는 거친 비성 리드",
+    "audibleAnchors": [
+      "얇고 단단한 높은 리드 몸통",
+      "공기 안개 없는 날카로운 비성 거친 결"
+    ],
+    "signatureBehavior": "짧은 높은 음을 잘게 붙잡고 모음 사이를 빠르게 뛰어넘습니다.",
+    "register": "high tenor",
+    "body": "thin hard reed body",
+    "texture": "brittle fine rasp with no airy haze",
+    "resonance": "bright sharply narrowed nasal focus",
+    "stylePrompt": "Adult male solo singing. high tenor; thin hard reed body. brittle fine rasp with no airy haze; bright sharply narrowed nasal focus. Catch short high notes with brittle fine rasp and move quickly between tightly focused vowels. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-095",
+    "gender": "male",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "오누단",
+    "shortDescription": "속이 빈 중음의 매트한 비성",
+    "audibleAnchors": [
+      "가벼운 빈 중음 몸통",
+      "광택이 줄어든 좁은 비성 공동"
+    ],
+    "signatureBehavior": "말하듯 음을 시작한 뒤 끝 모음만 길게 늘려 빈 비성을 드러냅니다.",
+    "register": "low-middle tenor",
+    "body": "light hollow body",
+    "texture": "dry matte surface",
+    "resonance": "muted narrow nasal cavity resonance",
+    "stylePrompt": "Adult male solo singing. low-middle tenor; light hollow body. dry matte surface; muted narrow nasal cavity resonance. Begin speech-like, then lengthen only the final vowel to reveal muted hollow nasal resonance. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-096",
+    "gender": "male",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "바르네",
+    "shortDescription": "두툼한 테너의 금속 비성",
+    "audibleAnchors": [
+      "흉성으로 이어지는 두툼한 고중음",
+      "좁고 선명한 금속 비성"
+    ],
+    "signatureBehavior": "중음에서 올라가는 음을 강하게 밀지 않고 좁은 금속 중심으로 세웁니다.",
+    "register": "upper-middle tenor",
+    "body": "substantial chest-connected body",
+    "texture": "clean tight texture",
+    "resonance": "narrow metallic nose-forward ring",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; substantial chest-connected body. clean tight texture; narrow metallic nose-forward ring. Rise from middle notes without force and establish a narrow metallic nasal center. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-097",
+    "gender": "male",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "주르안",
+    "shortDescription": "마른 베이스의 작은 비성 울림",
+    "audibleAnchors": [
+      "저음 무게를 줄인 마른 몸통",
+      "낮은 모음 위의 작은 전방 비성"
+    ],
+    "signatureBehavior": "낮은 모음을 짧게 이어 자음 뒤의 작은 비성 테두리를 들려줍니다.",
+    "register": "bass-baritone",
+    "body": "lean low body with restrained weight",
+    "texture": "fine intermittent low grain",
+    "resonance": "small forward nasal edge over dry low vowels",
+    "stylePrompt": "Adult male solo singing. bass-baritone; lean low body with restrained weight. fine intermittent low grain; small forward nasal edge over dry low vowels. Connect short low vowels and expose a small nasal edge after the consonants. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-098",
+    "gender": "male",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "세이론",
+    "shortDescription": "숨결 섞인 가는 비성 중음",
+    "audibleAnchors": [
+      "가늘고 유연한 중음 중심",
+      "부드러운 좁은 비성 주위의 연기결"
+    ],
+    "signatureBehavior": "짧은 당김음을 부드럽게 넘기고 끝음은 숨에 묻히지 않게 남깁니다.",
+    "register": "middle tenor",
+    "body": "thin flexible body",
+    "texture": "light smoky breath edge around clear pitch",
+    "resonance": "soft narrow nasal resonance",
+    "stylePrompt": "Adult male solo singing. middle tenor; thin flexible body. light smoky breath edge around clear pitch; soft narrow nasal resonance. Move softly through short syncopations and leave a voiced ending that is not swallowed by breath. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-099",
+    "gender": "male",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "카르눔",
+    "shortDescription": "어두운 덮인 테너의 얇은 리드",
+    "audibleAnchors": [
+      "가늘고 압축된 고중음 몸통",
+      "밝은 자극이 적은 어두운 리드 공명"
+    ],
+    "signatureBehavior": "모음을 덮어 작은 상행음을 잇고 마지막 음에서만 좁은 모음을 엽니다.",
+    "register": "upper-middle tenor",
+    "body": "slender compressed body",
+    "texture": "dry fine granular surface",
+    "resonance": "covered dark reed resonance with little bright bite",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; slender compressed body. dry fine granular surface; covered dark reed resonance with little bright bite. Connect small ascending notes with covered vowels and open the narrow vowel only on the final note. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-100",
+    "gender": "male",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "아루겐",
+    "shortDescription": "밝은 두성의 가는 코앞 공명",
+    "audibleAnchors": [
+      "가볍게 모인 두성 몸통",
+      "숨 소음 적은 은빛 비성 두성 공명"
+    ],
+    "signatureBehavior": "두성 유지음을 곧게 세우고 짧은 하행 끝을 또렷하게 닫습니다.",
+    "register": "connected upper head register",
+    "body": "light focused head body",
+    "texture": "smooth surface with very little breath",
+    "resonance": "thin silver nasal-head focus",
+    "stylePrompt": "Adult male solo singing. connected upper head register; light focused head body. smooth surface with very little breath; thin silver nasal-head focus. Hold a straight head note with silver nasal focus and close the short descending ending clearly. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-101",
+    "gender": "male",
+    "family": "metallic_ring",
+    "provisionalName": "칼모르",
+    "shortDescription": "강철 같은 고중음 테너",
+    "audibleAnchors": [
+      "팽팽하게 이어지는 고중음 흉성",
+      "거친 결 적은 단단한 강철 공명"
+    ],
+    "signatureBehavior": "중음에서 올라간 음을 곧게 유지하고 끝에만 미세한 떨림을 붙입니다.",
+    "register": "upper-middle tenor",
+    "body": "taut medium chest-connected body",
+    "texture": "clean firm texture with minimal rasp",
+    "resonance": "hard steel-like focused upper ring",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; taut medium chest-connected body. clean firm texture with minimal rasp; hard steel-like focused upper ring. Rise from the middle, sustain the upper note straight and add fine vibrato only at the release. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-102",
+    "gender": "male",
+    "family": "metallic_ring",
+    "provisionalName": "에르칸",
+    "shortDescription": "밝고 가는 은빛 고음",
+    "audibleAnchors": [
+      "가늘고 가벼운 높은 몸통",
+      "저음 무게 적은 좁고 밝은 은빛 공명"
+    ],
+    "signatureBehavior": "짧은 높은 음을 가볍게 연결하고 마지막 음은 가늘게 길게 남깁니다.",
+    "register": "high tenor",
+    "body": "slender lightweight body",
+    "texture": "smooth fine surface",
+    "resonance": "bright narrow silver ring with little low weight",
+    "stylePrompt": "Adult male solo singing. high tenor; slender lightweight body. smooth fine surface; bright narrow silver ring with little low weight. Connect short high notes lightly and leave a slender long final sustain. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-103",
+    "gender": "male",
+    "family": "metallic_ring",
+    "provisionalName": "보르엔",
+    "shortDescription": "두툼한 바리톤의 청동 울림",
+    "audibleAnchors": [
+      "두툼하고 둥근 중음 몸통",
+      "따뜻한 청동 같은 구강 공명"
+    ],
+    "signatureBehavior": "긴 중음 모음을 넓게 연결하고 작은 강약 변화로 금속 색을 들려줍니다.",
+    "register": "middle baritone",
+    "body": "substantial rounded body",
+    "texture": "smooth surface with faint brushed grain",
+    "resonance": "warm bronze-like oral ring",
+    "stylePrompt": "Adult male solo singing. middle baritone; substantial rounded body. smooth surface with faint brushed grain; warm bronze-like oral ring. Connect broad middle vowels and use small dynamic changes to reveal a warm bronze ring. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-104",
+    "gender": "male",
+    "family": "metallic_ring",
+    "provisionalName": "드이락",
+    "shortDescription": "건조한 테너의 거친 금속 가장자리",
+    "audibleAnchors": [
+      "날씬하고 단단한 중음 몸통",
+      "깨끗한 중심 둘레의 마른 금속 거친 결"
+    ],
+    "signatureBehavior": "당김음을 짧게 세우고 마지막 모음에서 거친 금속 테두리를 유지합니다.",
+    "register": "middle tenor",
+    "body": "lean hard-edged body",
+    "texture": "dry fine raspy rim around clean pitch",
+    "resonance": "small bright metallic forward focus",
+    "stylePrompt": "Adult male solo singing. middle tenor; lean hard-edged body. dry fine raspy rim around clean pitch; small bright metallic forward focus. Set syncopated notes briefly and retain a dry gritty metallic rim on the final vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-105",
+    "gender": "male",
+    "family": "metallic_ring",
+    "provisionalName": "그르온",
+    "shortDescription": "낮은 베이스의 구리빛 배음",
+    "audibleAnchors": [
+      "조밀한 낮은 흉성 중심",
+      "어두운 몸통 위의 구리빛 배음 테두리"
+    ],
+    "signatureBehavior": "낮은 음을 단단하게 두고 강도를 조금 올릴 때만 구리빛 테두리를 드러냅니다.",
+    "register": "bass-baritone",
+    "body": "dense grounded chest body",
+    "texture": "clean dry core with light low grain",
+    "resonance": "dark low body with a copper-colored upper edge",
+    "stylePrompt": "Adult male solo singing. bass-baritone; dense grounded chest body. clean dry core with light low grain; dark low body with a copper-colored upper edge. Keep low notes firm and reveal the copper-like upper edge only with a small increase in intensity. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-106",
+    "gender": "male",
+    "family": "metallic_ring",
+    "provisionalName": "티우멜",
+    "shortDescription": "밝은 두성의 유리 금속 링",
+    "audibleAnchors": [
+      "가늘고 촘촘한 두성 중심",
+      "입자감 적은 유리 같은 은빛 두성 공명"
+    ],
+    "signatureBehavior": "두성 작은 도약을 매끈하게 잇고 고음 끝을 짧게 또렷이 닫습니다.",
+    "register": "connected upper head register",
+    "body": "thin compact head body",
+    "texture": "clean almost grainless surface",
+    "resonance": "glassy silver head ring",
+    "stylePrompt": "Adult male solo singing. connected upper head register; thin compact head body. clean almost grainless surface; glassy silver head ring. Connect small head-voice leaps smoothly and close the high ending briefly and clearly. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-107",
+    "gender": "male",
+    "family": "metallic_ring",
+    "provisionalName": "로르네",
+    "shortDescription": "둥근 테너의 두꺼운 금속 링",
+    "audibleAnchors": [
+      "풍부하고 탄력 있는 흉성 연결",
+      "넓고 밝은 황동 같은 공명"
+    ],
+    "signatureBehavior": "긴 상행 모음을 연결하며 공명을 넓히되 볼륨은 보통 세기로 유지합니다.",
+    "register": "upper-middle tenor",
+    "body": "full elastic chest-linked body",
+    "texture": "smooth firm vowel center",
+    "resonance": "broad bright brass-like ring",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; full elastic chest-linked body. smooth firm vowel center; broad bright brass-like ring. Connect a long rising vowel and broaden its brass-like ring while remaining at ordinary volume. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-108",
+    "gender": "male",
+    "family": "metallic_ring",
+    "provisionalName": "오르딘",
+    "shortDescription": "콧등 바리톤의 얇은 금속 초점",
+    "audibleAnchors": [
+      "작고 날씬한 중음 몸통",
+      "콧등에 모인 얇고 뾰족한 금속 공명"
+    ],
+    "signatureBehavior": "짧은 자음 뒤 모음을 가늘게 붙잡아 작은 금속 중심을 드러냅니다.",
+    "register": "middle baritone",
+    "body": "compact lean body",
+    "texture": "dry clean tight texture",
+    "resonance": "thin pointed metallic nasal ring",
+    "stylePrompt": "Adult male solo singing. middle baritone; compact lean body. dry clean tight texture; thin pointed metallic nasal ring. Catch a slender vowel after each short consonant to expose the small pointed metallic center. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-109",
+    "gender": "male",
+    "family": "metallic_ring",
+    "provisionalName": "모크안",
+    "shortDescription": "어두운 테너에서 열리는 금속음",
+    "audibleAnchors": [
+      "중음에서는 덮인 중간 몸통",
+      "올라갈 때 열리는 선명한 강철 공명"
+    ],
+    "signatureBehavior": "덮인 중음에서 상행할 때 모음을 열어 금속 링으로 자연스럽게 바꿉니다.",
+    "register": "middle-to-upper tenor",
+    "body": "medium covered body that opens upward",
+    "texture": "fine matte grain at low intensity",
+    "resonance": "dark middle vowels opening into clear steel ring",
+    "stylePrompt": "Adult male solo singing. middle-to-upper tenor; medium covered body that opens upward. fine matte grain at low intensity; dark middle vowels opening into clear steel ring. Open the vowel naturally while rising from covered middle notes into a clear steel ring. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-110",
+    "gender": "male",
+    "family": "metallic_ring",
+    "provisionalName": "베이루",
+    "shortDescription": "스모키 바리톤의 부드러운 금속 테두리",
+    "audibleAnchors": [
+      "둥글고 부드러운 저중음 몸통",
+      "따뜻한 모음 위의 약한 금속 테두리"
+    ],
+    "signatureBehavior": "낮게 연결한 음 끝에서 숨결을 줄여 부드러운 금속 가장자리를 남깁니다.",
+    "register": "low-middle baritone",
+    "body": "rounded soft-edged body",
+    "texture": "subtle smoky surface with clear pitch",
+    "resonance": "mellow metallic rim over warm vowels",
+    "stylePrompt": "Adult male solo singing. low-middle baritone; rounded soft-edged body. subtle smoky surface with clear pitch; mellow metallic rim over warm vowels. Connect low notes and reduce breath at the ending to leave a mellow metallic rim. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-111",
+    "gender": "male",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "루에몬",
+    "shortDescription": "둥글고 맑은 저음 바리톤",
+    "audibleAnchors": [
+      "풍부하고 둥근 저음 몸통",
+      "공기 소음 적은 따뜻한 열린 모음"
+    ],
+    "signatureBehavior": "낮은 음을 매끈하게 연결하고 마지막 모음을 길게 둥글게 남깁니다.",
+    "register": "low baritone",
+    "body": "rounded substantial body",
+    "texture": "smooth clear surface with little air noise",
+    "resonance": "warm open rounded vowels",
+    "stylePrompt": "Adult male solo singing. low baritone; rounded substantial body. smooth clear surface with little air noise; warm open rounded vowels. Connect low notes smoothly and leave a long rounded final vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-112",
+    "gender": "male",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "세르안",
+    "shortDescription": "작고 맑은 중음 바리톤",
+    "audibleAnchors": [
+      "작고 중간 무게의 중음 몸통",
+      "건조하고 또렷한 둥근 구강 공명"
+    ],
+    "signatureBehavior": "짧은 문장을 명확하게 세우고 끝음은 곧고 짧게 정리합니다.",
+    "register": "middle baritone",
+    "body": "compact medium-weight body",
+    "texture": "clean dry even texture",
+    "resonance": "small focused rounded oral resonance",
+    "stylePrompt": "Adult male solo singing. middle baritone; compact medium-weight body. clean dry even texture; small focused rounded oral resonance. Set short phrases clearly and keep the final note straight and brief. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-113",
+    "gender": "male",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "누아단",
+    "shortDescription": "가볍고 따뜻한 낮은 테너",
+    "audibleAnchors": [
+      "가볍고 유연한 둥근 저중음",
+      "문장 경계의 작은 숨과 따뜻한 타원 공명"
+    ],
+    "signatureBehavior": "낮은 작은 도약을 부드럽게 잇고 문장 사이에서만 자연스럽게 숨을 쉽니다.",
+    "register": "low tenor",
+    "body": "light rounded flexible body",
+    "texture": "smooth fine texture with slight breath at boundaries",
+    "resonance": "soft warm oval resonance",
+    "stylePrompt": "Adult male solo singing. low tenor; light rounded flexible body. smooth fine texture with slight breath at boundaries; soft warm oval resonance. Connect small low leaps softly and breathe naturally only between phrases. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-114",
+    "gender": "male",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "도르루",
+    "shortDescription": "깊고 깨끗한 둥근 베이스",
+    "audibleAnchors": [
+      "크고 둥근 안정된 베이스 몸통",
+      "부풀지 않는 열린 넓은 저음 공명"
+    ],
+    "signatureBehavior": "낮은 모음을 넓게 두고 작은 강약 변화에도 음의 중심을 고정합니다.",
+    "register": "low bass",
+    "body": "large rounded grounded body",
+    "texture": "clear stable surface with no heavy gravel",
+    "resonance": "open spacious low resonance without boom",
+    "stylePrompt": "Adult male solo singing. low bass; large rounded grounded body. clear stable surface with no heavy gravel; open spacious low resonance without boom. Leave broad low vowels and keep the pitch center fixed through small dynamic changes. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-115",
+    "gender": "male",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "이르멜",
+    "shortDescription": "밝고 탄력 있는 맑은 테너",
+    "audibleAnchors": [
+      "중간 무게의 탄력 있는 고중음",
+      "밝고 열린 둥근 공명"
+    ],
+    "signatureBehavior": "리듬을 가볍게 타다가 긴 끝음을 맑고 곧게 세웁니다.",
+    "register": "upper-middle tenor",
+    "body": "medium elastic body",
+    "texture": "clean firm smooth texture",
+    "resonance": "bright open round resonance",
+    "stylePrompt": "Adult male solo singing. upper-middle tenor; medium elastic body. clean firm smooth texture; bright open round resonance. Move lightly with the rhythm, then establish a long clear straight ending. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-116",
+    "gender": "male",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "카루벤",
+    "shortDescription": "가늘고 둥근 맑은 고음",
+    "audibleAnchors": [
+      "가늘고 가벼운 높은 중심",
+      "날카롭지 않은 둥글고 밝은 고음 모음"
+    ],
+    "signatureBehavior": "고음 연결을 부드럽게 만들고 끝에만 좁은 비브라토를 넣습니다.",
+    "register": "high tenor",
+    "body": "slender light body",
+    "texture": "clean fine smooth surface",
+    "resonance": "rounded bright upper vowels without needle-like focus",
+    "stylePrompt": "Adult male solo singing. high tenor; slender light body. clean fine smooth surface; rounded bright upper vowels without needle-like focus. Make upper-note connections gentle and add narrow vibrato only at the end. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-117",
+    "gender": "male",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "모네르",
+    "shortDescription": "어둡고 매끈한 둥근 중음",
+    "audibleAnchors": [
+      "부드러운 외곽의 둥근 중음 몸통",
+      "입자감 적은 어두운 덮인 둥근 모음"
+    ],
+    "signatureBehavior": "중음 모음을 덮어 길게 잇다가 마지막 한 음에서만 부드럽게 엽니다.",
+    "register": "middle baritone",
+    "body": "rounded soft-edged body",
+    "texture": "smooth matte surface with minimal grain",
+    "resonance": "covered dark round vowels",
+    "stylePrompt": "Adult male solo singing. middle baritone; rounded soft-edged body. smooth matte surface with minimal grain; covered dark round vowels. Connect covered middle vowels for a long phrase and open softly only on the last note. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-118",
+    "gender": "male",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "하이론",
+    "shortDescription": "흉성과 두성을 매끈하게 잇는 맑은 음",
+    "audibleAnchors": [
+      "흉성과 두성이 균형 있게 이어지는 둥근 몸통",
+      "음역 전환에도 고른 맑은 표면"
+    ],
+    "signatureBehavior": "중음에서 두성으로 작은 계단을 오르되 각 음의 둥근 색을 유지합니다.",
+    "register": "middle-to-upper tenor",
+    "body": "balanced rounded chest-to-head body",
+    "texture": "clean even texture across register changes",
+    "resonance": "open round midrange with mellow head overtones",
+    "stylePrompt": "Adult male solo singing. middle-to-upper tenor; balanced rounded chest-to-head body. clean even texture across register changes; open round midrange with mellow head overtones. Step upward from middle into connected head voice while keeping the rounded color even across registers. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-119",
+    "gender": "male",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "에우찬",
+    "shortDescription": "맑고 둥근 두성의 부드러운 중심",
+    "audibleAnchors": [
+      "가볍고 둥근 유성 두성 중심",
+      "날카로운 금속 링 없는 부드러운 열린 공명"
+    ],
+    "signatureBehavior": "두성 긴 음을 작고 곧게 유지한 뒤 두 음을 부드럽게 내려옵니다.",
+    "register": "connected upper head register",
+    "body": "light rounded head body with a voiced core",
+    "texture": "clean soft surface with very little breath hiss",
+    "resonance": "mellow open head resonance without sharp metallic ring",
+    "stylePrompt": "Adult male solo singing. connected upper head register; light rounded head body with a voiced core. clean soft surface with very little breath hiss; mellow open head resonance without sharp metallic ring. Hold a quiet straight head note, then descend softly for two notes without a breathy fade. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-m-120",
+    "gender": "male",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "바이겐",
+    "shortDescription": "목질 바닥이 있는 맑은 중저음",
+    "audibleAnchors": [
+      "가벼운 목질 바닥의 둥근 중저음",
+      "비성을 절제한 따뜻한 구강 공명"
+    ],
+    "signatureBehavior": "말하듯 시작한 중저음을 길게 이어 마지막 모음에서만 둥근 울림을 펼칩니다.",
+    "register": "low-middle baritone",
+    "body": "medium rounded body with a light woody floor",
+    "texture": "clear dry surface with faint brushed texture",
+    "resonance": "warm oral resonance with restrained nasal color",
+    "stylePrompt": "Adult male solo singing. low-middle baritone; medium rounded body with a light woody floor. clear dry surface with faint brushed texture; warm oral resonance with restrained nasal color. Begin low-middle notes conversationally and broaden the rounded resonance only on the final sustained vowel. Keep a stable pitched core at ordinary volume; dry close solo vocal, no doubled lead, no imitation of a real singer.",
+    "verificationStatus": "design_only"
+  }
+]

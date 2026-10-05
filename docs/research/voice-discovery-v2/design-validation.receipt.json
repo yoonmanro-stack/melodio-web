@@ -1,0 +1,171 @@
+{
+  "version": 1,
+  "validatedAt": "2026-10-05T01:25:28.025426+00:00",
+  "status": "design_checks_passed",
+  "scope": "Written acoustic designs only; no generated-audio or voice-identity validation.",
+  "sources": [
+    {
+      "path": "docs/research/voice-discovery-v2/female-profiles.json",
+      "sha256": "c2432c1eef6352a41f408a7914032e0dfcff2438460149641e1ba866f744a8ca"
+    },
+    {
+      "path": "docs/research/voice-discovery-v2/male-profiles.json",
+      "sha256": "e41fa6d70d893e7d7b387d007878500ffcc3d24e129153b295bb94c7c57717b2"
+    }
+  ],
+  "counts": {
+    "profiles": 240,
+    "female": 120,
+    "male": 120,
+    "families": 12,
+    "perGenderPerFamily": 10,
+    "firstRound": 12,
+    "protectedSubmittedAcousticPrompts": 12,
+    "editedUnsubmittedProfiles": 7,
+    "metadataOnlyEditsToSubmittedProfiles": 1,
+    "resolvedIssues": 8,
+    "heldMetadataIssues": 0,
+    "unresolvedAcousticConflictsIdentified": 0
+  },
+  "checks": {
+    "idsContiguousUniqueAndPreserved": true,
+    "requiredFieldsComplete": true,
+    "verificationStatusDesignOnly": true,
+    "uniquePrompts": 240,
+    "uniqueWhitespaceCaseNormalizedPrompts": 240,
+    "stylePromptsEnglishASCII": true,
+    "maxStylePromptCharacters": 427,
+    "maxStylePlusCurrentFixedConditionCharacters": 727,
+    "atLeastTwoDistinctAudibleAnchorsPerProfile": true,
+    "all24GenderFamilyGroupsHave10UniqueBodyTextureResonanceCombinations": true,
+    "all24GenderFamilyGroupsHave10UniqueAnchorPairsAndSignatures": true,
+    "minimumDifferentAcousticFieldsWithinFamilyPair": 3,
+    "withinFamilyPairsCompared": 1080,
+    "shortDescriptionsContainKorean": 240,
+    "signatureBehaviorsContainKorean": 240,
+    "firstRoundAndSubmittedStylePromptsUnchanged": true,
+    "submittedStylePromptsMatchManifestSnapshots": true,
+    "submittedProviderStylesBeginWithUnchangedAcousticPrompts": true,
+    "onlySubmittedMetadataChange": "discovery-v2-f-051.signatureBehavior translated to Korean",
+    "namedArtistReferencesDetected": 0
+  },
+  "manualReview": {
+    "recordsReviewed": 240,
+    "axes": [
+      "voiced register and body",
+      "texture size/density/timing",
+      "resonance shape and spectral color",
+      "signature onset/sustain/release behavior"
+    ],
+    "withinFamilyContrastBasis": {
+      "smoky_grain": "Thin versus dense smoke, close versus broad body, continuous versus intermittent surface.",
+      "dry_coarse_husky": "Compact versus wide core, fine versus coarse dry friction, blunt versus bright rim.",
+      "sustained_crackle": "Fine versus large events, sparse versus dense timing, steady versus changing texture envelope.",
+      "frayed_onset": "Single versus paired/multiple starts, short versus extended fray, phrase-only versus repeated-note scope.",
+      "creaking_endings": "Fine versus coarse release, short versus long terminal creak, abrupt versus gradual narrowing.",
+      "pitched_gravel": "Discrete versus packed grains, fine versus blunt large grit, open versus compact pitched center.",
+      "hollow_low_resonance": "Lean versus heavy low body, small forward versus spacious rear cavity, dry versus softly airy rim.",
+      "dense_dark_chest": "Soft versus hard density, compact versus broad body, smooth versus grainy dark rim.",
+      "woody_matte": "Slender tube versus thick wood body, fine versus bristly fiber, covered versus open cavity.",
+      "narrow_reed_nasal": "Thin versus weighty core, muted versus bright nasal ridge, clean versus rough reed surface.",
+      "metallic_ring": "Thin focused versus broad ring, dark versus bright core, smooth versus abrasive edge.",
+      "clear_rounded_resonance": "Lean versus heavy clear body, small versus wide rounded cavity, dark versus bright spectral balance."
+    },
+    "artistScreen": "Reviewed all English voice prompts for named-performer or imitation targets; checked artist-reference fields and bounded exact-name patterns across all profile text. None found."
+  },
+  "issues": [
+    {
+      "id": "discovery-v2-f-001",
+      "category": "texture_timing_ambiguity",
+      "problem": "Delayed grain reveal was ambiguous against the shared instruction for grain throughout quiet vowels.",
+      "resolution": "Made faint grain present at onset and brought it forward halfway through the sustain.",
+      "status": "resolved"
+    },
+    {
+      "id": "discovery-v2-f-006",
+      "category": "texture_timing_conflict",
+      "problem": "Intermittent catches and return to a lean core conflicted with the shared throughout-vowel grain instruction.",
+      "resolution": "Kept the intended intermittent catch pattern and explicitly allowed the lean center between catches.",
+      "status": "resolved"
+    },
+    {
+      "id": "discovery-v2-m-032",
+      "category": "onset_scope_ambiguity",
+      "problem": "Texture wording allowed fraying at all onsets while the signature limited it to the first note.",
+      "resolution": "Restricted the texture wording to phrase-opening notes, matching the existing signature.",
+      "status": "resolved"
+    },
+    {
+      "id": "discovery-v2-m-040",
+      "category": "onset_scope_ambiguity",
+      "problem": "Texture wording allowed fraying at all onsets while the signature limited it to the first note.",
+      "resolution": "Restricted the texture wording to phrase-opening notes, matching the existing signature.",
+      "status": "resolved"
+    },
+    {
+      "id": "discovery-v2-m-065",
+      "category": "family_register_alignment",
+      "problem": "The hollow-low family used unqualified midrange cavity wording despite its low-middle register.",
+      "resolution": "Made the intended low-middle cavity color explicit while retaining slender dry nasal contrast.",
+      "status": "resolved"
+    },
+    {
+      "id": "discovery-v2-m-066",
+      "category": "family_register_alignment",
+      "problem": "The hollow-low family requested middle-register vowels without explicitly retaining low placement.",
+      "resolution": "Centered this rounded covered cavity design on low-middle baritone vowels.",
+      "status": "resolved"
+    },
+    {
+      "id": "discovery-v2-m-070",
+      "category": "family_register_alignment",
+      "problem": "The hollow-low family described only a middle-tenor cavity and final middle note.",
+      "resolution": "Moved the thin rounded open cavity target to low tenor while preserving fine air and mellow upper overtones.",
+      "status": "resolved"
+    },
+    {
+      "id": "discovery-v2-f-051",
+      "category": "metadata_language",
+      "problem": "signatureBehavior was English; the design brief requested Korean. Its acoustic content agreed with the style.",
+      "resolution": "Translated only the signature metadata into Korean with explicit root authorization; the submitted acoustic prompt is unchanged.",
+      "status": "resolved"
+    }
+  ],
+  "resolvedProfileIds": [
+    "discovery-v2-f-001",
+    "discovery-v2-f-006",
+    "discovery-v2-f-051",
+    "discovery-v2-m-032",
+    "discovery-v2-m-040",
+    "discovery-v2-m-065",
+    "discovery-v2-m-066",
+    "discovery-v2-m-070"
+  ],
+  "protectedProfileIds": [
+    "discovery-v2-f-011",
+    "discovery-v2-f-021",
+    "discovery-v2-f-051",
+    "discovery-v2-f-061",
+    "discovery-v2-f-091",
+    "discovery-v2-f-101",
+    "discovery-v2-m-001",
+    "discovery-v2-m-034",
+    "discovery-v2-m-043",
+    "discovery-v2-m-075",
+    "discovery-v2-m-082",
+    "discovery-v2-m-119"
+  ],
+  "limits": [
+    "Different written anchors and field strings do not prove different generated singers, recognizability, appeal, or consistent voice identity.",
+    "Acoustic descriptions are directional prompt hypotheses, not measured pitch, formant, harmonic, roughness, or physiological specifications.",
+    "No listening or media analysis occurred; rough upper/head-register requests and creaking endings may be ignored or shifted by the generation engine.",
+    "Artist screening detects references in this authored text; it does not establish globally unused provisional names or exhaustively search all performers.",
+    "Fixed-condition length was checked against the current local script; changed future arrangement instructions require a fresh length check.",
+    "Submitted profile f-051 received only a Korean metadata translation; its provider acoustic prompt is unchanged."
+  ],
+  "externalActions": {
+    "providerCalls": 0,
+    "mediaReadsOrWrites": 0,
+    "catalogChanges": 0
+  }
+}

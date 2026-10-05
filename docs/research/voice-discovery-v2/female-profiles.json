@@ -1,0 +1,2162 @@
+[
+  {
+    "id": "discovery-v2-f-001",
+    "gender": "female",
+    "family": "smoky_grain",
+    "provisionalName": "잿빛단",
+    "shortDescription": "낮은 모음 둘레에 잔 연기 같은 입자가 남는 두터운 목소리",
+    "audibleAnchors": [
+      "낮은 흉성의 둥근 중심",
+      "모음 바깥에 고운 불규칙 입자"
+    ],
+    "signatureBehavior": "첫 음을 잔결이 있는 둥근 중심으로 놓고 유지음 중간에서 연기 결을 더 드러낸다.",
+    "register": "low chest-led alto",
+    "body": "rounded weighty core",
+    "texture": "fine irregular smoky grain",
+    "resonance": "broad dark oral resonance",
+    "stylePrompt": "Adult female singing voice. Low chest-led alto; rounded weighty core. Audible fine irregular smoky grain; broad dark oral resonance. Start rounded with faint grain, then bring the grain forward halfway through each held vowel; finish with a small straight tail. Keep a smoky grain around a stable voiced core throughout quiet vowels. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-002",
+    "gender": "female",
+    "family": "smoky_grain",
+    "provisionalName": "모래등",
+    "shortDescription": "마른 연기 결과 짧은 밝은 가장자리가 함께 들리는 목소리",
+    "audibleAnchors": [
+      "무광 중저음 몸통",
+      "짧게 솟는 밝은 상부 배음"
+    ],
+    "signatureBehavior": "짧은 음은 마르게 끊고 긴 음에서만 밝은 가장자리를 띄운다.",
+    "register": "low-middle alto",
+    "body": "compact matte body",
+    "texture": "dry smoke flecks",
+    "resonance": "dark center with a thin bright rim",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; compact matte body. Audible dry smoke flecks; dark center with a thin bright rim. Clip short syllables cleanly and let a thin bright rim emerge only on longer vowels. Keep a smoky grain around a stable voiced core throughout quiet vowels. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-003",
+    "gender": "female",
+    "family": "smoky_grain",
+    "provisionalName": "밤실",
+    "shortDescription": "매끈한 저음 중심을 얇고 고르지 않은 연기 결이 감싸는 목소리",
+    "audibleAnchors": [
+      "매끈한 낮은 유성 중심",
+      "촘촘함이 변하는 얇은 연기 결"
+    ],
+    "signatureBehavior": "길게 미는 모음에서 결이 촘촘해졌다 성기게 풀린다.",
+    "register": "low alto",
+    "body": "slender smooth core",
+    "texture": "thin variable-density smoke grain",
+    "resonance": "close rounded resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; slender smooth core. Audible thin variable-density smoke grain; close rounded resonance. Alternate denser and sparser grain within one long note; keep the tail fully voiced. Keep a smoky grain around a stable voiced core throughout quiet vowels. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-004",
+    "gender": "female",
+    "family": "smoky_grain",
+    "provisionalName": "구름턱",
+    "shortDescription": "넓은 중음과 살짝 막힌 모음에 굵은 연기 조각이 얹히는 목소리",
+    "audibleAnchors": [
+      "넓은 중음 모음",
+      "굵고 느린 입자"
+    ],
+    "signatureBehavior": "큰 모음을 좁혀 들어가며 굵은 결을 마지막까지 남긴다.",
+    "register": "middle alto",
+    "body": "wide substantial body",
+    "texture": "coarse slow smoky flecks",
+    "resonance": "slightly covered oral resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto; wide substantial body. Audible coarse slow smoky flecks; slightly covered oral resonance. Begin each vowel wide and slowly narrow it, preserving coarse smoke flecks through the ending. Keep a smoky grain around a stable voiced core throughout quiet vowels. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-005",
+    "gender": "female",
+    "family": "smoky_grain",
+    "provisionalName": "재울",
+    "shortDescription": "가까운 건조 저음과 뒤쪽 잔향이 따로 느껴지는 목소리",
+    "audibleAnchors": [
+      "건조하고 가까운 저음",
+      "뒤쪽으로 번지는 흐린 배음"
+    ],
+    "signatureBehavior": "자음은 가까이 붙이고 모음의 뒤쪽 울림을 길게 끈다.",
+    "register": "low contralto-like register",
+    "body": "dry compact core",
+    "texture": "soft smoke fuzz",
+    "resonance": "dark rear resonance with close diction",
+    "stylePrompt": "Adult female singing voice. Low contralto-like register; dry compact core. Audible soft smoke fuzz; dark rear resonance with close diction. Place consonants close and dry, then let the back of the vowel bloom while the pitch stays level. Keep a smoky grain around a stable voiced core throughout quiet vowels. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-006",
+    "gender": "female",
+    "family": "smoky_grain",
+    "provisionalName": "연무리",
+    "shortDescription": "높게 뜨지 않는 중저음에 가벼운 쉰 결이 교차하는 목소리",
+    "audibleAnchors": [
+      "가늘지만 눌러앉은 중저음",
+      "유성과 쉰 결의 짧은 교대"
+    ],
+    "signatureBehavior": "연결된 두 음 사이에서 쉰 결을 한 번 걸었다 곧 정리한다.",
+    "register": "low-middle alto",
+    "body": "lean grounded body",
+    "texture": "intermittent smoky rasp",
+    "resonance": "small oval resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; lean grounded body. Audible intermittent smoky rasp; small oval resonance. Insert one brief smoky catch between connected notes, then return to the lean voiced core. Keep intermittent smoky catches around a stable voiced core, with a lean sustained center between catches. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-007",
+    "gender": "female",
+    "family": "smoky_grain",
+    "provisionalName": "검은솜",
+    "shortDescription": "부드러운 두께에 털 같은 거친 표면이 묻어나는 목소리",
+    "audibleAnchors": [
+      "부드럽고 두꺼운 저음 몸통",
+      "넓게 퍼진 거친 고주파 솜결"
+    ],
+    "signatureBehavior": "강세 모음에서 표면을 펼치고 비강세 음에서 좁힌다.",
+    "register": "low alto",
+    "body": "soft thick body",
+    "texture": "diffuse fuzzy smoky surface",
+    "resonance": "wide muted resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; soft thick body. Audible diffuse fuzzy smoky surface; wide muted resonance. Spread the fuzzy surface on stressed vowels and narrow it on unstressed syllables without losing body. Keep a smoky grain around a stable voiced core throughout quiet vowels. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-008",
+    "gender": "female",
+    "family": "smoky_grain",
+    "provisionalName": "돌안개",
+    "shortDescription": "둥근 저음 앞면과 각진 연기 결이 대비되는 목소리",
+    "audibleAnchors": [
+      "앞쪽에 모인 둥근 저음",
+      "짧고 각진 거친 입자"
+    ],
+    "signatureBehavior": "같은 음을 되풀이할 때 두 번째 음만 각진 결로 물린다.",
+    "register": "low chest alto",
+    "body": "firm rounded front",
+    "texture": "angular smoke ticks",
+    "resonance": "forward dark resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; firm rounded front. Audible angular smoke ticks; forward dark resonance. On repeated notes, make the second onset grainier and more angular while keeping both notes equally pitched. Keep a smoky grain around a stable voiced core throughout quiet vowels. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-009",
+    "gender": "female",
+    "family": "smoky_grain",
+    "provisionalName": "흐린별",
+    "shortDescription": "얇게 반짝이는 중음 위에 낮은 연기 결이 붙는 목소리",
+    "audibleAnchors": [
+      "작은 밝은 중음 중심",
+      "중심 아래에 느껴지는 둔한 거친 결"
+    ],
+    "signatureBehavior": "위로 이동해도 아래쪽 둔한 결을 붙여 두고 끝은 짧게 닫는다.",
+    "register": "middle alto with low-weight color",
+    "body": "small bright core",
+    "texture": "low dull smoky rasp",
+    "resonance": "narrow luminous center over dark undertone",
+    "stylePrompt": "Adult female singing voice. Middle alto with low-weight color; small bright core. Audible low dull smoky rasp; narrow luminous center over dark undertone. Keep the dull low grain attached during upward intervals and close the final vowel abruptly. Keep a smoky grain around a stable voiced core throughout quiet vowels. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-010",
+    "gender": "female",
+    "family": "smoky_grain",
+    "provisionalName": "묵은온",
+    "shortDescription": "짙은 흉성에 고른 연기 결과 느린 모음 이동이 있는 목소리",
+    "audibleAnchors": [
+      "짙고 안정된 흉성",
+      "고르게 이어지는 낮은 마찰 결"
+    ],
+    "signatureBehavior": "모음 색을 천천히 어둡게 바꾸면서 흔들림 없이 길게 버틴다.",
+    "register": "low chest-led alto",
+    "body": "dense steady body",
+    "texture": "even low smoky friction",
+    "resonance": "broad covered resonance",
+    "stylePrompt": "Adult female singing voice. Low chest-led alto; dense steady body. Audible even low smoky friction; broad covered resonance. Darken the vowel gradually through the held note with almost no vibrato and no drop in voicing. Keep a smoky grain around a stable voiced core throughout quiet vowels. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-011",
+    "gender": "female",
+    "family": "dry_coarse_husky",
+    "provisionalName": "마른솔",
+    "shortDescription": "짙은 저음 중심에 솔껍질 같은 굵은 마찰이 붙는 목소리",
+    "audibleAnchors": [
+      "굵고 단단한 여성 저음",
+      "숨보다 선명한 건조 마찰"
+    ],
+    "signatureBehavior": "작은 성량의 첫 모음부터 거칠게 붙이고 끝까지 같은 두께로 버틴다.",
+    "register": "low chest-led alto",
+    "body": "thick firm body",
+    "texture": "coarse bark-like dry friction",
+    "resonance": "dark compact resonance",
+    "stylePrompt": "Adult female singing voice. Low chest-led alto; thick firm body. Audible coarse bark-like dry friction; dark compact resonance. Make the very first quiet vowel coarse; keep the same dry friction across the entire held note. Keep coarse dry husk clearly audible on ordinary-volume held notes. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-012",
+    "gender": "female",
+    "family": "dry_coarse_husky",
+    "provisionalName": "자갈턱",
+    "shortDescription": "짧고 각진 중저음과 끊어 치는 거친 자음의 목소리",
+    "audibleAnchors": [
+      "각진 중저음 중심",
+      "짧게 튀는 자음 뒤의 거친 꼬리"
+    ],
+    "signatureBehavior": "자음을 짧게 치고 뒤 모음에 작은 자갈 조각 같은 결을 남긴다.",
+    "register": "low-middle alto",
+    "body": "angular compact body",
+    "texture": "short coarse husky fragments",
+    "resonance": "close forward resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; angular compact body. Audible short coarse husky fragments; close forward resonance. Strike consonants briefly and leave coarse fragments attached to the following vowel; use quick clean releases. Keep coarse dry husk clearly audible on ordinary-volume held notes. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-013",
+    "gender": "female",
+    "family": "dry_coarse_husky",
+    "provisionalName": "검은샌드",
+    "shortDescription": "넓게 깔린 어두운 모음에 고운 사포 결이 빽빽한 목소리",
+    "audibleAnchors": [
+      "넓고 어두운 모음 몸통",
+      "촘촘하고 균일한 사포 마찰"
+    ],
+    "signatureBehavior": "음이 높아져도 사포 결의 밀도를 유지하고 비브라토는 늦게 켠다.",
+    "register": "low to middle chest alto",
+    "body": "wide dark body",
+    "texture": "dense uniform sandpaper rasp",
+    "resonance": "broad low oral resonance",
+    "stylePrompt": "Adult female singing voice. Low to middle chest alto; wide dark body. Audible dense uniform sandpaper rasp; broad low oral resonance. Keep rasp density unchanged on ascending notes and introduce a small vibrato only late in the sustain. Keep coarse dry husk clearly audible on ordinary-volume held notes. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-014",
+    "gender": "female",
+    "family": "dry_coarse_husky",
+    "provisionalName": "갈대돌",
+    "shortDescription": "가느다란 앞쪽 울림과 두툼한 마른 마찰이 공존하는 목소리",
+    "audibleAnchors": [
+      "좁은 전방 울림",
+      "굵은 마찰과 날카로운 모음 테두리"
+    ],
+    "signatureBehavior": "모음을 좁게 세우고 긴 음 중간마다 마찰을 한 번 더 긁는다.",
+    "register": "middle-low alto",
+    "body": "lean firm core",
+    "texture": "chunky dry scraping rasp",
+    "resonance": "narrow forward resonance",
+    "stylePrompt": "Adult female singing voice. Middle-low alto; lean firm core. Audible chunky dry scraping rasp; narrow forward resonance. Hold narrow vowels and add one renewed scrape in the middle of a long note without changing pitch. Keep coarse dry husk clearly audible on ordinary-volume held notes. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-015",
+    "gender": "female",
+    "family": "dry_coarse_husky",
+    "provisionalName": "까만지",
+    "shortDescription": "낮고 납작한 몸통에 무딘 거친 표면이 고르게 깔리는 목소리",
+    "audibleAnchors": [
+      "납작하고 무광인 저음",
+      "날카로움이 적은 굵은 허스키"
+    ],
+    "signatureBehavior": "긴 음의 음량을 키우지 않고 무딘 표면을 계속 남긴다.",
+    "register": "low alto",
+    "body": "flat matte weight",
+    "texture": "blunt coarse dry husk",
+    "resonance": "muted broad resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; flat matte weight. Audible blunt coarse dry husk; muted broad resonance. Keep volume level through long notes and maintain blunt husk, with understated attacks and short endings. Keep coarse dry husk clearly audible on ordinary-volume held notes. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-016",
+    "gender": "female",
+    "family": "dry_coarse_husky",
+    "provisionalName": "먼지루",
+    "shortDescription": "작은 유성 중심 밖으로 마른 가루 결이 흩어지는 목소리",
+    "audibleAnchors": [
+      "작고 또렷한 유성 중심",
+      "빠르고 성긴 건조 입자"
+    ],
+    "signatureBehavior": "빠른 음절은 중심을 선명하게 두고 긴 모음에서 가루 결을 벌린다.",
+    "register": "low-middle alto",
+    "body": "small focused core",
+    "texture": "sparse fast dry grain",
+    "resonance": "tight oral focus",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; small focused core. Audible sparse fast dry grain; tight oral focus. Keep rapid syllables centered; spread the dry grain wider only when a vowel is held. Keep coarse dry husk clearly audible on ordinary-volume held notes. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-017",
+    "gender": "female",
+    "family": "dry_coarse_husky",
+    "provisionalName": "돌매듭",
+    "shortDescription": "두터운 저음이 매듭처럼 걸리며 각진 마찰을 내는 목소리",
+    "audibleAnchors": [
+      "두터운 낮은 흉성",
+      "두 음 연결부의 굵은 거친 걸림"
+    ],
+    "signatureBehavior": "상행 두 음의 연결에 짧은 걸림을 넣고 두 번째 음을 평평하게 유지한다.",
+    "register": "low chest alto",
+    "body": "knotted dense body",
+    "texture": "coarse dry catches",
+    "resonance": "dark forward chest resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; knotted dense body. Audible coarse dry catches; dark forward chest resonance. Put a brief rough catch into ascending two-note links, then hold the second note level and substantial. Keep coarse dry husk clearly audible on ordinary-volume held notes. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-018",
+    "gender": "female",
+    "family": "dry_coarse_husky",
+    "provisionalName": "막솔",
+    "shortDescription": "닫힌 중저음에 거친 결이 좁은 띠로 몰리는 목소리",
+    "audibleAnchors": [
+      "덮인 중저음 모음",
+      "좁은 주파수 띠처럼 들리는 거친 테두리"
+    ],
+    "signatureBehavior": "입 모양을 크게 벌리지 않은 채 테두리를 밀어 오래 유지한다.",
+    "register": "covered low-middle alto",
+    "body": "compact covered body",
+    "texture": "concentrated dry raspy edge",
+    "resonance": "narrow dark resonance",
+    "stylePrompt": "Adult female singing voice. Covered low-middle alto; compact covered body. Audible concentrated dry raspy edge; narrow dark resonance. Keep vowels covered and sustain a concentrated rough rim; open only the final syllable slightly. Keep coarse dry husk clearly audible on ordinary-volume held notes. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-019",
+    "gender": "female",
+    "family": "dry_coarse_husky",
+    "provisionalName": "철먼지",
+    "shortDescription": "딱딱한 저음 중심과 밝고 거친 가루 테두리의 목소리",
+    "audibleAnchors": [
+      "딱딱하고 안정된 저음 중심",
+      "밝은 건조 마찰"
+    ],
+    "signatureBehavior": "낮은 음은 묵직하게 두고 강세 음절에서만 밝은 마찰을 앞으로 보낸다.",
+    "register": "low alto",
+    "body": "hard stable body",
+    "texture": "bright abrasive dry dust",
+    "resonance": "dark center with forward upper edge",
+    "stylePrompt": "Adult female singing voice. Low alto; hard stable body. Audible bright abrasive dry dust; dark center with forward upper edge. Keep the low core weighty and push the bright abrasion forward on stressed syllables only. Keep coarse dry husk clearly audible on ordinary-volume held notes. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-020",
+    "gender": "female",
+    "family": "dry_coarse_husky",
+    "provisionalName": "거친밤",
+    "shortDescription": "깊고 넓은 모음에 서로 다른 크기의 건조 결이 섞인 목소리",
+    "audibleAnchors": [
+      "깊고 넓은 여성 저음",
+      "굵고 잔 거친 결의 교대"
+    ],
+    "signatureBehavior": "한 모음 안에서 굵은 결과 잔 결을 천천히 바꾸고 낮게 끝낸다.",
+    "register": "deep female chest register",
+    "body": "broad heavy body",
+    "texture": "alternating coarse and fine dry rasp",
+    "resonance": "deep rounded resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; broad heavy body. Audible alternating coarse and fine dry rasp; deep rounded resonance. Alternate coarse and fine rasp slowly within a held vowel, then end on a low fully voiced note. Keep coarse dry husk clearly audible on ordinary-volume held notes. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-021",
+    "gender": "female",
+    "family": "sustained_crackle",
+    "provisionalName": "불티낮",
+    "shortDescription": "굵은 저음 안에 불규칙한 잔 파열이 계속 살아 있는 목소리",
+    "audibleAnchors": [
+      "굵고 안정된 낮은 음정",
+      "유지음 내내 이어지는 잔 파열"
+    ],
+    "signatureBehavior": "짧은 음부터 잔 파열을 보이고 긴 음에서도 중심 음정을 흔들지 않는다.",
+    "register": "low chest-led alto",
+    "body": "dense steady body",
+    "texture": "persistent fine irregular crackle",
+    "resonance": "dark close resonance",
+    "stylePrompt": "Adult female singing voice. Low chest-led alto; dense steady body. Audible persistent fine irregular crackle; dark close resonance. Expose crackle from the first short vowel and keep it running through long notes around an unwavering pitched core. Carry irregular crackle through the held vowel, with its melodic pitch still clear. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-022",
+    "gender": "female",
+    "family": "sustained_crackle",
+    "provisionalName": "돌불꽃",
+    "shortDescription": "어두운 모음에 크고 성긴 파열이 느리게 박히는 목소리",
+    "audibleAnchors": [
+      "넓고 어두운 모음",
+      "성기고 큰 파열 입자"
+    ],
+    "signatureBehavior": "한 유지음 안에 큰 파열을 띄엄띄엄 남기고 끝은 단단히 닫는다.",
+    "register": "low alto",
+    "body": "broad dark body",
+    "texture": "sparse large crackling grains",
+    "resonance": "wide covered resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; broad dark body. Audible sparse large crackling grains; wide covered resonance. Space large crackling grains irregularly across held vowels and finish with a firm voiced closure. Carry irregular crackle through the held vowel, with its melodic pitch still clear. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-023",
+    "gender": "female",
+    "family": "sustained_crackle",
+    "provisionalName": "잔전류",
+    "shortDescription": "얇은 중저음 중심 둘레에 빠른 잔 떨림이 스치는 목소리",
+    "audibleAnchors": [
+      "얇고 직선적인 유성 중심",
+      "빠르고 가는 잔 파열"
+    ],
+    "signatureBehavior": "음정은 직선으로 버티며 파열 속도만 모음 끝에서 느려진다.",
+    "register": "low-middle alto",
+    "body": "slim straight core",
+    "texture": "rapid fine crackle",
+    "resonance": "narrow forward resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; slim straight core. Audible rapid fine crackle; narrow forward resonance. Hold pitch straight while letting the rapid fine crackle become slower toward the end of the vowel. Carry irregular crackle through the held vowel, with its melodic pitch still clear. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-024",
+    "gender": "female",
+    "family": "sustained_crackle",
+    "provisionalName": "따닥울",
+    "shortDescription": "둥근 저음과 두 번씩 묶여 들리는 파열의 목소리",
+    "audibleAnchors": [
+      "둥글고 짙은 흉성",
+      "쌍으로 붙는 짧은 파열"
+    ],
+    "signatureBehavior": "긴 모음에 두 번씩 붙는 파열을 흩뿌리고 다음 자음은 부드럽게 잇는다.",
+    "register": "low chest alto",
+    "body": "rounded substantial body",
+    "texture": "paired crackling ticks",
+    "resonance": "round dark oral resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; rounded substantial body. Audible paired crackling ticks; round dark oral resonance. Scatter brief paired ticks across long vowels and link into the next consonant with a rounded transition. Carry irregular crackle through the held vowel, with its melodic pitch still clear. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-025",
+    "gender": "female",
+    "family": "sustained_crackle",
+    "provisionalName": "거미탄",
+    "shortDescription": "가는 밝은 중심 아래 어두운 파열이 길게 남는 목소리",
+    "audibleAnchors": [
+      "가늘고 밝은 중심 음정",
+      "중심 아래 들리는 둔한 파열"
+    ],
+    "signatureBehavior": "상행 음에서도 파열은 아래쪽에 붙여 두고 중심만 좁게 밝힌다.",
+    "register": "middle alto with low texture",
+    "body": "lean bright core",
+    "texture": "dull low crackle",
+    "resonance": "bright narrow center over dark resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto with low texture; lean bright core. Audible dull low crackle; bright narrow center over dark resonance. On rising notes, brighten only the narrow pitch core while leaving dull crackle underneath. Carry irregular crackle through the held vowel, with its melodic pitch still clear. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-026",
+    "gender": "female",
+    "family": "sustained_crackle",
+    "provisionalName": "느린숯",
+    "shortDescription": "무거운 저음의 파열 간격이 긴 모음 동안 바뀌는 목소리",
+    "audibleAnchors": [
+      "무거운 저음 몸통",
+      "성기다가 촘촘해지는 파열"
+    ],
+    "signatureBehavior": "모음을 시작할 때 성기게 두고 중간부터 파열 간격을 줄인다.",
+    "register": "deep female chest register",
+    "body": "heavy matte body",
+    "texture": "variable-density crackle",
+    "resonance": "broad deep resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; heavy matte body. Audible variable-density crackle; broad deep resonance. Begin a held vowel with sparse crackle and tighten the spacing halfway through, at unchanged loudness. Carry irregular crackle through the held vowel, with its melodic pitch still clear. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-027",
+    "gender": "female",
+    "family": "sustained_crackle",
+    "provisionalName": "쪼각빛",
+    "shortDescription": "또렷한 중음이 작은 각진 파열과 번갈아 드러나는 목소리",
+    "audibleAnchors": [
+      "선명한 중음 중심",
+      "각진 파열 사이의 짧은 매끈한 틈"
+    ],
+    "signatureBehavior": "유지음에 파열과 매끈한 틈을 교대시키고 마지막에는 파열을 남긴다.",
+    "register": "middle-low alto",
+    "body": "firm clear core",
+    "texture": "angular crackle with brief smooth gaps",
+    "resonance": "compact front resonance",
+    "stylePrompt": "Adult female singing voice. Middle-low alto; firm clear core. Audible angular crackle with brief smooth gaps; compact front resonance. Alternate angular crackle with brief smooth windows during the sustain and leave the last segment crackling. Carry irregular crackle through the held vowel, with its melodic pitch still clear. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-028",
+    "gender": "female",
+    "family": "sustained_crackle",
+    "provisionalName": "먹전등",
+    "shortDescription": "덮인 낮은 모음 안에서 부드럽고 둔한 파열이 눌려 있는 목소리",
+    "audibleAnchors": [
+      "덮인 어두운 저음",
+      "충격이 약한 둔한 잔 파열"
+    ],
+    "signatureBehavior": "자음은 짧게 마르고 모음의 둔한 파열은 끝까지 일정하게 둔다.",
+    "register": "low covered alto",
+    "body": "thick covered body",
+    "texture": "soft blunt crackle",
+    "resonance": "muted rear oral resonance",
+    "stylePrompt": "Adult female singing voice. Low covered alto; thick covered body. Audible soft blunt crackle; muted rear oral resonance. Use short dry consonants and carry soft blunt crackle at constant density through the covered vowel. Carry irregular crackle through the held vowel, with its melodic pitch still clear. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-029",
+    "gender": "female",
+    "family": "sustained_crackle",
+    "provisionalName": "찰칵비",
+    "shortDescription": "가까운 작은 모음에 날카롭고 불규칙한 잔 파열이 있는 목소리",
+    "audibleAnchors": [
+      "가까운 작은 유성 중심",
+      "날카로운 잔 파열 테두리"
+    ],
+    "signatureBehavior": "말하듯 들어온 작은 모음을 길게 붙들며 파열 테두리를 앞으로 드러낸다.",
+    "register": "low-middle speech-like alto",
+    "body": "small close core",
+    "texture": "sharp irregular crackling rim",
+    "resonance": "close focused resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle speech-like alto; small close core. Audible sharp irregular crackling rim; close focused resonance. Enter with a speech-like small vowel and sustain it while bringing the sharp crackling rim forward. Carry irregular crackle through the held vowel, with its melodic pitch still clear. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-030",
+    "gender": "female",
+    "family": "sustained_crackle",
+    "provisionalName": "탄물결",
+    "shortDescription": "넓고 짙은 흉성의 거친 파열이 완만하게 번지는 목소리",
+    "audibleAnchors": [
+      "넓은 흉성 몸통",
+      "잔 파열에서 굵은 파열로 이어지는 결"
+    ],
+    "signatureBehavior": "유지음 초반의 잔 파열을 후반에 굵게 바꾸고 음량은 일정하게 둔다.",
+    "register": "low chest alto",
+    "body": "wide dense body",
+    "texture": "fine-to-coarse sustained crackle",
+    "resonance": "broad dark resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; wide dense body. Audible fine-to-coarse sustained crackle; broad dark resonance. Change fine crackle into coarser crackle late in each long note without increasing volume or lifting the register. Carry irregular crackle through the held vowel, with its melodic pitch still clear. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-031",
+    "gender": "female",
+    "family": "frayed_onset",
+    "provisionalName": "풀린매",
+    "shortDescription": "단단한 저음 앞에 짧고 굵은 갈라짐이 붙는 목소리",
+    "audibleAnchors": [
+      "단단한 여성 저음 중심",
+      "첫 모음의 짧고 굵은 갈라짐"
+    ],
+    "signatureBehavior": "첫 순간만 두 갈래로 풀렸다가 같은 음정의 단단한 중심에 붙는다.",
+    "register": "low chest alto",
+    "body": "firm dense body",
+    "texture": "brief coarse onset fray",
+    "resonance": "compact dark resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; firm dense body. Audible brief coarse onset fray; compact dark resonance. Let each onset fray briefly, then join a single firm pitch core without a slide. Make the distinctive fray audible at vowel onset without turning it into a breathy whisper. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-032",
+    "gender": "female",
+    "family": "frayed_onset",
+    "provisionalName": "솜금",
+    "shortDescription": "둥근 모음 앞면이 솜결처럼 잔잔하게 흩어지는 목소리",
+    "audibleAnchors": [
+      "둥근 중저음 모음",
+      "넓고 가는 발성 시작의 흐트러짐"
+    ],
+    "signatureBehavior": "자음 뒤 첫 모음을 얇게 흩뿌리고 유지음은 작은 비브라토로 모은다.",
+    "register": "low-middle alto",
+    "body": "rounded soft body",
+    "texture": "fine diffuse onset fray",
+    "resonance": "broad muted resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; rounded soft body. Audible fine diffuse onset fray; broad muted resonance. Scatter the first vowel edge finely after the consonant, then gather the sustain into small slow vibrato. Make the distinctive fray audible at vowel onset without turning it into a breathy whisper. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-033",
+    "gender": "female",
+    "family": "frayed_onset",
+    "provisionalName": "실턱",
+    "shortDescription": "좁고 마른 중음이 두 번 걸리며 시작하는 목소리",
+    "audibleAnchors": [
+      "좁고 마른 중음 중심",
+      "모음 시작의 연속 두 걸림"
+    ],
+    "signatureBehavior": "첫 모음에 두 번 짧게 걸린 뒤 직선적인 유지음으로 길게 간다.",
+    "register": "middle-low alto",
+    "body": "lean dry core",
+    "texture": "double raspy onset catches",
+    "resonance": "narrow forward resonance",
+    "stylePrompt": "Adult female singing voice. Middle-low alto; lean dry core. Audible double raspy onset catches; narrow forward resonance. Use two tiny raspy catches at the vowel onset, followed by a long straight pitched sustain. Make the distinctive fray audible at vowel onset without turning it into a breathy whisper. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-034",
+    "gender": "female",
+    "family": "frayed_onset",
+    "provisionalName": "갈라문",
+    "shortDescription": "덮인 저음의 시작이 넓게 벌어졌다 다시 닫히는 목소리",
+    "audibleAnchors": [
+      "덮인 낮은 몸통",
+      "발성 시작의 넓고 거친 벌어짐"
+    ],
+    "signatureBehavior": "낮은 첫 모음을 거칠게 벌린 뒤 입 모양을 좁히며 어둡게 모은다.",
+    "register": "low covered alto",
+    "body": "heavy covered body",
+    "texture": "broad coarse onset tear",
+    "resonance": "dark rear oral resonance",
+    "stylePrompt": "Adult female singing voice. Low covered alto; heavy covered body. Audible broad coarse onset tear; dark rear oral resonance. Start the low vowel with a broad coarse tear, then narrow and darken its resonance through the held note. Make the distinctive fray audible at vowel onset without turning it into a breathy whisper. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-035",
+    "gender": "female",
+    "family": "frayed_onset",
+    "provisionalName": "짚새",
+    "shortDescription": "밝은 모음 시작에 짚 같은 마른 잔 결이 붙는 목소리",
+    "audibleAnchors": [
+      "작고 밝은 유성 중심",
+      "시작 부분의 마른 잔 결"
+    ],
+    "signatureBehavior": "반복 음마다 마른 결을 재현하고 모음 끝은 또렷하고 짧게 끊는다.",
+    "register": "middle alto",
+    "body": "small firm bright core",
+    "texture": "fine straw-like onset rasp",
+    "resonance": "bright tight resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto; small firm bright core. Audible fine straw-like onset rasp; bright tight resonance. Renew the fine dry fray on every repeated note and release each vowel with a crisp short ending. Make the distinctive fray audible at vowel onset without turning it into a breathy whisper. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-036",
+    "gender": "female",
+    "family": "frayed_onset",
+    "provisionalName": "검은실금",
+    "shortDescription": "두터운 낮은 모음 시작에 미세한 금이 여러 번 나는 목소리",
+    "audibleAnchors": [
+      "두터운 낮은 흉성",
+      "여러 번의 미세한 시작 균열"
+    ],
+    "signatureBehavior": "첫 강세 모음에 여러 잔 균열을 넣고 다음 비강세 음은 매끈하게 잇는다.",
+    "register": "low chest-led alto",
+    "body": "thick weighty body",
+    "texture": "multiple fine onset fissures",
+    "resonance": "rounded dark resonance",
+    "stylePrompt": "Adult female singing voice. Low chest-led alto; thick weighty body. Audible multiple fine onset fissures; rounded dark resonance. Give the first stressed vowel several fine fissures, then connect the next unstressed note smoothly. Make the distinctive fray audible at vowel onset without turning it into a breathy whisper. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-037",
+    "gender": "female",
+    "family": "frayed_onset",
+    "provisionalName": "돌틈새",
+    "shortDescription": "단단한 저음이 각진 거친 시작에서 둥근 유지음으로 바뀌는 목소리",
+    "audibleAnchors": [
+      "단단하고 가까운 저음",
+      "각진 시작과 둥근 유지음의 대비"
+    ],
+    "signatureBehavior": "자음 뒤 각지게 물고 바로 둥근 중심을 펼쳐 낮게 끝낸다.",
+    "register": "low alto",
+    "body": "hard close body",
+    "texture": "angular onset fray",
+    "resonance": "rounded low resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; hard close body. Audible angular onset fray; rounded low resonance. Bite the vowel with an angular fray, immediately open a round core, and end with a level low tail. Make the distinctive fray audible at vowel onset without turning it into a breathy whisper. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-038",
+    "gender": "female",
+    "family": "frayed_onset",
+    "provisionalName": "낡은끈",
+    "shortDescription": "늘어진 낮은 모음에 길이가 긴 거친 시작이 붙는 목소리",
+    "audibleAnchors": [
+      "늘어진 어두운 모음",
+      "길게 남는 시작의 거친 결"
+    ],
+    "signatureBehavior": "첫 모음의 앞쪽 4분의 1을 거칠게 남기고 나머지는 무광으로 버틴다.",
+    "register": "low-middle alto",
+    "body": "loose broad body",
+    "texture": "extended dry onset fray",
+    "resonance": "matte dark resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; loose broad body. Audible extended dry onset fray; matte dark resonance. Keep the first quarter of each long vowel frayed, then sustain a matte fully voiced core with little vibrato. Make the distinctive fray audible at vowel onset without turning it into a breathy whisper. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-039",
+    "gender": "female",
+    "family": "frayed_onset",
+    "provisionalName": "먼별금",
+    "shortDescription": "가는 중음 시작에서 밝은 갈라짐이 옆으로 튀는 목소리",
+    "audibleAnchors": [
+      "가늘고 선명한 중음",
+      "밝게 튀는 짧은 시작 갈라짐"
+    ],
+    "signatureBehavior": "짧은 상행 음마다 밝은 갈라짐을 한 번 넣고 위 음은 얇고 곧게 둔다.",
+    "register": "middle alto",
+    "body": "slender clear core",
+    "texture": "brief bright onset splits",
+    "resonance": "small forward resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto; slender clear core. Audible brief bright onset splits; small forward resonance. Add one bright frayed tick to short upward notes, keeping the upper note thin and straight. Make the distinctive fray audible at vowel onset without turning it into a breathy whisper. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-040",
+    "gender": "female",
+    "family": "frayed_onset",
+    "provisionalName": "묵입",
+    "shortDescription": "낮고 짙은 모음이 눌린 거친 시작에서 천천히 열리는 목소리",
+    "audibleAnchors": [
+      "짙고 무거운 여성 저음",
+      "눌린 시작의 둔한 마찰"
+    ],
+    "signatureBehavior": "눌린 시작을 짧게 낸 뒤 모음을 천천히 열며 두꺼운 저음을 유지한다.",
+    "register": "deep female chest register",
+    "body": "dense heavy body",
+    "texture": "blunt pressed onset fray",
+    "resonance": "deep covered-to-open resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; dense heavy body. Audible blunt pressed onset fray; deep covered-to-open resonance. Use a short blunt frayed onset, then slowly open the vowel while keeping its dense low weight. Make the distinctive fray audible at vowel onset without turning it into a breathy whisper. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-041",
+    "gender": "female",
+    "family": "creaking_endings",
+    "provisionalName": "검은마디",
+    "shortDescription": "둥근 여성 저음이 마지막에 굵고 느린 삐걱임으로 접히는 목소리",
+    "audibleAnchors": [
+      "둥근 낮은 유성 몸통",
+      "종결의 느리고 굵은 삐걱임"
+    ],
+    "signatureBehavior": "긴 모음의 마지막 4분의 1을 낮게 접으며 굵은 삐걱임을 남긴다.",
+    "register": "low chest alto",
+    "body": "round weighty body",
+    "texture": "slow coarse terminal creak",
+    "resonance": "dark compact resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; round weighty body. Audible slow coarse terminal creak; dark compact resonance. Keep the vowel round until its last quarter, then fold it into a low coarse creaking tail. Let the voiced phrase ending narrow into an audible creak while keeping the sung core. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-042",
+    "gender": "female",
+    "family": "creaking_endings",
+    "provisionalName": "잔빗장",
+    "shortDescription": "좁고 마른 중저음 끝에 짧은 삐걱임이 두 번 걸리는 목소리",
+    "audibleAnchors": [
+      "좁은 건조 중저음",
+      "끝부분의 두 번 짧은 삐걱임"
+    ],
+    "signatureBehavior": "끝음을 길게 내리지 않고 같은 음 근처에서 두 번 걸려 멈춘다.",
+    "register": "low-middle alto",
+    "body": "narrow dry core",
+    "texture": "paired short terminal creaks",
+    "resonance": "close front resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; narrow dry core. Audible paired short terminal creaks; close front resonance. End near the held pitch with two short creaking catches instead of a long downward slide. Let the voiced phrase ending narrow into an audible creak while keeping the sung core. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-043",
+    "gender": "female",
+    "family": "creaking_endings",
+    "provisionalName": "문턱울",
+    "shortDescription": "넓고 어두운 모음이 끝에서 조용히 삐걱이며 좁아지는 목소리",
+    "audibleAnchors": [
+      "넓은 어두운 모음",
+      "음량 감소와 함께 드러나는 잔 삐걱임"
+    ],
+    "signatureBehavior": "끝음을 작게 줄여도 유성을 남기고 모음을 좁히며 잔 삐걱임을 낸다.",
+    "register": "low covered alto",
+    "body": "broad dark body",
+    "texture": "fine fading terminal creak",
+    "resonance": "wide-to-narrow oral resonance",
+    "stylePrompt": "Adult female singing voice. Low covered alto; broad dark body. Audible fine fading terminal creak; wide-to-narrow oral resonance. Reduce the ending gently but retain voicing, narrowing the vowel as fine creak becomes audible. Let the voiced phrase ending narrow into an audible creak while keeping the sung core. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-044",
+    "gender": "female",
+    "family": "creaking_endings",
+    "provisionalName": "돌닫이",
+    "shortDescription": "딱딱한 저음과 갑자기 닫히는 각진 삐걱임의 목소리",
+    "audibleAnchors": [
+      "딱딱한 저음 중심",
+      "끝의 각진 짧은 걸림"
+    ],
+    "signatureBehavior": "평평한 유지음 끝을 각진 삐걱임 한 번으로 닫고 잔향을 짧게 둔다.",
+    "register": "low chest alto",
+    "body": "hard firm body",
+    "texture": "single angular terminal creak",
+    "resonance": "compact forward chest resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; hard firm body. Audible single angular terminal creak; compact forward chest resonance. Hold notes level, then close each phrase with one angular creaking catch and a short release. Let the voiced phrase ending narrow into an audible creak while keeping the sung core. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-045",
+    "gender": "female",
+    "family": "creaking_endings",
+    "provisionalName": "나무밤",
+    "shortDescription": "무광 중음의 끝이 둔하고 나무 같은 삐걱임으로 남는 목소리",
+    "audibleAnchors": [
+      "무광 중음 모음",
+      "둔한 종결 삐걱임"
+    ],
+    "signatureBehavior": "중음은 곧게 유지하고 끝에서 입 모양만 좁혀 둔한 걸림을 만든다.",
+    "register": "middle-low alto",
+    "body": "matte medium body",
+    "texture": "blunt woody terminal creak",
+    "resonance": "covered woody resonance",
+    "stylePrompt": "Adult female singing voice. Middle-low alto; matte medium body. Audible blunt woody terminal creak; covered woody resonance. Sustain middle notes straight and narrow only the mouth shape at the ending to produce a blunt creak. Let the voiced phrase ending narrow into an audible creak while keeping the sung core. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-046",
+    "gender": "female",
+    "family": "creaking_endings",
+    "provisionalName": "실잠금",
+    "shortDescription": "가느다란 밝은 중심이 마지막에 빠르고 가는 삐걱임으로 잠기는 목소리",
+    "audibleAnchors": [
+      "가늘고 밝은 유성 중심",
+      "빠르고 가는 끝 떨림"
+    ],
+    "signatureBehavior": "상행 음 뒤 마지막 음의 끝만 가는 삐걱임으로 잠근다.",
+    "register": "middle alto",
+    "body": "slender clear body",
+    "texture": "fast fine terminal creak",
+    "resonance": "bright narrow resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto; slender clear body. Audible fast fine terminal creak; bright narrow resonance. After an ascending line, lock only the final note into a brief fast fine creak. Let the voiced phrase ending narrow into an audible creak while keeping the sung core. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-047",
+    "gender": "female",
+    "family": "creaking_endings",
+    "provisionalName": "깊은턱",
+    "shortDescription": "아주 낮은 여성 몸통이 종결에서 성긴 박동으로 풀리는 목소리",
+    "audibleAnchors": [
+      "아주 낮고 두터운 여성 흉성",
+      "끝의 성긴 저주파 박동"
+    ],
+    "signatureBehavior": "저음 종결을 길게 두고 박동 간격을 서서히 벌리며 멈춘다.",
+    "register": "deep female chest register",
+    "body": "thick low body",
+    "texture": "widely spaced terminal creak pulses",
+    "resonance": "deep hollow-dark resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; thick low body. Audible widely spaced terminal creak pulses; deep hollow-dark resonance. Extend low endings and gradually spread the creak pulse spacing while preserving a recognizably female sung core. Let the voiced phrase ending narrow into an audible creak while keeping the sung core. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-048",
+    "gender": "female",
+    "family": "creaking_endings",
+    "provisionalName": "구릿문",
+    "shortDescription": "앞쪽 금속 테두리가 있는 저음이 끝에서 마른 걸림으로 꺾이는 목소리",
+    "audibleAnchors": [
+      "어두운 저음과 작은 밝은 테두리",
+      "종결의 마른 삐걱임"
+    ],
+    "signatureBehavior": "밝은 테두리를 먼저 걷고 어두운 중심을 마른 삐걱임으로 끝낸다.",
+    "register": "low-middle alto",
+    "body": "firm dark body",
+    "texture": "dry terminal creaking catch",
+    "resonance": "dark center with thin metallic edge",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; firm dark body. Audible dry terminal creaking catch; dark center with thin metallic edge. Remove the bright edge first, then finish the dark vowel core with a dry creaking catch. Let the voiced phrase ending narrow into an audible creak while keeping the sung core. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-049",
+    "gender": "female",
+    "family": "creaking_endings",
+    "provisionalName": "느린경첩",
+    "shortDescription": "넓고 느슨한 모음 끝에 긴 삐걱임이 점점 거칠어지는 목소리",
+    "audibleAnchors": [
+      "느슨하고 넓은 모음 몸통",
+      "길고 거칠어지는 종결 삐걱임"
+    ],
+    "signatureBehavior": "마지막 모음의 뒤쪽 절반을 삐걱이며 유지하고 마지막만 짧게 닫는다.",
+    "register": "low alto",
+    "body": "loose wide body",
+    "texture": "extended coarse terminal creak",
+    "resonance": "wide covered resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; loose wide body. Audible extended coarse terminal creak; wide covered resonance. Creak through the latter half of the final vowel, growing coarser before a short voiced close. Let the voiced phrase ending narrow into an audible creak while keeping the sung core. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-050",
+    "gender": "female",
+    "family": "creaking_endings",
+    "provisionalName": "작은매듭",
+    "shortDescription": "작고 가까운 모음 끝이 짧고 둥근 걸림으로 말리는 목소리",
+    "audibleAnchors": [
+      "가까운 작은 중저음",
+      "짧고 둥근 종결 걸림"
+    ],
+    "signatureBehavior": "문장마다 마지막 모음 끝을 둥글게 말고 다음 문장은 매끈하게 연다.",
+    "register": "low-middle speech-like alto",
+    "body": "small close body",
+    "texture": "short rounded terminal creak",
+    "resonance": "close oval resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle speech-like alto; small close body. Audible short rounded terminal creak; close oval resonance. Curl each phrase ending into a short rounded creak and begin the next phrase with a smooth direct onset. Let the voiced phrase ending narrow into an audible creak while keeping the sung core. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-051",
+    "gender": "female",
+    "family": "pitched_gravel",
+    "provisionalName": "흑자갈",
+    "shortDescription": "두터운 여성 저음의 또렷한 음정 안에 굵은 자갈 결이 버티는 목소리",
+    "audibleAnchors": [
+      "넓고 둥근 저음 중심",
+      "느리게 되풀이되는 굵은 입자와 그 사이의 또렷한 유성음"
+    ],
+    "signatureBehavior": "첫 저음을 중심 있게 놓고 한 박자 뒤 굵은 자갈 입자를 드러낸 다음 짧고 맑은 저음 꼬리로 끝낸다.",
+    "register": "low chest-led alto",
+    "body": "thick pitched core",
+    "texture": "large slow discrete gravel grains with clearer voiced gaps",
+    "resonance": "broad rounded low oral resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto with a broad rounded pitched core and open dark oral resonance. Large blunt gravel grains recur slowly and irregularly inside the sustained vowel, with brief clearer voiced gaps; melodic pitch and chest weight stay continuous. Begin with a centered low note, expose the large grains after the first beat, and finish with a short clean low tail. Keep gravel audible at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-052",
+    "gender": "female",
+    "family": "pitched_gravel",
+    "provisionalName": "현무알",
+    "shortDescription": "짧고 딱딱한 음정 중심에 둥근 거친 알갱이가 붙는 목소리",
+    "audibleAnchors": [
+      "딱딱하고 작은 저음 중심",
+      "둥글고 성긴 거친 알갱이"
+    ],
+    "signatureBehavior": "짧은 음에서도 알갱이를 한 번 남기고 긴 음은 성기게 이어 간다.",
+    "register": "low alto",
+    "body": "hard small core",
+    "texture": "rounded sparse gravel grains",
+    "resonance": "compact dark resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; hard small core. Audible rounded sparse gravel grains; compact dark resonance. Leave one rounded gravel grain even on short notes, then space grains loosely across long notes. Maintain clearly pitched singing inside a coarse gravel layer at ordinary volume. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-053",
+    "gender": "female",
+    "family": "pitched_gravel",
+    "provisionalName": "철자갈",
+    "shortDescription": "어두운 저음의 굵은 결 위로 좁은 금속 고리가 울리는 목소리",
+    "audibleAnchors": [
+      "어둡고 무거운 저음",
+      "굵은 자갈 결과 좁은 밝은 고리"
+    ],
+    "signatureBehavior": "음량을 키우지 않고 자갈 뒤의 밝은 고리를 강세 모음에만 띄운다.",
+    "register": "low chest alto",
+    "body": "heavy dark core",
+    "texture": "thick dry gravel",
+    "resonance": "narrow metallic rim over dark body",
+    "stylePrompt": "Adult female singing voice. Low chest alto; heavy dark core. Audible thick dry gravel; narrow metallic rim over dark body. At level volume, expose the narrow bright ring behind the gravel on stressed vowels only. Maintain clearly pitched singing inside a coarse gravel layer at ordinary volume. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-054",
+    "gender": "female",
+    "family": "pitched_gravel",
+    "provisionalName": "잔석선",
+    "shortDescription": "가느다란 음정 선과 잔 자갈 결이 선명하게 분리되는 목소리",
+    "audibleAnchors": [
+      "가늘고 곧은 음정 중심",
+      "빠르고 잔 거친 입자"
+    ],
+    "signatureBehavior": "음정 선을 곧게 두고 입자만 유지음 후반에서 굵게 만든다.",
+    "register": "low-middle alto",
+    "body": "lean straight core",
+    "texture": "fast fine gravel",
+    "resonance": "tight forward resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; lean straight core. Audible fast fine gravel; tight forward resonance. Keep a thin straight pitch line and enlarge only the gravel grains in the latter part of a sustain. Maintain clearly pitched singing inside a coarse gravel layer at ordinary volume. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-055",
+    "gender": "female",
+    "family": "pitched_gravel",
+    "provisionalName": "넓은돌",
+    "shortDescription": "넓고 둥근 모음에 무딘 큰 자갈 결이 깔리는 목소리",
+    "audibleAnchors": [
+      "넓은 둥근 저음 모음",
+      "무딘 큰 마찰 입자"
+    ],
+    "signatureBehavior": "모음을 크게 펴되 고음으로 뜨지 않고 큰 결을 길게 남긴다.",
+    "register": "low alto",
+    "body": "broad rounded core",
+    "texture": "large blunt gravel",
+    "resonance": "wide low oral resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; broad rounded core. Audible large blunt gravel; wide low oral resonance. Open the vowel broadly without lifting its low placement, leaving large blunt gravel throughout the note. Maintain clearly pitched singing inside a coarse gravel layer at ordinary volume. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-056",
+    "gender": "female",
+    "family": "pitched_gravel",
+    "provisionalName": "돌음줄",
+    "shortDescription": "마른 중음 중심에서 자갈 결이 짧은 띠처럼 반복되는 목소리",
+    "audibleAnchors": [
+      "마른 중음 중심",
+      "짧은 반복 마찰 띠"
+    ],
+    "signatureBehavior": "긴 음에 짧은 자갈 띠를 되풀이하고 그 사이도 음정을 끊지 않는다.",
+    "register": "middle-low alto",
+    "body": "dry compact core",
+    "texture": "repeated short gravel bands",
+    "resonance": "close focused resonance",
+    "stylePrompt": "Adult female singing voice. Middle-low alto; dry compact core. Audible repeated short gravel bands; close focused resonance. Repeat short bands of gravel inside long notes, maintaining continuous pitch between bands. Maintain clearly pitched singing inside a coarse gravel layer at ordinary volume. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-057",
+    "gender": "female",
+    "family": "pitched_gravel",
+    "provisionalName": "먹돌함",
+    "shortDescription": "덮인 깊은 여성 모음 안에 둔하고 빽빽한 자갈 결이 있는 목소리",
+    "audibleAnchors": [
+      "깊고 덮인 여성 저음",
+      "빽빽한 둔한 자갈 결"
+    ],
+    "signatureBehavior": "낮은 모음을 천천히 붙이고 유지음 끝까지 결의 밀도를 고정한다.",
+    "register": "deep female chest register",
+    "body": "covered heavy core",
+    "texture": "dense blunt gravel",
+    "resonance": "deep covered resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; covered heavy core. Audible dense blunt gravel; deep covered resonance. Enter low vowels slowly and keep the dull gravel density fixed to the end of each sustain. Maintain clearly pitched singing inside a coarse gravel layer at ordinary volume. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-058",
+    "gender": "female",
+    "family": "pitched_gravel",
+    "provisionalName": "뾰족석",
+    "shortDescription": "작은 밝은 중심 주위로 각진 자갈 결이 앞에 튀는 목소리",
+    "audibleAnchors": [
+      "작고 밝은 중저음 중심",
+      "전방으로 튀는 각진 거친 입자"
+    ],
+    "signatureBehavior": "자음은 가볍게 붙이고 바로 뒤 모음의 각진 입자를 또렷하게 만든다.",
+    "register": "low-middle alto",
+    "body": "small bright pitched core",
+    "texture": "angular forward gravel",
+    "resonance": "narrow front oral resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; small bright pitched core. Audible angular forward gravel; narrow front oral resonance. Keep consonants light and expose angular gravel immediately in the following fully voiced vowel. Maintain clearly pitched singing inside a coarse gravel layer at ordinary volume. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-059",
+    "gender": "female",
+    "family": "pitched_gravel",
+    "provisionalName": "강돌결",
+    "shortDescription": "두터운 음정이 매끈한 결에서 굵은 자갈 결로 이어지는 목소리",
+    "audibleAnchors": [
+      "두터운 안정된 흉성",
+      "한 모음 안의 매끈함과 굵은 결"
+    ],
+    "signatureBehavior": "같은 음의 앞 절반은 단단히 모으고 뒤 절반에서 자갈 결을 크게 편다.",
+    "register": "low chest alto",
+    "body": "dense stable core",
+    "texture": "smooth-to-coarse gravel transition",
+    "resonance": "broad dark resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; dense stable core. Audible smooth-to-coarse gravel transition; broad dark resonance. Keep the first half of a note tightly centered and spread coarse gravel across its second half. Maintain clearly pitched singing inside a coarse gravel layer at ordinary volume. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-060",
+    "gender": "female",
+    "family": "pitched_gravel",
+    "provisionalName": "모난숨돌",
+    "shortDescription": "거친 중음에 단단한 유성 중심과 짧은 마른 빈틈이 있는 목소리",
+    "audibleAnchors": [
+      "단단한 중음 음정",
+      "자갈 결 사이의 짧은 건조 빈틈"
+    ],
+    "signatureBehavior": "음정 중심은 이어 두고 거친 표면에만 짧은 빈틈을 낸다.",
+    "register": "middle alto with chest weight",
+    "body": "firm weighted core",
+    "texture": "broken dry gravel surface",
+    "resonance": "compact edgy resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto with chest weight; firm weighted core. Audible broken dry gravel surface; compact edgy resonance. Maintain continuous voicing while opening brief dry gaps in the gravel surface; make phrase ends blunt. Maintain clearly pitched singing inside a coarse gravel layer at ordinary volume. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-061",
+    "gender": "female",
+    "family": "hollow_low_resonance",
+    "provisionalName": "빈항아리",
+    "shortDescription": "깊은 여성 저음이 넓은 빈 공간처럼 울리고 가장자리는 마른 목소리",
+    "audibleAnchors": [
+      "아주 낮고 둥근 여성 유성 중심",
+      "속이 빈 넓은 울림과 마른 가장자리"
+    ],
+    "signatureBehavior": "첫 저음을 짧게 붙인 뒤 빈 공간 울림을 넓혀 오래 버틴다.",
+    "register": "deep female chest register",
+    "body": "rounded weighty core",
+    "texture": "dry lightly husky rim",
+    "resonance": "large hollow dark oral resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; rounded weighty core. Audible dry lightly husky rim; large hollow dark oral resonance. Start the low note directly, then widen its hollow bloom; hold a fully voiced female core at ordinary volume. Keep a distinctly female low voice with audible hollow resonance and full voicing. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-062",
+    "gender": "female",
+    "family": "hollow_low_resonance",
+    "provisionalName": "깊은관",
+    "shortDescription": "좁고 긴 통 같은 저음 울림과 둔한 모음의 목소리",
+    "audibleAnchors": [
+      "좁고 깊은 저음 공명",
+      "둔하고 닫힌 모음 테두리"
+    ],
+    "signatureBehavior": "낮은 모음을 작게 모아 길게 유지하고 끝에서만 입을 조금 연다.",
+    "register": "low contralto-like register",
+    "body": "slender dense body",
+    "texture": "matte muted surface",
+    "resonance": "long narrow hollow resonance",
+    "stylePrompt": "Adult female singing voice. Low contralto-like register; slender dense body. Audible matte muted surface; long narrow hollow resonance. Keep low vowels tightly gathered for a long sustain and open the mouth shape slightly only at the release. Keep a distinctly female low voice with audible hollow resonance and full voicing. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-063",
+    "gender": "female",
+    "family": "hollow_low_resonance",
+    "provisionalName": "돌우물",
+    "shortDescription": "무거운 저음 앞면 뒤로 깊은 빈 울림이 내려앉는 목소리",
+    "audibleAnchors": [
+      "단단하고 무거운 저음 앞면",
+      "뒤쪽 깊은 공동 울림"
+    ],
+    "signatureBehavior": "자음은 단단히 놓고 모음은 뒤로 넓게 펼친 채 낮게 끝낸다.",
+    "register": "deep female chest register",
+    "body": "hard heavy front",
+    "texture": "faint dry grain",
+    "resonance": "deep rear hollow resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; hard heavy front. Audible faint dry grain; deep rear hollow resonance. Set consonants firmly, then expand the vowel backward and keep the ending low and fully voiced. Keep a distinctly female low voice with audible hollow resonance and full voicing. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-064",
+    "gender": "female",
+    "family": "hollow_low_resonance",
+    "provisionalName": "작은동굴",
+    "shortDescription": "작고 가까운 여성 저음 안에서 둥근 빈 울림이 선명한 목소리",
+    "audibleAnchors": [
+      "작고 가까운 저음 중심",
+      "둥근 공동 울림"
+    ],
+    "signatureBehavior": "성량을 작게 유지해도 둥근 빈 울림을 첫 모음부터 드러낸다.",
+    "register": "low female alto",
+    "body": "small close core",
+    "texture": "light dry husk",
+    "resonance": "small rounded hollow resonance",
+    "stylePrompt": "Adult female singing voice. Low female alto; small close core. Audible light dry husk; small rounded hollow resonance. Expose the round hollow color from the first small vowel and keep it clear at quiet singing volume. Keep a distinctly female low voice with audible hollow resonance and full voicing. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-065",
+    "gender": "female",
+    "family": "hollow_low_resonance",
+    "provisionalName": "나무통울",
+    "shortDescription": "깊은 여성 몸통에 나무통 같은 둔한 공동 울림이 있는 목소리",
+    "audibleAnchors": [
+      "깊고 두터운 여성 흉성",
+      "나무 같은 둔한 빈 울림"
+    ],
+    "signatureBehavior": "모음을 느리게 붙이고 강세가 와도 둔한 통울림의 색을 유지한다.",
+    "register": "low chest-led alto",
+    "body": "thick woody body",
+    "texture": "soft dry grain",
+    "resonance": "blunt hollow wooden resonance",
+    "stylePrompt": "Adult female singing voice. Low chest-led alto; thick woody body. Audible soft dry grain; blunt hollow wooden resonance. Enter vowels slowly and keep the blunt hollow wood color unchanged on stressed syllables. Keep a distinctly female low voice with audible hollow resonance and full voicing. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-066",
+    "gender": "female",
+    "family": "hollow_low_resonance",
+    "provisionalName": "그늘관",
+    "shortDescription": "덮인 저음에 작은 코 울림이 얇게 섞이는 목소리",
+    "audibleAnchors": [
+      "덮인 어두운 저음 공동",
+      "얇은 전방 비강 테두리"
+    ],
+    "signatureBehavior": "길게 버티는 저음의 끝에서만 얇은 코 테두리를 조금 키운다.",
+    "register": "deep covered female register",
+    "body": "compact dark body",
+    "texture": "fine matte husk",
+    "resonance": "hollow rear cavity with thin nasal rim",
+    "stylePrompt": "Adult female singing voice. Deep covered female register; compact dark body. Audible fine matte husk; hollow rear cavity with thin nasal rim. Sustain the covered hollow low vowel and increase its thin nasal rim only near the ending. Keep a distinctly female low voice with audible hollow resonance and full voicing. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-067",
+    "gender": "female",
+    "family": "hollow_low_resonance",
+    "provisionalName": "먼항아리",
+    "shortDescription": "넓고 느슨한 저음과 부드러운 마찰을 가진 목소리",
+    "audibleAnchors": [
+      "넓고 느슨한 낮은 모음",
+      "부드럽고 성긴 마찰"
+    ],
+    "signatureBehavior": "모음을 넓게 열어 공동을 드러내고 끝에서 천천히 좁혀 정리한다.",
+    "register": "low alto",
+    "body": "loose broad body",
+    "texture": "sparse soft husk",
+    "resonance": "wide hollow rounded resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; loose broad body. Audible sparse soft husk; wide hollow rounded resonance. Open the vowel wide to reveal its hollow space, then narrow it slowly toward a still-voiced ending. Keep a distinctly female low voice with audible hollow resonance and full voicing. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-068",
+    "gender": "female",
+    "family": "hollow_low_resonance",
+    "provisionalName": "철관밤",
+    "shortDescription": "차갑고 좁은 저음 공동에 작은 금속 테두리가 붙는 목소리",
+    "audibleAnchors": [
+      "좁고 깊은 저음 공명",
+      "차가운 작은 금속 테두리"
+    ],
+    "signatureBehavior": "낮은 중심을 움직이지 않고 긴 모음 중간에 금속 테두리를 한 번 띄운다.",
+    "register": "low female chest register",
+    "body": "firm narrow core",
+    "texture": "dry fine grain",
+    "resonance": "deep tube-like resonance with small metallic rim",
+    "stylePrompt": "Adult female singing voice. Low female chest register; firm narrow core. Audible dry fine grain; deep tube-like resonance with small metallic rim. Keep the low core fixed and reveal one small metallic rim in the middle of a long hollow vowel. Keep a distinctly female low voice with audible hollow resonance and full voicing. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-069",
+    "gender": "female",
+    "family": "hollow_low_resonance",
+    "provisionalName": "먹울림",
+    "shortDescription": "짙고 부드러운 여성 저음의 넓은 빈 울림이 오래 남는 목소리",
+    "audibleAnchors": [
+      "짙고 부드러운 저음 몸통",
+      "넓고 느리게 열리는 공동 울림"
+    ],
+    "signatureBehavior": "첫 음은 작게 모으고 모음의 뒤쪽 절반에서 공동 울림을 크게 연다.",
+    "register": "deep female chest register",
+    "body": "soft dense body",
+    "texture": "muted smoky surface",
+    "resonance": "broad slow hollow bloom",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; soft dense body. Audible muted smoky surface; broad slow hollow bloom. Gather the onset small and widen the hollow bloom in the latter half of the vowel without a louder delivery. Keep a distinctly female low voice with audible hollow resonance and full voicing. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-070",
+    "gender": "female",
+    "family": "hollow_low_resonance",
+    "provisionalName": "각진굴",
+    "shortDescription": "각진 저음 중심과 좁은 빈 울림이 만나는 목소리",
+    "audibleAnchors": [
+      "각진 단단한 저음 중심",
+      "좁고 건조한 공동 울림"
+    ],
+    "signatureBehavior": "낮은 반복 음마다 각진 시작을 주고 끝은 좁은 빈 울림으로 짧게 남긴다.",
+    "register": "low chest alto",
+    "body": "angular firm body",
+    "texture": "coarse dry edges",
+    "resonance": "narrow hollow oral resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; angular firm body. Audible coarse dry edges; narrow hollow oral resonance. Give each repeated low note an angular onset and leave a short narrow hollow tail. Keep a distinctly female low voice with audible hollow resonance and full voicing. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-071",
+    "gender": "female",
+    "family": "dense_dark_chest",
+    "provisionalName": "먹심",
+    "shortDescription": "아주 짙고 두터운 여성 저음이 작은 성량에서도 단단히 서는 목소리",
+    "audibleAnchors": [
+      "두터운 여성 흉성 중심",
+      "밝은 배음이 적은 짙은 모음"
+    ],
+    "signatureBehavior": "작은 첫 음부터 몸통을 채우고 후렴에서도 저음의 무게를 유지한다.",
+    "register": "deep female chest register",
+    "body": "dense solid body",
+    "texture": "fine dry surface",
+    "resonance": "deep dark rounded resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; dense solid body. Audible fine dry surface; deep dark rounded resonance. Fill the first quiet note with chest weight and retain the same low dense body through the chorus. Keep the dense dark low female chest body present through the chorus. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-072",
+    "gender": "female",
+    "family": "dense_dark_chest",
+    "provisionalName": "낮은기둥",
+    "shortDescription": "곧고 무거운 저음에 단단한 앞면이 있는 목소리",
+    "audibleAnchors": [
+      "곧게 이어지는 무거운 저음",
+      "단단하고 가까운 모음 앞면"
+    ],
+    "signatureBehavior": "긴 음을 흔들림 적게 버티고 끝에서 한 번만 작게 꺾는다.",
+    "register": "low chest-led alto",
+    "body": "pillar-like firm density",
+    "texture": "clean matte surface",
+    "resonance": "dark close oral resonance",
+    "stylePrompt": "Adult female singing voice. Low chest-led alto; pillar-like firm density. Audible clean matte surface; dark close oral resonance. Hold long notes nearly straight and add only one small pitch bend at the very end. Keep the dense dark low female chest body present through the chorus. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-073",
+    "gender": "female",
+    "family": "dense_dark_chest",
+    "provisionalName": "검은원",
+    "shortDescription": "넓고 둥근 저음 모음이 두껍게 이어지는 목소리",
+    "audibleAnchors": [
+      "넓고 둥근 저음 몸통",
+      "느리게 움직이는 모음 색"
+    ],
+    "signatureBehavior": "연결 음마다 몸통을 끊지 않고 모음의 어둠을 천천히 바꾼다.",
+    "register": "low alto",
+    "body": "broad rounded density",
+    "texture": "soft fine grain",
+    "resonance": "wide dark resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; broad rounded density. Audible soft fine grain; wide dark resonance. Keep the thick body continuous across linked notes and vary vowel darkness slowly without thinning it. Keep the dense dark low female chest body present through the chorus. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-074",
+    "gender": "female",
+    "family": "dense_dark_chest",
+    "provisionalName": "돌심장",
+    "shortDescription": "짧고 딱딱한 저음이 단단한 강세로 박히는 목소리",
+    "audibleAnchors": [
+      "딱딱하고 압축된 저음",
+      "짧고 무거운 강세 시작"
+    ],
+    "signatureBehavior": "강세 음은 짧고 무겁게 세우고 유지음은 같은 두께로 평평하게 둔다.",
+    "register": "low female chest register",
+    "body": "hard compressed body",
+    "texture": "small dry grit",
+    "resonance": "compact dark front resonance",
+    "stylePrompt": "Adult female singing voice. Low female chest register; hard compressed body. Audible small dry grit; compact dark front resonance. Set stressed notes briefly and heavily, then sustain the same body level with a restrained release. Keep the dense dark low female chest body present through the chorus. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-075",
+    "gender": "female",
+    "family": "dense_dark_chest",
+    "provisionalName": "밤벽",
+    "shortDescription": "무광의 넓은 중저음이 막힌 어두운 테두리를 가진 목소리",
+    "audibleAnchors": [
+      "넓고 두터운 중저음",
+      "덮인 무광 모음 테두리"
+    ],
+    "signatureBehavior": "중음으로 올라가도 덮인 테두리를 유지하고 끝을 짧게 닫는다.",
+    "register": "low-middle chest alto",
+    "body": "wide thick body",
+    "texture": "uniform matte surface",
+    "resonance": "dark covered resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle chest alto; wide thick body. Audible uniform matte surface; dark covered resonance. Keep vowels covered as the melody rises into the middle register and close phrase ends short. Keep the dense dark low female chest body present through the chorus. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-076",
+    "gender": "female",
+    "family": "dense_dark_chest",
+    "provisionalName": "짙은알",
+    "shortDescription": "작고 둥근 저음 중심에 밀도가 높은 몸통이 있는 목소리",
+    "audibleAnchors": [
+      "작은 둥근 저음 중심",
+      "작은 공간에 모인 높은 밀도"
+    ],
+    "signatureBehavior": "모음을 작게 모아도 두께를 잃지 않고 반복 음의 두 번째를 길게 둔다.",
+    "register": "low alto",
+    "body": "small dense round body",
+    "texture": "smooth firm surface",
+    "resonance": "compact dark oval resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; small dense round body. Audible smooth firm surface; compact dark oval resonance. Gather vowels small without losing thickness and lengthen the second note of repeated pairs. Keep the dense dark low female chest body present through the chorus. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-077",
+    "gender": "female",
+    "family": "dense_dark_chest",
+    "provisionalName": "먹철심",
+    "shortDescription": "짙은 저음 중심 위에 얇고 단단한 밝은 테두리가 있는 목소리",
+    "audibleAnchors": [
+      "단단한 어두운 흉성",
+      "얇은 밝은 배음 테두리"
+    ],
+    "signatureBehavior": "몸통은 낮게 고정하고 강세 모음의 마지막에만 테두리를 드러낸다.",
+    "register": "low chest-led alto",
+    "body": "dense hard body",
+    "texture": "fine dry grit",
+    "resonance": "dark body with thin bright upper rim",
+    "stylePrompt": "Adult female singing voice. Low chest-led alto; dense hard body. Audible fine dry grit; dark body with thin bright upper rim. Fix the chest body low and reveal the thin bright rim only late in stressed vowels. Keep the dense dark low female chest body present through the chorus. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-078",
+    "gender": "female",
+    "family": "dense_dark_chest",
+    "provisionalName": "느린흙",
+    "shortDescription": "부드럽지만 무거운 여성 저음이 느린 강세로 움직이는 목소리",
+    "audibleAnchors": [
+      "부드럽고 무거운 저음",
+      "둔하고 느린 발성 시작"
+    ],
+    "signatureBehavior": "모음을 밀지 않고 느리게 붙인 뒤 낮은 음을 길고 고르게 끈다.",
+    "register": "deep female chest register",
+    "body": "soft heavy density",
+    "texture": "muted earthy grain",
+    "resonance": "deep broad resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; soft heavy density. Audible muted earthy grain; deep broad resonance. Use slow blunt onsets, then carry long low notes evenly with almost no vibrato. Keep the dense dark low female chest body present through the chorus. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-079",
+    "gender": "female",
+    "family": "dense_dark_chest",
+    "provisionalName": "각먹",
+    "shortDescription": "각진 모음의 어두운 중저음이 가까이 모이는 목소리",
+    "audibleAnchors": [
+      "각진 중저음 형태",
+      "가까운 어두운 흉성 공명"
+    ],
+    "signatureBehavior": "짧은 모음은 각지게 끊고 긴 모음은 같은 자리에서 부드럽게 둥글린다.",
+    "register": "low-middle chest alto",
+    "body": "angular compact density",
+    "texture": "dry slightly rough surface",
+    "resonance": "close dark resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle chest alto; angular compact density. Audible dry slightly rough surface; close dark resonance. Clip short vowels angularly, then round longer vowels in the same close dark placement. Keep the dense dark low female chest body present through the chorus. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-080",
+    "gender": "female",
+    "family": "dense_dark_chest",
+    "provisionalName": "깊은결실",
+    "shortDescription": "밀도 높은 여성 저음에 작은 연기 결이 안정되게 붙는 목소리",
+    "audibleAnchors": [
+      "밀도 높은 낮은 유성 몸통",
+      "얇고 안정된 연기 결"
+    ],
+    "signatureBehavior": "얇은 결과 몸통의 비율을 유지하며 상행 두 음을 같은 두께로 잇는다.",
+    "register": "deep female chest register",
+    "body": "solid substantial density",
+    "texture": "thin steady smoky grain",
+    "resonance": "dark rounded chest resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; solid substantial density. Audible thin steady smoky grain; dark rounded chest resonance. Keep the grain-to-body balance fixed and join upward two-note phrases with unchanged thickness. Keep the dense dark low female chest body present through the chorus. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-081",
+    "gender": "female",
+    "family": "woody_matte",
+    "provisionalName": "참목",
+    "shortDescription": "두터운 낮은 모음에 나무 같은 무광 질감이 선명한 목소리",
+    "audibleAnchors": [
+      "두터운 낮은 유성 몸통",
+      "고주파 광택이 적은 나무 결"
+    ],
+    "signatureBehavior": "낮은 첫 음을 둔하게 놓고 모음 끝까지 같은 나무 색을 유지한다.",
+    "register": "low chest alto",
+    "body": "thick wooden body",
+    "texture": "blunt matte grain",
+    "resonance": "dark broad woody resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; thick wooden body. Audible blunt matte grain; dark broad woody resonance. Place the first low note bluntly and retain its wood color across the entire vowel with a short level ending. Keep the voice woody and matte, with a fully sung core and little glossy sheen. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-082",
+    "gender": "female",
+    "family": "woody_matte",
+    "provisionalName": "대나무속",
+    "shortDescription": "가늘고 단단한 중저음이 비어 있는 나무관처럼 울리는 목소리",
+    "audibleAnchors": [
+      "가늘고 단단한 중저음",
+      "좁은 빈 나무관 공명"
+    ],
+    "signatureBehavior": "짧은 음은 단단히 찍고 긴 음에서만 좁은 나무관 울림을 펼친다.",
+    "register": "low-middle alto",
+    "body": "slender firm body",
+    "texture": "fine matte fiber",
+    "resonance": "narrow hollow wooden resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; slender firm body. Audible fine matte fiber; narrow hollow wooden resonance. Set short notes firmly and expose the narrow hollow wood color only on held vowels. Keep the voice woody and matte, with a fully sung core and little glossy sheen. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-083",
+    "gender": "female",
+    "family": "woody_matte",
+    "provisionalName": "마른결판",
+    "shortDescription": "넓고 납작한 중음에 마른 나무 가루 결이 묻는 목소리",
+    "audibleAnchors": [
+      "넓고 납작한 중음",
+      "마른 미세 가루 질감"
+    ],
+    "signatureBehavior": "모음을 넓게 편 채 음량을 고정하고 강세 음에서 가루 결을 조금 키운다.",
+    "register": "middle-low alto",
+    "body": "wide flat body",
+    "texture": "dry fine sawdust grain",
+    "resonance": "broad matte oral resonance",
+    "stylePrompt": "Adult female singing voice. Middle-low alto; wide flat body. Audible dry fine sawdust grain; broad matte oral resonance. Spread vowels wide at steady volume and increase the fine dry grain slightly on stressed notes. Keep the voice woody and matte, with a fully sung core and little glossy sheen. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-084",
+    "gender": "female",
+    "family": "woody_matte",
+    "provisionalName": "단풍심",
+    "shortDescription": "작고 둥근 저음이 단단한 나무 중심처럼 들리는 목소리",
+    "audibleAnchors": [
+      "작고 단단한 둥근 저음",
+      "둔한 단단함과 짧은 잔향"
+    ],
+    "signatureBehavior": "반복 음을 같은 작은 자리에서 내고 두 번째 음의 끝만 길게 남긴다.",
+    "register": "low alto",
+    "body": "small hard rounded body",
+    "texture": "smooth matte firmness",
+    "resonance": "compact wooden resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; small hard rounded body. Audible smooth matte firmness; compact wooden resonance. Sing repeated notes in the same small placement and lengthen only the second note's woody tail. Keep the voice woody and matte, with a fully sung core and little glossy sheen. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-085",
+    "gender": "female",
+    "family": "woody_matte",
+    "provisionalName": "거친목반",
+    "shortDescription": "낮은 나무색 몸통에 굵은 섬유 마찰이 붙는 목소리",
+    "audibleAnchors": [
+      "낮고 무광인 몸통",
+      "굵은 섬유 같은 마찰"
+    ],
+    "signatureBehavior": "첫 모음부터 섬유 결을 남기고 상행해도 무광 몸통의 두께를 유지한다.",
+    "register": "low chest-led alto",
+    "body": "substantial matte body",
+    "texture": "coarse wooden fiber friction",
+    "resonance": "dark woody oral resonance",
+    "stylePrompt": "Adult female singing voice. Low chest-led alto; substantial matte body. Audible coarse wooden fiber friction; dark woody oral resonance. Expose coarse fiber friction from the first vowel and keep the matte body's thickness during upward intervals. Keep the voice woody and matte, with a fully sung core and little glossy sheen. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-086",
+    "gender": "female",
+    "family": "woody_matte",
+    "provisionalName": "목실",
+    "shortDescription": "얇고 길게 이어지는 중음에 잔 나무 결이 고른 목소리",
+    "audibleAnchors": [
+      "얇고 곧은 중음 중심",
+      "고르게 이어지는 잔 섬유 결"
+    ],
+    "signatureBehavior": "음을 곧게 이어 가다가 마지막 모음에서만 폭이 작은 비브라토를 켠다.",
+    "register": "middle alto",
+    "body": "lean straight body",
+    "texture": "even fine wooden grain",
+    "resonance": "narrow matte front resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto; lean straight body. Audible even fine wooden grain; narrow matte front resonance. Link notes straight and introduce narrow vibrato only on the final sustained vowel. Keep the voice woody and matte, with a fully sung core and little glossy sheen. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-087",
+    "gender": "female",
+    "family": "woody_matte",
+    "provisionalName": "그을목",
+    "shortDescription": "어둡고 덮인 저음에 탄 나무 같은 둔한 표면이 있는 목소리",
+    "audibleAnchors": [
+      "덮인 어두운 저음",
+      "탄 나무 같은 둔한 표면"
+    ],
+    "signatureBehavior": "첫음을 작게 모은 뒤 모음의 뒤쪽 절반을 넓혀 두꺼운 저음을 드러낸다.",
+    "register": "low covered female register",
+    "body": "dark thick body",
+    "texture": "charred blunt matte grain",
+    "resonance": "covered woody resonance",
+    "stylePrompt": "Adult female singing voice. Low covered female register; dark thick body. Audible charred blunt matte grain; covered woody resonance. Gather the onset small, then broaden the latter half of the vowel to expose the thick low wood body. Keep the voice woody and matte, with a fully sung core and little glossy sheen. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-088",
+    "gender": "female",
+    "family": "woody_matte",
+    "provisionalName": "목비틀",
+    "shortDescription": "각진 중저음에 좁고 마른 나무 울림이 비틀려 붙는 목소리",
+    "audibleAnchors": [
+      "각진 중저음 모음",
+      "좁고 건조한 나무 울림"
+    ],
+    "signatureBehavior": "모음을 연결할 때 한 번 좁혔다 다시 열어 각진 나무 색을 드러낸다.",
+    "register": "low-middle alto",
+    "body": "angular dry body",
+    "texture": "tight matte grain",
+    "resonance": "narrow woody resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; angular dry body. Audible tight matte grain; narrow woody resonance. Narrow once between linked vowels, then reopen to reveal the angular dry wood color. Keep the voice woody and matte, with a fully sung core and little glossy sheen. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-089",
+    "gender": "female",
+    "family": "woody_matte",
+    "provisionalName": "둥목방",
+    "shortDescription": "부드럽고 넓은 여성 저음에 둥근 나무통 울림이 있는 목소리",
+    "audibleAnchors": [
+      "부드럽고 넓은 저음",
+      "둥근 둔한 나무통 공명"
+    ],
+    "signatureBehavior": "유지음 중간부터 나무통 울림을 넓히되 음량과 음정은 그대로 둔다.",
+    "register": "low alto",
+    "body": "soft broad body",
+    "texture": "soft matte fiber",
+    "resonance": "rounded hollow wooden resonance",
+    "stylePrompt": "Adult female singing voice. Low alto; soft broad body. Audible soft matte fiber; rounded hollow wooden resonance. Widen the rounded wooden bloom midway through sustained notes while keeping volume and pitch steady. Keep the voice woody and matte, with a fully sung core and little glossy sheen. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-090",
+    "gender": "female",
+    "family": "woody_matte",
+    "provisionalName": "목가루별",
+    "shortDescription": "작은 밝은 모음 중심을 무광 섬유 결이 감싸는 목소리",
+    "audibleAnchors": [
+      "작은 밝은 유성 중심",
+      "무광의 잔 섬유 테두리"
+    ],
+    "signatureBehavior": "상행할 때 중심만 밝히고 섬유 테두리는 같은 밀도로 남긴다.",
+    "register": "middle alto",
+    "body": "small bright body",
+    "texture": "fine matte fiber rim",
+    "resonance": "bright small center with woody edge",
+    "stylePrompt": "Adult female singing voice. Middle alto; small bright body. Audible fine matte fiber rim; bright small center with woody edge. Brighten only the small core on ascending notes and retain the matte fiber rim at the same density. Keep the voice woody and matte, with a fully sung core and little glossy sheen. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-091",
+    "gender": "female",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "갈대심",
+    "shortDescription": "짙은 중저음 중심 위로 좁은 갈대 같은 코 울림이 솟는 목소리",
+    "audibleAnchors": [
+      "짙고 단단한 중저음 중심",
+      "좁고 선명한 비강 배음"
+    ],
+    "signatureBehavior": "낮은 모음의 몸통을 남긴 채 코 울림을 길게 세워 작은 성량에서도 드러낸다.",
+    "register": "low-middle alto",
+    "body": "firm dark core",
+    "texture": "dry reed-like grain",
+    "resonance": "narrow focused nasal resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; firm dark core. Audible dry reed-like grain; narrow focused nasal resonance. Keep a weighty low vowel body underneath a long narrow nasal ridge, audible from the first moderate-volume note. Keep a narrow reed-like forward resonance that remains clearly sung. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-092",
+    "gender": "female",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "가는오보",
+    "shortDescription": "얇고 곧은 중음이 좁은 리드 통처럼 이어지는 목소리",
+    "audibleAnchors": [
+      "얇고 곧은 중음 중심",
+      "길고 좁은 리드 공명"
+    ],
+    "signatureBehavior": "긴 음을 곧게 세우고 끝의 모음만 조금 둥글게 풀어 준다.",
+    "register": "middle alto",
+    "body": "thin straight core",
+    "texture": "smooth dry reed surface",
+    "resonance": "long narrow nasal tube resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto; thin straight core. Audible smooth dry reed surface; long narrow nasal tube resonance. Hold long notes straight in a narrow reed placement and round only the final vowel edge. Keep a narrow reed-like forward resonance that remains clearly sung. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-093",
+    "gender": "female",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "목갈대",
+    "shortDescription": "무광 중저음 몸통과 둔한 비강 테두리가 있는 목소리",
+    "audibleAnchors": [
+      "무광의 두터운 중저음",
+      "둔하고 좁은 코 울림"
+    ],
+    "signatureBehavior": "강세 자음은 짧게 놓고 뒤 모음의 둔한 비강 테두리를 오래 끈다.",
+    "register": "low-middle chest alto",
+    "body": "matte substantial body",
+    "texture": "fine wooden reed grain",
+    "resonance": "blunt narrow nasal rim",
+    "stylePrompt": "Adult female singing voice. Low-middle chest alto; matte substantial body. Audible fine wooden reed grain; blunt narrow nasal rim. Place stressed consonants briefly and prolong the blunt nasal rim of the following vowel. Keep a narrow reed-like forward resonance that remains clearly sung. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-094",
+    "gender": "female",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "쇠리드",
+    "shortDescription": "작고 딱딱한 중심에 밝은 비강 금속 테두리가 붙는 목소리",
+    "audibleAnchors": [
+      "작고 단단한 유성 중심",
+      "밝고 좁은 비강 고리"
+    ],
+    "signatureBehavior": "반복 음의 두 번째에서만 금속 같은 코 고리를 조금 넓힌다.",
+    "register": "middle-low alto",
+    "body": "small hard core",
+    "texture": "dry pointed grain",
+    "resonance": "bright narrow nasal ring",
+    "stylePrompt": "Adult female singing voice. Middle-low alto; small hard core. Audible dry pointed grain; bright narrow nasal ring. Widen the metallic nasal ring slightly on the second note of repeated pairs, keeping the core small. Keep a narrow reed-like forward resonance that remains clearly sung. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-095",
+    "gender": "female",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "낮은피리턱",
+    "shortDescription": "깊은 여성 저음 위에 얇고 닫힌 피리 같은 코 울림이 얹힌 목소리",
+    "audibleAnchors": [
+      "낮고 두터운 여성 흉성",
+      "얇고 닫힌 비강 공명"
+    ],
+    "signatureBehavior": "낮은 중심을 유지하며 연결 음마다 비강 띠를 짧게 닫았다 다시 연다.",
+    "register": "low female chest register",
+    "body": "thick low core",
+    "texture": "light dry reed grit",
+    "resonance": "thin closed nasal ridge",
+    "stylePrompt": "Adult female singing voice. Low female chest register; thick low core. Audible light dry reed grit; thin closed nasal ridge. Keep the low chest core continuous while briefly closing and reopening the nasal ridge between linked notes. Keep a narrow reed-like forward resonance that remains clearly sung. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-096",
+    "gender": "female",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "갈실금",
+    "shortDescription": "가느다란 리드 중심에 짧은 마른 균열이 붙는 목소리",
+    "audibleAnchors": [
+      "가느다란 선 모양의 비강 중심",
+      "모음 시작의 짧은 마른 균열"
+    ],
+    "signatureBehavior": "갈라지는 시작 뒤 좁은 코 울림을 곧게 유지하고 끝은 빠르게 닫는다.",
+    "register": "middle alto",
+    "body": "lean line-like core",
+    "texture": "brief dry reed onset fissure",
+    "resonance": "needle-narrow nasal resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto; lean line-like core. Audible brief dry reed onset fissure; needle-narrow nasal resonance. Use a brief dry fissure at onset, then hold the narrow nasal line straight and release it quickly. Keep a narrow reed-like forward resonance that remains clearly sung. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-097",
+    "gender": "female",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "넓몸좁리드",
+    "shortDescription": "넓은 어두운 몸통과 매우 좁은 비강 중심이 겹치는 목소리",
+    "audibleAnchors": [
+      "넓고 어두운 모음 몸통",
+      "몸통과 대비되는 매우 좁은 코 중심"
+    ],
+    "signatureBehavior": "모음 바깥은 넓게 펴고 중심의 비강 띠만 강세에서 앞으로 보낸다.",
+    "register": "low-middle alto",
+    "body": "wide dark body",
+    "texture": "soft dry reed grain",
+    "resonance": "very narrow nasal center inside broad oral resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; wide dark body. Audible soft dry reed grain; very narrow nasal center inside broad oral resonance. Spread the outer vowel body wide and push only the narrow nasal center forward on stressed syllables. Keep a narrow reed-like forward resonance that remains clearly sung. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-098",
+    "gender": "female",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "마른콧결",
+    "shortDescription": "가까운 중음 코 울림에 빠른 잔 마찰이 있는 목소리",
+    "audibleAnchors": [
+      "가까운 전방 비강 공명",
+      "빠르고 잔 건조 마찰"
+    ],
+    "signatureBehavior": "빠른 음절에서도 비강 위치를 고정하고 긴 모음에서는 마찰만 성기게 푼다.",
+    "register": "middle-low alto",
+    "body": "compact close core",
+    "texture": "fast fine dry reed friction",
+    "resonance": "close forward nasal resonance",
+    "stylePrompt": "Adult female singing voice. Middle-low alto; compact close core. Audible fast fine dry reed friction; close forward nasal resonance. Fix nasal placement through quick syllables and loosen only the friction density on long vowels. Keep a narrow reed-like forward resonance that remains clearly sung. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-099",
+    "gender": "female",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "어둔리드",
+    "shortDescription": "덮인 중저음의 좁은 코 울림이 거칠지 않고 둔하게 남는 목소리",
+    "audibleAnchors": [
+      "덮인 중저음 중심",
+      "둔하고 좁은 비강 배음"
+    ],
+    "signatureBehavior": "모음을 좁게 길게 두고 끝에서 비강 배음을 먼저 걷어 어두운 중심을 남긴다.",
+    "register": "low covered alto",
+    "body": "covered firm body",
+    "texture": "smooth matte reed surface",
+    "resonance": "dull narrow nasal resonance",
+    "stylePrompt": "Adult female singing voice. Low covered alto; covered firm body. Audible smooth matte reed surface; dull narrow nasal resonance. Keep vowels narrow and long, then remove the nasal rim first to leave a short dark core at the end. Keep a narrow reed-like forward resonance that remains clearly sung. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-100",
+    "gender": "female",
+    "family": "narrow_reed_nasal",
+    "provisionalName": "리드불티",
+    "shortDescription": "좁고 밝은 비강 중심에 잔 파열이 교차하는 목소리",
+    "audibleAnchors": [
+      "좁고 밝은 비강 중심",
+      "모음 중간의 가는 잔 파열"
+    ],
+    "signatureBehavior": "비강 중심은 곧게 두고 유지음 중간에 잔 파열을 짧게 반복한다.",
+    "register": "middle alto",
+    "body": "small bright core",
+    "texture": "fine intermittent crackling reed grain",
+    "resonance": "bright focused nasal resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto; small bright core. Audible fine intermittent crackling reed grain; bright focused nasal resonance. Hold the bright nasal core straight and repeat short fine crackles in the middle of a sustained vowel. Keep a narrow reed-like forward resonance that remains clearly sung. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-101",
+    "gender": "female",
+    "family": "metallic_ring",
+    "provisionalName": "구릿심",
+    "shortDescription": "어두운 저음 몸통 뒤로 단단한 구리 고리가 길게 울리는 목소리",
+    "audibleAnchors": [
+      "어둡고 두터운 저음 중심",
+      "중간 배음의 단단한 금속 고리"
+    ],
+    "signatureBehavior": "작은 첫 음부터 고리를 드러내고 낮은 몸통 위에서 길게 버틴다.",
+    "register": "low chest-led alto",
+    "body": "thick dark core",
+    "texture": "fine dry grit",
+    "resonance": "compact copper-like metallic ring",
+    "stylePrompt": "Adult female singing voice. Low chest-led alto; thick dark core. Audible fine dry grit; compact copper-like metallic ring. Reveal the compact ring on the first moderate-volume note and keep it sustained above a low weighty body. Keep the metallic ring audible on moderate-volume notes without requiring a shout. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-102",
+    "gender": "female",
+    "family": "metallic_ring",
+    "provisionalName": "은실종",
+    "shortDescription": "가느다란 맑은 중심에 얇고 긴 은빛 고리가 붙는 목소리",
+    "audibleAnchors": [
+      "가느다란 맑은 중음 중심",
+      "얇고 오래 남는 밝은 금속 테두리"
+    ],
+    "signatureBehavior": "긴 음의 후반에서 테두리를 더 좁게 모으고 끝은 짧게 닫는다.",
+    "register": "middle alto",
+    "body": "slender clear core",
+    "texture": "smooth firm surface",
+    "resonance": "thin bright silver-like ring",
+    "stylePrompt": "Adult female singing voice. Middle alto; slender clear core. Audible smooth firm surface; thin bright silver-like ring. Narrow the bright ring further in the latter half of a long note and close the vowel with a short release. Keep the metallic ring audible on moderate-volume notes without requiring a shout. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-103",
+    "gender": "female",
+    "family": "metallic_ring",
+    "provisionalName": "철테낮",
+    "shortDescription": "딱딱한 여성 저음의 모음 테두리가 날카로운 목소리",
+    "audibleAnchors": [
+      "딱딱하고 낮은 유성 중심",
+      "짧고 날카로운 금속 가장자리"
+    ],
+    "signatureBehavior": "강세 모음을 각지게 시작하고 유지음에서도 얇은 금속 테두리를 남긴다.",
+    "register": "low female chest register",
+    "body": "hard dense core",
+    "texture": "short dry abrasive edge",
+    "resonance": "sharp thin metallic rim",
+    "stylePrompt": "Adult female singing voice. Low female chest register; hard dense core. Audible short dry abrasive edge; sharp thin metallic rim. Start stressed vowels angularly and leave the thin metallic rim present through the fully voiced sustain. Keep the metallic ring audible on moderate-volume notes without requiring a shout. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-104",
+    "gender": "female",
+    "family": "metallic_ring",
+    "provisionalName": "황동방",
+    "shortDescription": "넓고 둥근 중저음에 두터운 황동 울림이 번지는 목소리",
+    "audibleAnchors": [
+      "넓고 둥근 중저음",
+      "두터운 중간 배음 금속 울림"
+    ],
+    "signatureBehavior": "모음을 천천히 열며 고리의 폭을 넓히되 음량은 고정한다.",
+    "register": "low-middle alto",
+    "body": "wide rounded body",
+    "texture": "soft firm grain",
+    "resonance": "broad thick brass-like ring",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; wide rounded body. Audible soft firm grain; broad thick brass-like ring. Open vowels slowly and widen the thick mid-harmonic ring at unchanged volume. Keep the metallic ring audible on moderate-volume notes without requiring a shout. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-105",
+    "gender": "female",
+    "family": "metallic_ring",
+    "provisionalName": "얇은강판",
+    "shortDescription": "납작하고 작은 모음 위에 날카로운 고주파 띠가 남는 목소리",
+    "audibleAnchors": [
+      "납작하고 작은 유성 중심",
+      "얇고 날카로운 상부 배음 띠"
+    ],
+    "signatureBehavior": "빠른 음에서는 고리를 짧게 남기고 긴 음에서는 같은 띠를 계속 유지한다.",
+    "register": "middle-low alto",
+    "body": "flat compact body",
+    "texture": "fine dry surface",
+    "resonance": "thin sharp upper metallic band",
+    "stylePrompt": "Adult female singing voice. Middle-low alto; flat compact body. Audible fine dry surface; thin sharp upper metallic band. Keep the ring brief on quick notes and continuous at the same narrow width on held vowels. Keep the metallic ring audible on moderate-volume notes without requiring a shout. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-106",
+    "gender": "female",
+    "family": "metallic_ring",
+    "provisionalName": "검은쇠원",
+    "shortDescription": "짙은 낮은 몸통의 작은 밝은 고리가 안정되게 박힌 목소리",
+    "audibleAnchors": [
+      "짙고 낮은 흉성 몸통",
+      "작고 안정된 밝은 배음 고리"
+    ],
+    "signatureBehavior": "상행 음에서도 고리 크기를 늘리지 않고 어두운 몸통을 연결한다.",
+    "register": "low chest alto",
+    "body": "dense dark body",
+    "texture": "muted fine grain",
+    "resonance": "small fixed metallic ring",
+    "stylePrompt": "Adult female singing voice. Low chest alto; dense dark body. Audible muted fine grain; small fixed metallic ring. Keep the ring size fixed on ascending notes and connect them with the same dense dark chest body. Keep the metallic ring audible on moderate-volume notes without requiring a shout. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-107",
+    "gender": "female",
+    "family": "metallic_ring",
+    "provisionalName": "쌍금빛",
+    "shortDescription": "맑은 중음 안에 두 겹처럼 들리는 금속 테두리가 있는 목소리",
+    "audibleAnchors": [
+      "맑고 단단한 중음 중심",
+      "밝고 둔한 두 금속 테두리"
+    ],
+    "signatureBehavior": "같은 유지음에서 밝은 테두리와 둔한 테두리의 비중을 천천히 바꾼다.",
+    "register": "middle alto",
+    "body": "firm clear core",
+    "texture": "smooth tight surface",
+    "resonance": "bright and dull metallic rims",
+    "stylePrompt": "Adult female singing voice. Middle alto; firm clear core. Audible smooth tight surface; bright and dull metallic rims. Slowly shift emphasis between a bright and a dull rim within one held note while its pitch remains stable. Keep the metallic ring audible on moderate-volume notes without requiring a shout. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-108",
+    "gender": "female",
+    "family": "metallic_ring",
+    "provisionalName": "쇠가루결",
+    "shortDescription": "두터운 중저음에 금속 고리와 잔 마찰이 함께 있는 목소리",
+    "audibleAnchors": [
+      "두터운 중저음 중심",
+      "금속 고리 안의 잔 건조 마찰"
+    ],
+    "signatureBehavior": "고리를 지속한 채 강세 모음 중간에만 잔 마찰을 앞으로 내민다.",
+    "register": "low-middle chest alto",
+    "body": "thick firm body",
+    "texture": "fine abrasive metal-dust grain",
+    "resonance": "forward compact metallic resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle chest alto; thick firm body. Audible fine abrasive metal-dust grain; forward compact metallic resonance. Keep the ring continuous and bring fine dry abrasion forward only halfway through stressed vowels. Keep the metallic ring audible on moderate-volume notes without requiring a shout. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-109",
+    "gender": "female",
+    "family": "metallic_ring",
+    "provisionalName": "안쪽종",
+    "shortDescription": "덮인 모음 안에 작고 둥근 금속 울림이 담기는 목소리",
+    "audibleAnchors": [
+      "덮인 둥근 유성 몸통",
+      "안쪽에 모인 작은 금속 울림"
+    ],
+    "signatureBehavior": "덮인 모음을 길게 두다가 끝의 짧은 구간에서만 고리를 밖으로 연다.",
+    "register": "low-middle covered alto",
+    "body": "round covered body",
+    "texture": "soft firm surface",
+    "resonance": "small internal metallic bloom",
+    "stylePrompt": "Adult female singing voice. Low-middle covered alto; round covered body. Audible soft firm surface; small internal metallic bloom. Sustain the covered vowel and open its small internal ring outward only for the final short segment. Keep the metallic ring audible on moderate-volume notes without requiring a shout. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-110",
+    "gender": "female",
+    "family": "metallic_ring",
+    "provisionalName": "날종선",
+    "shortDescription": "얇고 곧은 중음이 긴 금속 선처럼 이어지는 목소리",
+    "audibleAnchors": [
+      "얇고 곧은 중음 음정",
+      "길고 좁은 금속 배음 선"
+    ],
+    "signatureBehavior": "연결 음 사이를 매끈하게 잇고 마지막 음에서만 폭이 좁은 떨림을 켠다.",
+    "register": "middle alto",
+    "body": "lean straight core",
+    "texture": "clean taut surface",
+    "resonance": "long narrow metallic ring",
+    "stylePrompt": "Adult female singing voice. Middle alto; lean straight core. Audible clean taut surface; long narrow metallic ring. Join notes smoothly along a narrow metallic line and add tight vibrato only to the last held note. Keep the metallic ring audible on moderate-volume notes without requiring a shout. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-111",
+    "gender": "female",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "둥샘",
+    "shortDescription": "두터운 맑은 여성 저음에 둥근 울림이 낮게 모이는 목소리",
+    "audibleAnchors": [
+      "두터운 맑은 저음 중심",
+      "낮고 둥근 모음 공명"
+    ],
+    "signatureBehavior": "첫음을 단단하고 작게 놓은 뒤 둥근 저음 울림을 서서히 넓힌다.",
+    "register": "low chest alto",
+    "body": "thick clear body",
+    "texture": "clean firm surface",
+    "resonance": "low rounded oral resonance",
+    "stylePrompt": "Adult female singing voice. Low chest alto; thick clear body. Audible clean firm surface; low rounded oral resonance. Start the first note firm and small, then gradually widen its round low resonance without lifting the register. Keep rounded clear vowels while retaining the individual resonance and attack pattern. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-112",
+    "gender": "female",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "조약울",
+    "shortDescription": "작고 매끈한 중저음이 둥근 조약돌처럼 또렷한 목소리",
+    "audibleAnchors": [
+      "작고 단단한 맑은 중심",
+      "짧고 둥근 모음 울림"
+    ],
+    "signatureBehavior": "짧은 음마다 둥근 시작과 빠른 끝을 주고 긴 음은 곧게 둔다.",
+    "register": "low-middle alto",
+    "body": "small solid body",
+    "texture": "smooth taut surface",
+    "resonance": "compact oval resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; small solid body. Audible smooth taut surface; compact oval resonance. Give short notes rounded attacks and quick releases, while keeping long notes nearly straight. Keep rounded clear vowels while retaining the individual resonance and attack pattern. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-113",
+    "gender": "female",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "밤맑이",
+    "shortDescription": "어두운 여성 저음의 맑은 중심이 덮인 울림 안에 있는 목소리",
+    "audibleAnchors": [
+      "맑고 어두운 저음 중심",
+      "덮인 둥근 공명"
+    ],
+    "signatureBehavior": "낮은 모음을 덮인 채 오래 유지하고 끝에서만 밝은 테두리를 살짝 연다.",
+    "register": "deep female chest register",
+    "body": "clear dense body",
+    "texture": "clean matte surface",
+    "resonance": "dark covered rounded resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; clear dense body. Audible clean matte surface; dark covered rounded resonance. Sustain low vowels covered and open a small bright edge only near the ending. Keep rounded clear vowels while retaining the individual resonance and attack pattern. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-114",
+    "gender": "female",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "맑은단지",
+    "shortDescription": "넓고 맑은 중저음에 부드러운 통 모양 울림이 있는 목소리",
+    "audibleAnchors": [
+      "넓고 맑은 중저음",
+      "둥근 공동성 모음 울림"
+    ],
+    "signatureBehavior": "모음 중간에서 둥근 공동 울림을 한 번 넓히고 짧게 정리한다.",
+    "register": "low-middle alto",
+    "body": "wide clear body",
+    "texture": "soft clean surface",
+    "resonance": "rounded hollow oral resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; wide clear body. Audible soft clean surface; rounded hollow oral resonance. Widen the round hollow color once in the middle of a vowel, then gather it into a short voiced ending. Keep rounded clear vowels while retaining the individual resonance and attack pattern. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-115",
+    "gender": "female",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "방울심",
+    "shortDescription": "작고 밝은 모음 중심에 둥근 앞쪽 울림이 모이는 목소리",
+    "audibleAnchors": [
+      "작고 밝은 맑은 중심",
+      "앞쪽의 둥근 모음 공명"
+    ],
+    "signatureBehavior": "강세 음만 둥글게 앞으로 내고 비강세 음은 작은 같은 중심으로 잇는다.",
+    "register": "middle alto",
+    "body": "small bright body",
+    "texture": "clean crisp surface",
+    "resonance": "forward rounded resonance",
+    "stylePrompt": "Adult female singing voice. Middle alto; small bright body. Audible clean crisp surface; forward rounded resonance. Bring stressed vowels roundly forward and connect unstressed notes through the same small center. Keep rounded clear vowels while retaining the individual resonance and attack pattern. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-116",
+    "gender": "female",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "큰맑음",
+    "shortDescription": "두터운 중음 몸통과 넓은 둥근 모음이 선명한 목소리",
+    "audibleAnchors": [
+      "두터운 맑은 중음 몸통",
+      "넓게 열리는 둥근 모음"
+    ],
+    "signatureBehavior": "모음을 넓게 펴도 중심을 두껍게 유지하고 긴 음 끝에서만 작은 떨림을 더한다.",
+    "register": "middle chest alto",
+    "body": "thick clear body",
+    "texture": "smooth firm surface",
+    "resonance": "wide rounded resonance",
+    "stylePrompt": "Adult female singing voice. Middle chest alto; thick clear body. Audible smooth firm surface; wide rounded resonance. Open vowels broadly without thinning the core and add small vibrato only late in held notes. Keep rounded clear vowels while retaining the individual resonance and attack pattern. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-117",
+    "gender": "female",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "곧은샘",
+    "shortDescription": "가늘고 맑은 중음이 둥근 테두리 안에서 곧게 이어지는 목소리",
+    "audibleAnchors": [
+      "가늘고 곧은 맑은 음정",
+      "작은 둥근 모음 테두리"
+    ],
+    "signatureBehavior": "연결 음을 미끄러지지 않게 잇고 모음 테두리만 천천히 넓힌다.",
+    "register": "middle alto",
+    "body": "lean straight body",
+    "texture": "clean taut surface",
+    "resonance": "small rounded rim",
+    "stylePrompt": "Adult female singing voice. Middle alto; lean straight body. Audible clean taut surface; small rounded rim. Connect notes without slides and widen only the rounded vowel rim slowly through a sustain. Keep rounded clear vowels while retaining the individual resonance and attack pattern. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-118",
+    "gender": "female",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "둥근돌심",
+    "shortDescription": "딱딱한 맑은 저음에 둥근 울림과 각진 시작이 대비되는 목소리",
+    "audibleAnchors": [
+      "딱딱하고 맑은 낮은 중심",
+      "둥근 유지음과 각진 시작"
+    ],
+    "signatureBehavior": "각진 시작 직후 둥근 울림을 빠르게 열고 마지막은 평평하게 끝낸다.",
+    "register": "low female chest register",
+    "body": "hard clear body",
+    "texture": "clean firm surface",
+    "resonance": "round low oral resonance",
+    "stylePrompt": "Adult female singing voice. Low female chest register; hard clear body. Audible clean firm surface; round low oral resonance. Use an angular direct onset, open the round resonance quickly, and finish the note level. Keep rounded clear vowels while retaining the individual resonance and attack pattern. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-119",
+    "gender": "female",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "여린원",
+    "shortDescription": "부드럽고 작은 중저음 중심에 둥근 울림이 천천히 모이는 목소리",
+    "audibleAnchors": [
+      "부드럽고 작은 유성 중심",
+      "천천히 모이는 둥근 공명"
+    ],
+    "signatureBehavior": "첫 음을 가볍게 붙여도 숨으로 흐리지 않고 모음 중간에서 둥글게 모은다.",
+    "register": "low-middle alto",
+    "body": "soft small body",
+    "texture": "clean gentle surface",
+    "resonance": "gradually gathered rounded resonance",
+    "stylePrompt": "Adult female singing voice. Low-middle alto; soft small body. Audible clean gentle surface; gradually gathered rounded resonance. Enter lightly with full voicing and gather a round resonance in the middle of each long vowel. Keep rounded clear vowels while retaining the individual resonance and attack pattern. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  },
+  {
+    "id": "discovery-v2-f-120",
+    "gender": "female",
+    "family": "clear_rounded_resonance",
+    "provisionalName": "맑은깊결",
+    "shortDescription": "맑고 무거운 여성 저음에 아주 잔 무광 결이 있는 목소리",
+    "audibleAnchors": [
+      "맑고 무거운 낮은 흉성",
+      "둥근 모음의 아주 잔 무광 결"
+    ],
+    "signatureBehavior": "맑은 중심과 잔 결의 비율을 일정하게 두고 낮은 끝음을 오래 남긴다.",
+    "register": "deep female chest register",
+    "body": "clear heavy body",
+    "texture": "very fine matte grain",
+    "resonance": "deep rounded resonance",
+    "stylePrompt": "Adult female singing voice. Deep female chest register; clear heavy body. Audible very fine matte grain; deep rounded resonance. Keep the clear-core to fine-grain balance fixed and leave a long low fully voiced ending. Keep rounded clear vowels while retaining the individual resonance and attack pattern. Keep full voicing at ordinary volume.",
+    "verificationStatus": "design_only"
+  }
+]

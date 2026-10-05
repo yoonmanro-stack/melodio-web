@@ -71,6 +71,7 @@ export function VoiceDiscovery() {
     && `${voice.name} ${voice.desc || ''} ${voice.tags.join(' ')}`.toLocaleLowerCase().includes(normalizedQuery))
   const current = DISCOVERY_VOICES.find(voice => voice.discoveryVoiceId === currentId)
   const readyCount = DISCOVERY_VOICES.filter(voice => voice.previewStatus === 'ready' && voice.audioUrl).length
+  const referenceReadyCount = DISCOVERY_VOICES.filter(voice => voice.previewStatus === 'ready' && voice.audioUrl && voice.reuseStatus === 'ready').length
 
   useEffect(() => {
     const audio = audioRef.current
@@ -183,7 +184,8 @@ export function VoiceDiscovery() {
       <p className="text-xs font-semibold tracking-wide text-cyan-300">EXPLORE</p>
       <h2 id="discovery-title" className="mt-2 text-2xl font-bold text-white">새로운 음색을 발견하세요</h2>
       <p className="mt-2 text-sm leading-relaxed text-zinc-300">30초 가창 샘플을 듣고 마음에 드는 음색을 저장하세요. 즐겨찾기한 음색은 작곡 연결이 준비되면 세 스튜디오에서 사용할 수 있습니다.</p>
-      <p className="mt-3 text-xs text-zinc-400">{DISCOVERY_VOICES.length}개 음색 · 가창 샘플 {readyCount}개 준비 완료</p>
+      <p className="mt-3 text-xs text-zinc-400">{DISCOVERY_VOICES.length}개 음색 · 가창 샘플 {readyCount}개 준비 · 작곡 참조 {referenceReadyCount}개 준비</p>
+      <p className="mt-2 text-xs leading-relaxed text-zinc-500">설계 검증은 음색 설명의 검토를 뜻합니다. 샘플 생성과 작곡 참조 준비는 청음 품질 검증과 별개입니다.</p>
     </header>
 
     <div className="space-y-3 rounded-2xl border border-white/10 bg-zinc-950/40 p-4">
@@ -191,7 +193,7 @@ export function VoiceDiscovery() {
         <input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="이름, 음색 특징, 장르" className="mt-2 w-full rounded-xl border border-white/15 bg-black/30 px-4 py-3 text-sm text-white placeholder:text-zinc-500 focus:border-cyan-400 focus:outline-none" />
       </label>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-        <label className="text-xs text-zinc-300">가창 언어
+        <label className="text-xs text-zinc-300">샘플 언어
           <select value={language} onChange={event => setLanguage(event.target.value)} className="mt-2 w-full rounded-xl border border-white/15 bg-zinc-900 px-3 py-2.5 text-sm text-white"><option value="all">모든 언어</option>{LANGUAGES.map(item => <option key={item.id} value={item.id}>{item.label}</option>)}</select>
         </label>
         <label className="text-xs text-zinc-300">보컬
@@ -211,9 +213,10 @@ export function VoiceDiscovery() {
         const ready = voice.previewStatus === 'ready' && !!voice.audioUrl
         return <article key={id} className={`flex flex-col rounded-2xl border p-5 ${isCurrent ? 'border-cyan-400/50 bg-cyan-950/15' : 'border-white/10 bg-zinc-950/40'}`}>
           <div className="flex items-start justify-between gap-3">
-            <div><h3 className="text-lg font-bold text-white">{voice.name}</h3><p className="mt-1 text-xs text-zinc-400">{LANGUAGES.find(item => item.id === voice.language)?.label || voice.language} · {voice.gender === 'male' ? '남성' : '여성'}</p></div>
+            <div><h3 className="text-lg font-bold text-white">{voice.name}</h3><p className="mt-1 text-xs text-zinc-400">샘플 언어 {LANGUAGES.find(item => item.id === voice.language)?.label || voice.language} · {voice.gender === 'male' ? '남성' : '여성'}</p></div>
             <span className={`shrink-0 rounded-full px-2 py-1 text-xs ${ready ? 'bg-cyan-400/10 text-cyan-200' : 'bg-zinc-800 text-zinc-400'}`}>{ready ? '가창 30초' : '샘플 준비 중'}</span>
           </div>
+          {id.startsWith('discovery-v2-') && <p className="mt-3 text-xs text-amber-200">{voice.designStatus === 'verified' ? '설계 검증' : '설계 확인 중'} · {voice.qualityReview === 'reviewed' ? '청음 기록 있음' : '청음 미검증'}</p>}
           <p className="mt-3 text-sm leading-relaxed text-zinc-300">{voice.desc}</p>
           <div className="mb-5 mt-3 flex flex-wrap gap-1.5">{voice.tags.slice(0, 3).map(tag => <span key={tag} className="rounded-full bg-white/5 px-2 py-1 text-xs text-zinc-400">{tag}</span>)}</div>
           <div className="mt-auto grid grid-cols-2 gap-2">

@@ -52,6 +52,23 @@ test('configuration code and prompts are deterministic regardless of trait click
   }
 });
 
+test('existing saved design provenance remains valid after texture expansion', () => {
+  const value = compileVoiceDesign({ gender: 'female', age: '30s', language: 'ko',
+    traits: ['register-low', 'body-dense', 'texture-husky', 'resonance-dark', 'delivery-legato', 'emotion-yearning', 'articulation-rounded', 'vibrato-tail'] });
+  assert.equal(value.designCode, 'VDES1-0deb1a6a');
+  assert.equal(value.stylePrompt, 'female solo vocals, settled adult vocal character, low-register melodic center, dense weighty vocal core, smoky husky texture with soft grain, dark covered vowel resonance, connected flowing legato phrasing, yearning emotionally weighted delivery, rounded sustained vowel shapes, vibrato only at phrase endings');
+});
+
+test('new texture choices distinguish grain placement and preserve the one-per-group limit', () => {
+  const terms = ['texture-crackle', 'texture-gravel', 'texture-frayed', 'texture-creak', 'texture-wiry', 'texture-matte'];
+  const designs = terms.map(texture => compileVoiceDesign({ ...profile, traits: ['body-chest', texture] }));
+  assert.equal(new Set(designs.map(design => design.designCode)).size, terms.length);
+  assert.match(designs[0].stylePrompt, /throughout ordinary-volume sustained vowels/);
+  assert.match(designs[1].stylePrompt, /firmly pitched core/);
+  assert.match(designs[3].stylePrompt, /phrase endings/);
+  for (const texture of terms) assert.throws(() => compileVoiceDesign({ ...profile, traits: [texture, 'texture-husky'] }));
+});
+
 test('unsupported values, injection, duplicate groups and invalid counts are rejected', () => {
   for (const input of [null, [], {}, { ...profile, gender: 'duet' }, { ...profile, age: 'child' },
     { ...profile, age: '__proto__' }, { ...profile, language: 'es' }, { ...profile, traits: 'body-light' },

@@ -3786,9 +3786,10 @@ export default function VoiceDnaStudio() {
                             </button>
                             <button
                               onClick={() => setActiveVoice(voice)}
-                              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-[10px] text-zinc-300 font-bold transition-all cursor-pointer"
+                              disabled={!!voice.discoveryVoiceId && (voice.previewStatus !== 'ready' || voice.reuseStatus !== 'ready')}
+                              className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-[10px] text-zinc-300 font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                             >
-                              장착
+                              {voice.discoveryVoiceId && (voice.previewStatus !== 'ready' || voice.reuseStatus !== 'ready') ? '작곡 연결 준비 중' : '장착'}
                             </button>
                           </div>
                         </div>
