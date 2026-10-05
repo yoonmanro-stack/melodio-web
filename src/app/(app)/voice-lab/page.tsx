@@ -14,6 +14,8 @@ import { supabase } from "@/lib/supabase";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useVoice } from "@/contexts/VoiceContext";
 import { DEMO_LYRICS } from "@/data/demo-lyrics";
+import { VoiceDiscovery } from "@/components/voice/VoiceDiscovery";
+import { CustomVoiceDesigner } from "@/components/voice/CustomVoiceDesigner";
 
 type VoiceType = "default" | "record" | "upload" | "blend";
 
@@ -344,15 +346,10 @@ export default function VoiceDnaStudio() {
   const [voiceType, setVoiceType] = useState<VoiceType>("default");
   
   // Explore Filters & Audio Preview State
-  const [expSearchQuery, setExpSearchQuery] = useState("");
-  const [expLanguage, setExpLanguage] = useState("all");
-  const [expGender, setExpGender] = useState("all");
-  const [expSelectedTags, setExpSelectedTags] = useState<string[]>([]);
   const [explorePlayingVoiceId, setExplorePlayingVoiceId] = useState<string | null>(null);
   const [exploreProgress, setExploreProgress] = useState(0);
   const [explorePlaying, setExplorePlaying] = useState(false);
   const [copiedLinkTrackId, setCopiedLinkTrackId] = useState<string | null>(null);
-  const [expCurrentPage, setExpCurrentPage] = useState(1);
   const [favPage, setFavPage] = useState(1);
   const [customPage, setCustomPage] = useState(1);
   const [editingVoiceCode, setEditingVoiceCode] = useState<string | null>(null);
@@ -541,10 +538,11 @@ export default function VoiceDnaStudio() {
       const audio = new Audio(realAudioUrl);
       audio.crossOrigin = "anonymous";
       const initialRate = Math.pow(2, (pitch - 50) / 40);
-      audio.playbackRate = Math.max(0.55, Math.min(1.85, initialRate));
+      const tunedPreview = voice.code === "DESIGNER_PREVIEW";
+      audio.playbackRate = tunedPreview ? Math.max(0.55, Math.min(1.85, initialRate)) : 1;
       exploreAudioRef.current = audio;
 
-      try {
+      if (tunedPreview) try {
         if (!audioCtxRef.current) {
           audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
         }
@@ -589,8 +587,10 @@ export default function VoiceDnaStudio() {
 
       audio.ontimeupdate = () => {
         if (audio.duration) {
-          const percent = (audio.currentTime / audio.duration) * 100;
+          const previewDuration = voice.sampleDurationSeconds ? Math.min(audio.duration, voice.sampleDurationSeconds) : audio.duration;
+          const percent = Math.min(100, (audio.currentTime / previewDuration) * 100);
           setExploreProgress(percent);
+          if (voice.sampleDurationSeconds && audio.currentTime >= previewDuration) { audio.pause(); setExplorePlaying(false); }
         }
       };
 
@@ -607,6 +607,12 @@ export default function VoiceDnaStudio() {
         setExplorePlayingVoiceId(null);
         liveDspFilterRef.current = null;
       });
+      return;
+    }
+
+    if (voice.discoveryVoiceId || voice.designedVoiceId) {
+      setExplorePlaying(false);
+      setExplorePlayingVoiceId(null);
       return;
     }
 
@@ -905,6 +911,8 @@ export default function VoiceDnaStudio() {
   useEffect(() => {
     return () => {
       stopAllSynthesis();
+      exploreAudioRef.current?.pause();
+      if ((window as any).exploreIntervalId) clearInterval((window as any).exploreIntervalId);
     };
   }, []);
 
@@ -2001,9 +2009,9 @@ export default function VoiceDnaStudio() {
           >
             <Sparkles className="w-4 h-4 text-purple-400" />
             <span>내 음색 스타일 보기</span>
-            {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length > 0 && (
+            {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default' && v.sourceType !== 'discovered').length > 0 && (
               <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-xs text-purple-300 font-bold border border-purple-500/30">
-                {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length}
+                {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default' && v.sourceType !== 'discovered').length}
               </span>
             )}
           </button>
@@ -2396,9 +2404,9 @@ export default function VoiceDnaStudio() {
         >
           <Sparkles className="w-3.5 h-3.5 fill-purple-400 text-purple-400 shrink-0" />
           <span>내 음색 스타일</span>
-          {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length > 0 && (
+          {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default' && v.sourceType !== 'discovered').length > 0 && (
             <span className="px-1.5 py-0.2 rounded-full bg-purple-500/20 text-[10px] text-purple-300 font-bold border border-purple-500/30">
-              {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default').length}
+              {(voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default' && v.sourceType !== 'discovered').length}
             </span>
           )}
         </button>
@@ -2414,282 +2422,14 @@ export default function VoiceDnaStudio() {
       {/* ─── Main Content Grid ───────────────────────────────────────────────── */}
       <div className="flex-1 min-h-[500px] pb-10">
         
-        {/* TAB 0: EXPLORE VOICES */}
+        {/* Independent discovery catalog; the authored studio catalog stays separate. */}
         {activeTab === "explore" && (
-          <div className="space-y-6 animate-in fade-in duration-300">
-            {/* Filter Cockpit */}
-            <div className="glass-panel p-6 space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div className="relative flex-1">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500">
-                    <Search className="w-4 h-4" />
-                  </span>
-                  <input
-                    type="text"
-                    value={expSearchQuery}
-                    onChange={(e) => setExpSearchQuery(e.target.value)}
-                    placeholder="음색 스타일 이름, 태그, 설명 검색..."
-                    className="w-full bg-black/40 border border-white/5 rounded-xl pl-11 pr-4 py-3 text-sm text-white placeholder:text-zinc-500 outline-none focus:border-cyan-500/50 transition-colors"
-                  />
-                  {expSearchQuery && (
-                    <button
-                      onClick={() => setExpSearchQuery("")}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300 cursor-pointer"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-                
-                <div className="flex flex-wrap gap-3 shrink-0">
-                  <div className="flex flex-col gap-1">
-                    <select
-                      value={expLanguage}
-                      onChange={(e) => setExpLanguage(e.target.value)}
-                      className="px-3 py-2.5 rounded-xl text-xs bg-black/40 border border-white/5 text-zinc-300 focus:outline-none focus:border-cyan-500 cursor-pointer"
-                    >
-                      <option value="all">모든 언어</option>
-                      <option value="Korean">한국어</option>
-                      <option value="English">영어</option>
-                      <option value="Japanese">일본어</option>
-                    </select>
-                  </div>
-                  
-                  <div className="flex flex-col gap-1">
-                    <select
-                      value={expGender}
-                      onChange={(e) => setExpGender(e.target.value)}
-                      className="px-3 py-2.5 rounded-xl text-xs bg-black/40 border border-white/5 text-zinc-300 focus:outline-none focus:border-cyan-500 cursor-pointer"
-                    >
-                      <option value="all">모든 성별</option>
-                      <option value="female">여성 보컬</option>
-                      <option value="male">남성 보컬</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Tag Selection Chips */}
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
-                {['Soprano', 'Baritone', 'Tenor', 'Alto', 'Husky', 'Smooth', 'Powerful', 'Calm', 'Dreamy', 'Dark'].map((tag) => {
-                  const isSelected = expSelectedTags.includes(tag);
-                  return (
-                    <button
-                      key={tag}
-                      type="button"
-                      onClick={() => {
-                        setExpSelectedTags(prev => 
-                          prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-                        )
-                      }}
-                      className={`px-3 py-1.5 rounded-full text-xs font-semibold border transition-all ${
-                        isSelected 
-                          ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40 shadow-lg shadow-cyan-500/5' 
-                          : 'bg-zinc-900 border-white/5 text-zinc-400 hover:text-zinc-200'
-                      }`}
-                    >
-                      {tag}
-                    </button>
-                  );
-                })}
-                {expSelectedTags.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => setExpSelectedTags([])}
-                    className="px-3 py-1.5 rounded-full text-xs font-bold text-red-400 hover:text-red-300 transition-colors"
-                  >
-                    필터 초기화 (Reset)
-                  </button>
-                )}
-              </div>
-            </div>
-
-            {/* Voices List Grid */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-bold text-zinc-300 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-cyan-400" /> Trending Voices & Vocalists ({EXPLORE_VOICES.length})
-                </h3>
-                <span className="text-[11px] text-zinc-500">실시간 인기 보컬 리스트</span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {(() => {
-                  const filtered = EXPLORE_VOICES.filter((voice) => {
-                    if (expSearchQuery) {
-                      const q = expSearchQuery.toLowerCase();
-                      const matchesName = (voice.name || '').toLowerCase().includes(q);
-                      const matchesDesc = (voice.desc || '').toLowerCase().includes(q);
-                      const matchesTags = (voice.tags || []).some(t => t.toLowerCase().includes(q));
-                      if (!matchesName && !matchesDesc && !matchesTags) return false;
-                    }
-                    if (expLanguage !== 'all' && voice.language !== expLanguage) return false;
-                    if (expGender !== 'all' && voice.gender !== expGender) return false;
-                    if (expSelectedTags.length > 0) {
-                      const hasAllTags = expSelectedTags.every(t => (voice.tags || []).includes(t));
-                      if (!hasAllTags) return false;
-                    }
-                    return true;
-                  });
-
-                  const itemsPerPage = 10;
-                  const totalPages = Math.ceil(filtered.length / itemsPerPage);
-                  const safePage = Math.min(expCurrentPage, Math.max(1, totalPages));
-                  const startIndex = (safePage - 1) * itemsPerPage;
-                  const paginated = filtered.slice(startIndex, startIndex + itemsPerPage);
-
-                  return (
-                    <>
-                      {paginated.map((voice) => {
-                        const isFav = customVoices.some(v => v.vd_code === voice.code);
-                        const isPlaying = explorePlayingVoiceId === voice.code;
-
-                        return (
-                          <div
-                            key={voice.code}
-                            className="glass-panel p-2.5 px-3.5 hover:border-cyan-500/20 transition-all duration-300 group flex items-center gap-3 relative overflow-hidden"
-                          >
-                            {/* Avatar & Play/Pause Trigger - Circular Color Orb */}
-                            <div 
-                              className="relative w-10 h-10 shrink-0 rounded-full overflow-hidden flex items-center justify-center border border-white/10 transition-transform group-hover:scale-105 cursor-pointer shadow-md"
-                              style={{ background: (voice as any).gradient }}
-                              onClick={() => isPlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
-                            >
-                              {/* Play Overlay */}
-                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                                {isPlaying ? (
-                                  <Pause className="w-3.5 h-3.5 fill-white text-white" />
-                                ) : (
-                                  <Play className="w-3.5 h-3.5 fill-white text-white ml-0.5" />
-                                )}
-                              </div>
-
-                              {isPlaying && (
-                                <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                                  <span className="flex gap-0.5 items-end justify-center w-5 h-5">
-                                    <span className="w-0.5 h-2 bg-white rounded-full animate-[bounce_0.6s_infinite]" />
-                                    <span className="w-0.5 h-3 bg-white rounded-full animate-[bounce_0.6s_infinite_0.15s]" />
-                                    <span className="w-0.5 h-1.5 bg-white rounded-full animate-[bounce_0.6s_infinite_0.3s]" />
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-
-                            {/* Details - Compact & Tightly Spaced */}
-                            <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-base leading-none shrink-0" title={voice.language}>{voice.flag}</span>
-                                <h4 className="text-xs font-bold text-white group-hover:text-cyan-300 transition-colors truncate leading-tight">
-                                  {voice.name}
-                                </h4>
-                                <span className="text-[9px] text-zinc-500 font-medium truncate hidden sm:inline">
-                                  ({voice.language})
-                                </span>
-                              </div>
-                              <p className="text-[10px] text-zinc-400 leading-tight mt-0.5 truncate max-w-[170px] sm:max-w-none">
-                                {voice.desc}
-                              </p>
-                              
-                              {/* Tags list - only on sm+ to prevent squishing on narrow mobile screens */}
-                              <div className="hidden sm:flex flex-wrap gap-1 mt-1">
-                                {(voice.tags || []).slice(0, 3).map(t => (
-                                  <span key={t} className="px-1.5 py-0.2 rounded bg-black/40 text-[9px] text-zinc-500 border border-white/5">{t}</span>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Actions - Slimmed & Responsive */}
-                            <div className="flex flex-col items-end justify-between self-stretch shrink-0 gap-1.5">
-                              <span className="text-[9px] text-zinc-500 font-semibold">{voice.plays} plays</span>
-                              
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  const isFav = customVoices.some(v => v.vd_code === voice.code);
-                                  let updated;
-                                  if (isFav) {
-                                    updated = customVoices.filter(v => v.vd_code !== voice.code);
-                                  } else {
-                                    const newDna: VoiceDnaRecord = {
-                                      vd_code: voice.code,
-                                      name: voice.name,
-                                      physical_layers: voice.physical_layers as any,
-                                      textures: voice.textures,
-                                      emotions: voice.emotions,
-                                      style: voice.category,
-                                      noise_entropy: 15
-                                    };
-                                    updated = [...customVoices, newDna];
-                                  }
-                                  setCustomVoices(updated);
-                                  localStorage.setItem("custom_voice_dnas", JSON.stringify(updated));
-                                }}
-                                className={`flex items-center gap-1 transition-all rounded-lg border px-2 py-1 text-[9px] font-bold ${
-                                  isFav 
-                                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' 
-                                    : 'bg-zinc-900 border-white/5 text-zinc-400 hover:border-cyan-500/30 hover:text-cyan-300'
-                                }`}
-                              >
-                                {isFav ? (
-                                  <>
-                                    <Heart className="w-3 h-3 fill-purple-400 text-purple-400" />
-                                    <span className="hidden sm:inline">즐겨찾기 해제</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Plus className="w-3 h-3" />
-                                    <span className="hidden sm:inline">즐겨찾기 추가</span>
-                                  </>
-                                )}
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-
-                      {/* Pagination block */}
-                      {totalPages > 1 && (
-                        <div className="col-span-1 md:col-span-2 flex items-center justify-center gap-1 pt-4 pb-2 shrink-0">
-                          <button
-                            type="button"
-                            disabled={safePage === 1}
-                            onClick={() => setExpCurrentPage(prev => Math.max(1, prev - 1))}
-                            className="w-7 h-7 rounded-lg border border-white/5 flex items-center justify-center bg-black/40 text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:hover:text-zinc-400 transition-colors"
-                          >
-                            <ChevronLeft className="w-3.5 h-3.5" />
-                          </button>
-                          
-                          {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                            <button
-                              key={page}
-                              type="button"
-                              onClick={() => setExpCurrentPage(page)}
-                              className={`w-7 h-7 rounded-lg text-[10px] font-mono font-bold transition-all border ${
-                                safePage === page
-                                  ? "bg-cyan-500/10 text-cyan-300 border-cyan-500/30 shadow-lg"
-                                  : "bg-black/40 text-zinc-500 border-white/5 hover:text-zinc-300"
-                              }`}
-                            >
-                              {page}
-                            </button>
-                          ))}
-
-                          <button
-                            type="button"
-                            disabled={safePage === totalPages}
-                            onClick={() => setExpCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                            className="w-7 h-7 rounded-lg border border-white/5 flex items-center justify-center bg-black/40 text-zinc-400 hover:text-zinc-200 disabled:opacity-30 disabled:hover:text-zinc-400 transition-colors"
-                          >
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  );
-                })()}
-              </div>
-            </div>
-
+          <div className="space-y-6">
+            <details className="rounded-2xl border border-fuchsia-500/25 bg-fuchsia-950/10 p-5">
+              <summary className="cursor-pointer text-base font-semibold text-fuchsia-200">나만의 보컬 음색 만들기 · 성별, 연령감, 언어와 음색 단어로 설계</summary>
+              <div className="mt-5"><CustomVoiceDesigner /></div>
+            </details>
+            <VoiceDiscovery />
           </div>
         )}
 
@@ -3631,7 +3371,7 @@ export default function VoiceDnaStudio() {
 
         {/* TAB 2: COLLECTIONS (My Collections) */}
         {activeTab === "collections" && (() => {
-          const userCreatedVoices = (voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default');
+          const userCreatedVoices = (voices || []).filter(v => v && v.sourceType && v.sourceType !== 'default' && v.sourceType !== 'discovered');
           const signatureCodes = ['VD-1004', 'VD-3802', 'VD-7705'];
           const signatureVoices = signatureCodes.map(code => EXPLORE_VOICES.find(ev => ev.code === code)).filter(Boolean);
           const favVoices = (voices || []).filter(v => v && v.isFavorite);

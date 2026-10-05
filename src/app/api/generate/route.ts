@@ -1,6 +1,10 @@
 import { resolveMusicDuration } from '@/lib/music-duration'
 import { resolveOfficialVoice } from '@/lib/voice/official-voice-selection'
 import { officialVoicePersona } from '@/lib/voice/official-voice-registry'
+import { assertExclusiveVoiceSelection, resolveDiscoveryVoice } from '@/lib/voice/discovery-voice-selection'
+import { discoveryVoicePersona } from '@/lib/voice/discovery-voice-registry'
+import { compileVoiceDesign } from '@/lib/voice/voice-design-prompt'
+import { readDesignedVoice } from '@/lib/voice/designed-voice-repository'
 import { suppressIneligibleVoice } from "@/lib/voice/studio-selection"
 /**
  * Melodio — 음악 생성 API Route (비동기 아키텍처)
@@ -235,7 +239,8 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     }
   }
 
-  const isViralTrack = !payload.isInstrumental && durationPlan.mode === 'short-form';
+  const isViralTrack = !payload.isInstrumental && ((payload as any).isViral === true || (payload as any).isViralTrack === true
+    || (payload as any).sourceMenu === 'viral' || (payload as any).sourceMenu === 'viral-cf');
   if (isViralTrack && !effectiveStylePrompt.toLowerCase().startsWith('vocal-centric mix')) {
     effectiveStylePrompt = `vocal-centric mix, dry upfront vocals close to mic, minimal backing beat, crystal clear vocal delivery, ${effectiveStylePrompt}`;
   }
@@ -325,11 +330,37 @@ function getGenreFallback(pStr: string) {
   return `${FALLBACK_PRESET_BASE}/deep-sleep-drift.png`;
 }
 
+function applyVoiceDesignRequest(body: Record<string, any>) {
+  if (body.voiceDesign == null && body.sourceMenu !== 'voice-discovery-design') return null
+  if (body.sourceMenu !== 'voice-discovery-design') throw new Error('음색 디자인은 가창 샘플 메뉴에서 생성해 주세요.')
+  if (body.isInstrumental || body.activeVoice || body.officialVoiceId != null || body.discoveryVoiceId != null || body.customVoiceId != null || body.designedVoiceId != null || body.queueItemId) {
+    throw new Error('음색 디자인과 다른 보컬 선택을 함께 사용할 수 없습니다.')
+  }
+  const model = String(body.sunoVersion || 'V6').toUpperCase().replace(/[ .-]+/g, '_')
+  if (model !== 'V6' || (body.engine != null && !['suno_v5', 'suno_v6'].includes(body.engine))) throw new Error('음색 디자인은 Suno V6에서 생성해 주세요.')
+  const design = compileVoiceDesign(body.voiceDesign)
+  const duration = resolveMusicDuration(body)
+  if ((body.metadata?.durationSeconds != null || body.metadata?.duration != null) && duration.source !== 'explicit-duration') throw new Error('가창 샘플 길이를 확인해 주세요.')
+  const seconds = duration.source === 'explicit-duration' ? duration.seconds : 45
+  if (![30, 40, 45].includes(seconds)) throw new Error('가창 샘플 길이는 30초, 40초 또는 45초로 요청해 주세요.')
+  Object.assign(body, {
+    title: design.title, stylePrompt: design.sampleStylePrompt, lyricsPrompt: design.lyricsPrompt, lyricsSections: [],
+    vocalGender: design.gender, sunoVersion: 'V6', engine: 'suno_v5', isInstrumental: false, isPublic: false,
+    isViral: false, isViralTrack: false, voicePrompt: undefined, vdCode: undefined, presetId: undefined,
+    excludePrompt: 'choir, doubled lead, backing vocal ensemble, long instrumental intro',
+    metadata: { primaryGenre: 'Vocal sample', bpm: String(design.bpm), durationSeconds: seconds },
+  })
+  return design
+}
+
 export async function POST(request: NextRequest) {
   let claimedQueueItemId: string | null = null
   let sunoTaskAccepted = false
   try {
     const rawBody = await request.json()
+    let voiceDesign: ReturnType<typeof compileVoiceDesign> | null
+    try { voiceDesign = applyVoiceDesignRequest(rawBody) }
+    catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : '음색 디자인 설정을 확인해 주세요.' }, { status: 400 }) }
     suppressIneligibleVoice(rawBody)
     const payload = rawBody as PromptPayload
     if (payload.engine === 'lyria3') {
@@ -394,15 +425,49 @@ export async function POST(request: NextRequest) {
 
     let officialVoice: ReturnType<typeof resolveOfficialVoice> = null
     let officialPersonaId: string | undefined
+    let discoveryVoice: ReturnType<typeof resolveDiscoveryVoice> = null
+    let discoveryPersonaId: string | undefined
+    let designedVoice: Awaited<ReturnType<typeof readDesignedVoice>> = null
+    let designedPersonaId: string | undefined
+    let designedOwner: { id: string } | null = null
     try {
+      assertExclusiveVoiceSelection(rawBody)
       officialVoice = resolveOfficialVoice(rawBody)
+      discoveryVoice = resolveDiscoveryVoice(rawBody)
+      const designedId = rawBody.activeVoice?.designedVoiceId ?? rawBody.designedVoiceId
+      if (designedId != null) {
+        if (typeof designedId !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(designedId)) throw new Error('저장한 음색 선택값이 올바르지 않습니다.')
+        if (!['style-library', 'preset-studio', 'audio-forge', 'audio', 'japan', 'voice-discovery-sample'].includes(rawBody.sourceMenu)) throw new Error('저장한 음색은 가창 샘플 또는 뮤직·프리셋·일본 BGM 스튜디오에서 사용해 주세요.')
+        if (String(rawBody.sunoVersion || 'V6').toUpperCase().replace(/[ .-]+/g, '_') !== 'V6') throw new Error('저장한 음색은 Suno V6에서 사용해 주세요.')
+        if (typeof payload.lyricsPrompt !== 'string' || !payload.lyricsPrompt.trim()) throw new Error('저장한 음색을 사용하려면 가사를 먼저 준비해 주세요.')
+        const ownerClient = await createClient()
+        const { data: { user: owner } } = await ownerClient.auth.getUser()
+        if (!owner) return NextResponse.json({ error: '저장한 음색을 사용하려면 로그인이 필요합니다.' }, { status: 401 })
+        if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) throw new Error('designed_voice_not_ready')
+        const ownerAdmin = createSupabaseClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+        try { designedVoice = await readDesignedVoice(ownerAdmin, owner.id, designedId) }
+        catch { throw new Error('designed_voice_not_ready') }
+        if (!designedVoice || designedVoice.userId !== owner.id || designedVoice.id !== designedId) return NextResponse.json({ error: '저장한 음색을 찾을 수 없습니다.' }, { status: 404 })
+        if (designedVoice.status !== 'ready' || typeof designedVoice.providerPersonaId !== 'string' || !/^[A-Za-z0-9_-]{6,160}$/.test(designedVoice.providerPersonaId)
+          || !designedVoice.voicePrompt?.trim()) throw new Error('designed_voice_not_ready')
+        if (rawBody.vocalGender !== designedVoice.gender) throw new Error('저장한 음색과 보컬 성별이 다릅니다. 다시 선택해 주세요.')
+        designedPersonaId = designedVoice.providerPersonaId
+        designedOwner = { id: owner.id }
+        rawBody.voicePrompt = designedVoice.voicePrompt
+        rawBody.activeVoice = { id: designedVoice.id, designedVoiceId: designedVoice.id, gender: designedVoice.gender, stylePrompt: designedVoice.voicePrompt }
+      }
       if (officialVoice) {
         officialPersonaId = officialVoicePersona(officialVoice.id)
         rawBody.voicePrompt = officialVoice.stylePrompt
         rawBody.activeVoice = { id: officialVoice.id, officialVoiceId: officialVoice.id, gender: officialVoice.gender, stylePrompt: officialVoice.stylePrompt }
       }
+      if (discoveryVoice) {
+        discoveryPersonaId = discoveryVoicePersona(discoveryVoice.id)
+        rawBody.voicePrompt = discoveryVoice.stylePrompt
+        rawBody.activeVoice = { id: discoveryVoice.id, discoveryVoiceId: discoveryVoice.id, gender: discoveryVoice.gender, stylePrompt: discoveryVoice.stylePrompt }
+      }
     } catch (error) {
-      const unavailable = error instanceof Error && error.message === 'official_voice_not_ready'
+      const unavailable = error instanceof Error && ['official_voice_not_ready', 'discovery_voice_not_ready', 'designed_voice_not_ready'].includes(error.message)
       return NextResponse.json({ error: unavailable ? '선택한 보컬의 연결을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.' : error instanceof Error ? error.message : '보컬 선택을 확인해 주세요.' }, { status: unavailable ? 503 : 400 })
     }
 
@@ -446,10 +511,10 @@ export async function POST(request: NextRequest) {
     let generatedTags = '';
 
     const needTitle = !payload.title || !payload.title.trim();
-    const generated = queueItemId
+    const generated = queueItemId || voiceDesign
       ? {
           title: payload.title || 'Untitled',
-          description: 'Channel Builder에서 승인된 Episode Track Blueprint',
+          description: voiceDesign ? '선택한 음색 특성을 바탕으로 만든 가창 샘플' : 'Channel Builder에서 승인된 Episode Track Blueprint',
           tags: payload.stylePrompt.split(',').slice(0, 4).join(', '),
           source: 'approved-blueprint' as const,
           model: null,
@@ -464,7 +529,8 @@ export async function POST(request: NextRequest) {
 
     // Supabase 클라이언트
     const supabase = await createClient()
-    const { data: { user } } = await supabase.auth.getUser()
+    const user = designedOwner || (await supabase.auth.getUser()).data.user
+    if (voiceDesign && !user) return NextResponse.json({ error: '가창 샘플을 생성하려면 로그인이 필요합니다.' }, { status: 401 })
 
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -563,7 +629,8 @@ export async function POST(request: NextRequest) {
     if (!coverArtUrl2) coverArtUrl2 = defaultFallback;
 
     // ─── Suno: 비동기 제출 ────────────────────────────────────────────────────
-    const { taskId, model, requestedDurationSeconds, durationMode, durationSource } = await submitSunoJob(payload, matchedPlaybook, officialPersonaId || registeredVoicePersonaId, officialPersonaId ? 'style_persona' : 'voice_persona')
+    const samplePersonaId = officialPersonaId || discoveryPersonaId || designedPersonaId
+    const { taskId, model, requestedDurationSeconds, durationMode, durationSource } = await submitSunoJob(payload, matchedPlaybook, samplePersonaId || registeredVoicePersonaId, samplePersonaId ? 'style_persona' : 'voice_persona')
     sunoTaskAccepted = true
 
     // DB에 'generating' 상태로 저장 (워커가 폴링하여 완료 처리)
@@ -597,7 +664,13 @@ export async function POST(request: NextRequest) {
       vocalToneStyleCode: vdCode || null,
       officialVoiceId: officialVoice?.id || null,
       officialVoiceName: officialVoice?.name || null,
-      voiceFeatureMode: officialPersonaId ? 'suno_style_persona' : registeredVoicePersonaId ? 'suno_voice_persona' : 'prompt_style_only',
+      discoveryVoiceId: discoveryVoice?.id || null,
+      discoveryVoiceName: discoveryVoice?.name || null,
+      designedVoiceId: designedVoice?.id || null,
+      designedVoiceName: designedVoice?.name || null,
+      voiceDesign: voiceDesign ? { gender: voiceDesign.gender, age: voiceDesign.age, language: voiceDesign.language, traits: voiceDesign.traits, designCode: voiceDesign.designCode } : undefined,
+      voiceDesignCode: voiceDesign?.designCode,
+      voiceFeatureMode: samplePersonaId ? 'suno_style_persona' : registeredVoicePersonaId ? 'suno_voice_persona' : 'prompt_style_only',
       auto_voice_convert: false,
       voice_model_id: null,
       customVoiceRegistrationId: registeredVoicePersonaId ? requestedCustomVoiceId : null,

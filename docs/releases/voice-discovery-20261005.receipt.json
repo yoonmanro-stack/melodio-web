@@ -1,0 +1,47 @@
+{
+  "phase": "singing-preview-ready",
+  "createdAt": "2026-10-05T00:12:31.509Z",
+  "candidates": 32,
+  "languages": [
+    "en",
+    "ko",
+    "ja",
+    "fr"
+  ],
+  "perLanguage": {
+    "female": 4,
+    "male": 4
+  },
+  "creditsConsumed": 384,
+  "uniqueSampleHashes": 32,
+  "sampleSecondsRange": [
+    30,
+    30
+  ],
+  "personaRegistration": "held_by_auto_review_before_execution",
+  "subjectiveTimbreReview": "pending",
+  "sourceManifest": "artifacts/discovery-vocals-20261005/manifest.json",
+  "verification": {
+    "offlineTestsPassed": 58,
+    "typecheck": "passed",
+    "focusedLint": "passed",
+    "productionBuild": "passed_with_mock_public_config",
+    "uiReview": {
+      "languageGenderFilters": "8_combinations_4_each",
+      "sampleDuration": 30,
+      "playbackRate": 1,
+      "bookmark": "passed",
+      "traitSelectionLimit": 8,
+      "incubatorControls": "passed"
+    },
+    "deployment": "pending"
+  },
+  "providerPersonaPricing": {
+    "creditsPerRequest": 0,
+    "usdPerRequest": 0,
+    "source": "https://kie.ai/pricing",
+    "checkedAt": "2026-10-05",
+    "actualRegistrationExecuted": false,
+    "retention": "not_documented_for_personas"
+  }
+}

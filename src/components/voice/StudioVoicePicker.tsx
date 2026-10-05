@@ -46,7 +46,7 @@ export function StudioVoicePicker() {
         <p className="text-xs font-semibold text-cyan-300">보컬 음색 스타일</p>
         <p className="mt-1 text-base font-semibold">{enabled ? selected ? voiceLabel(selected) : '곡에 맞는 기본 음색' : '개별 음색 미적용'}</p>
         <p className="mt-1 text-xs leading-relaxed text-zinc-400">{enabled ? selected?.desc || '멜로디오 보컬과 내가 만든 보컬을 비교하고 선택하세요.' : '여성 또는 남성 보컬을 선택하면 목소리를 지정할 수 있습니다.'}</p>
-        {selected && <p className="mt-2 text-xs text-cyan-200">{selected.officialVoiceId ? '샘플 기반 음색 참조' : selected.customVoiceId ? '등록 목소리 연결' : '음색 특성 적용'} · 선택은 이 브라우저에 저장됩니다</p>}
+        {selected && <p className="mt-2 text-xs text-cyan-200">{selected.officialVoiceId || selected.discoveryVoiceId || selected.designedVoiceId ? '샘플 기반 음색 참조' : selected.customVoiceId ? '등록 목소리 연결' : '음색 특성 적용'} · 선택은 이 브라우저에 저장됩니다</p>}
       </div>
       <button ref={trigger} type="button" disabled={!enabled} onClick={() => { refreshVoices(); chooseCandidate(selected?.id || null); setTab(selected && selected.sourceType !== 'default' ? 'mine' : 'default'); setOpen(true) }} className="shrink-0 rounded-xl bg-cyan-500 px-4 py-2 text-sm font-semibold text-black disabled:bg-zinc-800 disabled:text-zinc-500">목소리 선택</button>
     </div>
@@ -58,7 +58,7 @@ export function StudioVoicePicker() {
         </header>
         <div className="flex flex-wrap items-center gap-2 p-4">
           <button type="button" aria-pressed={tab === 'default'} onClick={() => setTab('default')} className={`rounded-lg px-4 py-2 ${tab === 'default' ? 'bg-cyan-500 text-black' : 'bg-white/5'}`}>멜로디오 보컬</button>
-          <button type="button" aria-pressed={tab === 'mine'} onClick={() => setTab('mine')} className={`rounded-lg px-4 py-2 ${tab === 'mine' ? 'bg-cyan-500 text-black' : 'bg-white/5'}`}>내가 만든 보컬</button>
+          <button type="button" aria-pressed={tab === 'mine'} onClick={() => setTab('mine')} className={`rounded-lg px-4 py-2 ${tab === 'mine' ? 'bg-cyan-500 text-black' : 'bg-white/5'}`}>내 보컬 · 즐겨찾기</button>
           <Link href="/voice-lab" onClick={close} className="ml-auto text-sm text-cyan-300">새 보컬 만들기 ↗</Link>
           <input aria-label="보컬 검색" placeholder="이름, 음색 특징 검색" value={query} onChange={e => setQuery(e.target.value)} className="w-full rounded-lg border border-white/15 bg-black/30 px-3 py-2" />
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={favoritesOnly} onChange={e => setFavoritesOnly(e.target.checked)} />즐겨찾기만</label>
@@ -74,21 +74,21 @@ export function StudioVoicePicker() {
           <aside className="border-t border-white/10 bg-black/20 p-5 md:border-l md:border-t-0">
             {candidate ? <>
               <div className="flex flex-wrap items-center gap-2">
-                <p className="text-xs text-cyan-300">{candidate.officialVoiceId ? '샘플 기반 음색 참조' : candidate.customVoiceId ? '등록 목소리' : candidate.sourceType === 'default' ? '음색 설계 v2 · 청취 검증 전' : '음색 스타일'}</p>
+                <p className="text-xs text-cyan-300">{candidate.officialVoiceId || candidate.discoveryVoiceId || candidate.designedVoiceId ? '샘플 기반 음색 참조' : candidate.customVoiceId ? '등록 목소리' : candidate.sourceType === 'default' ? '음색 설계 v2 · 청취 검증 전' : '음색 스타일'}</p>
                 {candidate.officialVoiceId && candidate.reviewStatus && <span className={`rounded-full px-2 py-1 text-xs font-semibold ${candidate.reviewStatus === 'selected' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-amber-500/15 text-amber-300'}`}>{candidate.reviewStatus === 'selected' ? '선택 완료' : '시험 공개'}</span>}
               </div>
               <h3 className="mt-2 text-2xl font-bold">{voiceLabel(candidate)}</h3>
               <p className="mt-3 leading-relaxed text-zinc-300">{candidate.desc}</p>
               <p className="mt-4 text-sm text-zinc-400">{candidate.tags.join(' · ')}</p>
-              {candidate.audioUrl ? <div className="mt-6"><p className="mb-2 text-xs text-zinc-400">{candidate.officialVoiceId ? '음색 참조 샘플' : '기존 참고 샘플'} · 생성 결과는 곡에 따라 달라집니다</p><audio ref={audio} key={candidate.id} controls preload="none" src={candidate.audioUrl} onError={() => setError('샘플을 재생할 수 없습니다. 잠시 후 다시 시도해 주세요.')} className="w-full" /></div> : <p className="mt-6 rounded-xl bg-white/5 p-4 text-sm text-zinc-400">미리듣기 샘플 준비 중</p>}
+              {candidate.audioUrl && (!candidate.discoveryVoiceId || candidate.previewStatus === 'ready') ? <div className="mt-6"><p className="mb-2 text-xs text-zinc-400">{candidate.discoveryVoiceId || candidate.designedVoiceId ? '30초 가창 참조' : candidate.officialVoiceId ? '음색 참조 샘플' : '기존 참고 샘플'} · 생성 결과는 곡에 따라 달라집니다</p><audio data-voice-preview ref={audio} key={candidate.id} onPlay={event => { if (candidate.sampleDurationSeconds && event.currentTarget.currentTime >= candidate.sampleDurationSeconds) event.currentTarget.currentTime = 0; document.querySelectorAll<HTMLAudioElement>('audio[data-voice-preview]').forEach(element => { if (element !== event.currentTarget) element.pause() }) }} onTimeUpdate={event => { if (candidate.sampleDurationSeconds && event.currentTarget.currentTime >= candidate.sampleDurationSeconds) event.currentTarget.pause() }} controls preload="none" src={candidate.audioUrl} onError={() => setError('샘플을 재생할 수 없습니다. 잠시 후 다시 시도해 주세요.')} className="w-full" /></div> : <p className="mt-6 rounded-xl bg-white/5 p-4 text-sm text-zinc-400">미리듣기 샘플 준비 중</p>}
               {error && <p role="alert" className="mt-2 text-sm text-rose-300">{error}</p>}
-              <p className="mt-5 text-xs leading-relaxed text-zinc-500">{candidate.officialVoiceId ? '샘플의 음색과 창법을 참조합니다. 곡과 음역에 따라 표현이 달라지며, 동일 가수의 목소리를 보장하지 않습니다.' : candidate.customVoiceId ? '등록한 목소리를 기준으로 생성합니다. 곡과 음역에 따라 표현이 달라질 수 있습니다.' : '음색과 창법의 특성을 적용합니다. 동일 가수의 목소리를 보장하는 기능은 아닙니다.'}</p>
+              <p className="mt-5 text-xs leading-relaxed text-zinc-500">{candidate.officialVoiceId || candidate.discoveryVoiceId || candidate.designedVoiceId ? '샘플의 음색과 창법을 참조합니다. 곡과 음역에 따라 표현이 달라지며, 동일 가수의 목소리를 보장하지 않습니다.' : candidate.customVoiceId ? '등록한 목소리를 기준으로 생성합니다. 곡과 음역에 따라 표현이 달라질 수 있습니다.' : '음색과 창법의 특성을 적용합니다. 동일 가수의 목소리를 보장하는 기능은 아닙니다.'}</p>
             </> : <p className="text-zinc-400">목록에서 보컬을 선택해 특징과 샘플을 확인하세요.</p>}
           </aside>
         </div>
         <footer className="flex items-center justify-between gap-3 border-t border-white/10 p-4">
           <button type="button" onClick={() => { setActiveVoice(null); close() }} className="rounded-xl bg-white/5 px-4 py-3 text-sm">기본 음색 사용</button>
-          <button type="button" disabled={!candidate} onClick={() => { if (candidate) setActiveVoice(candidate); close() }} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-bold text-black disabled:opacity-40">이 목소리 적용</button>
+          <button type="button" disabled={!candidate || (!!candidate.discoveryVoiceId && (candidate.previewStatus !== 'ready' || candidate.reuseStatus !== 'ready'))} onClick={() => { if (candidate) setActiveVoice(candidate); close() }} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-bold text-black disabled:opacity-40">이 목소리 적용</button>
         </footer>
       </div>
     </dialog>, document.body)}

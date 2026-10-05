@@ -2,12 +2,12 @@
 
 import { Fingerprint, PenTool, Image as ImageIcon, Link as LinkIcon, ShieldAlert, Sparkles, Smartphone, MonitorPlay } from "lucide-react";
 import { useState } from "react";
+import { CustomVoiceDesigner } from "@/components/voice/CustomVoiceDesigner";
+import { ArtistVocalIdentity } from "@/components/voice/ArtistVocalIdentity";
 
 export default function ArtistIncubator() {
   const [aspectRatio, setAspectRatio] = useState<"9:16" | "16:9">("9:16");
-  const [voiceType, setVoiceType] = useState<"default" | "reference" | "upload" | "blend">("default");
-  const [blendRatio, setBlendRatio] = useState(50);
-  const [selectedTraits, setSelectedTraits] = useState<string[]>([]);
+  const [artistName, setArtistName] = useState("");
 
   return (
     <div className="max-w-6xl mx-auto pt-4 h-full flex flex-col">
@@ -16,6 +16,11 @@ export default function ArtistIncubator() {
         <p className="text-zinc-400">Design your Virtual Artist IP from scratch, set the visual concept, and manage copyrights.</p>
       </header>
 
+      <section className="mb-6 rounded-2xl border border-fuchsia-500/25 bg-fuchsia-950/10 p-5 md:p-6">
+        <h2 className="text-xl font-semibold text-fuchsia-200">나만의 보컬 음색 설계</h2>
+        <p className="mt-2 mb-5 text-sm text-zinc-400">성별·연령감·언어와 최대 8개의 음색 특성으로 프롬프트를 만들고, 30초 가창을 들은 뒤 저장하세요.</p>
+        <CustomVoiceDesigner />
+      </section>
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 gap-6 min-h-[650px] pb-10">
         
         {/* Left Column: DNA & Core Info */}
@@ -50,7 +55,7 @@ export default function ArtistIncubator() {
 
                 <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-2">Stage Name</label>
-                  <input type="text" placeholder="e.g. Neon Phantom" className="w-full bg-black/50 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-fuchsia-500 outline-none transition-colors" />
+                  <input aria-label="가수 이름" type="text" value={artistName} onChange={event => setArtistName(event.target.value)} maxLength={80} placeholder="e.g. Neon Phantom" className="w-full bg-black/50 border border-white/10 rounded-xl py-3 px-4 text-white focus:border-fuchsia-500 outline-none transition-colors" />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-zinc-400 mb-2">Genre & Style Focus</label>
@@ -60,118 +65,7 @@ export default function ArtistIncubator() {
             </div>
           </div>
 
-          {/* Prompt-based vocal tone style panel */}
-          <div className="glass-panel p-6 flex flex-col gap-4">
-            <div className="flex items-center gap-2 mb-2 border-b border-white/10 pb-3">
-              <Sparkles className="w-5 h-5 text-fuchsia-400" />
-              <div>
-                <h2 className="text-xl font-semibold text-white">보컬 음색 스타일</h2>
-                <p className="mt-0.5 text-[10px] text-zinc-500">프롬프트 기반 · 실제 목소리 복제 기능이 아닙니다.</p>
-              </div>
-            </div>
-            
-            <div className="space-y-4">
-              {/* Voice Generation Type Selector */}
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-2">음색 스타일 입력 방식</label>
-                <div className="grid grid-cols-2 gap-1.5 p-1 bg-black/50 border border-white/5 rounded-lg text-[10px] font-semibold">
-                  {(
-                    [
-                      { id: 'default', label: '기본 스타일', disabled: false },
-                      { id: 'reference', label: '참조 음원 · 준비 중', disabled: true },
-                      { id: 'upload', label: '음성 업로드 · 준비 중', disabled: true },
-                      { id: 'blend', label: '스타일 혼합', disabled: false }
-                    ] as const
-                  ).map((t) => (
-                    <button
-                      key={t.id}
-                      type="button"
-                      disabled={t.disabled}
-                      onClick={() => {
-                        if (!t.disabled) setVoiceType(t.id)
-                      }}
-                      className={`py-1.5 px-2 rounded-md transition-all ${
-                        voiceType === t.id
-                          ? 'bg-fuchsia-600/30 text-fuchsia-300 border border-fuchsia-500/20 font-bold'
-                          : t.disabled
-                            ? 'cursor-not-allowed text-zinc-600 opacity-70'
-                            : 'text-zinc-500 hover:text-zinc-300'
-                      }`}
-                    >
-                      {t.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5 text-[10px] leading-relaxed text-zinc-400">
-                실제 목소리 등록·녹음·업로드는 <span className="font-bold text-amber-300">준비 중</span>입니다. 현재는 보컬 특성을 텍스트 프롬프트로 설계합니다.
-              </div>
-
-              {voiceType === 'blend' && (
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">음색 스타일 A 코드 (예: VD-1004)</label>
-                    <input 
-                      type="text" 
-                      placeholder="VD-1004"
-                      className="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-4 text-xs text-white focus:border-fuchsia-500 outline-none transition-colors" 
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-zinc-400 mb-1.5">음색 스타일 B 코드</label>
-                    <input 
-                      type="text" 
-                      placeholder="VD-3802"
-                      className="w-full bg-black/50 border border-white/10 rounded-xl py-2.5 px-4 text-xs text-white focus:border-fuchsia-500 outline-none transition-colors" 
-                    />
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-[10px] text-zinc-400 mb-1">
-                      <span>Ratio (A : B)</span>
-                      <span>{blendRatio}% : {100 - blendRatio}%</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min="0" 
-                      max="100" 
-                      value={blendRatio} 
-                      onChange={(e) => setBlendRatio(Number(e.target.value))}
-                      className="w-full h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-fuchsia-500" 
-                    />
-                  </div>
-                </div>
-              )}
-
-              {/* Vocal Traits Tag Selection */}
-              <div>
-                <label className="block text-xs font-medium text-zinc-400 mb-2">보컬 음색 특성 (프롬프트 태그)</label>
-                <div className="flex flex-wrap gap-1">
-                  {['Whispered', 'Airy', 'Heavy Vibrato', 'Falsetto', 'Dry Mix', 'Warm tone'].map((tag) => {
-                    const isSelected = selectedTraits.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => {
-                          setSelectedTraits(prev => 
-                            prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
-                          );
-                        }}
-                        className={`px-2 py-1 rounded text-[9px] font-medium transition-all ${
-                          isSelected 
-                            ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30' 
-                            : 'bg-zinc-800/40 text-zinc-400 hover:text-zinc-300 border border-transparent'
-                        }`}
-                      >
-                        {tag}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          </div>
+          <ArtistVocalIdentity artistName={artistName} />
         </div>
 
         {/* Middle Column: Lore & Visuals */}

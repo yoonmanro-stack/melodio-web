@@ -2,6 +2,7 @@
 
 import { studioVoiceFields as buildStudioVoiceFields } from "@/lib/voice/studio-selection";
 import { INITIAL_SYSTEM_VOICES } from "@/data/vocalStyles";
+import { discoveryVoiceItem } from "@/data/discoveryVoices";
 import React, { createContext, useCallback, useContext, useState, useEffect } from "react";
 
 export interface VoiceItem {
@@ -14,7 +15,7 @@ export interface VoiceItem {
   tags: string[];
   audioUrl?: string;
   audioUrlB?: string;
-  sourceType: "default" | "recorded" | "uploaded" | "dna_designed" | "extracted";
+  sourceType: "default" | "recorded" | "uploaded" | "dna_designed" | "extracted" | "discovered";
   stylePrompt: string;
   isFavorite?: boolean;
   createdAt: string;
@@ -24,6 +25,16 @@ export interface VoiceItem {
   customVoiceId?: string;
   /** Public catalog ID. Provider persona IDs remain server-side. */
   officialVoiceId?: string;
+  /** Independent discovery catalog reference, resolved by the server. */
+  discoveryVoiceId?: string;
+  previewStatus?: "pending" | "ready";
+  reuseStatus?: "pending" | "ready";
+  previewStartSeconds?: number;
+  sampleDurationSeconds?: number;
+  /** Saved generated style persona; provider identity remains server-side. */
+  designedVoiceId?: string;
+  sampleGenerationId?: string;
+  sampleVersion?: 'A' | 'B';
   reviewStatus?: "selected" | "trial";
   shortDescription?: string;
   is100PercentSync?: boolean;
@@ -65,6 +76,8 @@ interface VoiceContextProps {
   closeCreateModal: () => void;
   setActiveVoice: (voice: VoiceItem | null) => void;
   addVoice: (voice: Omit<VoiceItem, "id" | "createdAt">) => VoiceItem;
+  saveDiscoveryVoice: (id: string) => VoiceItem | null;
+  syncDesignedVoice: (voice: VoiceItem) => void;
   syncRegisteredVoice: (voice: Omit<VoiceItem, "id" | "createdAt"> & { customVoiceId: string }) => void;
   updateVoice: (id: string, updates: Partial<VoiceItem>) => void;
   deleteVoice: (id: string) => void;
@@ -130,8 +143,12 @@ function persistCustomVoices(allVoices: VoiceItem[]) {
 
 export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [voiceRefresh, setVoiceRefresh] = useState(0);
-  const refreshVoices = () => setVoiceRefresh(n => n + 1);
-  const [studioGender, setStudioGender] = useState<StudioVocalGender>("mixed");
+  const refreshVoices = useCallback(() => setVoiceRefresh(n => n + 1), []);
+  const [studioGender, setStudioGenderState] = useState<StudioVocalGender>("mixed");
+  const setStudioGender = useCallback((gender: StudioVocalGender) => {
+    setStudioGenderState(gender);
+    try { localStorage.setItem('melodio_studio_vocal_gender', gender); } catch {}
+  }, []);
   const [voices, setVoices] = useState<VoiceItem[]>(INITIAL_SYSTEM_VOICES);
   const [activeVoice, setActiveVoiceState] = useState<VoiceItem | null>(null);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
@@ -140,6 +157,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   // 로컬스토리지 복원
   useEffect(() => {
     try {
+      const savedGender = localStorage.getItem('melodio_studio_vocal_gender');
+      if (savedGender && ['female', 'male', 'duet', 'mixed'].includes(savedGender)) setStudioGenderState(savedGender as StudioVocalGender);
       const favoriteIds = JSON.parse(localStorage.getItem("melodio_voice_favorites") || "null");
       if (Array.isArray(favoriteIds)) setVoices(current => current.map(v => ({ ...v, isFavorite: favoriteIds.includes(v.id) })));
       const saved = localStorage.getItem("melodio_user_voices");
@@ -148,7 +167,12 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         if (Array.isArray(parsed) && parsed.length > 0) {
           const customOnly: VoiceItem[] = parsed
             .filter((v: any) => v && typeof v === "object" && v.sourceType !== "default")
-            .map((v: any) => {
+            .map((v: any): VoiceItem | null => {
+              if (typeof v.discoveryVoiceId === "string") {
+                const canonical = discoveryVoiceItem(v.discoveryVoiceId);
+                if (canonical) return { ...canonical, isFavorite: !!v.isFavorite };
+                return null;
+              }
               const gender = v.gender === "male" || v.gender === "female" || v.gender === "duet" ? v.gender : "female";
               const prompt = typeof v.stylePrompt === "string" ? v.stylePrompt : "";
               const tags = Array.isArray(v.tags) ? v.tags : ["Custom", gender];
@@ -180,10 +204,16 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
                 customVoiceId: typeof v.customVoiceId === "string" && /^[0-9a-f-]{36}$/i.test(v.customVoiceId)
                   ? v.customVoiceId
                   : undefined,
+                designedVoiceId: typeof v.designedVoiceId === "string" && /^[0-9a-f-]{36}$/i.test(v.designedVoiceId) ? v.designedVoiceId : undefined,
+                sampleGenerationId: typeof v.sampleGenerationId === "string" && /^[0-9a-f-]{36}$/i.test(v.sampleGenerationId) ? v.sampleGenerationId : undefined,
+                sampleVersion: v.sampleVersion === 'B' ? 'B' : 'A',
+                sampleDurationSeconds: v.designedVoiceId ? 30 : undefined,
+                previewStartSeconds: v.designedVoiceId ? 0 : undefined,
+                previewStatus: v.designedVoiceId ? 'ready' : undefined,
                 is100PercentSync: false,
                 physicalLayers: v.physicalLayers,
               };
-            });
+            }).filter((v: VoiceItem | null): v is VoiceItem => v !== null);
           setVoices([...INITIAL_SYSTEM_VOICES, ...customOnly].map(v => ({ ...v, isFavorite: Array.isArray(favoriteIds) ? favoriteIds.includes(v.id) : v.isFavorite })));
 
         }
@@ -194,7 +224,10 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         setTimeout(() => {
           setVoices((current) => {
             const found = current.find((v) => v && v.id === savedActiveId);
-            if (found) setActiveVoiceState(found);
+            if (found) {
+              setActiveVoiceState(found);
+              if (!savedGender && (found.gender === 'female' || found.gender === 'male')) setStudioGenderState(found.gender);
+            }
             return current;
           });
         }, 100);
@@ -240,6 +273,43 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       } catch {
         // Keep local choices when signed out, offline, or the request is cancelled.
       }
+    })();
+    return () => controller.abort();
+  }, [isVoiceModalOpen, voiceRefresh]);
+
+  useEffect(() => {
+    if (!isVoiceModalOpen && voiceRefresh === 0) return;
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const response = await fetch('/api/voice/designed', { cache: 'no-store', signal: controller.signal });
+        if (!response.ok) return;
+        const data = await response.json();
+        if (!Array.isArray(data.voices)) return;
+        const ready = await Promise.all(data.voices.map(async (row: VoiceItem & { status?: string }): Promise<VoiceItem | null> => {
+          if (row.status !== 'ready' || !row.designedVoiceId || !/^[0-9a-f-]{36}$/i.test(row.designedVoiceId) || !row.sampleGenerationId) return null;
+          let audioUrl = '';
+          try {
+            const sampleResponse = await fetch(`/api/generations?id=${encodeURIComponent(row.sampleGenerationId)}`, { cache: 'no-store', signal: controller.signal });
+            if (sampleResponse.ok) {
+              const sample = await sampleResponse.json();
+              audioUrl = typeof sample.generation?.audio_url === 'string' ? sample.generation.audio_url : '';
+            }
+          } catch { /* A saved persona remains usable while its preview is unavailable. */ }
+          return { ...row, sourceType: 'dna_designed', audioUrl, voice_model_id: undefined,
+            is100PercentSync: false, previewStartSeconds: 0, sampleDurationSeconds: 30, previewStatus: 'ready' };
+        }));
+        if (controller.signal.aborted) return;
+        const incoming = ready.filter((row): row is VoiceItem => row !== null);
+        setVoices(previous => {
+          const updated = [...incoming.map(row => ({ ...row, isFavorite: previous.find(item => item.designedVoiceId === row.designedVoiceId)?.isFavorite ?? true })),
+            ...previous.filter(row => !row.designedVoiceId)];
+          persistCustomVoices(updated);
+          return updated;
+        });
+        setActiveVoiceState(previous => previous?.designedVoiceId
+          ? incoming.find(row => row.designedVoiceId === previous.designedVoiceId) || null : previous);
+      } catch { /* Keep saved choices during a transient connection error. */ }
     })();
     return () => controller.abort();
   }, [isVoiceModalOpen, voiceRefresh]);
@@ -290,6 +360,35 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
 
     setActiveVoice(newVoice);
     return newVoice;
+  };
+
+  const saveDiscoveryVoice = (id: string): VoiceItem | null => {
+    const canonical = discoveryVoiceItem(id);
+    if (!canonical) return null;
+    const saved = { ...canonical, isFavorite: true };
+    setVoices(previous => {
+      const updated = previous.some(voice => voice.discoveryVoiceId === canonical.discoveryVoiceId)
+        ? previous.map(voice => voice.discoveryVoiceId === canonical.discoveryVoiceId ? saved : voice)
+        : [saved, ...previous];
+      persistCustomVoices(updated);
+      return updated;
+    });
+    return saved;
+  };
+
+  const syncDesignedVoice = (voice: VoiceItem) => {
+    if (!voice.designedVoiceId || !/^[0-9a-f-]{36}$/i.test(voice.designedVoiceId)) return;
+    const saved: VoiceItem = { ...voice, id: `designed-voice-${voice.designedVoiceId}`, sourceType: 'dna_designed',
+      audioUrl: '', audioUrlB: undefined, voice_model_id: undefined, is100PercentSync: false,
+      isFavorite: true, sampleDurationSeconds: 30, previewStartSeconds: 0, previewStatus: 'ready' };
+    setVoices(previous => {
+      const updated = [saved, ...previous.filter(item => item.designedVoiceId !== saved.designedVoiceId)];
+      persistCustomVoices(updated);
+      return updated;
+    });
+    setActiveVoice(saved);
+    if (saved.gender === 'female' || saved.gender === 'male') setStudioGender(saved.gender);
+    setVoiceRefresh(value => value + 1);
   };
 
   const syncRegisteredVoice = useCallback((voiceData: Omit<VoiceItem, "id" | "createdAt"> & { customVoiceId: string }) => {
@@ -383,6 +482,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         closeCreateModal,
         setActiveVoice,
         addVoice,
+        saveDiscoveryVoice,
+        syncDesignedVoice,
         syncRegisteredVoice,
         updateVoice,
         deleteVoice,
@@ -413,6 +514,8 @@ export function useVoice() {
       closeCreateModal: () => {},
       setActiveVoice: () => {},
       addVoice: () => ({ id: 'fallback', name: 'Fallback', gender: 'female', tags: [], stylePrompt: '' } as any),
+      saveDiscoveryVoice: (_id: string) => null,
+      syncDesignedVoice: (_voice: VoiceItem) => {},
       syncRegisteredVoice: () => {},
       updateVoice: () => {},
       deleteVoice: () => {},
