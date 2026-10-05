@@ -3,15 +3,15 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ArrowLeft, ArrowRight, Archive, Check, CheckCircle2, ImagePlus, Library, Loader2, Mic2, Music2, Plus, RefreshCw, Save, UserRound } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, CheckCircle2, ImagePlus, Library, Loader2, Mic2, Music2, Plus, RefreshCw, Save, UserRound } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 import { useVoice } from '@/contexts/VoiceContext'
 import { DISCOVERY_VOICES } from '@/data/discoveryVoices'
+import type { User } from '@supabase/supabase-js'
 import type { ArtistInput, ArtistPortrait, ArtistProfile } from '@/lib/artists/types'
 import { ArtistProfileFields } from './ArtistProfileFields'
 import { ArtistVoiceStep } from './ArtistVoiceStep'
 import { ArtistPortraitStep } from './ArtistPortraitStep'
-import { ArtistWorks } from './ArtistWorks'
 import { artistInput, artistResponse, artistToDraft, artistVoiceChoice, newArtistDraft, readyRequirements, VOICE_KIND_LABELS, type ArtistDraft } from './artist-form'
 
 const STEPS = [
@@ -26,13 +26,17 @@ function coreValue(form: ArtistDraft) {
   return JSON.stringify([value.name, value.tagline, value.description, value.genres, value.personality, value.backstory, value.speakingStyle, value.visualDirection, value.voice, value.portrait])
 }
 
-export default function ArtistWorkspace({ mode, initialArtistId }: { mode: 'incubator' | 'persona'; initialArtistId?: string }) {
-  const { user, loading: authLoading } = useAuth()
+export default function ArtistWorkspace({ initialArtistId, initialStep = 0 }: { initialArtistId?: string; initialStep?: 0 | 1 | 2 | 3 }) {
+  const { user, loading } = useAuth()
+  return <ArtistIncubator key={user?.id || 'signed-out'} initialArtistId={initialArtistId} initialStep={initialStep} user={user} authLoading={loading} />
+}
+
+function ArtistIncubator({ initialArtistId, initialStep, user, authLoading }: { initialArtistId?: string; initialStep: 0 | 1 | 2 | 3; user: User | null; authLoading: boolean }) {
   const { voices } = useVoice()
   const [artists, setArtists] = useState<ArtistProfile[]>([])
   const [selected, setSelected] = useState<ArtistProfile | null>(null)
   const [form, setForm] = useState<ArtistDraft>(newArtistDraft)
-  const [step, setStep] = useState(0)
+  const [step, setStep] = useState<number>(initialStep)
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState('')
   const [error, setError] = useState('')
@@ -40,6 +44,7 @@ export default function ArtistWorkspace({ mode, initialArtistId }: { mode: 'incu
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [showArchived, setShowArchived] = useState(false)
+  const [showApproved, setShowApproved] = useState(false)
   const [saveUncertain, setSaveUncertain] = useState(false)
   const requestBusy = useRef(false)
   const activeUser = useRef<string | undefined>(undefined)
@@ -49,15 +54,16 @@ export default function ArtistWorkspace({ mode, initialArtistId }: { mode: 'incu
   const coreDirty = selected !== null && coreValue(form) !== coreValue(baseline)
   const archived = selected?.status === 'archived'
   const busy = saving || uploading
-  const activeArtists = artists.filter(artist => artist.status !== 'archived')
-  const visibleArtists = artists.filter(artist => showArchived || artist.status !== 'archived')
+  const draftArtists = artists.filter(artist => artist.status === 'draft')
+  const activeArtistCount = artists.filter(artist => artist.status !== 'archived').length
+  const visibleArtists = artists.filter(artist => artist.id === selected?.id || artist.status === 'draft' || (showApproved && artist.status === 'ready') || (showArchived && artist.status === 'archived'))
   const missing = readyRequirements(form)
   const savedReady = selected?.status === 'ready' && !dirty
   const currentVoice = [...voices, ...DISCOVERY_VOICES].map(artistVoiceChoice).find(choice => choice?.kind === form.voice?.kind && choice?.referenceId === form.voice?.referenceId)
   const voiceName = currentVoice?.voice.name || (selected?.voice?.kind === form.voice?.kind && selected?.voice?.referenceId === form.voice?.referenceId ? selected?.voice?.name : null)
   const userId = user?.id
 
-  useEffect(() => { activeUser.current = userId }, [userId])
+  useEffect(() => { activeUser.current = userId; return () => { activeUser.current = undefined } }, [userId])
 
   const loadArtists = useCallback(async (signal?: AbortSignal) => {
     setListLoading(true); setListError('')
@@ -65,19 +71,21 @@ export default function ArtistWorkspace({ mode, initialArtistId }: { mode: 'incu
       if (!userId) { setArtists([]); setSelected(null); setForm(newArtistDraft()); initializedUser.current = null; return }
       const data = await artistResponse<{ artists: ArtistProfile[] }>(await fetch('/api/artists', { cache: 'no-store', signal }))
       if (!Array.isArray(data.artists)) throw new Error('아티스트 목록을 확인하지 못했습니다.')
-      if (signal?.aborted) return
+      if (data.artists.some(artist => artist.userId !== userId)) throw new Error('현재 계정의 가수 목록을 확인하지 못했습니다. 다시 불러와 주세요.')
+      if (signal?.aborted || activeUser.current !== userId) return
       setArtists(data.artists)
-      const initialKey = `${userId}:${initialArtistId || ''}`
+      const initialKey = `${userId}:${initialArtistId || ''}:${initialStep}`
       if (initializedUser.current !== initialKey) {
         const requested = data.artists.find(artist => artist.id === initialArtistId)
-        const candidate = requested || (mode === 'persona' ? data.artists.find(artist => artist.status !== 'archived') : undefined)
+        const candidate = requested
         setSelected(candidate || null); setForm(candidate ? artistToDraft(candidate) : newArtistDraft())
+        setStep(requested ? initialStep : 0)
         if (initialArtistId && !requested) setNotice('요청한 가수를 찾을 수 없습니다. 새 가수를 만들거나 목록에서 선택하세요.')
         initializedUser.current = initialKey
       }
     } catch (reason) { if (!signal?.aborted) setListError(reason instanceof Error ? reason.message : '아티스트를 불러오지 못했습니다.') }
     finally { if (!signal?.aborted) setListLoading(false) }
-  }, [initialArtistId, mode, userId])
+  }, [initialArtistId, initialStep, userId])
 
   useEffect(() => {
     if (authLoading) return
@@ -169,31 +177,22 @@ export default function ArtistWorkspace({ mode, initialArtistId }: { mode: 'incu
     requestBusy.current = true; setSaving(true); setError('')
     try {
       const data = await artistResponse<{ artist: ArtistProfile }>(await fetch(`/api/artists/${encodeURIComponent(selected.id)}`, { cache: 'no-store' }))
+      if (activeUser.current !== userId) return
       acceptArtist(data.artist); setSaveUncertain(false); setNotice('계정에 저장된 최신 내용을 불러왔습니다.')
     } catch (reason) { setError(reason instanceof Error ? reason.message : '저장된 내용을 불러오지 못했습니다.') }
     finally { requestBusy.current = false; setSaving(false) }
   }
 
-  async function archiveArtist() {
-    if (!selected || requestBusy.current || archived) return
-    if (!window.confirm(`${selected.name}을 보관할까요? ${dirty ? '저장하지 않은 변경 사항은 버립니다. ' : ''}보관한 가수는 보기만 가능하며 새 곡 제작에 선택할 수 없습니다.`)) return
-    requestBusy.current = true; setSaving(true); setError('')
-    try {
-      const data = await artistResponse<{ artist: ArtistProfile }>(await fetch(`/api/artists/${encodeURIComponent(selected.id)}`, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expectedRevision: selected.revision }) }))
-      acceptArtist(data.artist); setShowArchived(true); setNotice('가수를 보관했습니다. 기존 프로필과 제작한 음원은 계속 확인할 수 있습니다.')
-    } catch (reason) { setError(reason instanceof Error ? reason.message : '가수를 보관하지 못했습니다.') }
-    finally { requestBusy.current = false; setSaving(false) }
-  }
-
   return <div className="mx-auto max-w-7xl pb-12 pt-3">
-    <header className="mb-7 flex flex-wrap items-start justify-between gap-4"><div><p className="mb-2 text-xs font-semibold tracking-[0.15em] text-purple-300">MELODIO ARTISTS</p><h1 className="text-3xl font-bold tracking-tight text-white">{mode === 'incubator' ? 'AI 가수 인큐베이터' : '아티스트 페르소나'}</h1><p className="mt-2 text-sm leading-relaxed text-zinc-400">{mode === 'incubator' ? '프로필, 보컬, 참조 사진을 완성하고 나만의 AI 가수를 승인하세요.' : '저장한 가수의 정체성과 작업물을 관리하고 다음 곡으로 이어가세요.'}</p></div><Link href={mode === 'incubator' ? '/persona' : '/incubator'} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5">{mode === 'incubator' ? <Library size={16} /> : <Plus size={16} />}{mode === 'incubator' ? '아티스트 관리' : '새 가수 만들기'}</Link></header>
+    <header className="mb-7 flex flex-wrap items-start justify-between gap-4"><div><p className="mb-2 text-xs font-semibold tracking-[0.15em] text-purple-300">MELODIO INCUBATOR</p><h1 className="text-3xl font-bold tracking-tight text-white">AI 가수 인큐베이터</h1><p className="mt-2 text-sm leading-relaxed text-zinc-400">가수의 기본 방향을 정하고, 보컬과 얼굴을 확인해 제작 준비를 마칩니다.</p></div><Link href="/persona" className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5"><Library size={16} />내 가수 관리 · 페르소나</Link></header>
     {!authLoading && !user && <div className="mb-5 rounded-xl border border-purple-400/20 bg-purple-500/10 p-4 text-sm text-purple-200">로그인하면 프로필과 참조 사진을 계정에 비공개로 저장하고 다른 기기에서 이어서 작업할 수 있습니다. <Link href="/login" className="ml-2 underline underline-offset-4">로그인</Link></div>}
     <div className="grid items-start gap-5 lg:grid-cols-[270px_minmax(0,1fr)]">
       <aside className="rounded-2xl border border-white/10 bg-white/[0.02] p-4">
-        <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">내 가수 <span className="ml-1 text-zinc-500">{activeArtists.length}</span></h2><button type="button" disabled={listLoading || busy || !user} aria-label="아티스트 목록 새로고침" onClick={() => void loadArtists()} className="rounded-lg p-2 text-zinc-500 hover:bg-white/5 disabled:opacity-40"><RefreshCw size={15} className={listLoading ? 'animate-spin' : ''} /></button></div>
-        <button type="button" disabled={busy || !user || activeArtists.length >= 30} onClick={() => chooseArtist(null)} className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-medium disabled:opacity-40 ${!selected ? 'border-purple-400/40 bg-purple-500/10 text-purple-200' : 'border-white/10 text-zinc-300 hover:bg-white/5'}`}><Plus size={16} />새 가수</button>
-        {authLoading || listLoading ? <p className="mt-5 flex items-center gap-2 text-xs text-zinc-500"><Loader2 size={14} className="animate-spin" />가수를 불러오는 중…</p> : listError ? <p role="alert" className="mt-4 text-xs text-rose-300">{listError}</p> : user && !visibleArtists.length ? <p className="mt-4 rounded-xl border border-dashed border-white/10 p-4 text-sm text-zinc-500">아직 저장한 가수가 없습니다. 첫 프로필을 만들고 초안으로 저장하세요.</p> : null}
+        <div className="flex items-center justify-between"><h2 className="text-sm font-semibold">준비 중인 가수 <span className="ml-1 text-zinc-500">{draftArtists.length}</span></h2><button type="button" disabled={listLoading || busy || !user} aria-label="아티스트 목록 새로고침" onClick={() => void loadArtists()} className="rounded-lg p-2 text-zinc-500 hover:bg-white/5 disabled:opacity-40"><RefreshCw size={15} className={listLoading ? 'animate-spin' : ''} /></button></div>
+        <button type="button" disabled={busy || !user || activeArtistCount >= 30} onClick={() => chooseArtist(null)} className={`mt-3 flex w-full items-center justify-center gap-2 rounded-xl border px-3 py-3 text-sm font-medium disabled:opacity-40 ${!selected ? 'border-purple-400/40 bg-purple-500/10 text-purple-200' : 'border-white/10 text-zinc-300 hover:bg-white/5'}`}><Plus size={16} />새 가수</button>
+        {authLoading || listLoading ? <p className="mt-5 flex items-center gap-2 text-xs text-zinc-500"><Loader2 size={14} className="animate-spin" />가수를 불러오는 중…</p> : listError ? <p role="alert" className="mt-4 text-xs text-rose-300">{listError}</p> : user && !visibleArtists.length ? <p className="mt-4 rounded-xl border border-dashed border-white/10 p-4 text-sm text-zinc-500">준비 중인 가수가 없습니다. 새 가수를 만들거나 페르소나에서 승인한 가수를 관리하세요.</p> : null}
         <div className="mt-3 max-h-[620px] space-y-2 overflow-y-auto">{visibleArtists.map(artist => <button type="button" key={artist.id} disabled={busy} aria-pressed={selected?.id === artist.id} onClick={() => chooseArtist(artist)} className={`flex w-full gap-3 rounded-xl border p-3 text-left disabled:opacity-60 ${selected?.id === artist.id ? 'border-purple-400/40 bg-purple-500/10' : 'border-transparent bg-white/[0.02] hover:bg-white/5'}`}><span className="relative flex h-12 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-zinc-900">{artist.portrait ? <Image src={`/api/artists/portrait?assetId=${encodeURIComponent(artist.portrait.assetId)}`} alt="" fill unoptimized sizes="40px" className="object-cover" /> : <UserRound size={18} className="text-zinc-600" />}</span><span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{artist.name}</span><span className="mt-1 block truncate text-xs text-zinc-500">{artist.tagline || artist.voice?.name || '보컬 선택 전'}</span><span className={`mt-1.5 inline-block text-[11px] ${artist.status === 'ready' ? 'text-emerald-300' : artist.status === 'archived' ? 'text-zinc-600' : 'text-purple-300'}`}>{artist.status === 'ready' ? '제작 준비 완료' : artist.status === 'archived' ? '보관됨' : '초안'} · 버전 {artist.revision + 1}</span></span></button>)}</div>
+        {artists.some(artist => artist.status === 'ready') && <label className="mt-4 flex items-center gap-2 text-xs text-zinc-500"><input type="checkbox" checked={showApproved} onChange={event => setShowApproved(event.target.checked)} className="accent-purple-500" />승인한 가수 검토·변경</label>}
         {artists.some(artist => artist.status === 'archived') && <label className="mt-4 flex items-center gap-2 text-xs text-zinc-500"><input type="checkbox" checked={showArchived} onChange={event => setShowArchived(event.target.checked)} className="accent-purple-500" />보관한 가수 보기</label>}
       </aside>
       <main className="min-w-0">
@@ -205,9 +204,10 @@ export default function ArtistWorkspace({ mode, initialArtistId }: { mode: 'incu
           <fieldset disabled={busy || archived || !user || authLoading || listLoading} className="min-w-0 px-5 py-6 disabled:opacity-70 sm:px-7"><legend className="sr-only">가수 프로필 편집</legend><h3 className="mb-5 text-lg font-semibold">{STEPS[step].title}</h3>
             {step === 0 ? <ArtistProfileFields form={form} onChange={change} /> : step === 1 ? <ArtistVoiceStep key={selected?.id || 'new'} form={form} onChange={change} savedVoiceName={selected?.voice?.name} /> : step === 2 ? <ArtistPortraitStep form={form} onChange={change} onUpload={uploadPortrait} uploading={uploading} /> : <div className="space-y-5">
               <div className="grid gap-4 rounded-xl border border-white/10 bg-black/15 p-4 sm:grid-cols-2"><div><p className="text-xs text-zinc-500">가수 이름</p><p className="mt-1 text-sm font-medium">{form.name || '이름 입력 전'}</p><p className="mt-2 text-xs text-zinc-500">{form.tagline || '한 줄 소개 입력 전'}</p></div><div><p className="text-xs text-zinc-500">보컬</p><p className="mt-1 text-sm font-medium">{voiceName || '보컬을 다시 확인해 주세요'}</p><p className="mt-2 text-xs text-zinc-500">{form.voice ? VOICE_KIND_LABELS[form.voice.kind] : '선택 전'}</p></div><div><p className="text-xs text-zinc-500">성격과 매력</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{form.personality || '작성 전'}</p></div><div><p className="text-xs text-zinc-500">비주얼 방향</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{form.visualDirection || '작성 전'}</p></div></div>
+              {(form.backstory || form.speakingStyle) && <div className="grid gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 sm:grid-cols-2">{form.backstory && <div><p className="text-xs text-zinc-500">배경 이야기와 세계관</p><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-300">{form.backstory}</p></div>}{form.speakingStyle && <div><p className="text-xs text-zinc-500">말투와 표현 방식</p><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-300">{form.speakingStyle}</p></div>}</div>}
               <div className="space-y-2.5">{[{ label: '보컬 선택과 확인', done: !!form.voice && form.checks.voiceAuditioned, target: 1 }, { label: '참조 사진과 비주얼 확인', done: !!form.portrait && !!form.visualDirection.trim() && form.checks.portraitReviewed, target: 2 }].map(item => <button type="button" key={item.label} onClick={() => setStep(item.target)} className="flex w-full items-center justify-between rounded-xl border border-white/10 px-4 py-3 text-left text-sm"><span className="flex items-center gap-2">{item.done ? <Check size={16} className="text-emerald-300" /> : <span className="h-4 w-4 rounded-full border border-zinc-600" />}{item.label}</span><span className={item.done ? 'text-emerald-300' : 'text-zinc-500'}>{item.done ? '확인됨' : '확인하기'} →</span></button>)}</div>
               <label className={`flex items-start gap-2.5 rounded-xl border p-4 text-sm ${form.checks.identityReviewed ? 'border-purple-400/30 bg-purple-500/10 text-purple-200' : 'border-white/10 text-zinc-400'}`}><input type="checkbox" className="mt-1 accent-purple-500" checked={form.checks.identityReviewed} disabled={!form.name.trim() || !form.personality.trim() || !form.visualDirection.trim()} onChange={event => change({ checks: { ...form.checks, identityReviewed: event.target.checked } }, 'checks')} /><span>가수 이름, 성격, 이야기와 외형을 검토했습니다. 이 프로필을 곡 제작에 사용할 정체성으로 승인합니다.</span></label>
-              <p className="text-xs leading-relaxed text-zinc-500">이 가수로 곡을 생성하면 확정한 기준 이미지가 곡 커버로 사용됩니다. 원본 사진은 비공개로 저장되며, 곡 제작 시 커버 사본이 공개 이미지로 저장됩니다.</p>
+              <p className="text-xs leading-relaxed text-zinc-500">이 가수로 곡을 생성하면 확정한 기준 이미지가 곡 커버로 사용됩니다. 기준 사진은 비공개로 저장되며, 곡 제작 시 커버 사본이 공개 이미지로 저장됩니다.</p>
               {coreDirty ? <p className="rounded-xl border border-amber-400/20 bg-amber-500/5 p-3 text-sm text-amber-200">변경한 프로필을 먼저 초안으로 저장하세요. 저장 후 변경된 항목의 확인을 다시 체크하면 승인할 수 있습니다.</p> : missing.length ? <p className="text-xs text-zinc-500">승인까지 남은 항목 · {missing.join(' · ')}</p> : <p className="text-sm text-emerald-300">모든 확인을 마쳤습니다. 승인해 첫 곡을 만들어 보세요.</p>}
               <button type="button" onClick={() => void save('ready')} disabled={!!missing.length || coreDirty || saveUncertain || savedReady} className="flex w-full items-center justify-center gap-2 rounded-xl bg-purple-500 px-4 py-3.5 text-sm font-semibold text-white hover:bg-purple-400 disabled:bg-zinc-800 disabled:text-zinc-500"><CheckCircle2 size={17} />{savedReady ? '승인된 가수입니다' : '가수 승인 · 제작 준비 완료'}</button>
             </div>}
@@ -215,10 +215,17 @@ export default function ArtistWorkspace({ mode, initialArtistId }: { mode: 'incu
           <div className="border-t border-white/10 px-5 py-4 sm:px-7">
             {error && <p role="alert" className="mb-4 rounded-xl border border-rose-400/20 bg-rose-500/5 p-3 text-sm text-rose-300">{error}</p>}{notice && <p role="status" className="mb-4 rounded-xl border border-purple-400/20 bg-purple-500/5 p-3 text-sm text-purple-200">{notice}</p>}
             <div className="flex flex-wrap items-center gap-2"><button type="button" disabled={busy || archived || !user || !dirty || saveUncertain || listLoading} onClick={() => void save('draft')} className="inline-flex items-center gap-2 rounded-xl bg-purple-500/15 px-4 py-3 text-sm font-semibold text-purple-200 hover:bg-purple-500/25 disabled:opacity-40">{saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}초안 저장</button><p className="text-xs text-zinc-500">{busy ? uploading ? '사진 업로드 중' : '저장 중' : dirty ? '변경 사항이 아직 저장되지 않았습니다' : selected ? '계정에 저장됨' : '초안을 저장해 이어서 작업하세요'}</p><div className="ml-auto flex items-center gap-2">{step > 0 && <button type="button" disabled={busy} onClick={() => setStep(value => value - 1)} aria-label="이전 단계" className="rounded-xl border border-white/10 p-3 text-zinc-400"><ArrowLeft size={16} /></button>}{step < 3 && <button type="button" disabled={busy} onClick={() => setStep(value => value + 1)} className="inline-flex items-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm text-zinc-300">다음 <ArrowRight size={16} /></button>}</div></div>
-            {selected && <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/5 pt-3"><button type="button" disabled={busy} onClick={() => void reloadCurrent()} className="text-xs text-zinc-500 hover:text-zinc-300">저장된 내용 다시 불러오기</button>{!archived && <button type="button" disabled={busy} onClick={() => void archiveArtist()} className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-rose-300"><Archive size={13} />가수 보관</button>}</div>}{saveUncertain && <button type="button" disabled={listLoading || busy} onClick={() => void loadArtists()} className="mt-3 text-sm text-purple-300 underline">저장된 가수 목록 확인</button>}
+            {selected && <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-white/5 pt-3"><button type="button" disabled={busy} onClick={() => void reloadCurrent()} className="text-xs text-zinc-500 hover:text-zinc-300">저장된 내용 다시 불러오기</button></div>}{saveUncertain && <button type="button" disabled={listLoading || busy} onClick={() => void loadArtists()} className="mt-3 text-sm text-purple-300 underline">저장된 가수 목록 확인</button>}
           </div>
         </section>
-        {selected && <><section className="mt-5 rounded-2xl border border-purple-400/15 bg-purple-500/[0.04] p-5"><div className="flex flex-wrap items-center justify-between gap-4"><div><h2 className="flex items-center gap-2 font-semibold"><Music2 size={18} className="text-purple-300" />이 가수의 다음 곡</h2><p className="mt-2 text-xs text-zinc-500">{savedReady ? `승인 버전 ${selected.revision + 1}의 보컬과 정체성을 가지고 곡 제작을 시작합니다.` : '프로필을 저장하고 확인 항목을 마친 뒤 승인하면 곡 제작을 시작할 수 있습니다.'}</p></div><div className="flex flex-wrap gap-2">{savedReady ? <><Link href={`/style-library?artistId=${encodeURIComponent(selected.id)}`} className="rounded-xl bg-purple-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-purple-400">뮤직 스튜디오 ↗</Link><Link href={`/audio?artistId=${encodeURIComponent(selected.id)}`} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5">프리셋 스튜디오 ↗</Link></> : <button type="button" disabled={archived || busy} onClick={() => setStep(3)} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-400 disabled:opacity-40">{archived ? '보관된 가수' : '승인 항목 확인'}</button>}</div></div></section><ArtistWorks key={selected.id} artistId={selected.id} artistName={selected.name} /></>}
+        {selected && <section className="mt-5 rounded-2xl border border-purple-400/15 bg-purple-500/[0.04] p-5">
+          <h2 className="flex items-center gap-2 font-semibold"><Music2 size={18} className="text-purple-300" />{savedReady ? '가수 준비를 마쳤습니다' : '검토를 마치고 가수를 승인하세요'}</h2>
+          <p className="mt-2 text-sm leading-relaxed text-zinc-400">{savedReady ? '세계관과 제작곡은 페르소나에서 관리하고, 승인한 목소리로 첫 곡을 만들어 보세요.' : '저장한 보컬·얼굴·정체성을 확인한 뒤 승인하면 이 가수로 곡을 만들 수 있습니다.'}</p>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Link href={`/persona?artistId=${encodeURIComponent(selected.id)}`} className={`rounded-xl px-4 py-2.5 text-sm font-semibold ${savedReady ? 'bg-purple-500 text-white hover:bg-purple-400' : 'border border-white/10 text-zinc-300 hover:bg-white/5'}`}>페르소나에서 가수 관리 ↗</Link>
+            {savedReady ? <><Link href={`/style-library?artistId=${encodeURIComponent(selected.id)}`} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5">뮤직 스튜디오 ↗</Link><Link href={`/audio?artistId=${encodeURIComponent(selected.id)}`} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-300 hover:bg-white/5">프리셋 스튜디오 ↗</Link></> : <button type="button" disabled={archived || busy} onClick={() => setStep(3)} className="rounded-xl border border-white/10 px-4 py-2.5 text-sm text-zinc-400 disabled:opacity-40">{archived ? '보관된 가수' : '승인 항목 확인'}</button>}
+          </div>
+        </section>}
       </main>
     </div>
   </div>

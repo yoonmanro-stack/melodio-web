@@ -1,6 +1,6 @@
-import ArtistWorkspace from '@/components/artists/ArtistWorkspace'
+import ArtistPersonaWorkspace from '@/components/artists/ArtistPersonaWorkspace'
 
 export default async function Page({ searchParams }: { searchParams: Promise<{ artistId?: string | string[] }> }) {
   const query = await searchParams
-  return <ArtistWorkspace mode="persona" initialArtistId={typeof query.artistId === 'string' ? query.artistId : undefined} />
+  return <ArtistPersonaWorkspace initialArtistId={typeof query.artistId === 'string' ? query.artistId : undefined} />
 }

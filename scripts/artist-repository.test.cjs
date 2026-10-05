@@ -238,6 +238,43 @@ test('readiness requires approved components and edited identity requires a late
   await assert.rejects(repository.updateArtist(f.admin, userId, created.id, 4, input({ portrait: replacement, name: '새 이름', personality: '', status: 'ready' })), /artist_not_ready/);
 });
 
+test('editing an approved singer worldview preserves voice and portrait approvals and permits later identity reapproval', async () => {
+  const f = fixture();
+  const portrait = await repository.storeArtistPortrait(f.admin, userId, pngFile());
+  const approved = await repository.createArtist(f.admin, userId, input({ portrait, status: 'ready' }));
+  const worldview = {
+    name: '새벽의 하린', tagline: '도시의 작은 이야기를 노래하는 가수', description: '일상의 대화를 음악으로 기록합니다.',
+    genres: ['소울', '시티팝'], personality: '차분하지만 새로운 사람에게 먼저 다가갑니다.',
+    backstory: '밤의 작은 공연장에서 관객의 이야기를 노래로 만들기 시작했습니다.', speakingStyle: '다정한 짧은 문장과 구체적인 비유를 사용합니다.',
+  };
+  // Old approval flags cannot silently approve a changed identity, even when
+  // the caller retains the previously approved status and review fields.
+  const edited = await repository.updateArtist(f.admin, userId, approved.id, approved.revision,
+    input({ ...worldview, portrait, voice: { kind: approved.voice.kind, referenceId: approved.voice.referenceId },
+      checks: { ...approved.checks }, status: 'ready' }));
+  assert.equal(edited.id, approved.id);
+  assert.equal(edited.revision, approved.revision + 1);
+  assert.deepEqual(edited.voice, approved.voice);
+  assert.deepEqual(edited.portrait, approved.portrait);
+  assert.equal(edited.visualDirection, approved.visualDirection);
+  assert.equal(edited.checks.voiceAuditioned, true);
+  assert.equal(edited.checks.portraitReviewed, true);
+  assert.equal(edited.checks.identityReviewed, false);
+  assert.equal(edited.status, 'draft');
+  for (const [key, value] of Object.entries(worldview)) assert.deepEqual(edited[key], value);
+
+  const reapproved = await repository.updateArtist(f.admin, userId, edited.id, edited.revision,
+    input({ ...worldview, portrait, voice: { kind: edited.voice.kind, referenceId: edited.voice.referenceId },
+      checks: { ...edited.checks, identityReviewed: true }, status: 'ready' }));
+  assert.equal(reapproved.id, approved.id);
+  assert.equal(reapproved.revision, approved.revision + 2);
+  assert.equal(reapproved.status, 'ready');
+  assert.deepEqual(reapproved.voice, approved.voice);
+  assert.deepEqual(reapproved.portrait, approved.portrait);
+  assert.deepEqual(reapproved.checks, approved.checks);
+  assert.deepEqual(await repository.readArtist(f.admin, userId, approved.id), reapproved);
+});
+
 test('archive retains immutable owned profile and remains possible with a removed voice', async () => {
   const f = fixture();
   const custom = await customRepository.createCustomVoice(f.admin, customRow());
