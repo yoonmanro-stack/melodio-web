@@ -197,6 +197,15 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
               const genderLabel = gender === "female" ? "여성" : gender === "male" ? "남성" : "듀엣";
               const legacyHint = resolveLegacyGeneratedSample(v, legacyDnas, process.env.NEXT_PUBLIC_SUPABASE_URL || "");
               if (legacyHint && typeof v.id === 'string') legacySampleHints.current.set(v.id, legacyHint);
+              if (!legacyHint && v.sourceType === 'dna_designed' && !v.sampleGenerationId && !v.designedVoiceId) {
+                const matching = Array.isArray(legacyDnas) ? legacyDnas.filter(record => record?.vd_code === v.designAttributes?.vd_code) : [];
+                const record = matching.length === 1 ? matching[0] : undefined;
+                const sample = record?.sample_version === 'B' ? record?.audio_url_b : record?.audio_url;
+                let sampleHost = 'none';
+                let pathKind = 'none';
+                try { const parsedSample = new URL(sample); sampleHost = parsedSample.hostname; pathKind = parsedSample.pathname.includes('/generated_audio/') ? 'generated_audio' : parsedSample.pathname.includes('/storage/') ? 'storage' : 'other'; } catch {}
+                console.warn('[Voice preview recovery]', JSON.stringify({ code: v.designAttributes?.vd_code, matches: matching.length, hasSample: typeof sample === 'string' && !!sample, sampleHost, pathKind, selectedVersion: v.sampleVersion, savedVersion: record?.sample_version, hasAttributes: !!v.designAttributes }));
+              }
               
               let stylePrompt = prompt;
               if (!prompt.trim()) {
