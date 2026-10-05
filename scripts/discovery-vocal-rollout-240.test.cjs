@@ -2,8 +2,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const vm = require('node:vm');
-const { canSubmit, canRegister, firstClip, validateManifest, CAP } = require('./discovery-vocal-rollout-240.cjs');
+const { canSubmit, canRegister, firstClip, validateManifest, normalizePersonaDescription, registerPersonas, CAP } = require('./discovery-vocal-rollout-240.cjs');
 
 function manifestFixture() {
   const languages = ['en', 'ko', 'ja', 'fr'];
@@ -151,4 +152,317 @@ test('the actual planner imports 12 charged tasks and A receipts without resubmi
     assert.equal(job.sample.clipId, original.clips[0].id);
     assert.equal(canSubmit(job), false);
   }
+});
+
+function registrationFixture(count) {
+  const m = manifestFixture();
+  for (const [index, job] of m.jobs.slice(0, count).entries()) {
+    job.state = 'complete';
+    job.taskId = `charged-source-${index}`;
+    job.clips = [{ id: `first-audio-${index}`, url: 'https://cdn1.suno.ai/a.mp3' },
+      { id: `second-audio-${index}`, url: 'https://cdn1.suno.ai/b.mp3' }];
+    job.sample = { version: 'A', clipId: job.clips[0].id };
+  }
+  return m;
+}
+function registrationRecorder() {
+  const snapshots = [];
+  return { snapshots, persist(m) {
+    snapshots.push(m.jobs.filter(job => job.taskId).map(job => ({ id: job.id, taskId: job.taskId,
+      personaState: job.personaState, personaId: job.personaId, personaModel: job.personaModel,
+      personaSubmittedAt: job.personaSubmittedAt, personaAudioId: job.personaAudioId,
+      personaTaskId: job.personaTaskId, personaSourceVersion: job.personaSourceVersion,
+      personaAttemptId: job.personaAttemptId, personaRequestSha256: job.personaRequestSha256, personaTimeoutMs: job.personaTimeoutMs,
+      personaHttpStatus: job.personaHttpStatus, personaProviderCode: job.personaProviderCode, personaErrorCategory: job.personaErrorCategory,
+      personaFinishedAt: job.personaFinishedAt, personaElapsedMs: job.personaElapsedMs })));
+  } };
+}
+function deferred() {
+  let resolve, reject;
+  const promise = new Promise((yes, no) => { resolve = yes; reject = no; });
+  return { promise, resolve, reject };
+}
+const tick = () => new Promise(resolve => setImmediate(resolve));
+const personaResponse = taskId => new Response(JSON.stringify({ code: 200, data: { persona_id: `registered_${taskId}` } }));
+const registrationConfig = { apiKey: 'offline-fixture-only' };
+
+test('parallel registration caps in-flight requests at eight and spaces complete groups before continuing', async () => {
+  const m = registrationFixture(17), recorder = registrationRecorder();
+  const pending = [], pauses = [], groupStarts = [];
+  let active = 0, maximum = 0;
+  const operation = registerPersonas(m, registrationConfig, {
+    persist: recorder.persist,
+    fetchImpl(url, init) {
+      const input = JSON.parse(init.body).input;
+      if (pending.length % 8 === 0) groupStarts.push(Date.now());
+      const receipt = recorder.snapshots.at(-1).find(job => job.taskId === input.task_id);
+      assert.equal(receipt.personaState, 'submitting');
+      assert.ok(receipt.personaSubmittedAt);
+      const response = deferred();
+      pending.push({ ...response, taskId: input.task_id });
+      maximum = Math.max(maximum, ++active);
+      return response.promise.finally(() => { active--; });
+    },
+    pause(ms) { pauses.push({ ms, elapsed: Date.now() - groupStarts.at(-1) }); return Promise.resolve(); },
+  });
+  assert.equal(pending.length, 8);
+  assert.equal(active, 8);
+  for (const request of pending.slice(0, 7)) request.resolve(personaResponse(request.taskId));
+  await tick();
+  assert.equal(pending.length, 8, 'the next group waits for the eighth result');
+  pending[7].resolve(personaResponse(pending[7].taskId));
+  await tick();
+  assert.equal(pending.length, 16);
+  assert.equal(active, 8);
+  for (const request of pending.slice(8, 16)) request.resolve(personaResponse(request.taskId));
+  await tick();
+  assert.equal(pending.length, 17);
+  pending[16].resolve(personaResponse(pending[16].taskId));
+  await operation;
+  assert.equal(maximum, 8);
+  assert.equal(active, 0);
+  assert.equal(pauses.length, 2);
+  for (const pause of pauses) {
+    assert.ok(pause.ms >= 0 && pause.ms <= 11000);
+    assert.ok(pause.ms + pause.elapsed >= 10950, 'the requested pause covers the remaining eleven-second batch interval');
+  }
+  for (const job of m.jobs.slice(0, 17)) {
+    const durable = recorder.snapshots.at(-1).find(record => record.id === job.id);
+    assert.equal(durable.personaState, 'ready');
+    assert.equal(durable.personaId, `registered_${job.taskId}`);
+    assert.equal(durable.personaModel, 'style_persona');
+    assert.equal(durable.personaAudioId, job.clips[0].id);
+    assert.equal(durable.personaTaskId, job.taskId);
+    assert.equal(durable.personaSourceVersion, 'A');
+  }
+});
+
+test('registration skips ready, uncertain, submitting, held and B sources and posts only the first A payload', async () => {
+  const m = registrationFixture(7), recorder = registrationRecorder();
+  ['ready', 'uncertain', 'submitting', 'held'].forEach((state, index) => { m.jobs[index].personaState = state; });
+  m.jobs[0].personaId = 'existing_ready_persona';
+  m.jobs[4].sample = { version: 'B', clipId: m.jobs[4].clips[1].id };
+  m.jobs[5].state = 'processing';
+  const selected = m.jobs[6];
+  selected.profile.stylePrompt = `Distinct original design ${'x'.repeat(220)}`;
+  selected.options.style = `${selected.profile.stylePrompt} controlled audition`;
+  const payloads = [];
+  await registerPersonas(m, registrationConfig, { persist: recorder.persist, pause: async () => {}, fetchImpl: async (url, init) => {
+    assert.equal(url, 'https://api.kie.ai/api/v1/jobs/createTask');
+    assert.equal(init.method, 'POST');
+    assert.equal(init.headers.Authorization, 'Bearer offline-fixture-only');
+    const payload = JSON.parse(init.body); payloads.push(payload);
+    assert.equal(recorder.snapshots.at(-1).find(job => job.id === selected.id).personaState, 'submitting');
+    assert.equal(payload.model, 'ai-music-api/generate-persona');
+    assert.deepEqual(payload.input, { task_id: selected.taskId, audio_id: selected.clips[0].id,
+      name: selected.profile.provisionalName, description: selected.profile.stylePrompt, vocal_start: 0, vocal_end: 30,
+      style: selected.profile.stylePrompt.slice(0, 200) });
+    assert.notEqual(payload.input.audio_id, selected.clips[1].id);
+    return personaResponse(selected.taskId);
+  } });
+  assert.equal(payloads.length, 1);
+  assert.equal(selected.personaState, 'ready');
+  assert.deepEqual(m.jobs.slice(0, 4).map(job => job.personaState), ['ready', 'uncertain', 'submitting', 'held']);
+  assert.equal(m.jobs[0].personaId, 'existing_ready_persona');
+  assert.equal(m.jobs[4].personaState, undefined);
+});
+
+test('a failed registration group settles every sibling, persists all results and never starts the next group', async () => {
+  const m = registrationFixture(16), recorder = registrationRecorder();
+  const requests = [], pauses = [];
+  let outcomeSettled = false;
+  const operation = registerPersonas(m, registrationConfig, { persist: recorder.persist,
+    pause: async ms => { pauses.push(ms); }, fetchImpl(url, init) {
+      const input = JSON.parse(init.body).input, response = deferred();
+      requests.push({ ...response, taskId: input.task_id });
+      return response.promise;
+    } });
+  const outcome = operation.then(() => ({ ok: true }), error => ({ error })).then(result => { outcomeSettled = true; return result; });
+  assert.equal(requests.length, 8);
+  requests[0].reject(new Error('SIMULATED_TRANSPORT_UNCERTAINTY'));
+  for (const request of requests.slice(1, 7)) request.resolve(personaResponse(request.taskId));
+  await tick();
+  assert.equal(m.jobs[0].personaState, 'uncertain');
+  assert.equal(outcomeSettled, false, 'the failed group still waits for its final sibling');
+  assert.equal(requests.length, 8);
+  requests[7].resolve(personaResponse(requests[7].taskId));
+  const result = await outcome;
+  assert.match(result.error.message, /ROLLOUT_PERSONA_HELD/);
+  assert.equal(requests.length, 8);
+  assert.deepEqual(pauses, []);
+  const durable = recorder.snapshots.at(-1);
+  assert.equal(durable[0].personaState, 'uncertain');
+  assert.equal(durable.slice(1, 8).filter(job => job.personaState === 'ready').length, 7);
+  assert.ok(m.jobs.slice(8, 16).every(job => !job.personaState));
+  const resumedTasks = [];
+  await registerPersonas(m, registrationConfig, { limit: 1, persist: recorder.persist, pause: async () => {}, fetchImpl: async (url, init) => {
+    const taskId = JSON.parse(init.body).input.task_id; resumedTasks.push(taskId); return personaResponse(taskId);
+  } });
+  assert.deepEqual(resumedTasks, [m.jobs[8].taskId]);
+  assert.equal(m.jobs[0].personaState, 'uncertain', 'a later explicit run does not resend the uncertain request');
+});
+
+test('unsupported registration concurrency fails before persistence or any request', async () => {
+  for (const concurrency of [0, 9, 1.5]) {
+    let calls = 0;
+    await assert.rejects(registerPersonas(registrationFixture(1), registrationConfig, { concurrency,
+      persist() { calls++; }, fetchImpl() { calls++; throw new Error('Unexpected request'); }, pause: async () => {} }), /PERSONA_CONCURRENCY/);
+    assert.equal(calls, 0);
+  }
+});
+
+test('registration persists an immutable first A request receipt before POST and enforces bounded timeouts', async () => {
+  for (const timeoutMs of [undefined, 30000, 120000]) {
+    const m = registrationFixture(1), recorder = registrationRecorder();
+    const expected = timeoutMs ?? 90000;
+    await registerPersonas(m, registrationConfig, { ...(timeoutMs === undefined ? {} : { timeoutMs }), persist: recorder.persist,
+      pause: async () => {}, fetchImpl: async (url, init) => {
+        const input = JSON.parse(init.body).input, receipt = recorder.snapshots.at(-1)[0];
+        assert.equal(receipt.personaState, 'submitting');
+        assert.match(receipt.personaAttemptId, /^[a-f0-9-]{36}$/);
+        assert.equal(receipt.personaTimeoutMs, expected);
+        assert.equal(receipt.personaTaskId, input.task_id);
+        assert.equal(receipt.personaAudioId, input.audio_id);
+        assert.equal(receipt.personaSourceVersion, 'A');
+        assert.equal(receipt.personaRequestSha256, crypto.createHash('sha256').update(init.body).digest('hex'));
+        assert.equal(receipt.personaHttpStatus, null);
+        assert.equal(receipt.personaProviderCode, null);
+        assert.equal(init.signal.aborted, false);
+        return personaResponse(input.task_id);
+      } });
+    const ready = recorder.snapshots.at(-1)[0];
+    assert.equal(ready.personaState, 'ready');
+    assert.equal(ready.personaHttpStatus, 200);
+    assert.equal(ready.personaProviderCode, 200);
+    assert.equal(ready.personaErrorCategory, null);
+    assert.ok(Number.isFinite(Date.parse(ready.personaFinishedAt)));
+    assert.ok(Number.isInteger(ready.personaElapsedMs) && ready.personaElapsedMs >= 0);
+    assert.equal(ready.personaAttemptId, recorder.snapshots[0][0].personaAttemptId);
+  }
+  for (const timeoutMs of [29999, 120001, 90000.5, Infinity, '90000']) {
+    let sideEffects = 0;
+    await assert.rejects(registerPersonas(registrationFixture(1), registrationConfig, { timeoutMs,
+      persist() { sideEffects++; }, fetchImpl() { sideEffects++; throw new Error('Unexpected call'); }, pause: async () => {} }), /PERSONA_TIMEOUT/);
+    assert.equal(sideEffects, 0);
+  }
+});
+
+test('registration failures persist compact categories and numeric codes, remain uncertain and preserve recovery evidence', async () => {
+  const cases = [
+    { category: 'timeout', status: null, code: null, response: async () => { const error = new Error('PRIVATE_TIMEOUT_MESSAGE'); error.name = 'TimeoutError'; throw error; } },
+    { category: 'transport', status: null, code: null, response: async () => { throw new Error('PRIVATE_TRANSPORT_MESSAGE'); } },
+    { category: 'http_error', status: 503, code: 503, response: async () => new Response(JSON.stringify({ code: 503, msg: 'PRIVATE_PROVIDER_MESSAGE' }), { status: 503 }) },
+    { category: 'provider_error', status: 200, code: 500, response: async () => new Response(JSON.stringify({ code: 500, msg: 'PRIVATE_PROVIDER_MESSAGE' })) },
+    { category: 'invalid_json', status: 200, code: null, response: async () => new Response('PRIVATE_INVALID_RESPONSE') },
+  ];
+  for (const example of cases) {
+    const m = registrationFixture(1), recorder = registrationRecorder();
+    const history = [{ result: 'previous confirmed terminal failure', sourceTaskId: m.jobs[0].taskId }];
+    m.jobs[0].personaFailureHistory = history;
+    let calls = 0;
+    const options = { persist: recorder.persist, pause: async () => {}, fetchImpl: async () => { calls++; return example.response(); } };
+    await assert.rejects(registerPersonas(m, registrationConfig, options), /ROLLOUT_PERSONA_HELD/);
+    const receipt = recorder.snapshots.at(-1)[0];
+    assert.equal(receipt.personaState, 'uncertain');
+    assert.equal(receipt.personaErrorCategory, example.category);
+    assert.equal(receipt.personaHttpStatus, example.status);
+    assert.equal(receipt.personaProviderCode, example.code);
+    assert.ok(Number.isFinite(Date.parse(receipt.personaFinishedAt)));
+    assert.ok(Number.isInteger(receipt.personaElapsedMs) && receipt.personaElapsedMs >= 0);
+    assert.match(receipt.personaRequestSha256, /^[a-f0-9]{64}$/);
+    assert.deepEqual(m.jobs[0].personaFailureHistory, history);
+    assert.equal(JSON.stringify(recorder.snapshots).includes('PRIVATE_'), false);
+    await registerPersonas(m, registrationConfig, options);
+    assert.equal(calls, 1, 'the uncertain registration is never sent again');
+  }
+});
+
+test('explicit continuation drains a failed group then processes only the other original pending sources', async () => {
+  const m = registrationFixture(20), recorder = registrationRecorder();
+  ['held', 'uncertain', 'submitting', 'ready'].forEach((state, index) => { m.jobs[16 + index].personaState = state; });
+  const requests = [], pauses = [];
+  const operation = registerPersonas(m, registrationConfig, { continueOnHeld: true, persist: recorder.persist,
+    pause: async ms => { pauses.push(ms); }, fetchImpl(url, init) {
+      const taskId = JSON.parse(init.body).input.task_id, response = deferred();
+      requests.push({ ...response, taskId });
+      return response.promise;
+    } });
+  assert.equal(requests.length, 8);
+  requests[0].reject(new Error('SIMULATED_HELD_RESULT'));
+  for (const request of requests.slice(1, 7)) request.resolve(personaResponse(request.taskId));
+  await tick();
+  assert.equal(requests.length, 8, 'continuation still waits for every sibling in the failed group');
+  assert.equal(m.jobs[0].personaState, 'uncertain');
+  requests[7].resolve(personaResponse(requests[7].taskId));
+  await tick();
+  assert.equal(requests.length, 16);
+  const persisted = recorder.snapshots.find(snapshot => snapshot.slice(0, 8).filter(job => job.personaState === 'ready').length === 7);
+  assert.ok(persisted, 'all seven successes are durable before continuing');
+  assert.equal(persisted[0].personaState, 'uncertain');
+  for (const request of requests.slice(8)) request.resolve(personaResponse(request.taskId));
+  await operation;
+  assert.equal(pauses.length, 1);
+  assert.equal(m.jobs.slice(0, 16).filter(job => job.personaState === 'ready').length, 15);
+  assert.equal(m.jobs[0].personaState, 'uncertain');
+  assert.deepEqual(m.jobs.slice(16, 20).map(job => job.personaState), ['held', 'uncertain', 'submitting', 'ready']);
+  assert.equal(new Set(requests.map(request => request.taskId)).size, 16);
+  assert.equal(requests.filter(request => request.taskId === m.jobs[0].taskId).length, 1);
+  let resubmissions = 0;
+  await registerPersonas(m, registrationConfig, { continueOnHeld: true, persist: recorder.persist, pause: async () => {}, fetchImpl() {
+    resubmissions++;
+    throw new Error('Completed and uncertain sources must never be resent');
+  } });
+  assert.equal(resubmissions, 0);
+  assert.equal(m.jobs[0].personaState, 'uncertain');
+});
+
+test('explicit continuation still stops on a failed durable receipt write', async () => {
+  const m = registrationFixture(16), recorder = registrationRecorder();
+  let failedWrite = false, calls = 0;
+  await assert.rejects(registerPersonas(m, registrationConfig, { continueOnHeld: true,
+    persist(manifest) {
+      if (manifest.jobs[0].personaState === 'uncertain' && !failedWrite) { failedWrite = true; throw new Error('SIMULATED_RECEIPT_WRITE_FAILURE'); }
+      recorder.persist(manifest);
+    }, pause: async () => { throw new Error('The next group must not start'); }, fetchImpl: async (url, init) => {
+      calls++;
+      const taskId = JSON.parse(init.body).input.task_id;
+      return taskId === m.jobs[0].taskId ? new Response(JSON.stringify({ code: 500 })) : personaResponse(taskId);
+    } }), /ROLLOUT_PERSONA_HELD/);
+  assert.equal(failedWrite, true);
+  assert.equal(calls, 8);
+  assert.equal(m.jobs[0].personaState, 'uncertain');
+  assert.ok(m.jobs.slice(8, 16).every(job => !job.personaState));
+});
+
+test('generic persona wording is normalized before truncation and hashing without changing the acoustic design', async () => {
+  const m = registrationFixture(2), recorder = registrationRecorder();
+  const source = 'Adult female low alto, compact dry woody body and narrow neutral oral resonance. Keep the voice woody and matte at ordinary intensity with a stable pitched center. THE VOICE has short straight endings, restrained breath leakage and no imitation of any singer.';
+  const normalized = 'Adult female low alto, compact dry woody body and narrow neutral oral resonance. Keep the vocal timbre woody and matte at ordinary intensity with a stable pitched center. the vocal timbre has short straight endings, restrained breath leakage and no imitation of any singer.';
+  m.jobs[0].profile.stylePrompt = source;
+  m.jobs[0].options.style = `${source} Korean solo audition`;
+  const beforeOptions = { ...m.jobs[0].options }, otherDescription = m.jobs[1].profile.stylePrompt;
+  assert.equal(normalizePersonaDescription(source), normalized);
+  assert.equal(normalizePersonaDescription('Keep the voices clear and use voice-leading.'), 'Keep the voices clear and use voice-leading.');
+  assert.equal(normalizePersonaDescription(otherDescription), otherDescription);
+  const posted = [];
+  await registerPersonas(m, registrationConfig, { persist: recorder.persist, pause: async () => {}, fetchImpl: async (url, init) => {
+    const payload = JSON.parse(init.body), index = posted.length;
+    posted.push(payload);
+    const expectedDescription = index === 0 ? normalized : otherDescription;
+    assert.equal(payload.input.description, expectedDescription);
+    assert.equal(payload.input.style, expectedDescription.slice(0, 200));
+    assert.equal(payload.input.name, m.jobs[index].profile.provisionalName);
+    assert.equal(payload.input.task_id, m.jobs[index].taskId);
+    assert.equal(payload.input.audio_id, m.jobs[index].clips[0].id);
+    const durable = recorder.snapshots.at(-1).find(job => job.taskId === payload.input.task_id);
+    assert.equal(durable.personaRequestSha256, crypto.createHash('sha256').update(init.body).digest('hex'));
+    if (index === 0) assert.equal(/\bthe voice\b/i.test(payload.input.description), false);
+    return personaResponse(payload.input.task_id);
+  } });
+  assert.equal(posted.length, 2);
+  assert.equal(m.jobs[0].profile.stylePrompt, source);
+  assert.deepEqual(m.jobs[0].options, beforeOptions);
+  assert.equal(m.jobs[1].profile.stylePrompt, otherDescription);
+  assert.equal(posted[0].input.vocal_start, 0);
+  assert.equal(posted[0].input.vocal_end, 30);
 });

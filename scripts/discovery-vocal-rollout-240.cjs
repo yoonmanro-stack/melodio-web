@@ -37,10 +37,58 @@ function firstClip(j) {
   return j.clips[0];
 }
 function canRegister(j) { return j.state==='complete' && j.sample?.version==='A' && j.sample.clipId===j.clips?.[0]?.id && !j.personaState; }
+function normalizePersonaDescription(s) { return s.replace(/\bthe voice\b/gi,'the vocal timbre'); }
 async function json(response) {
   const parts=[]; let total=0;
   for await(const part of response.body) { total+=part.length;if(total>512*1024)throw new Error('PROVIDER_SIZE');parts.push(part); }
   return JSON.parse(Buffer.concat(parts).toString('utf8'));
+}
+async function registerPersonas(m,config,{limit=CAP,concurrency=8,timeoutMs=90000,continueOnHeld=false,fetchImpl=fetch,persist=save,pause=ms=>new Promise(resolve=>setTimeout(resolve,ms))}={}) {
+  if(!Number.isInteger(concurrency)||concurrency<1||concurrency>8)throw new Error('PERSONA_CONCURRENCY');
+  if(!Number.isInteger(timeoutMs)||timeoutMs<30000||timeoutMs>120000)throw new Error('PERSONA_TIMEOUT');
+  if(typeof continueOnHeld!=='boolean')throw new Error('PERSONA_CONTINUATION');
+  const pending=m.jobs.filter(canRegister).slice(0,limit);
+  for(let offset=0;offset<pending.length;offset+=concurrency) {
+    const started=Date.now();
+    const results=await Promise.allSettled(pending.slice(offset,offset+concurrency).filter(canRegister).map(async j=>{
+      const clip=firstClip(j),attemptStarted=Date.now();
+      const description=normalizePersonaDescription(j.profile.stylePrompt);
+      const body=JSON.stringify({model:'ai-music-api/generate-persona',input:{task_id:j.taskId,audio_id:clip.id,name:j.profile.provisionalName,
+        description,vocal_start:0,vocal_end:30,style:description.slice(0,200)}});
+      j.personaState='submitting';j.personaSubmittedAt=new Date(attemptStarted).toISOString();j.personaAttemptId=crypto.randomUUID();
+      j.personaTaskId=j.taskId;j.personaAudioId=clip.id;j.personaSourceVersion='A';j.personaTimeoutMs=timeoutMs;
+      j.personaRequestSha256=crypto.createHash('sha256').update(body).digest('hex');
+      j.personaHttpStatus=null;j.personaProviderCode=null;j.personaErrorCategory=null;j.personaFinishedAt=null;j.personaElapsedMs=null;
+      persist(m);
+      const signal=AbortSignal.timeout(timeoutMs);let errorCategory='transport';
+      try {
+        const res=await fetchImpl('https://api.kie.ai/api/v1/jobs/createTask',{method:'POST',headers:{Authorization:`Bearer ${config.apiKey}`,'Content-Type':'application/json'},
+          body,signal});
+        if(Number.isInteger(res.status)&&res.status>=100&&res.status<=599)j.personaHttpStatus=res.status;
+        errorCategory='response_body';const raw=await json(res),code=Number(raw?.code);
+        if(Number.isSafeInteger(code))j.personaProviderCode=code;
+        if(!res.ok){errorCategory='http_error';throw new Error('PERSONA_RESULT');}
+        if(j.personaProviderCode!==200){errorCategory=j.personaProviderCode===null?'invalid_response':'provider_error';throw new Error('PERSONA_RESULT');}
+        const id=raw?.data?.persona_id||raw?.data?.personaId;
+        if(typeof id!=='string'){errorCategory=id==null?'missing_persona_id':'invalid_persona_id';throw new Error('PERSONA_RESULT');}
+        if(!/^[A-Za-z0-9_-]{6,160}$/.test(id)){errorCategory='invalid_persona_id';throw new Error('PERSONA_RESULT');}
+        j.personaId=id;j.personaModel='style_persona';j.personaState='ready';
+      } catch(e) {
+        j.personaState='uncertain';j.personaFinishedAt=new Date().toISOString();j.personaElapsedMs=Math.max(0,Date.now()-attemptStarted);
+        j.personaErrorCategory=e?.name==='TimeoutError'||(signal.aborted&&signal.reason?.name==='TimeoutError')?'timeout'
+          :e?.name==='AbortError'?'aborted':e?.message==='PROVIDER_SIZE'?'oversized_response':e?.name==='SyntaxError'?'invalid_json':errorCategory;
+        persist(m);throw Object.assign(new Error('ROLLOUT_PERSONA_HELD'),{registrationReceiptPersisted:true});
+      }
+      j.personaFinishedAt=new Date().toISOString();j.personaElapsedMs=Math.max(0,Date.now()-attemptStarted);
+      persist(m);
+    }));
+    report(m);
+    const failures=results.filter(r=>r.status==='rejected');
+    if(failures.length&&(!continueOnHeld||failures.some(r=>r.reason?.registrationReceiptPersisted!==true)))throw new Error('ROLLOUT_PERSONA_HELD');
+    // Eight requests per batch with at least eleven seconds between starts
+    // stays below the documented account limit of twenty per ten seconds.
+    if(offset+concurrency<pending.length)await pause(Math.max(0,11000-(Date.now()-started)));
+  }
 }
 async function main() {
   require('@next/env').loadEnvConfig(ROOT,true,{info(){},error(){}});
@@ -117,23 +165,11 @@ async function main() {
         }
         save(m);if(++count%10===0)report(m);
       }
-    } else if(mode==='persona') {
-      const config=provider.getKieConfig();let count=0;
-      for(const j of m.jobs.filter(canRegister).slice(0,limit)) {
-        const clip=firstClip(j);j.personaState='submitting';j.personaSubmittedAt=new Date().toISOString();save(m);
-        try {
-          const res=await fetch('https://api.kie.ai/api/v1/jobs/createTask',{method:'POST',headers:{Authorization:`Bearer ${config.apiKey}`,'Content-Type':'application/json'},
-            body:JSON.stringify({model:'ai-music-api/generate-persona',input:{task_id:j.taskId,audio_id:clip.id,name:j.profile.provisionalName,
-              description:j.profile.stylePrompt,vocal_start:0,vocal_end:30,style:j.profile.stylePrompt.slice(0,200)}}),signal:AbortSignal.timeout(30000)});
-          const raw=await json(res);const id=raw.data?.persona_id||raw.data?.personaId;
-          if(!res.ok||Number(raw.code)!==200||typeof id!=='string'||!/^[A-Za-z0-9_-]{6,160}$/.test(id))throw new Error('PERSONA_RESULT');
-          j.personaId=id;j.personaModel='style_persona';j.personaState='ready';j.personaAudioId=clip.id;j.personaTaskId=j.taskId;j.personaSourceVersion='A';
-        } catch {j.personaState='uncertain';save(m);throw new Error('ROLLOUT_PERSONA_HELD');}
-        save(m);if(++count%10===0)report(m);await new Promise(resolve=>setTimeout(resolve,300));
-      }
+    } else if(mode==='persona'||mode==='persona-remaining') {
+      await registerPersonas(m,provider.getKieConfig(),{limit,continueOnHeld:mode==='persona-remaining'});
     } else if(!['plan','report'].includes(mode))throw new Error('ROLLOUT_MODE');
     report(m);
   } finally {fs.rmdirSync(lock);}
 }
-module.exports={canSubmit,canRegister,firstClip,validateManifest,CAP};
+module.exports={canSubmit,canRegister,firstClip,validateManifest,normalizePersonaDescription,registerPersonas,CAP};
 if(require.main===module)main().catch(e=>{console.error(e.message);process.exitCode=1});

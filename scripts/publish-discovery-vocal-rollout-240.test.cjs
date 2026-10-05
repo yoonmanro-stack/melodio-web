@@ -287,3 +287,84 @@ test('a pre-existing registry binding for a pending preview stops publication in
   for (const file of [fixture.paths.catalog, fixture.paths.registry, fixture.paths.receipt]) assert.equal(fixture.files.has(file), false);
   assert.equal(publisher.networkCalls, 0);
 });
+
+test('available references publishes held and uncertain A samples as pending while preserving canonical ready bindings', () => {
+  const fixture = pendingFixture();
+  fixture.m.jobs[0] = publicationFixture().m.jobs[0];
+  fixture.m.jobs[1].personaState = 'held';
+  fixture.m.jobs[2].personaState = 'uncertain';
+  const catalogBefore = fixture.files.get(fixture.paths.originalCatalog), registryBefore = fixture.files.get(fixture.paths.originalRegistry);
+  const publisher = loadPublisher(fixture, true, ['--available-references']);
+  assert.deepEqual(publisher.errors, []);
+  assert.equal(publisher.process.exitCode, 0);
+  assert.equal(publisher.networkCalls, 0);
+  const catalog = JSON.parse(fixture.files.get(fixture.paths.catalog));
+  const registry = JSON.parse(fixture.files.get(fixture.paths.registry));
+  const receipt = JSON.parse(fixture.files.get(fixture.paths.receipt));
+  assert.deepEqual(catalog.slice(0, 32), fixture.baseline);
+  assert.equal(catalog.length, 272);
+  for (const [index, row] of catalog.slice(32).entries()) {
+    const job = fixture.m.jobs[index];
+    assert.equal(row.id, job.id);
+    assert.equal(row.reuseStatus, index === 0 ? 'ready' : 'pending');
+    assert.equal(row.previewStatus, 'ready');
+    assert.equal(row.sampleVersion, 'A');
+    assert.equal(row.qualityReview, 'unreviewed');
+    assert.equal(row.stylePrompt, job.profile.stylePrompt);
+    assert.equal(registry[job.id], index === 0 ? job.personaId : undefined);
+  }
+  assert.equal(receipt.readyNewReferences, 1);
+  assert.equal(receipt.heldNewReferences, 2);
+  assert.equal(receipt.catalogSha256, digest(fixture.files.get(fixture.paths.catalog)));
+  assert.equal(receipt.registrySha256, digest(fixture.files.get(fixture.paths.registry)));
+  assert.equal(receipt.sameSingerGuarantee, false);
+  assert.equal(JSON.parse(publisher.logs[0]).heldReferences, 2);
+  assert.equal(fixture.files.get(fixture.paths.originalCatalog), catalogBefore);
+  assert.equal(fixture.files.get(fixture.paths.originalRegistry), registryBefore);
+  for (const argv of [[], ['--previews']]) {
+    const strict = pendingFixture();
+    strict.m.jobs[0].personaState = 'held';
+    const result = loadPublisher(strict, true, argv);
+    assert.deepEqual(result.errors, ['FIRST_A_REFERENCE_NOT_READY']);
+    assert.equal(strict.files.has(strict.paths.catalog), false);
+  }
+});
+
+test('available references rejects illegal states, existing persona IDs and invalid A provenance before publication', () => {
+  const patches = [
+    [fixture => { fixture.m.jobs[0].personaState = 'submitting'; }, 'FIRST_A_REFERENCE_NOT_READY'],
+    [fixture => { fixture.m.jobs[0].personaState = 'ready'; }, 'FIRST_A_REFERENCE_NOT_READY'],
+    [fixture => { fixture.m.jobs[0].personaState = 'unknown'; }, 'FIRST_A_REFERENCE_NOT_READY'],
+    ...['held', 'uncertain'].flatMap(state => ['existing_persona', 'bad id', '', null, false, 0].map(id => [
+      fixture => { fixture.m.jobs[0].personaState = state; fixture.m.jobs[0].personaId = id; }, 'FIRST_A_REFERENCE_NOT_READY',
+    ])),
+    [fixture => { fixture.m.jobs[0].sample.version = 'B'; }, 'FIRST_A_REFERENCE_NOT_READY'],
+    [fixture => { fixture.m.jobs[0].sample.clipId = fixture.m.jobs[0].clips[1].id; }, 'FIRST_A_REFERENCE_NOT_READY'],
+    [fixture => { delete fixture.m.jobs[0].taskId; }, 'FIRST_A_REFERENCE_NOT_READY'],
+    [fixture => { fixture.m.jobs[0].sample.seconds = 29; }, 'FIRST_A_REFERENCE_NOT_READY'],
+    [fixture => { fixture.m.jobs[0].options.style = 'Unrelated design'; }, 'FIRST_A_REFERENCE_NOT_READY'],
+    ...['samples', 'original'].map(directory => [fixture => {
+      fixture.files.set(path.join(DIR, directory, `${fixture.m.jobs[0].id}-A.mp3`), Buffer.from('changed held artifact'));
+    }, 'AUDIO_PROVENANCE']),
+    [fixture => { fixture.m.jobs[1].sample.sha256 = fixture.m.jobs[0].sample.sha256; }, 'DUPLICATE_BINDING'],
+    [fixture => {
+      const ready = publicationFixture().m.jobs.slice(1, 3);
+      ready[1].personaId = ready[0].personaId;
+      fixture.m.jobs.splice(1, 2, ...ready);
+    }, 'DUPLICATE_BINDING'],
+    [fixture => {
+      fixture.registry[fixture.m.jobs[0].id] = 'stale_held_persona';
+      fixture.files.set(fixture.paths.originalRegistry, JSON.stringify(fixture.registry));
+    }, 'PENDING_REFERENCE_EXISTS'],
+  ];
+  for (const [mutate, expected] of patches) {
+    const fixture = pendingFixture();
+    fixture.m.jobs[0].personaState = 'held';
+    mutate(fixture);
+    const publisher = loadPublisher(fixture, true, ['--available-references']);
+    assert.deepEqual(publisher.errors, [expected]);
+    assert.equal(publisher.process.exitCode, 1);
+    assert.equal(publisher.networkCalls, 0);
+    for (const file of [fixture.paths.catalog, fixture.paths.registry, fixture.paths.receipt]) assert.equal(fixture.files.has(file), false);
+  }
+});

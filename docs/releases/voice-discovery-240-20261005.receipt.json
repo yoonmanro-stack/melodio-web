@@ -1,6 +1,6 @@
 {
   "createdAt": "2026-10-05T01:45:53.844Z",
-  "phase": "preview_ready_reference_approval_required",
+  "phase": "verified_reference_bundle_partial",
   "designs": 240,
   "female": 120,
   "male": 120,
@@ -14,23 +14,112 @@
   "generatedRequests": 240,
   "generatedClips": 480,
   "verifiedFirstASamples": 240,
-  "registeredReferences": 0,
+  "registeredReferences": 236,
   "knownGenerationCredits": 2880,
   "personaPricingCredits": 0,
   "personaPricingSource": "https://kie.ai/pricing",
   "qualityReview": "unreviewed",
   "sameSingerGuarantee": false,
-  "registrationHeldReason": "auto_review_requires_explicit_Kie_destination_payload_approval_and_unconfirmed_retention",
   "sourceManifest": "artifacts/discovery-vocals-v2-20261005/rollout-240.json",
-  "sourceManifestSha256": "e181d42d873c25f09f740fcba40ce462dd44f63c0ac1b4f5b82682178e46811a",
+  "sourceManifestSha256": "9d11ca67205a2777687208e8ab31aec5c0bbe51e079cab02f8e926f9cab9360c",
   "verifiedChecks": {
-    "tests": 64,
+    "tests": 76,
     "typecheck": true,
     "localMockBuild": true,
-    "duplicateSampleHashes": 0
+    "duplicateSampleHashes": 0,
+    "publicSamplesHashVerified": 240,
+    "canonicalFirstAReferences": 236,
+    "providerRetryOnAmbiguousResult": false
   },
   "deployment": {
-    "status": "not_deployed_yet"
+    "status": "awaiting_activation"
   },
-  "nextAction": "await_Kie_registration_approval"
+  "nextAction": "deploy_verified_236_reference_bundle",
+  "registrationApproval": {
+    "approved": true,
+    "receivedAt": "2026-10-05T01:49:21.140Z",
+    "userReply": "승인",
+    "destination": "Kie.ai",
+    "scope": "240 first-A task/audio IDs, provisional names, acoustic descriptions,0-30s segments",
+    "priceCredits": 0,
+    "retentionUnconfirmed": true,
+    "resolvedPriorApprovalHold": true
+  },
+  "updatedAt": "2026-10-05T02:33:51.068695+00:00",
+  "previewDeployment": {
+    "status": "READY",
+    "id": "dpl_Fa6MGSPSkt4vxuYEEMnisYmUj6ye",
+    "url": "https://melodio-7x2bqxebn-whaleloops-projects.vercel.app",
+    "alias": "https://melodio.app",
+    "commit": "06759ac"
+  },
+  "registrationRecovery": {
+    "profileId": "discovery-v2-f-051",
+    "logTaskId": "920f8a6f536c94505c727bd5da33a75e",
+    "state": "verified_terminal_failure_no_result",
+    "providerFailCode": "500",
+    "exactTaskAndAudioMatch": true,
+    "recoveredWithoutDuplicate": true
+  },
+  "heldReferences": [
+    {
+      "profileId": "discovery-v2-f-062",
+      "name": "깊은관",
+      "errorCategory": "provider-moderation",
+      "sourceVersion": "A"
+    },
+    {
+      "profileId": "discovery-v2-f-065",
+      "name": "나무통울",
+      "errorCategory": "provider-server",
+      "sourceVersion": "A"
+    },
+    {
+      "profileId": "discovery-v2-f-066",
+      "name": "그늘관",
+      "errorCategory": "provider-moderation",
+      "sourceVersion": "A"
+    },
+    {
+      "profileId": "discovery-v2-f-067",
+      "name": "먼항아리",
+      "errorCategory": "provider-moderation",
+      "sourceVersion": "A"
+    }
+  ],
+  "moderationRetryApproval": {
+    "status": "pending",
+    "profiles": [
+      "discovery-v2-f-062",
+      "discovery-v2-f-066",
+      "discovery-v2-f-067"
+    ],
+    "scope": "one_unmodified_retry_each",
+    "automaticReviewBlockedRetry": true
+  },
+  "publication": {
+    "createdAt": "2026-10-05T02:33:13.470Z",
+    "newIdentities": 240,
+    "female": 120,
+    "male": 120,
+    "selectedVersion": "A",
+    "catalogTotal": 272,
+    "readyNewReferences": 236,
+    "heldNewReferences": 4,
+    "designValidation": "passed",
+    "qualityReview": "unreviewed",
+    "sameSingerGuarantee": false,
+    "actualKnownGenerationCredits": 2880,
+    "unknownCostRequests": 0,
+    "catalogSha256": "3047e4a3ed98456adb970caa07041d081baee76628e0e29cbde9f5112af0c44c",
+    "registrySha256": "2e5d70120754951c983bb95471c459da77cd379abd7c4d3c9efd66619fac3126"
+  },
+  "genericArtistTagCorrection": {
+    "profiles": 10,
+    "rejectedPhrase": "the voice",
+    "replacement": "the vocal timbre",
+    "scope": "registration_description_only",
+    "originalDesignAndFirstAAudioUnchanged": true,
+    "correctedReferencesReady": 10
+  }
 }
