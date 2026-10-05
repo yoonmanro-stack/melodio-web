@@ -296,22 +296,28 @@ test('zero-valued saved controls and actual age restore without replacing them w
   assert.equal(values.setSelectedGenre, 'jazz');
 });
 
-test('late playback promises and old sample events cannot control a newer sample', async () => {
-  const audios = [], playing = [], g = {
-    exploreAudioRef: { current: null }, setVoicePreviewNotice() {}, setExplorePlaying(value) { playing.push(value); },
-    setExplorePlayingVoiceId() {}, setExploreProgress() {},
+function playbackFixture() {
+  const audios = [], playing = [], values = { voiceId: null, progress: 0, playing: false };
+  const g = {
+    exploreAudioRef: { current: null }, exploreSampleRef: { current: null }, explorePlayRequestRef: { current: 0 }, exploreVolume: 1,
+    setVoicePreviewNotice() {}, setExplorePlaying(value) { playing.push(value); values.playing = value; },
+    setExplorePlayingVoiceId(value) { values.voiceId = value; }, setExploreProgress(value) { values.progress = value; },
     Audio: class {
-      constructor(url) { this.url = url; this.duration = 30; this.currentTime = 1; this.pauses = 0; audios.push(this); }
+      constructor(url) { this.url = url; this.duration = 60; this.currentTime = 0; this.ended = false; this.pauses = 0; this.playCalls = 0; audios.push(this); }
       pause() { this.pauses += 1; }
-      play() { return new Promise(resolve => { this.resolve = resolve; }); }
+      play() { this.playCalls += 1; return new Promise((resolve, reject) => { this.resolve = resolve; this.reject = reject; }); }
     },
   };
   g.getStoredVoiceSampleUrl = evaluate(named('getStoredVoiceSampleUrl'), { getSingingSampleUrl });
-  g.stopExploreVoiceDemo = evaluate(named('stopExploreVoiceDemo'), g);
-  const play = evaluate(named('playExploreVoiceDemo'), g);
-  play({ id: 'old', audioUrl: 'https://fixture.invalid/old' });
+  for (const name of ['getExplorePreviewDuration', 'stopExploreVoiceDemo', 'pauseExploreVoiceDemo', 'resumeExploreVoiceDemo', 'playExploreVoiceDemo', 'seekExploreVoicePreview']) g[name] = evaluate(named(name), g);
+  return { g, audios, playing, values };
+}
+
+test('late playback promises and old sample events cannot control a newer sample', async () => {
+  const { g, audios, playing } = playbackFixture();
+  g.playExploreVoiceDemo({ id: 'old', audioUrl: 'https://fixture.invalid/old' });
   const oldEnded = audios[0].onended;
-  play({ id: 'new', audioUrl: 'https://fixture.invalid/new' });
+  g.playExploreVoiceDemo({ id: 'new', audioUrl: 'https://fixture.invalid/new' });
   assert.equal(audios[0].onended, null);
   oldEnded();
   assert.equal(audios[1].pauses, 0);
@@ -321,6 +327,76 @@ test('late playback promises and old sample events cannot control a newer sample
   audios[1].resolve();
   await Promise.resolve();
   assert.equal(playing.at(-1), true);
+});
+
+test('pause preserves the actual sample and position; same voice resumes and pending play cannot undo pause', async () => {
+  const { g, audios, values } = playbackFixture();
+  const voice = { id: 'saved', audioUrl: 'https://fixture.invalid/sample' };
+  g.playExploreVoiceDemo(voice);
+  const audio = audios[0];
+  audio.currentTime = 12;
+  audio.ontimeupdate();
+  g.pauseExploreVoiceDemo();
+  assert.equal(g.exploreAudioRef.current, audio);
+  assert.equal(values.voiceId, 'saved');
+  assert.equal(values.progress, 40);
+  assert.equal(audio.currentTime, 12);
+  audio.resolve();
+  await Promise.resolve();
+  assert.equal(values.playing, false, 'Late play resolution must not undo a pause');
+  g.playExploreVoiceDemo(voice);
+  assert.equal(audios.length, 1);
+  assert.equal(audio.currentTime, 12);
+  assert.equal(audio.playCalls, 2);
+  audio.resolve();
+  await Promise.resolve();
+  assert.equal(values.playing, true);
+  g.pauseExploreVoiceDemo();
+  g.resumeExploreVoiceDemo();
+  assert.equal(audios.length, 1, 'Footer resume reuses the same sample');
+  assert.equal(audio.currentTime, 12);
+  g.playExploreVoiceDemo({ id: 'next', audioUrl: 'https://fixture.invalid/next' });
+  assert.equal(audios.length, 2);
+  assert.equal(audio.onended, null);
+  assert.equal(values.voiceId, 'next');
+  assert.equal(values.progress, 0);
+});
+
+test('actual seeking and truthful short duration obey the 30-second cap and clean end reset', () => {
+  for (const duration of [27, 60]) {
+    const { g, audios, values } = playbackFixture();
+    g.playExploreVoiceDemo({ id: 'sample', audioUrl: 'https://fixture.invalid/sample' });
+    const audio = audios[0];
+    audio.duration = duration;
+    const bound = Math.min(duration, 30);
+    assert.equal(g.getExplorePreviewDuration(), bound);
+    g.seekExploreVoicePreview(50);
+    assert.equal(audio.currentTime, bound / 2);
+    assert.equal(values.progress, 50);
+    g.pauseExploreVoiceDemo();
+    assert.equal(audio.currentTime, bound / 2);
+    audio.currentTime = bound;
+    audio.ontimeupdate();
+    assert.equal(g.exploreAudioRef.current, null);
+    assert.equal(g.exploreSampleRef.current, null);
+    assert.equal(values.voiceId, null);
+    assert.equal(values.progress, 0);
+    assert.equal(values.playing, false);
+    assert.equal(audio.onended, null);
+  }
+  const { g, audios, values } = playbackFixture();
+  g.playExploreVoiceDemo({ id: 'sample', audioUrl: 'https://fixture.invalid/sample' });
+  audios[0].onended();
+  assert.equal(g.exploreAudioRef.current, null);
+  assert.equal(values.voiceId, null);
+  assert.equal(values.progress, 0);
+  const footer = source.slice(source.indexOf('{/* Saved-sample player'), source.indexOf('{/* Global CSS Styles'));
+  assert.match(footer, /createPortal/);
+  assert.match(footer, /md:pt-3 md:pb-\[13px\]/);
+  assert.match(footer, /pauseExploreVoiceDemo\(\) : resumeExploreVoiceDemo\(\)/);
+  assert.match(footer, /seekExploreVoicePreview/);
+  assert.match(footer, /exploreAudioRef.current.volume = volume/);
+  assert.doesNotMatch(footer, /Shuffle|Previous|Next|Repeat|custom_voice_dnas|melodio.app\//);
 });
 
 test('all save actions require a name confirmation and preserve the exact visible name', () => {
@@ -358,20 +434,39 @@ test('saved cards expose one accessible sample control and never play legacy spo
   }
   assert.equal(getStoredVoiceSampleUrl({ audio_url: 'https://fixture.invalid/A', audio_url_b: 'https://fixture.invalid/B', sample_version: 'B' }), 'https://fixture.invalid/B');
   const calls = [], render = evaluate(named('renderStoredVoiceSampleControl'), {
-    getStoredVoiceSampleUrl, Play() {}, Pause() {}, stopExploreVoiceDemo() { calls.push('stop'); },
+    getStoredVoiceSampleUrl, Play() {}, Pause() {}, pauseExploreVoiceDemo() { calls.push('pause'); },
     playExploreVoiceDemo(voice) { calls.push(voice.audioUrl); },
   });
   const missing = render({ name: 'Saved', audioUrl: '/assets/voices/vd1004.mp3' }, false);
-  const absentButton = missing.props.children[0];
+  const absentButton = missing;
   assert.equal(absentButton.props.disabled, true);
-  assert.equal(absentButton.props['aria-label'], 'Saved 보컬 샘플 듣기');
-  assert.ok(missing.props.children[1], 'Missing actual audio must have a visible explanation');
+  assert.equal(absentButton.props['aria-label'], 'Saved 보컬 샘플 없음');
+  assert.equal(missing.props.children.props.children, '샘플 없음', 'Missing actual audio must have a visible label');
+  assert.equal(render({ name: 'Saved' }, true).props.disabled, true, 'An absent sample must never show a false playing control');
   const ready = render({ name: 'Generated', audioUrl: 'https://fixture.invalid/B', sampleVersion: 'B' }, false);
-  ready.props.children[0].props.onClick();
-  render({ name: 'Generated', audioUrl: 'https://fixture.invalid/B' }, true).props.children[0].props.onClick();
-  assert.deepEqual(calls, ['https://fixture.invalid/B', 'stop']);
+  ready.props.onClick();
+  const playing = render({ name: 'Generated', audioUrl: 'https://fixture.invalid/B' }, true);
+  playing.props.onClick();
+  assert.match(ready.props.children.props.className, /group-hover\/sample:opacity-100/);
+  assert.match(ready.props.children.props.className, /group-focus-visible\/sample:opacity-100/);
+  assert.match(ready.props.children.props.className, /pointer:coarse/);
+  assert.doesNotMatch(playing.props.children.props.className, /opacity-0/);
+  assert.deepEqual(calls, ['https://fixture.invalid/B', 'pause']);
   const collection = source.slice(source.indexOf('{activeTab === "collections" &&'), source.indexOf('{activeTab === "decoder" &&'));
   assert.equal((collection.match(/renderStoredVoiceSampleControl\(voice, isPlaying\)/g) || []).length, 2);
+  const thumbnailClasses = [];
+  function findThumbnail(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(file) === 'renderStoredVoiceSampleControl') {
+      const parent = node.parent.parent;
+      assert.ok(ts.isJsxElement(parent));
+      const className = parent.openingElement.attributes.properties.find(attribute => ts.isJsxAttribute(attribute) && attribute.name.getText(file) === 'className');
+      thumbnailClasses.push(className?.getText(file));
+    }
+    ts.forEachChild(node, findThumbnail);
+  }
+  findThumbnail(file);
+  assert.equal(thumbnailClasses.length, 2);
+  assert.ok(thumbnailClasses.every(value => /relative w-(?:11|12) h-(?:11|12)/.test(value)), 'Playback must live inside thumbnails, never footer actions');
   assert.doesNotMatch(collection, /playExploreVoiceDemo\(voice\)|signatureVoices|추천 보컬 음색 스타일/);
 });
 

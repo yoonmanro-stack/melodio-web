@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { 
   Mic2, Sparkles, Sliders, Disc, ShieldCheck, 
   Play, Pause, Layers, Volume2, Info,
@@ -474,6 +475,9 @@ export default function VoiceDnaStudio() {
   ];
 
   const exploreAudioRef = useRef<HTMLAudioElement | null>(null);
+  const exploreSampleRef = useRef<{ voiceKey: string; url: string; durationSeconds?: number } | null>(null);
+  const explorePlayRequestRef = useRef(0);
+  const [exploreVolume, setExploreVolume] = useState(1);
   const [voicePreviewNotice, setVoicePreviewNotice] = useState<string | null>(null);
 
   const getStoredVoiceSampleUrl = (voice: any): string | null => {
@@ -486,57 +490,97 @@ export default function VoiceDnaStudio() {
 
   const renderStoredVoiceSampleControl = (voice: any, isPlaying: boolean) => {
     const sample = getStoredVoiceSampleUrl(voice);
-    return <div className="flex flex-col gap-1 shrink-0">
-      <button
+    const playing = !!sample && isPlaying;
+    return <button
         type="button"
-        disabled={!sample && !isPlaying}
-        aria-label={`${voice.name || "저장된 음색"} 보컬 샘플 ${isPlaying ? "재생 중지" : "듣기"}`}
+        disabled={!sample}
+        aria-label={`${voice.name || "저장된 음색"} 보컬 샘플 ${playing ? "일시정지" : sample ? "재생" : "없음"}`}
+        title={sample ? playing ? "일시정지" : "보컬 샘플 재생 · 일시정지한 샘플은 이어 듣기" : "샘플 없음 · 실제 보컬 샘플이 아직 연결되지 않았습니다."}
         onClick={() => {
-          if (isPlaying) stopExploreVoiceDemo();
+          if (playing) pauseExploreVoiceDemo();
           else if (sample) playExploreVoiceDemo({ ...voice, audioUrl: sample });
         }}
-        className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-bold text-zinc-300 transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+        className={`group/sample absolute inset-0 z-10 flex items-center justify-center text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-white disabled:cursor-not-allowed ${playing || !sample ? "bg-black/50" : "bg-black/0 hover:bg-black/50 focus-visible:bg-black/50 [@media(pointer:coarse)]:bg-black/20"}`}
       >
-        {isPlaying ? <Pause aria-hidden="true" className="h-3.5 w-3.5" /> : <Play aria-hidden="true" className="h-3.5 w-3.5" />}
-        <span>{isPlaying ? "중지" : sample ? "듣기" : "샘플 없음"}</span>
-      </button>
-      {!sample && <span className="max-w-36 text-[10px] leading-snug text-zinc-500">재생할 실제 보컬 샘플이 아직 연결되지 않았습니다.</span>}
-    </div>;
+        {playing ? <Pause aria-hidden="true" className="h-5 w-5 fill-current" /> : sample ? <Play aria-hidden="true" className="ml-0.5 h-5 w-5 fill-current opacity-0 transition-opacity group-hover/sample:opacity-100 group-focus-visible/sample:opacity-100 [@media(pointer:coarse)]:opacity-100" /> : <span className="px-0.5 text-[8px] font-semibold leading-tight">샘플 없음</span>}
+    </button>;
   };
 
   const playExploreVoiceDemo = (voice: any) => {
-    stopExploreVoiceDemo();
     const realAudioUrl = getStoredVoiceSampleUrl(voice);
     if (!realAudioUrl) {
+      stopExploreVoiceDemo();
       setVoicePreviewNotice("아직 실제 보컬 샘플이 없습니다. 데모를 생성한 후 확인해 주세요.");
       return;
     }
     setVoicePreviewNotice(null);
-    const voiceKey = voice.id || voice.code;
+    const voiceKey = voice.id || voice.code || realAudioUrl;
+    const currentSample = exploreSampleRef.current;
+    if (exploreAudioRef.current && currentSample && currentSample.voiceKey === voiceKey && currentSample.url === realAudioUrl) {
+      resumeExploreVoiceDemo();
+      return;
+    }
+    stopExploreVoiceDemo();
     const audio = new Audio(realAudioUrl);
-    audio.volume = 1;
+    audio.volume = exploreVolume;
     audio.playbackRate = 1;
     exploreAudioRef.current = audio;
+    exploreSampleRef.current = { voiceKey, url: realAudioUrl, durationSeconds: Math.min(voice.sampleDurationSeconds || 30, 30) };
     setExplorePlayingVoiceId(voiceKey);
     setExploreProgress(0);
     audio.ontimeupdate = () => {
       if (exploreAudioRef.current !== audio) return;
-      if (!audio.duration) return;
-      const duration = voice.sampleDurationSeconds ? Math.min(audio.duration, voice.sampleDurationSeconds) : audio.duration;
+      const duration = getExplorePreviewDuration();
       setExploreProgress(Math.min(100, audio.currentTime / duration * 100));
-      if (voice.sampleDurationSeconds && audio.currentTime >= duration) stopExploreVoiceDemo();
+      if (audio.currentTime >= duration) stopExploreVoiceDemo();
     };
     audio.onended = () => { if (exploreAudioRef.current === audio) stopExploreVoiceDemo(); };
-    audio.play().then(() => { if (exploreAudioRef.current === audio) setExplorePlaying(true); }).catch(() => {
-      if (exploreAudioRef.current !== audio) return;
+    resumeExploreVoiceDemo();
+  };
+
+  const getExplorePreviewDuration = () => {
+    const duration = exploreAudioRef.current?.duration;
+    const limit = exploreSampleRef.current?.durationSeconds || 30;
+    return duration && Number.isFinite(duration) ? Math.min(duration, limit) : limit;
+  };
+
+  const seekExploreVoicePreview = (percentage: number) => {
+    const audio = exploreAudioRef.current;
+    if (!audio) return;
+    const progress = Math.min(100, Math.max(0, percentage));
+    audio.currentTime = getExplorePreviewDuration() * progress / 100;
+    setExploreProgress(progress);
+    if (progress === 100) stopExploreVoiceDemo();
+  };
+
+  const resumeExploreVoiceDemo = () => {
+    const audio = exploreAudioRef.current;
+    if (!audio) return;
+    if (audio.ended || audio.currentTime >= getExplorePreviewDuration()) {
+      stopExploreVoiceDemo();
+      return;
+    }
+    const request = ++explorePlayRequestRef.current;
+    audio.play().then(() => {
+      if (exploreAudioRef.current === audio && explorePlayRequestRef.current === request) setExplorePlaying(true);
+    }).catch(() => {
+      if (exploreAudioRef.current !== audio || explorePlayRequestRef.current !== request) return;
       stopExploreVoiceDemo();
       setVoicePreviewNotice("실제 보컬 샘플을 재생하지 못했습니다. 잠시 후 다시 시도해 주세요.");
     });
   };
 
+  const pauseExploreVoiceDemo = () => {
+    explorePlayRequestRef.current += 1;
+    exploreAudioRef.current?.pause();
+    setExplorePlaying(false);
+  };
+
   const stopExploreVoiceDemo = () => {
+    explorePlayRequestRef.current += 1;
     const audio = exploreAudioRef.current;
     exploreAudioRef.current = null;
+    exploreSampleRef.current = null;
     if (audio) {
       audio.ontimeupdate = null;
       audio.onended = null;
@@ -549,7 +593,7 @@ export default function VoiceDnaStudio() {
 
   const playCurrentDesignedVoicePreview = () => {
     if (explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW") {
-      stopExploreVoiceDemo();
+      pauseExploreVoiceDemo();
       return;
     }
     const sample = selectedVocalVersion === "B" ? demoAudioUrlB : demoAudioUrl;
@@ -576,7 +620,13 @@ export default function VoiceDnaStudio() {
     setVoiceType("default");
   };
 
-  useEffect(() => () => { exploreAudioRef.current?.pause(); }, []);
+  useEffect(() => () => {
+    explorePlayRequestRef.current += 1;
+    const audio = exploreAudioRef.current;
+    exploreAudioRef.current = null;
+    exploreSampleRef.current = null;
+    if (audio) { audio.ontimeupdate = null; audio.onended = null; audio.pause(); }
+  }, []);
 
   // Load current user for Supabase sync
   useEffect(() => {
@@ -2186,7 +2236,7 @@ export default function VoiceDnaStudio() {
                           : "bg-fuchsia-600/20 hover:bg-fuchsia-600/30 border border-fuchsia-500/40 text-fuchsia-300"
                       }`}
                     >
-                      {explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW" ? "청음 중지" : "생성된 보컬 샘플 듣기"}
+                      {explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW" ? "일시정지" : "생성된 보컬 샘플 듣기"}
                     </button>
 
                     <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
@@ -3019,14 +3069,16 @@ export default function VoiceDnaStudio() {
                             <div className="flex items-center gap-1">
                               <button
                                 onClick={() => toggleFavorite(voice.id)}
-                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                className={`inline-flex items-center gap-1 p-1.5 rounded-lg transition-colors cursor-pointer ${
                                   voice.isFavorite
                                     ? 'text-amber-400 bg-amber-400/10'
                                     : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'
                                 }`}
                                 title={voice.isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}
+                                aria-label={`${voice.name} ${voice.isFavorite ? '즐겨찾기 해제' : '즐겨찾기 추가'}`}
                               >
-                                <Heart className={`w-3.5 h-3.5 ${voice.isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
+                                <Heart aria-hidden="true" className={`w-3.5 h-3.5 ${voice.isFavorite ? 'fill-amber-400 text-amber-400' : ''}`} />
+                                <span className="text-[10px] font-semibold">{voice.isFavorite ? '즐겨찾기 해제' : '즐겨찾기'}</span>
                               </button>
                               <button
                                 onClick={() => {
@@ -3034,10 +3086,12 @@ export default function VoiceDnaStudio() {
                                     deleteVoice(voice.id);
                                   }
                                 }}
-                                className="p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                                className="inline-flex items-center gap-1 p-1.5 rounded-lg text-zinc-500 hover:text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
                                 title="삭제하기"
+                                aria-label={`${voice.name} 삭제`}
                               >
-                                <Trash2 className="w-3.5 h-3.5" />
+                                <Trash2 aria-hidden="true" className="w-3.5 h-3.5" />
+                                <span className="text-[10px] font-semibold">삭제</span>
                               </button>
                             </div>
                           </div>
@@ -3050,13 +3104,7 @@ export default function VoiceDnaStudio() {
 
                             >
                               <Mic2 aria-hidden="true" className="h-4 w-4 text-white/80" />
-                              {isPlaying && (
-                                <span className="absolute bottom-1 flex items-end gap-[1.5px] h-2.5">
-                                  <span className="w-[2px] bg-white animate-[eq_0.8s_ease-in-out_infinite]" />
-                                  <span className="w-[2px] bg-white animate-[eq_0.5s_ease-in-out_infinite_0.2s]" />
-                                  <span className="w-[2px] bg-white animate-[eq_0.7s_ease-in-out_infinite_0.4s]" />
-                                </span>
-                              )}
+                              {renderStoredVoiceSampleControl(voice, isPlaying)}
                             </div>
 
                             <div className="min-w-0 flex-1">
@@ -3135,8 +3183,6 @@ export default function VoiceDnaStudio() {
 
                           {/* Footer Actions: Equip for Generation */}
                           <div className="flex items-center gap-2 pt-1 border-t border-white/5">
-                            {renderStoredVoiceSampleControl(voice, isPlaying)}
-
                             <button
                               onClick={() => {
                                 if (isEquipped) {
@@ -3198,6 +3244,7 @@ export default function VoiceDnaStudio() {
 
                           >
                             <Mic2 aria-hidden="true" className="h-4 w-4 text-white/80" />
+                            {renderStoredVoiceSampleControl(voice, isPlaying)}
                           </div>
 
                           <div className="flex-1 min-w-0 pr-4">
@@ -3210,13 +3257,14 @@ export default function VoiceDnaStudio() {
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {renderStoredVoiceSampleControl(voice, isPlaying)}
                             <button
                               onClick={() => toggleFavorite(voice.id)}
-                              className="text-amber-400 hover:text-amber-300 p-1.5 cursor-pointer"
+                              className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 p-1.5 cursor-pointer"
                               title="즐겨찾기 해제"
+                              aria-label={`${voice.name} 즐겨찾기 해제`}
                             >
-                              <Heart className="w-4 h-4 fill-amber-400" />
+                              <Heart aria-hidden="true" className="w-4 h-4 fill-amber-400" />
+                              <span className="text-[10px] font-semibold">즐겨찾기 해제</span>
                             </button>
                             <button
                               onClick={() => {
@@ -3440,260 +3488,34 @@ export default function VoiceDnaStudio() {
         )}
       </AnimatePresence>
 
-      {/* Bottom Audio Player Bar */}
-      {explorePlayingVoiceId && (() => {
-        let voice = EXPLORE_VOICES.find(v => v.code === explorePlayingVoiceId);
-        if (!voice && voices) {
-          const vContext = voices.find(v => v.id === explorePlayingVoiceId || v.name === explorePlayingVoiceId);
-          if (vContext) {
-            voice = {
-              code: vContext.id,
-              name: vContext.name,
-              desc: vContext.desc || vContext.stylePrompt || '저장된 보컬 음색 스타일',
-              flag: '🎤',
-              language: '내 음색 스타일',
-              tags: vContext.tags || ['Custom'],
-              gradient: vContext.avatarGradient || 'linear-gradient(135deg, #a855f7, #ec4899)',
-              audioUrl: vContext.audioUrl,
-              physical_layers: { gender: vContext.gender || 'female' }
-            } as any;
-          }
-        }
-        if (!voice && customVoices) {
-          const customVoice = customVoices.find(v => v.vd_code === explorePlayingVoiceId);
-          if (customVoice) {
-            voice = {
-              code: customVoice.vd_code,
-              name: customVoice.name || "Custom Voice",
-              desc: `${customVoice.physical_layers?.gender === 'female' ? 'Female' : 'Male'} Custom Voice • Style: ${customVoice.style || 'Studio Reverb'}`,
-              flag: '👤',
-              language: 'Custom',
-              tags: customVoice.textures || ['Custom'],
-              gradient: `linear-gradient(135deg, hsl(${(parseInt((customVoice.vd_code || "").replace(/\D/g, '') || '0') * 17) % 360}, 70%, 50%), hsl(${(parseInt((customVoice.vd_code || "").replace(/\D/g, '') || '0') * 17 + 120) % 360}, 70%, 40%))`,
-              physical_layers: customVoice.physical_layers || { gender: 'female', pitch: 50 }
-            } as any;
-          } else if (explorePlayingVoiceId === "DESIGNER_PREVIEW") {
-            voice = {
-              code: "DESIGNER_PREVIEW",
-              name: stageName || "My Design Preview",
-              desc: `Previewing: ${gender === 'female' ? '여성' : '남성'} • Pitch ${pitch}% • Power ${power}%`,
-              flag: "🎛️",
-              language: "Custom Preview",
-              tags: selectedTextures.length > 0 ? selectedTextures : ["Preview"],
-              gradient: "linear-gradient(135deg, #d946ef 0%, #06b6d4 100%)",
-              physical_layers: {
-                gender,
-                age,
-                pitch,
-                brightness,
-                chest: chestResonance,
-                head: headResonance,
-                weight,
-                power
-              }
-            } as any;
-          }
-        }
+      {/* Saved-sample player uses the same neutral 58px desktop dock as Discovery. */}
+      {explorePlayingVoiceId && typeof document !== 'undefined' && (() => {
+        const voice = voices.find(item => item.id === explorePlayingVoiceId)
+          || customVoices.find(item => item.vd_code === explorePlayingVoiceId)
+          || EXPLORE_VOICES.find(item => item.code === explorePlayingVoiceId)
+          || (explorePlayingVoiceId === "DESIGNER_PREVIEW" ? { name: stageName || "보컬 샘플" } : null);
         if (!voice) return null;
-        const isFav = customVoices.some(v => v.vd_code === voice.code);
-
-        return (
-          <div className="fixed bottom-0 left-0 right-0 w-full z-[100] bg-[#0c0d12]/98 border-t border-white/10 backdrop-blur-2xl px-4 md:px-8 py-3.5 flex flex-col md:flex-row items-center justify-between gap-4 shadow-[0_-10px_30px_rgba(0,0,0,0.8)] animate-in slide-in-from-bottom duration-350">
-            {/* Left: Info Section */}
-            <div className="flex items-center gap-3.5 w-full md:w-auto md:max-w-md shrink-0">
-              {/* Circle Avatar with Equalizer */}
-              <div 
-                className="relative w-11 h-11 rounded-full border border-white/10 shrink-0 shadow-md flex items-center justify-center overflow-hidden"
-                style={{ background: voice.gradient || 'linear-gradient(135deg, #ec4899, #8b5cf6)' }}
-              >
-                {explorePlaying && (
-                  <span className="flex items-end gap-[2px] h-3.5 mb-[2px]">
-                    <span className="w-[2.5px] bg-white rounded-full animate-[eq_0.8s_ease-in-out_infinite]" />
-                    <span className="w-[2.5px] bg-white rounded-full animate-[eq_0.5s_ease-in-out_infinite_0.2s]" />
-                    <span className="w-[2.5px] bg-white rounded-full animate-[eq_0.7s_ease-in-out_infinite_0.4s]" />
-                  </span>
-                )}
-              </div>
-              {/* Text Details matching the Voice Card exactly */}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[14px] leading-none select-none">{voice.flag || '🎤'}</span>
-                  <span className="text-sm font-bold text-white truncate leading-snug">{voice.name}</span>
-                  <span className="text-xs text-zinc-400">({voice.language || 'Voice'})</span>
-                </div>
-                <p className="text-xs text-zinc-300 truncate mt-0.5 max-w-[280px]">
-                  {voice.desc}
-                </p>
-                <div className="hidden md:flex items-center gap-1 mt-1 flex-wrap">
-                  {(voice.tags || []).slice(0, 3).map((tag: string) => (
-                    <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded bg-zinc-800/80 border border-zinc-700/50 text-zinc-400 leading-none select-none">
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Center: Controls & Slider Section */}
-            <div className="flex-1 max-w-xl w-full flex flex-col items-center gap-1.5">
-              {/* Buttons Row */}
-              <div className="flex items-center gap-6">
-                <button
-                  type="button"
-                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                  title="Shuffle"
-                >
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M10.59 9.17L5.41 4 4 5.41l5.17 5.17 1.42-1.41zM14.5 4l2.04 2.04L4 18.59 5.41 20 17.96 7.46 20 9.5V4h-5.5zm.33 9.41l-1.41 1.41 3.13 3.13L14.5 20H20v-5.5l-2.04 2.04-3.13-3.13z"/>
-                  </svg>
-                </button>
-
-                <button
-                  type="button"
-                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                  title="Previous"
-                >
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M6 6h2v12H6zm3.5 6L18 6v12z"/>
-                  </svg>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => explorePlaying ? stopExploreVoiceDemo() : playExploreVoiceDemo(voice)}
-                  className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:bg-zinc-200 transition-all transform hover:scale-105 active:scale-95 shadow-md shrink-0"
-                >
-                  {explorePlaying ? (
-                    <Pause className="w-4 h-4 fill-black text-black" />
-                  ) : (
-                    <Play className="w-4 h-4 fill-black text-black ml-0.5" />
-                  )}
-                </button>
-
-                <button
-                  type="button"
-                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                  title="Next"
-                >
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M6 18l8.5-6L6 6zm9-12h2v12h-2z"/>
-                  </svg>
-                </button>
-
-                <button
-                  type="button"
-                  className="text-zinc-500 hover:text-zinc-300 transition-colors"
-                  title="Repeat"
-                >
-                  <svg className="w-4 h-4 fill-current" viewBox="0 0 24 24">
-                    <path d="M7 7h10v3l4-4-4-4v3H5v6h2V7zm10 10H7v-3l-4 4 4 4v-3h12v-6h-2v4z"/>
-                  </svg>
-                </button>
-              </div>
-
-              {/* Progress Slider Row */}
-              <div className="w-full flex items-center gap-3 px-2">
-                <span className="text-[10px] text-zinc-500 font-mono w-7 text-right">
-                  {`0:${Math.floor(exploreProgress * 0.15).toString().padStart(2, '0')}`}
-                </span>
-                <div 
-                  className="flex-1 h-1 bg-zinc-800 rounded-full overflow-hidden relative cursor-pointer group"
-                  onClick={(e) => {
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    const clickX = e.clientX - rect.left;
-                    const percentage = Math.min(100, Math.max(0, (clickX / rect.width) * 100));
-                    setExploreProgress(percentage);
-                  }}
-                >
-                  <div 
-                    className="absolute left-0 top-0 bottom-0 bg-white group-hover:bg-cyan-400 transition-all duration-100 rounded-full" 
-                    style={{ width: `${exploreProgress}%` }}
-                  />
-                </div>
-                <span className="text-[10px] text-zinc-500 font-mono w-7">0:15</span>
-              </div>
-            </div>
-
-            {/* Right: Actions (Add/Fav, Volume, Close) */}
-            <div className="flex items-center gap-4 shrink-0 justify-end w-full md:w-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  let updated;
-                  if (isFav) {
-                    updated = customVoices.filter(v => v.vd_code !== voice.code);
-                  } else {
-                    const newDna: VoiceDnaRecord = {
-                      vd_code: voice.code,
-                      name: voice.name,
-                      physical_layers: (voice.physical_layers || { gender: 'female', age: 'young', pitch: 50, brightness: 50, chest: 50, head: 50, weight: 50, power: 50 }) as any,
-                      textures: voice.textures || [],
-                      emotions: voice.emotions || [],
-                      style: voice.category || "Studio Reverb",
-                      noise_entropy: 15
-                    };
-                    updated = [...customVoices, newDna];
-                  }
-                  setCustomVoices(updated);
-                  try {
-                    localStorage.setItem("custom_voice_dnas", JSON.stringify(updated));
-                  } catch {}
-                }}
-                className={`px-3 py-2 rounded-xl border text-[10px] font-bold transition-all flex items-center gap-1.5 ${
-                  isFav 
-                    ? 'bg-purple-500/20 text-purple-300 border-purple-500/30' 
-                    : 'bg-zinc-900 border border-white/5 text-zinc-300 hover:border-cyan-500/30 hover:text-cyan-300'
-                }`}
-              >
-                {isFav ? (
-                  <>
-                    <Heart className="w-3.5 h-3.5 fill-purple-400 text-purple-400" />
-                    <span>즐겨찾기 완료 ✓</span>
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-3 h-3" />
-                    <Heart className="w-3.5 h-3.5 text-zinc-400" />
-                    <span>즐겨찾기 추가</span>
-                  </>
-                )}
+        const previewSeconds = getExplorePreviewDuration();
+        const elapsedSeconds = Math.min(exploreAudioRef.current?.currentTime || 0, previewSeconds);
+        return createPortal(
+          <div role="region" aria-label="보컬 샘플 플레이어" className="fixed inset-x-0 bottom-0 z-[65] border-t border-zinc-500/70 bg-[#222225] px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pt-3 md:pb-[13px] shadow-[0_-8px_24px_rgba(0,0,0,0.4)]">
+            <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_2.25rem_2.25rem] items-center gap-x-3 gap-y-1 md:grid-cols-[minmax(0,9rem)_2rem_minmax(0,1fr)_auto_2rem]">
+              <p className="min-w-0 truncate text-sm font-medium text-zinc-100" title={voice.name}>{voice.name}</p>
+              <button type="button" aria-label={explorePlaying ? "보컬 샘플 일시정지" : "보컬 샘플 이어 듣기"} title={explorePlaying ? "일시정지" : "이어 듣기"} onClick={() => explorePlaying ? pauseExploreVoiceDemo() : resumeExploreVoiceDemo()} className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-200 text-zinc-950 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-100 md:h-8 md:w-8">
+                {explorePlaying ? <Pause aria-hidden="true" className="h-3.5 w-3.5" fill="currentColor" /> : <Play aria-hidden="true" className="ml-0.5 h-3.5 w-3.5" fill="currentColor" />}
               </button>
-
-              {/* Copy Song Link Button */}
-              <button
-                type="button"
-                onClick={() => {
-                  const shareUrl = `${window.location.origin}/vault/share-${voice.code}`;
-                  navigator.clipboard.writeText(shareUrl);
-                  setCopiedLinkTrackId(voice.code);
-                  setTimeout(() => setCopiedLinkTrackId(null), 2000);
-                }}
-                className="p-2 text-zinc-500 hover:text-zinc-300 transition-colors rounded-lg"
-                title="Copy Song Link"
-              >
-                {copiedLinkTrackId === voice.code ? (
-                  <Check className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Link className="w-4 h-4" />
-                )}
-              </button>
-
-              <div className="hidden sm:flex items-center gap-2 text-zinc-500 hover:text-zinc-300 transition-colors">
-                <Volume2 className="w-4 h-4" />
-                <div className="w-16 h-1 bg-zinc-800 rounded-full overflow-hidden relative cursor-pointer">
-                  <div className="absolute left-0 top-0 bottom-0 bg-white w-2/3 rounded-full" />
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => stopExploreVoiceDemo()}
-                className="p-2 text-zinc-500 hover:text-zinc-300 transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <label className="col-span-3 row-start-2 flex min-w-0 items-center gap-2 text-[11px] tabular-nums text-zinc-300 md:col-span-1 md:col-start-3 md:row-start-1">
+                <span className="sr-only">보컬 샘플 재생 위치</span><span>{`0:${Math.floor(elapsedSeconds).toString().padStart(2, '0')}`}</span>
+                <input type="range" min={0} max={previewSeconds} step={0.1} value={elapsedSeconds} onChange={event => seekExploreVoicePreview(Number(event.target.value) / previewSeconds * 100)} className="h-4 min-w-0 flex-1 accent-zinc-200" />
+                <span>{`0:${Math.ceil(previewSeconds).toString().padStart(2, '0')}`}</span>
+              </label>
+              <label className="hidden items-center gap-2 text-zinc-300 md:col-start-4 md:row-start-1 md:flex">
+                <span className="sr-only">음량</span><Volume2 aria-hidden="true" className="h-3.5 w-3.5" />
+                <input type="range" min={0} max={1} step={0.01} value={exploreVolume} onChange={event => { const volume = Number(event.target.value); setExploreVolume(volume); if (exploreAudioRef.current) exploreAudioRef.current.volume = volume; }} className="h-4 w-16 accent-zinc-200" />
+              </label>
+              <button type="button" aria-label="보컬 샘플 플레이어 닫기" title="닫기" onClick={stopExploreVoiceDemo} className="col-start-3 row-start-1 flex h-9 w-9 items-center justify-center rounded-full text-zinc-400 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-zinc-100 md:col-start-5 md:h-8 md:w-8"><X aria-hidden="true" className="h-4 w-4" /></button>
             </div>
-          </div>
+          </div>, document.body,
         );
       })()}
 
