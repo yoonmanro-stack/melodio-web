@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useCallback } from "react";
 import { 
   X, Search, Plus, Play, Pause, Star, Trash2, 
   Sparkles, Mic2, LayoutGrid, List, CheckCircle2, ChevronRight, Edit2, Check
@@ -48,22 +48,20 @@ export function VoiceModal() {
     );
   });
 
-  // Unmount cleanup for the preview audio element.
-  useEffect(() => {
-    return () => {
-      playbackRequestRef.current += 1;
-      audioRef.current?.pause();
-    };
-  }, []);
-
-  const handleStopAudio = () => {
+  const handleStopAudio = useCallback(() => {
     playbackRequestRef.current += 1;
     if (audioRef.current) {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
     }
     setPlayingId(null);
-  };
+  }, []);
+
+  // AppShell keeps this component mounted after the modal closes.
+  useEffect(() => {
+    if (!isVoiceModalOpen) return;
+    return handleStopAudio;
+  }, [isVoiceModalOpen, handleStopAudio]);
 
   const handleClose = () => {
     handleStopAudio();
@@ -189,7 +187,7 @@ export function VoiceModal() {
         <div className="px-6 mt-3">
           <button
             type="button"
-            onClick={() => { closeVoiceModal(); openCreateModal(); }}
+            onClick={() => { handleClose(); openCreateModal(); }}
             className="w-full relative overflow-hidden rounded-2xl p-4 flex items-center justify-between border border-fuchsia-500/25 bg-fuchsia-950/20 text-left hover:bg-fuchsia-950/35 cursor-pointer transition-colors"
           >
             <div className="flex items-center gap-3.5">

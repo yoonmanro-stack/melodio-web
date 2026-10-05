@@ -1,5 +1,50 @@
 type RegistrationState = { status: string; errorCode?: string };
 
+export const REGISTRATION_STEPS = ['목소리 샘플', '본인 확인 녹음', '검증·저장'] as const;
+
+/** Step completion means the input was submitted, not that identity was verified. */
+export function registrationPresentation(status?: string, validationPhrase?: string): {
+  step: 1 | 2 | 3;
+  title: string;
+  description: string;
+} {
+  if (status === 'phrase_ready') return {
+    step: 2,
+    title: '본인 목소리 확인',
+    description: '샘플을 제출한 사람이 아래 문구를 읽어 주세요. 이 녹음으로 본인 목소리인지 확인합니다.',
+  };
+  if (['voice_submitting', 'voice_pending', 'availability_pending'].includes(status || '')) return {
+    step: 3,
+    title: '본인 확인 및 목소리 저장 중',
+    description: '제출한 샘플과 검증 녹음을 확인하고 있습니다. 검증을 통과하면 내 음색 스타일에 저장됩니다.',
+  };
+  if (status === 'ready') return {
+    step: 3,
+    title: '목소리 저장 완료',
+    description: '본인 확인을 마친 목소리를 내 음색 스타일에서 사용할 수 있습니다.',
+  };
+  if (['validation_submitting', 'validation_pending'].includes(status || '')) return {
+    step: 1,
+    title: '목소리 샘플 확인 중',
+    description: '업로드한 샘플을 확인하고 있습니다. 준비가 끝나면 본인 확인용 문구가 표시됩니다.',
+  };
+  if (status === 'failed') return {
+    step: validationPhrase ? 3 : 1,
+    title: '목소리 등록 상태 확인',
+    description: '아래 안내에서 처리 결과를 확인해 주세요. 아직 목소리가 저장된 상태는 아닙니다.',
+  };
+  if (status === 'draft') return {
+    step: 1,
+    title: '목소리 샘플 업로드 확인',
+    description: '샘플 제출을 완료하지 못했습니다. 입력 내용과 선택 구간을 확인해 주세요.',
+  };
+  return {
+    step: 1,
+    title: '목소리 샘플 업로드',
+    description: '내 목소리 샘플을 먼저 제출하세요. 다음 단계에서 안내 문구를 읽어 본인 확인을 진행합니다.',
+  };
+}
+
 const RESUMABLE_STATUSES = new Set([
   "validation_submitting", "validation_pending", "phrase_ready",
   "voice_submitting", "voice_pending", "availability_pending",

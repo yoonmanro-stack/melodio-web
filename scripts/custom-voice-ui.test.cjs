@@ -10,7 +10,29 @@ const compiled = ts.transpileModule(source, {
 }).outputText;
 const moduleUnderTest = { exports: {} };
 new Function('module', 'exports', compiled)(moduleUnderTest, moduleUnderTest.exports);
-const { restoreRegistration, failureGuidance } = moduleUnderTest.exports;
+const { restoreRegistration, failureGuidance, registrationPresentation, REGISTRATION_STEPS } = moduleUnderTest.exports;
+
+test('registration steps distinguish source, identity recording, and verified storage', () => {
+  assert.deepEqual(REGISTRATION_STEPS, ['목소리 샘플', '본인 확인 녹음', '검증·저장']);
+  for (const status of [undefined, 'draft', 'validation_submitting', 'validation_pending']) {
+    assert.equal(registrationPresentation(status).step, 1);
+    assert.doesNotMatch(registrationPresentation(status).title, /저장 완료|본인 목소리 확인/);
+  }
+  const verify = registrationPresentation('phrase_ready');
+  assert.equal(verify.step, 2);
+  assert.equal(verify.title, '본인 목소리 확인');
+  assert.match(verify.description, /샘플을 제출한 사람/);
+  for (const status of ['voice_submitting', 'voice_pending', 'availability_pending']) {
+    const pending = registrationPresentation(status);
+    assert.equal(pending.step, 3);
+    assert.match(pending.description, /검증을 통과하면/);
+    assert.doesNotMatch(pending.title, /완료/);
+  }
+  assert.equal(registrationPresentation('ready').title, '목소리 저장 완료');
+  assert.equal(registrationPresentation('failed').step, 1);
+  assert.equal(registrationPresentation('failed', 'Read this phrase').step, 3);
+  assert.match(registrationPresentation('failed').description, /아직 목소리가 저장된 상태는 아닙니다/);
+});
 
 test('reopening shows a new registration instead of a terminal failure', () => {
   const failed = { id: 'newer', status: 'failed', errorCode: 'validation_failed' };

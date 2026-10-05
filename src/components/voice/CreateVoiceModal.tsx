@@ -1,11 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Check, CircleStop, FileAudio, Loader2, Mic2, ShieldCheck, Upload, X } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { useVoice } from "@/contexts/VoiceContext";
 import { VoiceSampleEditor, type VoiceSampleSelection } from "@/components/voice/VoiceSampleEditor";
-import { failureGuidance, restoreRegistration } from "@/components/voice/registrationUi";
+import { VoiceUploadGuide } from "@/components/voice/VoiceUploadGuide";
+import { failureGuidance, restoreRegistration, registrationPresentation, REGISTRATION_STEPS } from "@/components/voice/registrationUi";
 import { MAX_VOICE_SOURCE_BYTES, trimVoiceSampleToWav } from "@/lib/audio/voiceSample";
 
 type Registration = {
@@ -134,9 +136,16 @@ export function CreateVoiceModal() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [recordingTarget, setRecordingTarget] = useState<"source" | "verification" | null>(null);
+  const [registrationLoadState, setRegistrationLoadState] = useState<"loading" | "ready" | "error">("loading");
+  const [registrationLoadAttempt, setRegistrationLoadAttempt] = useState(0);
+  const [verificationPreviewUrl, setVerificationPreviewUrl] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
+  const recordingSessionRef = useRef(0);
+  const dialogRef = useRef<HTMLElement | null>(null);
+  const headingRef = useRef<HTMLHeadingElement | null>(null);
+  const presentation = registrationPresentation(current?.status, current?.validationPhrase);
 
   const chooseSourceFile = (file: File | null, mode: "recorded" | "uploaded") => {
     setSourceSelection(null);
@@ -152,6 +161,12 @@ export function CreateVoiceModal() {
 
   const changeSourceMode = (mode: "recorded" | "uploaded") => {
     if (mode === sourceMode) return;
+    recordingSessionRef.current += 1;
+    if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
+    streamRef.current?.getTracks().forEach(track => track.stop());
+    streamRef.current = null;
+    mediaRecorderRef.current = null;
+    setRecordingTarget(null);
     setSourceMode(mode);
     setSourceFile(null);
     setSourceSelection(null);
@@ -185,11 +200,13 @@ export function CreateVoiceModal() {
     });
   }, [syncRegisteredVoice]);
 
-  const loadRegistrations = useCallback(async () => {
-    const response = await fetch("/api/voice/custom", { cache: "no-store" });
+  const loadRegistrations = useCallback(async (signal?: AbortSignal) => {
+    const response = await fetch("/api/voice/custom", { cache: "no-store", signal });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(data.error || "등록 목소리를 불러오지 못했습니다.");
-    const list = Array.isArray(data.voices) ? data.voices as Registration[] : [];
+    if (!Array.isArray(data.voices)) throw new Error("등록 상태를 확인하지 못했습니다. 다시 불러와 주세요.");
+    const list = data.voices as Registration[];
+    if (signal?.aborted) return list;
     setRegistrations(list);
     list.filter((item) => item.status === "ready").forEach((item) => syncVoice(item));
     setCurrent(restoreRegistration(list));
@@ -198,12 +215,66 @@ export function CreateVoiceModal() {
 
   useEffect(() => {
     if (!isCreateModalOpen) return;
+    const controller = new AbortController();
+    setRegistrationLoadState("loading");
     setError("");
-    void loadRegistrations().catch((reason) => setError(reason instanceof Error ? reason.message : "등록 목소리를 불러오지 못했습니다."));
-  }, [isCreateModalOpen, loadRegistrations]);
+    void loadRegistrations(controller.signal).then(() => {
+      if (!controller.signal.aborted) setRegistrationLoadState("ready");
+    }).catch((reason) => {
+      if (controller.signal.aborted) return;
+      setError(reason instanceof Error ? reason.message : "등록 목소리를 불러오지 못했습니다.");
+      setRegistrationLoadState("error");
+    });
+    return () => { controller.abort(); setRegistrationLoadState("loading"); };
+  }, [isCreateModalOpen, loadRegistrations, registrationLoadAttempt]);
+
+  useEffect(() => {
+    if (!isCreateModalOpen || !verificationFile) { setVerificationPreviewUrl(null); return; }
+    const previewUrl = URL.createObjectURL(verificationFile);
+    setVerificationPreviewUrl(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [isCreateModalOpen, verificationFile]);
+
+  useEffect(() => {
+    if (!isCreateModalOpen) return;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    const main = document.querySelector<HTMLElement>("main");
+    const previousMainOverflow = main?.style.overflowY;
+    document.body.style.overflow = "hidden";
+    if (main) main.style.overflowY = "hidden";
+    dialogRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); closeCreateModal(); return; }
+      if (event.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const controls = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, audio[controls], [href], [tabindex]:not([tabindex="-1"])'))
+        .filter(element => element.getClientRects().length > 0);
+      const first = controls[0], last = controls[controls.length - 1];
+      if (!first) { event.preventDefault(); dialog.focus(); return; }
+      if (!controls.includes(document.activeElement as HTMLElement) || (event.shiftKey && document.activeElement === first)) {
+        event.preventDefault(); (event.shiftKey ? last : first).focus();
+      } else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (main) main.style.overflowY = previousMainOverflow || "";
+      previousFocus?.focus();
+    };
+  // The close action is stable in behavior; rerenders must not reset keyboard focus.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCreateModalOpen]);
+
+  useEffect(() => {
+    if (isCreateModalOpen && registrationLoadState === "ready") headingRef.current?.focus();
+  }, [isCreateModalOpen, registrationLoadState, presentation.step]);
 
   const currentId = current?.id;
   const currentStatus = current?.status;
+  useEffect(() => { setVerificationFile(null); }, [currentId, current?.validationPhrase]);
 
   useEffect(() => {
     if (!currentId || !currentStatus || !STATUS_TEXT[currentStatus]) return;
@@ -229,11 +300,16 @@ export function CreateVoiceModal() {
   }, [currentId, currentStatus, syncVoice]);
 
   useEffect(() => () => {
+    recordingSessionRef.current += 1;
     if (mediaRecorderRef.current?.state === "recording") mediaRecorderRef.current.stop();
     streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+    mediaRecorderRef.current = null;
+    setRecordingTarget(null);
   }, [isCreateModalOpen]);
 
   const startRecording = async (target: "source" | "verification") => {
+    const session = ++recordingSessionRef.current;
     setError("");
     if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === "undefined") {
       setError("이 브라우저에서는 녹음할 수 없습니다. 음성 파일을 업로드해 주세요.");
@@ -241,13 +317,15 @@ export function CreateVoiceModal() {
     }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+      if (session !== recordingSessionRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
       const preferred = ["audio/webm;codecs=opus", "audio/mp4", "audio/webm"].find((type) => MediaRecorder.isTypeSupported(type));
       const recorder = new MediaRecorder(stream, preferred ? { mimeType: preferred } : undefined);
       streamRef.current = stream;
       mediaRecorderRef.current = recorder;
       chunksRef.current = [];
-      recorder.ondataavailable = (event) => { if (event.data.size) chunksRef.current.push(event.data); };
+      recorder.ondataavailable = (event) => { if (session === recordingSessionRef.current && event.data.size) chunksRef.current.push(event.data); };
       recorder.onstop = () => {
+        if (session !== recordingSessionRef.current) { stream.getTracks().forEach(track => track.stop()); return; }
         const type = (recorder.mimeType || "audio/webm").split(";")[0];
         const extension = type === "audio/mp4" ? "m4a" : type === "audio/ogg" ? "ogg" : "webm";
         const file = new File(chunksRef.current, `${target}-${Date.now()}.${extension}`, { type });
@@ -261,6 +339,7 @@ export function CreateVoiceModal() {
       recorder.start(500);
       setRecordingTarget(target);
     } catch {
+      if (session !== recordingSessionRef.current) return;
       setError("마이크 권한을 확인하거나 음성 파일을 업로드해 주세요.");
     }
   };
@@ -268,6 +347,7 @@ export function CreateVoiceModal() {
   const stopRecording = () => mediaRecorderRef.current?.stop();
 
   const beginRegistration = async () => {
+    if (registrationLoadState !== "ready") return;
     if (!sourceFile || !sourceSelection?.valid || !name.trim() || !consent) {
       setError("이름, 6초~2분 음성 구간, 사용 권한 확인이 필요합니다.");
       return;
@@ -303,6 +383,7 @@ export function CreateVoiceModal() {
   };
 
   const submitVerification = async () => {
+    if (registrationLoadState !== "ready") return;
     if (!current || !verificationFile) { setError("검증 문구를 읽은 녹음이 필요합니다."); return; }
     setBusy(true); setError("");
     try {
@@ -327,7 +408,7 @@ export function CreateVoiceModal() {
     setCurrent(null); setSourceFile(null); setSourceSelection(null); setVerificationFile(null); setConsent(false); setError("");
   };
 
-  if (!isCreateModalOpen) return null;
+  if (!isCreateModalOpen || typeof document === "undefined") return null;
 
   const pending = current && STATUS_TEXT[current.status];
   const draft = current?.status === "draft";
@@ -337,37 +418,41 @@ export function CreateVoiceModal() {
   const failure = failed ? failureGuidance(current.errorCode, current.validationPhrase) : null;
   const previousFailure = registrations.find((item) => item.status === "failed");
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[160] flex items-center justify-center bg-black/85 p-4 backdrop-blur-md">
-      <section className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-fuchsia-500/30 bg-[#121116] shadow-2xl">
-        <header className="flex items-start justify-between border-b border-white/10 px-6 py-5">
+      <section ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="create-voice-title" aria-describedby="create-voice-description" tabIndex={-1} className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-3xl border border-fuchsia-500/30 bg-[#121116] shadow-2xl outline-none">
+        <header className="sticky top-0 z-10 flex shrink-0 items-start justify-between gap-3 border-b border-white/10 bg-[#121116] px-6 py-5">
           <div>
             <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-white">목소리 등록</h2>
-              <span className="rounded-full border border-emerald-400/30 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-bold text-emerald-300">Suno V6</span>
+              <h2 ref={headingRef} id="create-voice-title" tabIndex={-1} className="text-xl font-bold text-white outline-none">{registrationLoadState === "ready" ? presentation.title : "이전 등록 상태 확인"}</h2>
             </div>
-            <p className="mt-2 text-xs leading-relaxed text-zinc-400">노래 샘플과 검증 문구 녹음으로 나만의 보컬을 등록합니다.</p>
+            <p id="create-voice-description" className="mt-2 text-xs leading-relaxed text-zinc-400">{registrationLoadState === "ready" ? presentation.description : "진행 중인 등록을 확인한 뒤 해당 단계로 이어갑니다."}</p>
+            {registrationLoadState === "ready" && <ol aria-label="목소리 등록 진행 단계" className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[11px]">
+              {REGISTRATION_STEPS.map((step, index) => <li key={step} aria-current={presentation.step === index + 1 ? "step" : undefined} className={`flex items-center gap-1.5 ${presentation.step === index + 1 ? "font-bold text-fuchsia-200" : "text-zinc-500"}`}><span aria-hidden="true" className="flex h-5 w-5 items-center justify-center rounded-full border border-current">{index + 1}</span>{step}</li>)}
+            </ol>}
           </div>
-          <button type="button" onClick={closeCreateModal} aria-label="닫기" className="flex h-8 w-8 items-center justify-center rounded-full bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={closeCreateModal} aria-label="목소리 등록 창 닫기" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-white/5 text-zinc-400 hover:bg-white/10 hover:text-white focus-visible:outline-2 focus-visible:outline-white"><X aria-hidden="true" className="h-4 w-4" /></button>
         </header>
 
-        <div className="overflow-y-auto p-6">
-          {error && <div className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">{error}</div>}
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          {error && <div role="alert" className="mb-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-xs text-red-200">{error}</div>}
+          {registrationLoadState === "loading" && <div role="status" className="flex flex-col items-center gap-3 py-10 text-center text-sm text-zinc-300"><Loader2 aria-hidden="true" className="h-7 w-7 animate-spin" />이전 등록 상태를 불러오고 있습니다.</div>}
+          {registrationLoadState === "error" && <div className="space-y-4 py-8 text-center"><p className="text-sm text-zinc-400">진행 중인 등록을 확인하지 못했습니다. 상태를 확인한 뒤 이어서 진행해 주세요.</p><button type="button" onClick={() => setRegistrationLoadAttempt(attempt => attempt + 1)} className="rounded-xl border border-white/15 bg-white/5 px-4 py-2 text-sm font-semibold text-white">등록 상태 다시 불러오기</button></div>}
 
-          {pending && (
-            <div className="flex flex-col items-center py-14 text-center">
+          {registrationLoadState === "ready" && pending && (
+            <div role="status" className="flex flex-col items-center py-14 text-center">
               <Loader2 className="mb-4 h-10 w-10 animate-spin text-fuchsia-400" />
               <h3 className="font-bold text-white">{current.errorCode === "provider_result_unrecognized" ? failureGuidance(current.errorCode).title : pending}</h3>
               <p className="mt-2 text-xs text-zinc-400">{current.errorCode === "provider_result_unrecognized"
                 ? failureGuidance(current.errorCode).detail
                 : current.status === "validation_submitting" || current.status === "validation_pending"
-                ? "검증이 성공한 뒤에만 읽을 문구가 표시됩니다. 창을 닫아도 작업은 계속되며 다시 열면 상태를 확인할 수 있습니다."
+                ? "샘플 확인이 끝나면 본인 확인용 문구가 표시됩니다. 창을 닫아도 작업은 계속되며 다시 열면 상태를 확인할 수 있습니다."
                 : "창을 닫아도 작업은 계속되며 다시 열면 상태를 이어서 확인합니다."}</p>
               {current.errorCode === "provider_result_unrecognized" && <p className="mt-3 select-text break-all text-[11px] text-zinc-500">등록 ID: {current.id}</p>}
             </div>
           )}
 
-          {draft && (
+          {registrationLoadState === "ready" && draft && (
             <div className="py-10 text-center">
               <h3 className="font-bold text-white">목소리 등록 준비를 완료하지 못했습니다</h3>
               <p className="mt-2 text-xs leading-relaxed text-zinc-400">검증 요청을 보내기 전 단계에서 멈췄습니다. 입력 화면으로 돌아가 안내된 오류를 확인해 주세요. 선택한 파일과 음성 구간은 유지됩니다.</p>
@@ -376,30 +461,36 @@ export function CreateVoiceModal() {
             </div>
           )}
 
-          {phraseReady && (
+          {registrationLoadState === "ready" && phraseReady && (
             <div className="space-y-5">
+              <p className="text-sm leading-relaxed text-zinc-300"><strong className="text-white">{current.name}</strong>의 목소리 샘플을 이미 제출했습니다. 같은 사람이 아래 문구를 읽은 새 녹음을 준비해 주세요.</p>
               <div className="rounded-2xl border border-cyan-500/30 bg-cyan-500/10 p-5">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-cyan-300">검증 문구</span>
-                <p className="mt-2 text-lg font-bold leading-relaxed text-white">{current.validationPhrase}</p>
-                <p className="mt-2 text-xs text-zinc-400">위 문구만 자연스럽게 읽어 녹음해 주세요. 음악이나 다른 사람 목소리가 섞이지 않아야 합니다.</p>
+                <span className="text-[10px] font-bold tracking-wider text-cyan-300">본인 확인용 문구 · 그대로 읽어 주세요</span>
+                <p lang={current.language} className="mt-2 select-text text-lg font-bold leading-relaxed text-white">{current.validationPhrase}</p>
+                <p className="mt-2 text-xs leading-relaxed text-zinc-400">노래 샘플을 다시 제출하는 단계가 아닙니다. 위 문구만 자연스럽게 말로 읽어 녹음해 주세요. 음악이나 다른 사람의 목소리가 섞이지 않아야 합니다.</p>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <button type="button" onClick={() => recordingTarget === "verification" ? stopRecording() : startRecording("verification")} className="flex items-center justify-center gap-2 rounded-2xl border border-fuchsia-500/30 bg-fuchsia-500/10 px-4 py-4 text-sm font-bold text-fuchsia-200 hover:bg-fuchsia-500/20">
+              <div className="space-y-3">
+                <button type="button" disabled={busy} onClick={() => recordingTarget === "verification" ? stopRecording() : startRecording("verification")} className="flex w-full items-center justify-center gap-2 rounded-2xl border border-fuchsia-500/30 bg-fuchsia-500/10 px-4 py-4 text-sm font-bold text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:opacity-40">
                   {recordingTarget === "verification" ? <CircleStop className="h-5 w-5" /> : <Mic2 className="h-5 w-5" />}
-                  {recordingTarget === "verification" ? "녹음 끝내기" : "검증 문구 녹음"}
+                  {recordingTarget === "verification" ? "녹음 끝내기" : "위 문구 읽고 녹음하기"}
                 </button>
-                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-4 text-sm font-bold text-zinc-200 hover:bg-white/10">
-                  <Upload className="h-5 w-5" /> 녹음 파일 선택
-                  <input type="file" accept="audio/*" className="hidden" onChange={(event) => setVerificationFile(event.target.files?.[0] || null)} />
-                </label>
+                <details className="rounded-xl border border-white/10 p-3">
+                  <summary className="cursor-pointer text-xs font-semibold text-zinc-300">이미 녹음한 본인 확인 문구 파일 사용</summary>
+                  <label className="mt-3 flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white/5 px-4 py-3 text-xs font-semibold text-zinc-200 hover:bg-white/10 focus-within:ring-2 focus-within:ring-fuchsia-400">
+                    <Upload aria-hidden="true" className="h-4 w-4" /> 검증 문구를 읽은 녹음 파일 선택
+                    <input type="file" accept="audio/*" aria-label="검증 문구를 읽은 녹음 파일 선택" disabled={busy || !!recordingTarget} className="sr-only" onChange={(event) => setVerificationFile(event.target.files?.[0] || null)} />
+                  </label>
+                </details>
               </div>
-              <p className="text-xs text-zinc-400">녹음 파일은 최대 40MB까지 업로드할 수 있습니다.</p>
+              <p className="text-xs leading-relaxed text-zinc-400">본인 확인 문구 전체를 읽은 말소리 녹음 · 멜로디오 기준 최대 40MB · MP3/WAV 권장. M4A/AAC/OGG/WebM은 브라우저의 재생·변환 지원에 따라 사용할 수 있습니다.</p>
               {verificationFile && <div className="flex items-center gap-2 rounded-xl bg-black/30 px-3 py-2 text-xs text-emerald-300"><FileAudio className="h-4 w-4" />{verificationFile.name}</div>}
-              <button type="button" disabled={!verificationFile || busy || !!recordingTarget} onClick={submitVerification} className="w-full rounded-2xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-3.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? "제출 중…" : "본인 확인 후 목소리 등록"}</button>
+              {verificationPreviewUrl && <audio controls preload="metadata" src={verificationPreviewUrl} aria-label="본인 확인 녹음 미리듣기" className="w-full" />}
+              <button type="button" disabled={!verificationFile || busy || !!recordingTarget} onClick={submitVerification} className="w-full rounded-2xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-3.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? "본인 확인 요청 중…" : "본인 확인 요청"}</button>
+              <p className="text-center text-xs text-zinc-400">검증을 통과하면 내 음색 스타일에 저장됩니다.</p>
             </div>
           )}
 
-          {ready && (
+          {registrationLoadState === "ready" && ready && (
             <div className="flex flex-col items-center py-12 text-center">
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/15 text-emerald-300"><Check className="h-7 w-7" /></div>
               <h3 className="text-xl font-bold text-white">{current.name} 등록 완료</h3>
@@ -408,7 +499,7 @@ export function CreateVoiceModal() {
             </div>
           )}
 
-          {failed && (
+          {registrationLoadState === "ready" && failed && (
             <div className="flex flex-col items-center py-12 text-center">
               <X className="mb-3 h-10 w-10 text-red-400" />
               <h3 className="font-bold text-white">{failure?.title}</h3>
@@ -418,7 +509,7 @@ export function CreateVoiceModal() {
             </div>
           )}
 
-          {!current && (
+          {registrationLoadState === "ready" && !current && (
             <div className="space-y-5">
               {previousFailure && (
                 <details className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3 text-xs text-zinc-300">
@@ -427,37 +518,42 @@ export function CreateVoiceModal() {
                   <p className="mt-2 select-text break-all text-zinc-400">등록 ID: {previousFailure.id}</p>
                 </details>
               )}
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className="text-xs font-semibold text-zinc-300">목소리 이름<input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder="예: My Warm Vocal" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm text-white outline-none focus:border-fuchsia-500/60" /></label>
-                <label className="text-xs font-semibold text-zinc-300">보컬 스타일<input value={style} onChange={(event) => setStyle(event.target.value)} maxLength={120} placeholder="예: warm indie pop" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm text-white outline-none focus:border-fuchsia-500/60" /></label>
-              </div>
-              <label className="block text-xs font-semibold text-zinc-300">설명<input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={300} placeholder="선택 사항" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm text-white outline-none focus:border-fuchsia-500/60" /></label>
-              <div className="grid grid-cols-3 gap-3">
+              <label className="block text-xs font-semibold text-zinc-300">목소리 이름<input value={name} onChange={(event) => setName(event.target.value)} maxLength={80} placeholder="예: My Warm Vocal" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm text-white outline-none focus:border-fuchsia-500/60" /></label>
+              <div className="grid grid-cols-2 gap-3">
                 <label className="text-xs text-zinc-400">성별<select value={gender} onChange={(event) => setGender(event.target.value as "female" | "male")} className="mt-1.5 w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-sm text-white"><option value="female">여성</option><option value="male">남성</option></select></label>
-                <label className="text-xs text-zinc-400">검증 언어<select value={language} onChange={(event) => setLanguage(event.target.value)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-sm text-white"><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option></select></label>
-                <label className="text-xs text-zinc-400">숙련도<select value={skill} onChange={(event) => setSkill(event.target.value)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-sm text-white"><option value="beginner">입문</option><option value="intermediate">중급</option><option value="advanced">고급</option><option value="professional">전문</option></select></label>
+                <label className="text-xs text-zinc-400">검증 문구 언어<select value={language} onChange={(event) => setLanguage(event.target.value)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-sm text-white"><option value="ko">한국어</option><option value="en">English</option><option value="ja">日本語</option></select></label>
               </div>
+              <VoiceUploadGuide />
 
               <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
                 <div className="mb-3 flex gap-2">
-                  <button type="button" onClick={() => changeSourceMode("uploaded")} className={`flex-1 rounded-xl px-3 py-2 text-xs font-bold ${sourceMode === "uploaded" ? "bg-fuchsia-600 text-white" : "bg-white/5 text-zinc-400"}`}>음성 업로드</button>
-                  <button type="button" onClick={() => changeSourceMode("recorded")} className={`flex-1 rounded-xl px-3 py-2 text-xs font-bold ${sourceMode === "recorded" ? "bg-fuchsia-600 text-white" : "bg-white/5 text-zinc-400"}`}>바로 녹음</button>
+                  <button type="button" disabled={busy || !!recordingTarget} onClick={() => changeSourceMode("uploaded")} className={`flex-1 rounded-xl px-3 py-2 text-xs font-bold ${sourceMode === "uploaded" ? "bg-fuchsia-600 text-white" : "bg-white/5 text-zinc-400"}`}>파일 선택</button>
+                  <button type="button" disabled={busy || !!recordingTarget} onClick={() => changeSourceMode("recorded")} className={`flex-1 rounded-xl px-3 py-2 text-xs font-bold ${sourceMode === "recorded" ? "bg-fuchsia-600 text-white" : "bg-white/5 text-zinc-400"}`}>직접 녹음</button>
                 </div>
                 {sourceMode === "uploaded" ? (
-                  <label className="flex cursor-pointer flex-col items-center rounded-xl border border-dashed border-white/15 px-4 py-6 text-center hover:border-fuchsia-500/50"><Upload className="mb-2 h-6 w-6 text-fuchsia-400" /><span className="text-sm font-bold text-white">보컬 음성 파일 선택</span><span className="mt-1 text-[11px] text-zinc-400">최대 40MB · 업로드 후 코러스 없는 6초~2분 구간 선택</span><input type="file" accept="audio/*" className="hidden" onChange={(event) => chooseSourceFile(event.target.files?.[0] || null, "uploaded")} /></label>
+                  <label className="flex cursor-pointer flex-col items-center rounded-xl border border-dashed border-white/15 px-4 py-6 text-center hover:border-fuchsia-500/50 focus-within:ring-2 focus-within:ring-fuchsia-400"><Upload className="mb-2 h-6 w-6 text-fuchsia-400" /><span className="text-sm font-bold text-white">목소리 샘플 파일 선택</span><span className="mt-1 text-[11px] text-zinc-400">멜로디오 업로드 기준: 최대 40MB · 업로드 후 6초~2분 구간 선택</span><input type="file" accept="audio/*" aria-label="목소리 샘플 파일 선택" disabled={busy || !!recordingTarget} className="sr-only" onChange={(event) => chooseSourceFile(event.target.files?.[0] || null, "uploaded")} /></label>
                 ) : (
-                  <button type="button" onClick={() => recordingTarget === "source" ? stopRecording() : startRecording("source")} className="flex w-full flex-col items-center rounded-xl border border-dashed border-white/15 px-4 py-6 hover:border-fuchsia-500/50"><Mic2 className="mb-2 h-6 w-6 text-fuchsia-400" /><span className="text-sm font-bold text-white">{recordingTarget === "source" ? "녹음 끝내기" : "보컬 샘플 녹음"}</span><span className="mt-1 text-[11px] text-zinc-500">반주 없이 노래한 뒤 6초~2분 구간을 선택해 주세요</span></button>
+                  <button type="button" onClick={() => recordingTarget === "source" ? stopRecording() : startRecording("source")} className="flex w-full flex-col items-center rounded-xl border border-dashed border-white/15 px-4 py-6 hover:border-fuchsia-500/50"><Mic2 className="mb-2 h-6 w-6 text-fuchsia-400" /><span className="text-sm font-bold text-white">{recordingTarget === "source" ? "녹음 끝내기" : "목소리 샘플 녹음"}</span><span className="mt-1 text-[11px] text-zinc-500">반주 없이 노래하거나 말한 뒤 6초~2분 구간을 선택해 주세요</span></button>
                 )}
                 {sourceFile && <div className="mt-3 flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3 py-2 text-xs text-emerald-300"><FileAudio className="h-4 w-4" />{sourceFile.name}</div>}
                 {sourceFile && <VoiceSampleEditor file={sourceFile} onSelectionChange={updateSourceSelection} />}
               </div>
 
+              <details className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                <summary className="cursor-pointer text-xs font-semibold text-zinc-300">추가 정보 (선택)</summary>
+                <div className="mt-4 space-y-4">
+                  <label className="block text-xs font-semibold text-zinc-300">보컬 스타일<input value={style} onChange={(event) => setStyle(event.target.value)} maxLength={120} placeholder="예: warm indie pop" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm text-white outline-none focus:border-fuchsia-500/60" /></label>
+                  <label className="block text-xs font-semibold text-zinc-300">설명<input value={description} onChange={(event) => setDescription(event.target.value)} maxLength={300} placeholder="선택 사항" className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 text-sm text-white outline-none focus:border-fuchsia-500/60" /></label>
+                  <label className="block text-xs text-zinc-400">숙련도<select value={skill} onChange={(event) => setSkill(event.target.value)} className="mt-1.5 w-full rounded-xl border border-white/10 bg-zinc-900 px-3 py-2.5 text-sm text-white"><option value="beginner">입문</option><option value="intermediate">중급</option><option value="advanced">고급</option><option value="professional">전문</option></select></label>
+                </div>
+              </details>
+
               <label className="flex cursor-pointer items-start gap-3 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4">
                 <input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-0.5 h-4 w-4 accent-fuchsia-600" />
                 <span className="text-xs leading-relaxed text-zinc-300"><strong className="text-white">본인의 목소리이거나 명시적 허가를 받은 목소리</strong>임을 확인합니다. 샘플은 비공개로 저장되고 Kie.ai의 등록 처리에 사용되며, 등록 완료 후 Melodio 저장본은 삭제됩니다.</span>
               </label>
-              <div className="flex items-start gap-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-cyan-400" /><p className="text-xs leading-relaxed text-zinc-400">샘플 검증이 성공한 뒤에만 읽을 문구가 표시됩니다. 문구가 나타나면 같은 사람이 직접 읽어 녹음해 주세요.</p></div>
-              <button type="button" disabled={!name.trim() || !sourceFile || !sourceSelection?.valid || !consent || busy || !!recordingTarget} onClick={beginRegistration} className="w-full rounded-2xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-3.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? "선택 구간 업로드 중…" : "선택 구간으로 검증 문구 받기"}</button>
+              <div className="flex items-start gap-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4"><ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-cyan-400" /><p className="text-xs leading-relaxed text-zinc-400">샘플 확인이 끝나면 본인 확인용 문구가 표시됩니다. 같은 사람이 문구를 그대로 읽어 새로 녹음해 주세요.</p></div>
+              <button type="button" disabled={!name.trim() || !sourceFile || !sourceSelection?.valid || !consent || busy || !!recordingTarget} onClick={beginRegistration} className="w-full rounded-2xl bg-gradient-to-r from-fuchsia-600 to-purple-600 px-5 py-3.5 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40">{busy ? "샘플 제출 중…" : "샘플 제출하고 본인 확인으로"}</button>
 
               {registrations.some((item) => item.status === "ready") && (
                 <div className="border-t border-white/10 pt-5"><h3 className="mb-2 text-xs font-bold text-zinc-300">등록 완료된 목소리</h3><div className="space-y-2">{registrations.filter((item) => item.status === "ready").map((item) => <div key={item.id} className="flex items-center justify-between rounded-xl bg-white/5 px-3 py-2"><span className="text-sm font-semibold text-white">{item.name}</span><span className="text-[10px] font-bold text-emerald-300">사용 가능</span></div>)}</div></div>
@@ -466,6 +562,6 @@ export function CreateVoiceModal() {
           )}
         </div>
       </section>
-    </div>
+    </div>, document.body,
   );
 }
