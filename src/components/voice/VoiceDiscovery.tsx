@@ -233,7 +233,7 @@ export function VoiceDiscovery() {
       })}
     </div>
 
-    {current && typeof document !== 'undefined' && createPortal(<div role="region" aria-label="30초 음색 플레이어" className="fixed inset-x-0 bottom-0 z-[65] border-t border-zinc-500/70 bg-[#222225] px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(0,0,0,0.4)]">
+    {current && typeof document !== 'undefined' && createPortal(<div role="region" aria-label="30초 음색 플레이어" className="fixed inset-x-0 bottom-0 z-[65] border-t border-zinc-500/70 bg-[#222225] px-4 pt-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] md:pt-3 md:pb-[13px] shadow-[0_-8px_24px_rgba(0,0,0,0.4)]">
       <div className="mx-auto grid max-w-6xl grid-cols-[minmax(0,1fr)_2.25rem_2.25rem] items-center gap-x-3 gap-y-1 md:grid-cols-[minmax(0,9rem)_2rem_minmax(0,1fr)_auto_2rem]">
         <p className="min-w-0 truncate text-sm font-medium text-zinc-100" title={current.name}>{current.name}</p>
         <button type="button" disabled={loading} aria-label={loading ? '샘플 불러오는 중' : playing ? '일시 정지' : elapsed >= DISCOVERY_PREVIEW_SECONDS ? '다시 듣기' : '재생'} title={playing ? '일시 정지' : '재생'} onClick={() => void preview(current.discoveryVoiceId)} className="flex h-9 w-9 items-center justify-center rounded-full bg-zinc-200 text-zinc-950 hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-100 disabled:opacity-50 md:h-8 md:w-8">

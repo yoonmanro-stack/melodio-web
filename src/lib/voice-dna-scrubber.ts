@@ -25,6 +25,14 @@ export interface VoiceDnaRecord {
     groove?: number
   }
   style?: string
+  /** Vocal space; legacy records use style for this setting. */
+  reverb?: string
+  /** Musical phrasing instructions, independent of song genre and language. */
+  delivery?: string
+  /** Save/restore metadata; reusable timbre does not impose song language. */
+  language?: string
+  preview_genre?: string
+  sample_version?: 'A' | 'B'
   noise_entropy?: number
 }
 
@@ -62,8 +70,55 @@ export const defaultSystemVoices: Record<string, VoiceDnaRecord> = {
   }
 }
 
-// 노이즈 필터링 지터 단어 풀
-const JITTER_POOL = ['velvety', 'breathy', 'airy', 'crisp', 'pure', 'warm', 'smooth', 'intimate', 'focused', 'clear']
+const TEXTURE_PROMPTS: Record<string, string> = {
+  velvet: 'velvety rounded texture',
+  silky: 'silky connected texture',
+  breathy: 'audible breath around a voiced core',
+  smoky: 'smoky vocal grain',
+  metallic: 'focused metallic edge',
+  crystal: 'crystalline ringing edge',
+  glass: 'transparent glassy resonance',
+  wood: 'woody warm resonance',
+  cotton: 'soft diffuse vocal edges',
+  rough: 'raspy grain on note attacks',
+  clean: 'clean controlled texture',
+  husky: 'husky textured core',
+  smooth: 'smooth sustained texture',
+  airy: 'airy voiced texture',
+}
+
+const EMOTION_PROMPTS: Record<string, string> = {
+  hopeful: 'hopeful', lonely: 'introspective lonely', broken: 'vulnerable aching',
+  romantic: 'tender romantic', dark: 'somber', powerful: 'confident',
+  dreamy: 'dreamy', calm: 'calm restrained', passionate: 'impassioned', happy: 'joyful',
+}
+
+const REVERB_PROMPTS: Record<string, string> = {
+  studio: 'close studio vocal with minimal room reverb',
+  'rain cafe': 'intimate small-room vocal ambience',
+  'concert hall': 'moderate hall reverb behind the foreground vocal',
+  arena: 'wide controlled vocal reverb with a focused lead',
+  'sunset beach': 'gentle spacious vocal ambience',
+}
+
+function dialValue(value?: number): number | undefined {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.min(100, value)) : undefined
+}
+
+function dialPrompt(value: number | undefined, low: string, middle: string, high: string, lowEnd = 35, middleEnd = 70): string | undefined {
+  const dial = dialValue(value)
+  if (dial === undefined) return undefined
+  return dial <= lowEnd ? low : dial <= middleEnd ? middle : high
+}
+
+function selectedPrompts(values: string[], dictionary: Record<string, string>): string[] {
+  if (!Array.isArray(values)) return []
+  return [...new Set(values.flatMap(value => {
+    if (typeof value !== 'string') return []
+    const key = value.trim().toLowerCase()
+    return Object.hasOwn(dictionary, key) ? [dictionary[key]] : []
+  }))]
+}
 
 /**
  * Voice DNA 속성을 기반으로 Suno AI 음색 프롬프트를 빌드합니다.
@@ -73,70 +128,56 @@ export function buildVoicePromptFromAttributes(dna: VoiceDnaRecord, customNoiseR
   const textures = dna.textures || []
   const emotions = dna.emotions || []
   const perf = dna.performance || {}
-  const gender = phys.gender || 'female'
+  const gender = phys.gender === 'male' || phys.gender === 'duet' ? phys.gender : 'female'
+  const register = gender === 'male'
+    ? dialPrompt(phys.pitch, 'low baritone register', 'middle male register', 'upper tenor register', 35, 69)
+    : gender === 'female'
+      ? dialPrompt(phys.pitch, 'low alto register', 'middle mezzo register', 'upper soprano register', 45, 74)
+      : dialPrompt(phys.pitch, 'low-register center', 'middle-register center', 'upper-register center', 35, 74)
+  const age = phys.age === 'young' ? 'youthful adult character'
+    : phys.age === 'mature' ? 'mature vocal character'
+      : phys.age === 'childish' ? 'playful youthful character' : undefined
 
-  // 1. 핵심 음색 빌드
-  const voiceTags: string[] = []
+  // Keep register, resonance, body and delivery independent. A strong chest
+  // setting does not turn every male voice into a low baritone.
+  const voiceTags = [
+    gender === 'duet' ? 'male and female duet vocals' : `${gender} solo vocals`,
+    register, age,
+    dialPrompt(phys.brightness, 'dark covered tone', 'balanced warm tone', 'bright open tone', 35, 65),
+    dialPrompt(phys.chest, 'light chest resonance', 'balanced chest resonance', 'grounded chest resonance'),
+    dialPrompt(phys.head, 'restrained head resonance', 'blended head resonance', 'ringing head resonance'),
+    dialPrompt(phys.weight, 'light vocal body', 'medium vocal body', 'dense weighty vocal body'),
+    ...selectedPrompts(textures, TEXTURE_PROMPTS),
+  ].filter((tag): tag is string => Boolean(tag))
 
-  // 성별 및 음색 기본
-  if (gender === 'female') {
-    if (phys.pitch && phys.pitch > 75) {
-      voiceTags.push(phys.age === 'childish' ? 'sweet high-pitched anime female voice' : 'clear high soprano female voice')
-    } else {
-      voiceTags.push('warm emotional female vocals')
-    }
-  } else if (gender === 'male') {
-    if (phys.chest && phys.chest > 75) {
-      voiceTags.push('deep warm chest-resonant baritone male vocals')
-    } else {
-      voiceTags.push('expressive melodic male voice')
-    }
-  } else {
-    voiceTags.push('duet vocals, male and female harmonies')
+  const emotionTags = selectedPrompts(emotions, EMOTION_PROMPTS)
+  if (emotionTags.length) voiceTags.push(`${emotionTags.join(' / ')} phrasing`)
+  for (const tag of [
+    dialPrompt(perf.power, 'soft supported delivery', 'measured vocal projection', 'strong supported projection'),
+    dialPrompt(perf.dynamics, 'even restrained dynamics', 'controlled phrase swells', 'expressive soft-to-strong dynamics'),
+    dialPrompt(perf.vibrato, 'mostly straight sustained notes', 'subtle phrase-tail vibrato', 'broad controlled vibrato', 30, 65),
+    dialPrompt(perf.groove, 'steady straight phrasing', 'gently syncopated phrasing', 'strong syncopated rhythmic pocket'),
+  ]) {
+    if (tag) voiceTags.push(tag)
   }
 
-  // 2. 질감(Textures) & 감정(Emotions) 결합
-  if (textures.length > 0) {
-    voiceTags.push(`${textures.map(t => t.toLowerCase()).join(' and ')} vocal texture`)
+  if (typeof dna.delivery === 'string' && dna.delivery.trim()) {
+    voiceTags.push(dna.delivery.trim().replace(/\s+/g, ' ').slice(0, 160))
   }
-  if (emotions.length > 0) {
-    voiceTags.push(`${emotions.map(e => e.toLowerCase()).join(' and ')} emotion`)
-  }
+  const selectedSpace = dna.reverb ?? dna.style
+  const space = typeof selectedSpace === 'string' ? selectedSpace.trim().toLowerCase() : undefined
+  if (space && Object.hasOwn(REVERB_PROMPTS, space)) voiceTags.push(REVERB_PROMPTS[space])
 
-  // 3. 다이내믹스 속성 가중 반영
-  if (perf.power && perf.power > 75) {
-    voiceTags.push('powerful vocal delivery')
-  }
-  if (perf.vibrato && perf.vibrato > 70) {
-    voiceTags.push('rich vibrato')
-  }
+  // Entropy varies natural expression, not timbre by an arbitrary saved ID.
+  // It is a prompt instruction, not an audio noise-removal operation.
+  const entropy = dialValue(customNoiseRatio) ?? dialValue(dna.noise_entropy) ?? 15
+  voiceTags.push(entropy <= 5 ? 'restrained phrasing variation'
+    : entropy <= 35 ? 'subtle human phrasing variation'
+      : entropy <= 70 ? 'natural breath and onset variation'
+        : 'expressive human breath and phrasing variation')
 
-  // 4. 노이즈 지터(Entropy) 결합으로 수노 복제 방지 및 톤 다변화
-  const entropy = typeof customNoiseRatio === 'number' ? customNoiseRatio : (dna.noise_entropy ?? 15)
-  if (entropy > 5) {
-    // 0~100 entropy 수치를 기반으로 무작위 단어 주입 (시드 기반 결정성 보장을 위해 vd_code 문자열 코드를 시드로 활용)
-    const seedStr = dna.vd_code || 'VD-DEFAULT'
-    let seed = 0
-    for (let i = 0; i < seedStr.length; i++) {
-      seed += seedStr.charCodeAt(i)
-    }
-
-    const jitterCount = Math.min(3, Math.ceil(entropy / 30))
-    const selectedJitters: string[] = []
-    for (let j = 0; j < jitterCount; j++) {
-      const idx = (seed + j * 7) % JITTER_POOL.length
-      const word = JITTER_POOL[idx]
-      if (!selectedJitters.includes(word)) {
-        selectedJitters.push(word)
-      }
-    }
-    if (selectedJitters.length > 0) {
-      voiceTags.push(`${selectedJitters.join(', ')} details`)
-    }
-  }
-
-  // 5. 스튜디오 급 마이크 및 드라이 믹싱 결합 (가사 명료화)
-  voiceTags.push('vocal-centric mix, dry close-up vocals, crystal clear vocal delivery')
+  // Production clarity must not overwrite an intentionally grainy texture.
+  voiceTags.push('foreground lead vocal, balanced backing, intelligible lyrics')
 
   return {
     tags: voiceTags.join(', '),
@@ -206,6 +247,8 @@ export async function scrubAndComposeVoiceDna(
             emotions: data.emotions || [],
             performance: data.performance || {},
             style: data.style,
+            reverb: data.reverb,
+            delivery: data.delivery ?? data.physical_layers?.delivery,
             noise_entropy: data.noise_entropy
           }
           console.log(`[DNA Scrubber] Custom Voice DNA Loaded successfully: ${vdCode}`)

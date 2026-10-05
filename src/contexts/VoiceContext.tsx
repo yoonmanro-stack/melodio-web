@@ -3,6 +3,8 @@
 import { studioVoiceFields as buildStudioVoiceFields } from "@/lib/voice/studio-selection";
 import { INITIAL_SYSTEM_VOICES } from "@/data/vocalStyles";
 import { discoveryVoiceItem } from "@/data/discoveryVoices";
+import { restoreDesignAttributes } from "@/lib/voice/restore-design-attributes";
+import type { VoiceDnaRecord } from "@/lib/voice-dna-scrubber";
 import React, { createContext, useCallback, useContext, useState, useEffect } from "react";
 
 export interface VoiceItem {
@@ -38,6 +40,8 @@ export interface VoiceItem {
   reviewStatus?: "selected" | "trial";
   shortDescription?: string;
   is100PercentSync?: boolean;
+  /** Full editable recipe, kept separate from audio samples and singer identities. */
+  designAttributes?: VoiceDnaRecord;
   physicalLayers?: {
     pitch?: number;
     brightness?: number;
@@ -135,6 +139,7 @@ function persistCustomVoices(allVoices: VoiceItem[]) {
         audioUrlB: undefined,
         voice_model_id: undefined,
         is100PercentSync: false,
+        designAttributes: restoreDesignAttributes(v.designAttributes),
         tags: Array.isArray(v.tags) ? v.tags : [],
         stylePrompt: v.stylePrompt || "",
         name: v.name || "보컬 음색 스타일",
@@ -219,6 +224,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
                 previewStatus: v.designedVoiceId ? 'ready' : undefined,
                 is100PercentSync: false,
                 physicalLayers: v.physicalLayers,
+                designAttributes: restoreDesignAttributes(v.designAttributes),
               };
             }).filter((v: VoiceItem | null): v is VoiceItem => v !== null);
           setVoices([...INITIAL_SYSTEM_VOICES, ...customOnly].map(v => ({ ...v, isFavorite: Array.isArray(favoriteIds) ? favoriteIds.includes(v.id) : v.isFavorite })));

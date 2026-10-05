@@ -11,11 +11,13 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { defaultSystemVoices, buildVoicePromptFromAttributes, VoiceDnaRecord } from "@/lib/voice-dna-scrubber";
 import { supabase } from "@/lib/supabase";
-import { useLanguage } from "@/contexts/LanguageContext";
+import { useLanguage, type Language } from "@/contexts/LanguageContext";
 import { useVoice } from "@/contexts/VoiceContext";
 import { DEMO_LYRICS } from "@/data/demo-lyrics";
 import { VoiceDiscovery } from "@/components/voice/VoiceDiscovery";
 import { CustomVoiceDesigner } from "@/components/voice/CustomVoiceDesigner";
+import { QUICK_START_TEMPLATES, type QuickStartTemplateId } from "@/lib/voice/quick-start-templates";
+import { restoreDesignAttributes } from "@/lib/voice/restore-design-attributes";
 
 type VoiceType = "default" | "record" | "upload" | "blend";
 
@@ -325,11 +327,12 @@ const EXPLORE_VOICES = [
 // DEMO_LYRICS is now imported from @/data/demo-lyrics
 
 export default function VoiceDnaStudio() {
-  const { language } = useLanguage();
+  const { language, setLanguage } = useLanguage();
   const { 
     voices, 
     activeVoice, 
-    setActiveVoice, 
+    setActiveVoice,
+    setStudioGender,
     addVoice,
     updateVoice, 
     deleteVoice, 
@@ -344,6 +347,9 @@ export default function VoiceDnaStudio() {
   // ─── State Management ──────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<"explore" | "design" | "collections" | "decoder">("explore");
   const [voiceType, setVoiceType] = useState<VoiceType>("default");
+  const designerRegionRef = useRef<HTMLDivElement | null>(null);
+  const [quickStartStatus, setQuickStartStatus] = useState<string | null>(null);
+  const [quickStartNavigationRequest, setQuickStartNavigationRequest] = useState(0);
   
   // Explore Filters & Audio Preview State
   const [explorePlayingVoiceId, setExplorePlayingVoiceId] = useState<string | null>(null);
@@ -384,8 +390,6 @@ export default function VoiceDnaStudio() {
 
   const demoAudioRef = useRef<HTMLAudioElement | null>(null);
   const demoTimersRef = useRef<NodeJS.Timeout[]>([]);
-  const demoAudioCtxRef = useRef<AudioContext | null>(null);
-  const demoSynthIntervalRef = useRef<any>(null);
 
   // Voice Blend Source and Ratio States
   const [blendSourceA, setBlendSourceA] = useState<string>("VD-1004");
@@ -407,6 +411,9 @@ export default function VoiceDnaStudio() {
   const [demoGenerateStep, setDemoGenerateStep] = useState(0);
   const [demoAudioUrl, setDemoAudioUrl] = useState<string | null>(null);
   const [demoAudioUrlB, setDemoAudioUrlB] = useState<string | null>(null);
+  const currentDesignSignatureRef = useRef("");
+  const demoRequestRef = useRef(0);
+  const demoCompletedSignatureRef = useRef<string | null>(null);
   const [selectedVocalVersion, setSelectedVocalVersion] = useState<"A" | "B">("A");
   const [isDemoPlaying, setIsDemoPlaying] = useState(false);
   const [demoProgress, setDemoProgress] = useState(0);
@@ -453,279 +460,52 @@ export default function VoiceDnaStudio() {
     },
     {
       title: "5단계: Save Designed Voice (DNA 코드 발급)",
-      description: "설계가 끝나면 저장 버튼을 누르세요. 나만의 고유 암호화된 DNA 코드(VD-XXXX)가 생성되어 라이브러리에 저장되며, 음악 생성 시 즉각 적용 가능해집니다.",
+      description: "설계가 끝나면 음색 스타일을 저장하세요. 설정과 가창 지시가 라이브러리에 저장되며, 같은 성별의 스튜디오 보컬을 선택할 때 적용됩니다. 실제 결과는 생성된 샘플로 확인하세요.",
       target: "save-btn"
     }
   ];
 
-  const [playingDemoId, setPlayingDemoId] = useState<string | null>(null);
-  const audioCtxRef = useRef<AudioContext | null>(null);
-  const oscillatorsRef = useRef<any[]>([]);
   const exploreAudioRef = useRef<HTMLAudioElement | null>(null);
-  const liveDspFilterRef = useRef<{
-    lowShelf?: BiquadFilterNode;
-    highShelf?: BiquadFilterNode;
-    peakFilter?: BiquadFilterNode;
-    sourceElement?: HTMLAudioElement;
-    ctx?: AudioContext;
-  } | null>(null);
-
-  // 실시간 슬라이더 값 동기화 ref (재생 루프에서 매 음표마다 즉각 참조)
-  const slidersLiveRef = useRef({
-    pitch: 65,
-    brightness: 70,
-    chestResonance: 50,
-    headResonance: 60,
-    power: 70,
-    gender: "female" as "female" | "male"
-  });
-
-  useEffect(() => {
-    slidersLiveRef.current = {
-      pitch,
-      brightness,
-      chestResonance,
-      headResonance,
-      power,
-      gender
-    };
-  }, [pitch, brightness, chestResonance, headResonance, power, gender]);
-
-  // 실시간 슬라이더 드래그 시 재생 중인 오디오 DSP 필터 & 피치 즉각 갱신 (0ms 지연)
-  useEffect(() => {
-    if (liveDspFilterRef.current && liveDspFilterRef.current.ctx) {
-      const { lowShelf, highShelf, peakFilter, sourceElement, ctx } = liveDspFilterRef.current;
-      const t = ctx.currentTime;
-      if (lowShelf) {
-        // 흉성 공명 (200Hz Low-Shelf: -24dB ~ +24dB 초강력 부스트/컷)
-        lowShelf.gain.setTargetAtTime((chestResonance - 50) * 0.48, t, 0.02);
-      }
-      if (highShelf) {
-        // 두성 & 밝기 (3000Hz High-Shelf: -24dB ~ +24dB 시원한 고음역 개방)
-        highShelf.gain.setTargetAtTime(((headResonance + brightness) / 2 - 50) * 0.48, t, 0.02);
-      }
-      if (peakFilter) {
-        // 가창 출력 파워 (1400Hz Peaking Filter: 보컬 중심 배음 증폭)
-        peakFilter.gain.setTargetAtTime((power - 50) * 0.3, t, 0.02);
-      }
-      if (sourceElement) {
-        // 피치 변조 (0: 0.6배속 굵은 저음, 50: 1.0배속 원음, 100: 1.7배속 높은 고음)
-        const rate = Math.pow(2, (pitch - 50) / 40);
-        sourceElement.playbackRate = Math.max(0.55, Math.min(1.85, rate));
-      }
-    }
-  }, [pitch, brightness, chestResonance, headResonance, power]);
-
-  const stopAllSynthesis = () => {
-    oscillatorsRef.current.forEach(osc => {
-      try { osc.stop(); } catch (e) {}
-    });
-    oscillatorsRef.current = [];
-    setPlayingDemoId(null);
-  };
+  const [voicePreviewNotice, setVoicePreviewNotice] = useState<string | null>(null);
 
   const playExploreVoiceDemo = (voice: any) => {
     stopExploreVoiceDemo();
-    
-    // 1. 실제 오디오 파일이 등록되어 있는 경우 (실제 음원 + 실시간 DSP 필터)
     const realAudioUrl = voice.audioUrl || voice.audio_url || voice.physical_layers?.audio_url;
+    if (!realAudioUrl) {
+      setVoicePreviewNotice("아직 실제 보컬 샘플이 없습니다. 데모를 생성한 후 확인해 주세요.");
+      return;
+    }
+    setVoicePreviewNotice(null);
     const voiceKey = voice.id || voice.code;
-    if (realAudioUrl) {
-      setExplorePlayingVoiceId(voiceKey);
-      setExplorePlaying(true);
-      setExploreProgress(0);
-
-      const audio = new Audio(realAudioUrl);
-      audio.crossOrigin = "anonymous";
-      const initialRate = Math.pow(2, (pitch - 50) / 40);
-      const tunedPreview = voice.code === "DESIGNER_PREVIEW";
-      audio.playbackRate = tunedPreview ? Math.max(0.55, Math.min(1.85, initialRate)) : 1;
-      exploreAudioRef.current = audio;
-
-      if (tunedPreview) try {
-        if (!audioCtxRef.current) {
-          audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-        }
-        const ctx = audioCtxRef.current;
-        if (ctx.state === 'suspended') {
-          ctx.resume();
-        }
-        const source = ctx.createMediaElementSource(audio);
-        
-        // 흉성 저음 필터 (200Hz Low-Shelf)
-        const lowShelf = ctx.createBiquadFilter();
-        lowShelf.type = "lowshelf";
-        lowShelf.frequency.setValueAtTime(200, ctx.currentTime);
-        lowShelf.gain.setValueAtTime((chestResonance - 50) * 0.48, ctx.currentTime);
-
-        // 두성 & 밝기 고음 필터 (3000Hz High-Shelf)
-        const highShelf = ctx.createBiquadFilter();
-        highShelf.type = "highshelf";
-        highShelf.frequency.setValueAtTime(3000, ctx.currentTime);
-        highShelf.gain.setValueAtTime(((headResonance + brightness) / 2 - 50) * 0.48, ctx.currentTime);
-
-        // 가창 출력 미드 필터 (1400Hz Peaking)
-        const peakFilter = ctx.createBiquadFilter();
-        peakFilter.type = "peaking";
-        peakFilter.frequency.setValueAtTime(1400, ctx.currentTime);
-        peakFilter.Q.setValueAtTime(1.2, ctx.currentTime);
-        peakFilter.gain.setValueAtTime((power - 50) * 0.3, ctx.currentTime);
-
-        const masterGain = ctx.createGain();
-        masterGain.gain.setValueAtTime(0.95, ctx.currentTime);
-
-        source.connect(lowShelf);
-        lowShelf.connect(highShelf);
-        highShelf.connect(peakFilter);
-        peakFilter.connect(masterGain);
-        masterGain.connect(ctx.destination);
-
-        liveDspFilterRef.current = { lowShelf, highShelf, peakFilter, sourceElement: audio, ctx };
-      } catch (dspErr) {
-        console.warn("Web Audio DSP routing fallback to direct playback:", dspErr);
-      }
-
-      audio.ontimeupdate = () => {
-        if (audio.duration) {
-          const previewDuration = voice.sampleDurationSeconds ? Math.min(audio.duration, voice.sampleDurationSeconds) : audio.duration;
-          const percent = Math.min(100, (audio.currentTime / previewDuration) * 100);
-          setExploreProgress(percent);
-          if (voice.sampleDurationSeconds && audio.currentTime >= previewDuration) { audio.pause(); setExplorePlaying(false); }
-        }
-      };
-
-      audio.onended = () => {
-        setExplorePlaying(false);
-        setExplorePlayingVoiceId(null);
-        setExploreProgress(0);
-        liveDspFilterRef.current = null;
-      };
-
-      audio.play().catch(err => {
-        console.error("Failed to play explore audio url:", err);
-        setExplorePlaying(false);
-        setExplorePlayingVoiceId(null);
-        liveDspFilterRef.current = null;
-      });
-      return;
-    }
-
-    if (voice.discoveryVoiceId || voice.designedVoiceId) {
-      setExplorePlaying(false);
-      setExplorePlayingVoiceId(null);
-      return;
-    }
-
-    // 2. 가상 음성 합성 엔진 (실시간 슬라이더 변화 100% 즉시 반영)
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') {
-      ctx.resume();
-    }
-
-    setExplorePlayingVoiceId(voice.code);
-    setExplorePlaying(true);
+    const audio = new Audio(realAudioUrl);
+    audio.volume = 1;
+    audio.playbackRate = 1;
+    exploreAudioRef.current = audio;
+    setExplorePlayingVoiceId(voiceKey);
     setExploreProgress(0);
-
-    const dest = ctx.destination;
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.12, ctx.currentTime);
-
-    // Dynamic Filter Node
-    const dynamicFilter = ctx.createBiquadFilter();
-    dynamicFilter.type = "lowpass";
-    dynamicFilter.frequency.setValueAtTime(1500, ctx.currentTime);
-
-    // Chest Bass Booster
-    const lowShelfNode = ctx.createBiquadFilter();
-    lowShelfNode.type = "lowshelf";
-    lowShelfNode.frequency.setValueAtTime(220, ctx.currentTime);
-    lowShelfNode.gain.setValueAtTime((chestResonance - 50) * 0.48, ctx.currentTime);
-
-    dynamicFilter.connect(lowShelfNode);
-    lowShelfNode.connect(masterGain);
-    masterGain.connect(dest);
-
-    liveDspFilterRef.current = { lowShelf: lowShelfNode, ctx };
-
-    const chord = [1.0, 1.25, 1.5, 1.875, 2.0, 2.5, 3.0, 3.75]; // 도-미-솔-시 아르페지오
-    let noteIdx = 0;
-    
-    // 매 음표마다 실시간 슬라이더 값을 직접 읽어서 피치 및 배음 즉시 변경!
-    const intervalId = setInterval(() => {
-      if (!audioCtxRef.current) return;
-      const t = audioCtxRef.current.currentTime;
-      const osc = audioCtxRef.current.createOscillator();
-      const gainNode = ctx.createGain();
-
-      const live = slidersLiveRef.current;
-      const isFemaleVocal = live.gender === 'female';
-      
-      // 슬라이더 피치 비율 (0: -1.5옥타브 저음 ~ 100: +1.5옥타브 초고음)
-      const pitchRatio = Math.pow(2, (live.pitch - 50) / 30);
-      const baseFundamental = (isFemaleVocal ? 330 : 120) * pitchRatio;
-      const noteFreq = baseFundamental * chord[noteIdx % chord.length];
-
-      // 밝기 & 두성에 따른 실시간 컷오프 주파수 (250Hz ~ 9000Hz)
-      const dynamicCutoff = Math.max(250, Math.min(10000, 300 + (live.brightness / 100) * 4500 + (live.headResonance / 100) * 3500));
-      dynamicFilter.frequency.setTargetAtTime(dynamicCutoff, t, 0.03);
-      lowShelfNode.gain.setTargetAtTime((live.chestResonance - 50) * 0.48, t, 0.03);
-
-      osc.type = isFemaleVocal ? 'sine' : 'triangle';
-      osc.frequency.setValueAtTime(noteFreq, t);
-
-      // Vibrato LFO
-      const lfo = audioCtxRef.current.createOscillator();
-      const lfoGain = audioCtxRef.current.createGain();
-      lfo.frequency.value = 5.6;
-      lfoGain.gain.value = noteFreq * (0.008 + (live.power / 100) * 0.03);
-      lfo.connect(lfoGain);
-      lfoGain.connect(osc.frequency);
-
-      // Attack / Release
-      gainNode.gain.setValueAtTime(0, t);
-      gainNode.gain.linearRampToValueAtTime(0.12, t + 0.08);
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, t + 0.65);
-
-      osc.connect(gainNode);
-      gainNode.connect(dynamicFilter);
-      
-      lfo.start(t);
-      osc.start(t);
-      
-      oscillatorsRef.current.push(lfo);
-      oscillatorsRef.current.push(osc);
-
-      noteIdx++;
-      
-      setExploreProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(intervalId);
-          setExplorePlaying(false);
-          setExplorePlayingVoiceId(null);
-          liveDspFilterRef.current = null;
-          return 0;
-        }
-        return prev + 4.5;
-      });
-    }, 700);
-
-    (window as any).exploreIntervalId = intervalId;
+    audio.ontimeupdate = () => {
+      if (exploreAudioRef.current !== audio) return;
+      if (!audio.duration) return;
+      const duration = voice.sampleDurationSeconds ? Math.min(audio.duration, voice.sampleDurationSeconds) : audio.duration;
+      setExploreProgress(Math.min(100, audio.currentTime / duration * 100));
+      if (voice.sampleDurationSeconds && audio.currentTime >= duration) stopExploreVoiceDemo();
+    };
+    audio.onended = () => { if (exploreAudioRef.current === audio) stopExploreVoiceDemo(); };
+    audio.play().then(() => { if (exploreAudioRef.current === audio) setExplorePlaying(true); }).catch(() => {
+      if (exploreAudioRef.current !== audio) return;
+      stopExploreVoiceDemo();
+      setVoicePreviewNotice("실제 보컬 샘플을 재생하지 못했습니다. 잠시 후 다시 시도해 주세요.");
+    });
   };
 
   const stopExploreVoiceDemo = () => {
-    if ((window as any).exploreIntervalId) {
-      clearInterval((window as any).exploreIntervalId);
-      (window as any).exploreIntervalId = null;
+    const audio = exploreAudioRef.current;
+    exploreAudioRef.current = null;
+    if (audio) {
+      audio.ontimeupdate = null;
+      audio.onended = null;
+      audio.pause();
     }
-    if (exploreAudioRef.current) {
-      exploreAudioRef.current.pause();
-      exploreAudioRef.current = null;
-    }
-    liveDspFilterRef.current = null;
-    stopAllSynthesis();
     setExplorePlaying(false);
     setExplorePlayingVoiceId(null);
     setExploreProgress(0);
@@ -736,185 +516,31 @@ export default function VoiceDnaStudio() {
       stopExploreVoiceDemo();
       return;
     }
-    const tempVoice = {
-      code: "DESIGNER_PREVIEW",
-      name: stageName || "My Design Preview",
-      desc: `Pitch: ${pitch}% • Brightness: ${brightness}% • Power: ${power}%`,
-      flag: "🎛️",
-      language: "Custom",
-      tags: selectedTextures.length > 0 ? selectedTextures : ["Custom"],
-      gradient: "linear-gradient(135deg, #d946ef 0%, #06b6d4 100%)",
-      audioUrl: loadedVoiceAudioUrl || undefined,
-      physical_layers: {
-        gender,
-        age,
-        pitch,
-        brightness,
-        chest: chestResonance,
-        head: headResonance,
-        weight,
-        power,
-        audio_url: loadedVoiceAudioUrl || undefined
-      }
-    };
-    playExploreVoiceDemo(tempVoice);
+    const sample = selectedVocalVersion === "B" ? demoAudioUrlB : demoAudioUrl;
+    if (!sample) {
+      setVoicePreviewNotice("현재 설정의 실제 보컬 샘플이 없습니다. 데모를 생성한 후 확인해 주세요.");
+      return;
+    }
+    playExploreVoiceDemo({ code: "DESIGNER_PREVIEW", audioUrl: sample });
   };
 
   const handleLoadVoiceIntoDesigner = (v: any) => {
+    if (isDemoGenerating) return;
+    const recipe = restoreDesignAttributes(v.designAttributes) || restoreDesignAttributes(v.physical_layers ? v : {
+      vd_code: v.id || v.code || "VD-SAVED", name: v.name,
+      physical_layers: { ...v.physicalLayers, gender: v.gender },
+      textures: v.textures || v.tags || [], emotions: v.emotions || [],
+      performance: v.performance || { vibrato: v.physicalLayers?.vibrato },
+      reverb: v.reverb, style: v.style, noise_entropy: v.noise_entropy ?? v.physicalLayers?.roughness,
+    });
+    if (recipe) loadPresetToSliders(recipe);
     setLoadedVoiceId(v.id || v.code);
-    setLoadedVoiceAudioUrl(v.audioUrl || v.audio_url || null);
+    setLoadedVoiceAudioUrl(null);
     setStageName(v.name || "Custom Voice");
-    setGender(v.gender === "male" ? "male" : "female");
-    
-    if (v.physicalLayers || v.physical_layers) {
-      const pl = v.physicalLayers || v.physical_layers;
-      if (pl.pitch !== undefined) setPitch(pl.pitch);
-      if (pl.brightness !== undefined) setBrightness(pl.brightness);
-      if (pl.chest !== undefined) setChestResonance(pl.chest);
-      if (pl.head !== undefined) setHeadResonance(pl.head);
-      if (pl.weight !== undefined || pl.power !== undefined) setPower(pl.weight ?? pl.power ?? 70);
-      if (pl.roughness !== undefined) setNoiseEntropy(pl.roughness);
-      if (pl.vibrato !== undefined) setVibrato(pl.vibrato);
-    }
-    if (v.tags && Array.isArray(v.tags) && v.tags.length > 0) {
-      setSelectedTextures(v.tags.slice(0, 2));
-    }
     setVoiceType("default");
   };
 
-  const playVoiceSyntheticDemo = (code: string) => {
-    stopAllSynthesis();
-    
-    // Web Audio API Context
-    if (!audioCtxRef.current) {
-      audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
-    }
-    const ctx = audioCtxRef.current;
-    if (ctx.state === 'suspended') {
-      ctx.resume();
-    }
-
-    setPlayingDemoId(code);
-
-    const dest = ctx.destination;
-    const masterGain = ctx.createGain();
-    masterGain.gain.setValueAtTime(0.12, ctx.currentTime);
-    masterGain.connect(dest);
-
-    // Filter for warmth
-    const filter = ctx.createBiquadFilter();
-    filter.type = code === "VD-3802" ? "lowpass" : "peaking";
-    filter.frequency.setValueAtTime(code === "VD-3802" ? 800 : 2500, ctx.currentTime);
-    filter.connect(masterGain);
-
-    const now = ctx.currentTime;
-    
-    if (code === "VD-1004") {
-      // Aria - Sweet High Soprano: Pure Sine wave chords with warm vibrato
-      const freqs = [523.25, 659.25, 783.99]; // C5, E5, G5
-      freqs.forEach((f, i) => {
-        const osc = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-        
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(f, now);
-
-        // Add vibrato LFO
-        const lfo = ctx.createOscillator();
-        const lfoGain = ctx.createGain();
-        lfo.frequency.value = 5.5; // Vibrato speed
-        lfoGain.gain.value = 6;     // Vibrato depth
-        lfo.connect(lfoGain);
-        lfoGain.connect(osc.frequency);
-        lfo.start(now);
-        oscillatorsRef.current.push(lfo);
-
-        gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(0.08, now + 0.3);
-        gainNode.gain.setValueAtTime(0.08, now + 1.2);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 2.0);
-
-        osc.connect(gainNode);
-        gainNode.connect(filter);
-        osc.start(now);
-        oscillatorsRef.current.push(osc);
-      });
-    } else if (code === "VD-3802") {
-      // Kaelen - Husky Deep Baritone: Warm low triangle waves with heavy chest filter
-      const freqs = [130.81, 164.81, 196.00]; // C3, E3, G3
-      freqs.forEach((f, i) => {
-        const osc = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-        
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(f, now);
-
-        // Add slow chest vibrato LFO
-        const lfo = ctx.createOscillator();
-        const lfoGain = ctx.createGain();
-        lfo.frequency.value = 4.0;
-        lfoGain.gain.value = 2;
-        lfo.connect(lfoGain);
-        lfoGain.connect(osc.frequency);
-        lfo.start(now);
-        oscillatorsRef.current.push(lfo);
-
-        gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(0.12, now + 0.4);
-        gainNode.gain.setValueAtTime(0.12, now + 1.2);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 2.2);
-
-        osc.connect(gainNode);
-        gainNode.connect(filter);
-        osc.start(now);
-        oscillatorsRef.current.push(osc);
-      });
-    } else if (code === "VD-7705") {
-      // Moe - High Kawaii: Fast cute pulse waveforms
-      const freqs = [880.00, 987.77, 1046.50]; // A5, B5, C6
-      freqs.forEach((f, i) => {
-        const osc = ctx.createOscillator();
-        const gainNode = ctx.createGain();
-        
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(f, now);
-
-        // Fast light vibrato
-        const lfo = ctx.createOscillator();
-        const lfoGain = ctx.createGain();
-        lfo.frequency.value = 7.0;
-        lfoGain.gain.value = 10;
-        lfo.connect(lfoGain);
-        lfoGain.connect(osc.frequency);
-        lfo.start(now);
-        oscillatorsRef.current.push(lfo);
-
-        gainNode.gain.setValueAtTime(0, now);
-        gainNode.gain.linearRampToValueAtTime(0.05, now + 0.2);
-        gainNode.gain.setValueAtTime(0.05, now + 1.0);
-        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.7);
-
-        osc.connect(gainNode);
-        gainNode.connect(filter);
-        osc.start(now);
-        oscillatorsRef.current.push(osc);
-      });
-    }
-
-    // Auto stop after 2.5 seconds
-    setTimeout(() => {
-      setPlayingDemoId(prev => prev === code ? null : prev);
-    }, 2500);
-  };
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopAllSynthesis();
-      exploreAudioRef.current?.pause();
-      if ((window as any).exploreIntervalId) clearInterval((window as any).exploreIntervalId);
-    };
-  }, []);
+  useEffect(() => () => { exploreAudioRef.current?.pause(); }, []);
 
   // Load current user for Supabase sync
   useEffect(() => {
@@ -924,182 +550,81 @@ export default function VoiceDnaStudio() {
     });
   }, []);
 
-  // ─── 3. 1초 완성 퀵스타트 템플릿 로드 함수 ────────────────────────────────────
-  const loadQuickStartTemplate = (type: "whisperer" | "belter" | "diva" | "baritone" | "soul" | "indie" | "hiphop" | "dance") => {
-    if (type === "whisperer") {
-      setStageName("Warm Lofi Whisperer");
-      setGender("female");
-      setAge("young");
-      setPitch(50);
-      setBrightness(30);
-      setChestResonance(85);
-      setHeadResonance(40);
-      setWeight(70);
-      setPower(40);
-      setDynamics(60);
-      setVibrato(45);
-      setGroove(50);
-      setNoiseEntropy(10);
-      setSelectedTextures(["Velvet", "Breathy", "Smoky"]);
-      setSelectedEmotions(["Dreamy", "Calm", "Lonely"]);
-      setSelectedReverb("Rain Cafe");
-    } else if (type === "belter") {
-      setStageName("Steel Heavy Belter");
-      setGender("male");
-      setAge("mature");
-      setPitch(45);
-      setBrightness(75);
-      setChestResonance(90);
-      setHeadResonance(65);
-      setWeight(85);
-      setPower(95);
-      setDynamics(80);
-      setVibrato(80);
-      setGroove(65);
-      setNoiseEntropy(20);
-      setSelectedTextures(["Metallic", "Wood", "Glass"]);
-      setSelectedEmotions(["Powerful", "Dark", "Passionate"]);
-      setSelectedReverb("Arena");
-    } else if (type === "diva") {
-      setStageName("Crystal Pop Diva");
-      setGender("female");
-      setAge("young");
-      setPitch(85);
-      setBrightness(90);
-      setChestResonance(30);
-      setHeadResonance(95);
-      setWeight(40);
-      setPower(75);
-      setDynamics(80);
-      setVibrato(70);
-      setGroove(85);
-      setNoiseEntropy(15);
-      setSelectedTextures(["Crystal", "Silky", "Clean"]);
-      setSelectedEmotions(["Hopeful", "Romantic", "Dreamy"]);
-      setSelectedReverb("Concert Hall");
-    } else if (type === "baritone") {
-      setStageName("Midnight Velvet Baritone");
-      setGender("male");
-      setAge("mature");
-      setPitch(25);
-      setBrightness(40);
-      setChestResonance(95);
-      setHeadResonance(35);
-      setWeight(80);
-      setPower(70);
-      setDynamics(75);
-      setVibrato(65);
-      setGroove(80);
-      setNoiseEntropy(12);
-      setSelectedTextures(["Velvet", "Smoky", "Breathy"]);
-      setSelectedEmotions(["Lonely", "Romantic", "Calm"]);
-      setSelectedReverb("Studio");
-    } else if (type === "soul") {
-      setStageName("Golden Retro Soul");
-      setGender("female");
-      setAge("young");
-      setPitch(70);
-      setBrightness(65);
-      setChestResonance(65);
-      setHeadResonance(80);
-      setWeight(60);
-      setPower(80);
-      setDynamics(85);
-      setVibrato(75);
-      setGroove(90);
-      setNoiseEntropy(14);
-      setSelectedTextures(["Silky", "Breathy", "Wood"]);
-      setSelectedEmotions(["Passionate", "Hopeful", "Dreamy"]);
-      setSelectedReverb("Studio");
-    } else if (type === "indie") {
-      setStageName("Indie Acoustic Breeze");
-      setGender("female");
-      setAge("young");
-      setPitch(75);
-      setBrightness(80);
-      setChestResonance(50);
-      setHeadResonance(70);
-      setWeight(45);
-      setPower(60);
-      setDynamics(70);
-      setVibrato(50);
-      setGroove(70);
-      setNoiseEntropy(8);
-      setSelectedTextures(["Crystal", "Clean", "Cotton"]);
-      setSelectedEmotions(["Hopeful", "Calm", "Dreamy"]);
-      setSelectedReverb("Rain Cafe");
-    } else if (type === "hiphop") {
-      setStageName("Street Lyricist Rap");
-      setGender("male");
-      setAge("young");
-      setPitch(35);
-      setBrightness(60);
-      setChestResonance(80);
-      setHeadResonance(50);
-      setWeight(70);
-      setPower(85);
-      setDynamics(90);
-      setVibrato(20);
-      setGroove(95);
-      setNoiseEntropy(25);
-      setSelectedTextures(["Rough", "Breathy", "Metallic"]);
-      setSelectedEmotions(["Powerful", "Dark", "Passionate"]);
-      setSelectedReverb("Studio");
-    } else if (type === "dance") {
-      setStageName("Neon Electro Diva");
-      setGender("female");
-      setAge("young");
-      setPitch(85);
-      setBrightness(95);
-      setChestResonance(40);
-      setHeadResonance(90);
-      setWeight(50);
-      setPower(90);
-      setDynamics(85);
-      setVibrato(70);
-      setGroove(90);
-      setNoiseEntropy(18);
-      setSelectedTextures(["Crystal", "Metallic", "Silky"]);
-      setSelectedEmotions(["Hopeful", "Passionate", "Dreamy"]);
-      setSelectedReverb("Arena");
-    }
+  // Applying a recipe changes settings only; generation remains an explicit action.
+  const loadQuickStartTemplate = (type: QuickStartTemplateId) => {
+    if (isDemoGenerating) return;
+    stopExploreVoiceDemo();
+    demoAudioRef.current?.pause();
+    demoAudioRef.current = null;
+    demoTimersRef.current.forEach(clearTimeout);
+    demoTimersRef.current = [];
+    setLoadedVoiceId(null);
+    setLoadedVoiceAudioUrl(null);
+    setLastSavedDna(null);
+    setDemoAudioUrl(null);
+    setDemoAudioUrlB(null);
+    setSelectedVocalVersion("A");
+    setIsDemoPlaying(false);
+    setDemoProgress(0);
+    setDemoGenerateStep(0);
+    setVoicePreviewNotice(null);
+    setVoiceType("default");
+    const template = QUICK_START_TEMPLATES[type];
+    setStageName(template.name);
+    setSelectedGenre(template.genre);
+    setGender(template.physical_layers.gender);
+    setAge(template.physical_layers.age);
+    setPitch(template.physical_layers.pitch);
+    setBrightness(template.physical_layers.brightness);
+    setChestResonance(template.physical_layers.chest);
+    setHeadResonance(template.physical_layers.head);
+    setWeight(template.physical_layers.weight);
+    setPower(template.performance.power);
+    setDynamics(template.performance.dynamics);
+    setVibrato(template.performance.vibrato);
+    setGroove(template.performance.groove);
+    setNoiseEntropy(template.noise_entropy);
+    setSelectedTextures([...template.textures]);
+    setSelectedEmotions([...template.emotions]);
+    setSelectedReverb(template.reverb);
+    setActiveTab("design");
+    setQuickStartStatus("설정 적용됨 → 조절 → 스타일 저장 → 스튜디오 선택");
+    setQuickStartNavigationRequest((previous) => previous + 1);
   };
 
-  const getActiveQuickStart = () => {
-    const hasTextures = (t: string[]) => selectedTextures.length === t.length && selectedTextures.every(x => t.includes(x));
-    const hasEmotions = (e: string[]) => selectedEmotions.length === e.length && selectedEmotions.every(x => e.includes(x));
+  useEffect(() => {
+    if (!quickStartNavigationRequest || activeTab !== "design") return;
+    const designer = designerRegionRef.current;
+    if (!designer) return;
+    designer.focus({ preventScroll: true });
+    designer.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [quickStartNavigationRequest, activeTab]);
 
-    if (gender === "female") {
-      if (pitch === 50 && brightness === 30 && chestResonance === 85 && headResonance === 40 && power === 40 && noiseEntropy === 10 && selectedReverb === "Rain Cafe" && hasTextures(["Velvet", "Breathy", "Smoky"]) && hasEmotions(["Dreamy", "Calm", "Lonely"])) {
-        return "whisperer";
-      }
-      if (pitch === 85 && brightness === 90 && chestResonance === 30 && headResonance === 95 && power === 75 && noiseEntropy === 15 && selectedReverb === "Concert Hall" && hasTextures(["Crystal", "Silky", "Clean"]) && hasEmotions(["Hopeful", "Romantic", "Dreamy"])) {
-        return "diva";
-      }
-      if (pitch === 70 && brightness === 65 && chestResonance === 65 && headResonance === 80 && power === 80 && noiseEntropy === 14 && selectedReverb === "Studio" && hasTextures(["Silky", "Breathy", "Wood"]) && hasEmotions(["Passionate", "Hopeful", "Dreamy"])) {
-        return "soul";
-      }
-      if (pitch === 75 && brightness === 80 && chestResonance === 50 && headResonance === 70 && power === 60 && noiseEntropy === 8 && selectedReverb === "Rain Cafe" && hasTextures(["Crystal", "Clean", "Cotton"]) && hasEmotions(["Hopeful", "Calm", "Dreamy"])) {
-        return "indie";
-      }
-      if (pitch === 85 && brightness === 95 && chestResonance === 40 && headResonance === 90 && power === 90 && noiseEntropy === 18 && selectedReverb === "Arena" && hasTextures(["Crystal", "Metallic", "Silky"]) && hasEmotions(["Hopeful", "Passionate", "Dreamy"])) {
-        return "dance";
-      }
-    } else { // male
-      if (pitch === 45 && brightness === 75 && chestResonance === 90 && headResonance === 65 && power === 95 && noiseEntropy === 20 && selectedReverb === "Arena" && hasTextures(["Metallic", "Wood", "Glass"]) && hasEmotions(["Powerful", "Dark", "Passionate"])) {
-        return "belter";
-      }
-      if (pitch === 25 && brightness === 40 && chestResonance === 95 && headResonance === 35 && power === 70 && noiseEntropy === 12 && selectedReverb === "Studio" && hasTextures(["Velvet", "Smoky", "Breathy"]) && hasEmotions(["Lonely", "Romantic", "Calm"])) {
-        return "baritone";
-      }
-      if (pitch === 35 && brightness === 60 && chestResonance === 80 && headResonance === 50 && power === 85 && noiseEntropy === 25 && selectedReverb === "Studio" && hasTextures(["Rough", "Breathy", "Metallic"]) && hasEmotions(["Powerful", "Dark", "Passionate"])) {
-        return "hiphop";
-      }
-    }
-    return null;
+  const getActiveQuickStart = (): QuickStartTemplateId | null => {
+    const sameWords = (left: readonly string[], right: readonly string[]) => left.length === right.length && left.every(word => right.includes(word));
+    return (Object.keys(QUICK_START_TEMPLATES) as QuickStartTemplateId[]).find(key => {
+      const t = QUICK_START_TEMPLATES[key], p = t.physical_layers, f = t.performance;
+      return gender === p.gender && age === p.age && pitch === p.pitch && brightness === p.brightness
+        && chestResonance === p.chest && headResonance === p.head && weight === p.weight
+        && power === f.power && dynamics === f.dynamics && vibrato === f.vibrato && groove === f.groove
+        && selectedReverb === t.reverb && noiseEntropy === t.noise_entropy
+        && sameWords(selectedTextures, t.textures) && sameWords(selectedEmotions, t.emotions);
+    }) ?? null;
   };
-
   const activeQuickStart = getActiveQuickStart();
+
+  const buildCurrentVoiceDna = (code: string, name: string): VoiceDnaRecord => ({
+    vd_code: code, name,
+    physical_layers: { gender, age, pitch, brightness, chest: chestResonance, head: headResonance, weight },
+    textures: [...selectedTextures], emotions: [...selectedEmotions],
+    performance: { power, dynamics, vibrato, groove },
+    style: selectedReverb, reverb: selectedReverb, noise_entropy: noiseEntropy,
+    delivery: activeQuickStart ? QUICK_START_TEMPLATES[activeQuickStart].delivery : undefined,
+    language, preview_genre: selectedGenre,
+  });
+  const currentDesignSignature = JSON.stringify({ ...buildCurrentVoiceDna("VD-DESIGN", "Current tone"), lyricIndex });
+  currentDesignSignatureRef.current = currentDesignSignature;
+  const voiceLanguageName = ({ ko: "Korean", en: "English", ja: "Japanese", es: "Spanish", fr: "French", de: "German", pt: "Portuguese", zh: "Chinese", it: "Italian", hi: "Hindi" } as Record<string, string>)[language] || "Korean";
 
   // ─── DB & Preload Fetching ─────────────────────────────────────────────────
   useEffect(() => {
@@ -1167,23 +692,29 @@ export default function VoiceDnaStudio() {
     }
   }, [voiceType, blendSourceA, blendSourceB, blendRatio]);
 
-  // Reset demo player when attributes or parameters change
+  // A sample represents the submitted recipe, never later slider edits.
   useEffect(() => {
-    if (demoAudioRef.current) {
-      demoAudioRef.current.pause();
-      demoAudioRef.current = null;
-    }
-    demoTimersRef.current.forEach(clearTimeout);
-    demoTimersRef.current = [];
+    demoAudioRef.current?.pause();
+    demoAudioRef.current = null;
+    exploreAudioRef.current?.pause();
+    exploreAudioRef.current = null;
+    demoCompletedSignatureRef.current = null;
     setIsDemoPlaying(false);
     setDemoProgress(0);
     setDemoAudioUrl(null);
-    setIsDemoGenerating(false);
-  }, [gender, selectedGenre, pitch, brightness, chestResonance, headResonance, power, noiseEntropy]);
+    setDemoAudioUrlB(null);
+    setSelectedVocalVersion("A");
+    setLoadedVoiceAudioUrl(null);
+    setExplorePlaying(false);
+    setExplorePlayingVoiceId(null);
+    setLastSavedDna(null);
+    // Keep polling an accepted paid job; its result is checked against this recipe.
+  }, [currentDesignSignature]);
 
   // Clean up audio & timers on unmount
   useEffect(() => {
     return () => {
+      demoRequestRef.current += 1;
       if (demoAudioRef.current) {
         demoAudioRef.current.pause();
       }
@@ -1194,6 +725,9 @@ export default function VoiceDnaStudio() {
   // Demo Singing Generation — Real AI via /api/generate (Suno)
   const handleGenerateDemo = async () => {
     if (isDemoGenerating) return;
+    const request = ++demoRequestRef.current;
+    const submittedSignature = currentDesignSignature;
+    demoCompletedSignatureRef.current = null;
     setIsDemoGenerating(true);
     setDemoGenerateStep(0);
     setDemoAudioUrl(null);
@@ -1212,43 +746,9 @@ export default function VoiceDnaStudio() {
     demoTimersRef.current = [];
 
     try {
-      // Build Voice DNA style prompt from current slider values
-      const currentDna: VoiceDnaRecord = {
-        vd_code: `VD-DEMO-${Date.now()}`,
-        name: 'Demo Voice',
-        physical_layers: {
-          gender: gender,
-          age: pitch > 70 ? 'young' : 'mature',
-          pitch: pitch,
-          brightness: brightness,
-          chest: chestResonance,
-          head: headResonance,
-        },
-        textures: selectedTextures,
-        emotions: selectedEmotions,
-        performance: {
-          power: power,
-          vibrato: pitch > 50 ? 60 : 40,
-        },
-        noise_entropy: noiseEntropy,
-      };
-
+      const currentDna = buildCurrentVoiceDna("VD-DESIGN", stageName || "Demo Voice");
       const { tags: voiceTags } = buildVoicePromptFromAttributes(currentDna, noiseEntropy);
-
-      // Genre mapping for style prompt with dynamic language injection
-      const languageDescs: Record<string, string> = {
-        ko: 'Korean',
-        en: 'English',
-        ja: 'Japanese',
-        es: 'Spanish',
-        fr: 'French',
-        de: 'German',
-        pt: 'Portuguese',
-        zh: 'Chinese',
-        it: 'Italian',
-        hi: 'Hindi'
-      };
-      const langDesc = languageDescs[language] || 'Korean';
+      const langDesc = voiceLanguageName;
 
       const genreStyleMap: Record<string, string> = {
         ballad: `emotional ${langDesc} ballad, piano, strings, 70 BPM, heartfelt`,
@@ -1271,14 +771,17 @@ export default function VoiceDnaStudio() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: `Vocal Tone Style Demo (${selectedGenre})`,
+          title: `Vocal Tone Style Demo (${stageName || selectedGenre}) ${Date.now()}`,
           stylePrompt: stylePrompt,
           lyricsPrompt: lyrics,
           engine: 'suno_v5',
           isInstrumental: false,
+          isPublic: false,
           sunoVersion: 'v5.5',
           metadata: {
             primaryGenre: selectedGenre,
+            durationSeconds: 30,
+            purpose: "vocal-tone-preview",
             subGenre: '',
             bpm: selectedGenre === 'ballad' ? '70' : selectedGenre === 'pop' ? '120' : selectedGenre === 'rnb' ? '90' : selectedGenre === 'rock' ? '140' : selectedGenre === 'hiphop' ? '90' : selectedGenre === 'dance' ? '128' : selectedGenre === 'jazz' ? '80' : '75',
             mood: selectedEmotions[0] || 'emotional',
@@ -1298,6 +801,7 @@ export default function VoiceDnaStudio() {
         throw new Error(data.error || '음원 생성 실패');
       }
 
+      if (request !== demoRequestRef.current) return;
       setDemoGenerateStep(2); // "AI Generating Vocal..."
 
       // Poll for completion (Suno async architecture)
@@ -1317,12 +821,20 @@ export default function VoiceDnaStudio() {
             const pollRes = await fetch(`/api/generations?id=${generationId}`);
             const pollData = await pollRes.json();
             const gen = pollData.generation;
+            if (request !== demoRequestRef.current) return;
 
             if (gen?.status === 'completed' && gen?.audio_url) {
-              // Success! Set the real audio URL
+              if (submittedSignature !== currentDesignSignatureRef.current) {
+                setIsDemoGenerating(false);
+                setVoicePreviewNotice("데모 생성 중 설정이 바뀌었습니다. 이전 설정의 결과는 Track Library에서 확인해 주세요.");
+                return;
+              }
+              demoCompletedSignatureRef.current = submittedSignature;
+              setVoicePreviewNotice(null);
+              // Attach only an actual completed sample of the submitted recipe.
               setDemoGenerateStep(3);
               setDemoAudioUrl(gen.audio_url);
-              if (pollData.sibling?.audio_url) {
+              if (pollData.sibling?.status === 'completed' && pollData.sibling?.audio_url) {
                 setDemoAudioUrlB(pollData.sibling.audio_url);
               }
               setIsDemoGenerating(false);
@@ -1423,37 +935,24 @@ export default function VoiceDnaStudio() {
   };
 
   // ─── Save DNA ──────────────────────────────────────────────────────────────
+  const loadedVoiceRecord = voices.find(voice => voice.id === loadedVoiceId);
+  const canOverwriteLoadedVoice = Boolean(loadedVoiceRecord
+    && !loadedVoiceRecord.officialVoiceId && !loadedVoiceRecord.discoveryVoiceId
+    && !loadedVoiceRecord.customVoiceId && !loadedVoiceRecord.designedVoiceId);
   const handleSaveDna = (overwrite: boolean = false) => {
     const vdCode = `VD-${Math.floor(Math.random() * 9000 + 1000)}`;
     const finalName = stageName.trim() || `보컬 음색 스타일 ${vdCode}`;
-    const saveName = overwrite ? finalName : (loadedVoiceId && !finalName.includes("v2") && !finalName.includes("튜닝") ? `${finalName} (v2)` : finalName);
+    const overwriteExisting = overwrite && canOverwriteLoadedVoice;
+    const saveName = overwriteExisting ? finalName : (loadedVoiceId && !finalName.includes("v2") && !finalName.includes("튜닝") ? `${finalName} (v2)` : finalName);
 
+    const designAttributes = buildCurrentVoiceDna(vdCode, saveName);
+    const { tags: voicePrompt } = buildVoicePromptFromAttributes(designAttributes, noiseEntropy);
+    const hasMatchingSample = demoCompletedSignatureRef.current === currentDesignSignature;
+    const audioA = hasMatchingSample ? demoAudioUrl : undefined;
+    const audioB = hasMatchingSample ? demoAudioUrlB : undefined;
+    const sampleVersion: "A" | "B" = selectedVocalVersion === "B" && audioB ? "B" : "A";
     const newDna: VoiceDnaRecord = {
-      vd_code: vdCode,
-      name: saveName,
-      physical_layers: {
-        gender,
-        age,
-        pitch,
-        brightness,
-        chest: chestResonance,
-        head: headResonance,
-        weight: power,
-        audio_url: demoAudioUrl || loadedVoiceAudioUrl || undefined,
-        audio_url_b: demoAudioUrlB || undefined
-      },
-      textures: selectedTextures,
-      emotions: selectedEmotions,
-      performance: {
-        power,
-        dynamics,
-        vibrato,
-        groove
-      },
-      style: selectedReverb,
-      noise_entropy: noiseEntropy,
-      audio_url: demoAudioUrl || loadedVoiceAudioUrl || undefined,
-      audio_url_b: demoAudioUrlB || undefined
+      ...designAttributes, audio_url: audioA || undefined, audio_url_b: audioB || undefined, sample_version: sampleVersion,
     };
 
     const updated = [newDna, ...customVoices];
@@ -1462,73 +961,36 @@ export default function VoiceDnaStudio() {
     localStorage.setItem("custom_voice_dnas", JSON.stringify(updated));
     setLastSavedDna(vdCode);
 
-    // Sync with VoiceContext
-    if (overwrite && loadedVoiceId) {
-      updateVoice(loadedVoiceId, {
-        name: finalName,
-        stylePrompt: `${gender} vocals, pitch ${pitch}, brightness ${brightness}, chest resonance ${chestResonance}, head resonance ${headResonance}, ${selectedTextures.join(', ')}`,
-        gender,
-        tags: [...selectedTextures, ...selectedEmotions],
-        physicalLayers: {
-          pitch,
-          brightness,
-          chest: chestResonance,
-          head: headResonance,
-          weight: power,
-          roughness: noiseEntropy,
-          vibrato,
-        }
-      });
+    const voiceSettings = {
+      name: saveName, gender, language: voiceLanguageName,
+      stylePrompt: voicePrompt, tags: [...selectedTextures, ...selectedEmotions],
+      designAttributes,
+      physicalLayers: { ...designAttributes.physical_layers, roughness: noiseEntropy, vibrato },
+      sampleVersion: sampleVersion as "A" | "B",
+    };
+    if (overwriteExisting && loadedVoiceId) {
+      updateVoice(loadedVoiceId, voiceSettings);
+      const previous = voices.find(voice => voice.id === loadedVoiceId);
+      if (previous) setActiveVoice({ ...previous, ...voiceSettings, audioUrl: "", audioUrlB: undefined });
     } else {
-      addVoice({
-        name: saveName,
+      addVoice({ ...voiceSettings,
         desc: `${gender === 'male' ? '남성' : '여성'} 보컬 (${selectedTextures.join(', ') || 'Custom'})`,
-        gender,
-        language: 'Korean',
-        tags: [...selectedTextures, ...selectedEmotions],
-        audioUrl: demoAudioUrl || loadedVoiceAudioUrl || '',
-        sourceType: 'dna_designed',
-        stylePrompt: `${gender} vocals, pitch ${pitch}, brightness ${brightness}, chest resonance ${chestResonance}, head resonance ${headResonance}, ${selectedTextures.join(', ')}`,
-        isFavorite: true,
-        physicalLayers: {
-          pitch,
-          brightness,
-          chest: chestResonance,
-          head: headResonance,
-          weight: power,
-          roughness: noiseEntropy,
-          vibrato,
-        }
+        audioUrl: (sampleVersion === "B" ? audioB : audioA) || '',
+        sourceType: 'dna_designed', isFavorite: true,
       });
     }
+    setStudioGender(gender);
 
     // Supabase DB Sync
     if (currentUser) {
       supabase.from('voice_dnas').insert({
-        vd_code: vdCode,
-        name: saveName,
-        physical_layers: {
-          gender,
-          age,
-          pitch,
-          brightness,
-          chest: chestResonance,
-          head: headResonance,
-          weight,
-          audio_url: demoAudioUrl || undefined,
-          audio_url_b: demoAudioUrlB || undefined
+        vd_code: vdCode, name: saveName,
+        physical_layers: { ...designAttributes.physical_layers,
+          language, preview_genre: selectedGenre, delivery: designAttributes.delivery,
         },
-        textures: selectedTextures,
-        emotions: selectedEmotions,
-        performance: {
-          power,
-          dynamics,
-          vibrato,
-          groove
-        },
-        style: selectedReverb,
-        noise_entropy: noiseEntropy,
-        user_id: currentUser.id
+        textures: designAttributes.textures, emotions: designAttributes.emotions,
+        performance: designAttributes.performance, style: selectedReverb, noise_entropy: noiseEntropy,
+        user_id: currentUser.id,
       }).then((res: any) => {
         if (res.error) console.error("Failed to sync custom Voice DNA to Supabase:", res.error);
       });
@@ -1582,31 +1044,39 @@ export default function VoiceDnaStudio() {
 
   // ─── Preset Loading ────────────────────────────────────────────────────────
   const loadPresetToSliders = (preset: VoiceDnaRecord) => {
+    if (isDemoGenerating) return;
+    stopExploreVoiceDemo();
+    setLoadedVoiceId(null);
+    setLoadedVoiceAudioUrl(null);
     setStageName(preset.name);
     setGender(preset.physical_layers.gender === "male" ? "male" : "female");
-    setAge(preset.physical_layers.age || "young");
-    setPitch(preset.physical_layers.pitch || 50);
-    setBrightness(preset.physical_layers.brightness || 50);
-    setChestResonance(preset.physical_layers.chest || 50);
-    setHeadResonance(preset.physical_layers.head || 50);
-    setWeight(preset.physical_layers.weight || 50);
-    
-    setPower(preset.performance?.power || 50);
-    setDynamics(preset.performance?.dynamics || 50);
-    setVibrato(preset.performance?.vibrato || 50);
-    setGroove(preset.performance?.groove || 50);
+    setAge(preset.physical_layers.age ?? "young");
+    setPitch(preset.physical_layers.pitch ?? 50);
+    setBrightness(preset.physical_layers.brightness ?? 50);
+    setChestResonance(preset.physical_layers.chest ?? 50);
+    setHeadResonance(preset.physical_layers.head ?? 50);
+    setWeight(preset.physical_layers.weight ?? 50);
+    setPower(preset.performance?.power ?? 50);
+    setDynamics(preset.performance?.dynamics ?? 50);
+    setVibrato(preset.performance?.vibrato ?? 50);
+    setGroove(preset.performance?.groove ?? 50);
     setNoiseEntropy(preset.noise_entropy ?? 15);
-    
-    setSelectedTextures(preset.textures || []);
-    setSelectedEmotions(preset.emotions || []);
-    setSelectedReverb(preset.style || "Studio");
-    
-    // Restore generated audio URLs to the Design Tab if saved
-    const savedAudioUrl = preset.audio_url || preset.physical_layers?.audio_url || null;
-    const savedAudioUrlB = preset.audio_url_b || preset.physical_layers?.audio_url_b || null;
-    setDemoAudioUrl(savedAudioUrl);
-    setDemoAudioUrlB(savedAudioUrlB);
-    
+    setSelectedTextures([...(preset.textures || [])]);
+    setSelectedEmotions([...(preset.emotions || [])]);
+    setSelectedReverb(preset.reverb || preset.style || "Studio");
+    if (preset.preview_genre && ["ballad", "pop", "rnb", "rock", "hiphop", "dance", "jazz", "acoustic"].includes(preset.preview_genre)) {
+      setSelectedGenre(preset.preview_genre as typeof selectedGenre);
+    }
+    if (preset.language && ["ko", "en", "ja", "es", "fr", "de", "pt", "zh", "it", "hi"].includes(preset.language)) {
+      setLanguage(preset.language as Language);
+    }
+    demoCompletedSignatureRef.current = null;
+    setDemoAudioUrl(null);
+    setDemoAudioUrlB(null);
+    setSelectedVocalVersion("A");
+    setLastSavedDna(null);
+    setVoicePreviewNotice("음색 설정을 불러왔습니다. 현재 설정의 실제 보컬 샘플은 데모를 생성해 확인해 주세요.");
+    setVoiceType("default");
     setActiveTab("design");
   };
 
@@ -2018,17 +1488,21 @@ export default function VoiceDnaStudio() {
         </div>
       </section>
 
-      {/* ─── 5. 1초 완성 퀵스타트 템플릿 섹션 (초보자 최우선 개선) ───────────────── */}
+      {voicePreviewNotice && <p role="status" className="mb-4 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">{voicePreviewNotice}</p>}
+
+      {/* ─── 5. 보컬 음색 빠른 설정 ─────────────────────────────────────────── */}
       <section className="mb-6 bg-zinc-950/40 border border-white/5 rounded-2xl p-4">
         <div className="mb-4">
           <h3 className="text-sm font-semibold text-white flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-fuchsia-400 animate-pulse" /> 1초 완성 인기 템플릿
+            <Sparkles className="w-4 h-4 text-fuchsia-400 animate-pulse" /> 보컬 음색 빠른 설정
           </h3>
           <p className="text-[10px] text-zinc-500 mt-1 font-medium">
-            ※ 마음에 드는 스타일을 고르면 '톤 맞춤 조절' 탭으로 바로 이동하여 맞춤 튜닝됩니다.
+            마음에 드는 스타일을 고르면 '톤 맞춤 조절'에서 설정을 조절할 수 있습니다. 데모 생성과 스타일 저장은 다음 단계에서 진행합니다.
           </p>
+          {isDemoGenerating && <p role="status" className="mt-2 text-xs text-amber-300">데모 음원을 생성 중입니다. 완료 후 빠른 설정을 바꿀 수 있습니다.</p>}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <fieldset disabled={isDemoGenerating} className="grid grid-cols-1 md:grid-cols-4 gap-3 disabled:opacity-50">
+          <legend className="sr-only">인기 보컬 음색 설정</legend>
           <button 
             onClick={() => loadQuickStartTemplate("whisperer")}
             className={`flex items-center gap-4 p-3 rounded-xl text-left transition-all group border ${
@@ -2046,7 +1520,7 @@ export default function VoiceDnaStudio() {
             </div>
             <div>
               <div className="text-xs font-bold text-white">감성 발라드 (Warm Whisperer)</div>
-              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">숨소리가 많은 벨벳 질감의 따뜻하고 편안한 음색</div>
+              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">{QUICK_START_TEMPLATES.whisperer.description}</div>
             </div>
           </button>
 
@@ -2067,7 +1541,7 @@ export default function VoiceDnaStudio() {
             </div>
             <div>
               <div className="text-xs font-bold text-white">파워풀 락 보컬 (Steel Belter)</div>
-              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">금속성 배음이 강하고 가창력이 돋보이는 웅장한 목소리</div>
+              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">{QUICK_START_TEMPLATES.belter.description}</div>
             </div>
           </button>
 
@@ -2088,7 +1562,7 @@ export default function VoiceDnaStudio() {
             </div>
             <div>
               <div className="text-xs font-bold text-white">청아한 소프라노 (Crystal Diva)</div>
-              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">크리스탈처럼 맑고 깨끗하게 뻗어나가는 팝 보컬</div>
+              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">{QUICK_START_TEMPLATES.diva.description}</div>
             </div>
           </button>
 
@@ -2109,7 +1583,7 @@ export default function VoiceDnaStudio() {
             </div>
             <div>
               <div className="text-xs font-bold text-white">재즈 벨벳 바리톤 (Midnight Baritone)</div>
-              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">낮고 묵직한 가슴 울림의 감미롭고 부드러운 중저음</div>
+              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">{QUICK_START_TEMPLATES.baritone.description}</div>
             </div>
           </button>
 
@@ -2130,7 +1604,7 @@ export default function VoiceDnaStudio() {
             </div>
             <div>
               <div className="text-xs font-bold text-white">레트로 R&B 소울 (Golden Retro Soul)</div>
-              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">그루비하고 감정선이 깊은 소울풀한 알앤비 음색</div>
+              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">{QUICK_START_TEMPLATES.soul.description}</div>
             </div>
           </button>
 
@@ -2151,7 +1625,7 @@ export default function VoiceDnaStudio() {
             </div>
             <div>
               <div className="text-xs font-bold text-white">인디 어쿠스틱 브리즈 (Acoustic Breeze)</div>
-              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">맑고 따뜻한 감성으로 편안하게 속삭이는 포크 보컬</div>
+              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">{QUICK_START_TEMPLATES.indie.description}</div>
             </div>
           </button>
 
@@ -2172,7 +1646,7 @@ export default function VoiceDnaStudio() {
             </div>
             <div>
               <div className="text-xs font-bold text-white">트렌디 힙합 래퍼 (Street Lyricist)</div>
-              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">딕션이 뚜렷하고 리드미컬한 로우-미드톤 랩 보컬</div>
+              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">{QUICK_START_TEMPLATES.hiphop.description}</div>
             </div>
           </button>
 
@@ -2193,10 +1667,10 @@ export default function VoiceDnaStudio() {
             </div>
             <div>
               <div className="text-xs font-bold text-white">일렉트릭 댄스 디바 (Neon Electro Diva)</div>
-              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">시원한 발성과 에너제틱한 비트 위의 클럽 댄스 보컬</div>
+              <div className="text-[10px] text-zinc-500 leading-normal mt-0.5">{QUICK_START_TEMPLATES.dance.description}</div>
             </div>
           </button>
-        </div>
+        </fieldset>
       </section>
 
       {/* ─── 6. 공개 설명 기반 보컬 음색 참고 스타일 ───────────────── */}
@@ -2435,7 +1909,8 @@ export default function VoiceDnaStudio() {
 
         {/* TAB 1: DESIGNER */}
         {activeTab === "design" && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div id="voice-tone-designer" ref={designerRegionRef} tabIndex={-1} role="region" aria-label="보컬 음색 맞춤 조절" className="grid grid-cols-1 lg:grid-cols-12 gap-6 scroll-mt-24 focus:outline-none">
+            {quickStartStatus && <p role="status" className="lg:col-span-12 rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/10 px-4 py-3 text-xs text-fuchsia-200">{quickStartStatus}</p>}
             
             {/* Left Box: Attribute Controller */}
             <div className="lg:col-span-8 space-y-6">
@@ -2631,7 +2106,7 @@ export default function VoiceDnaStudio() {
                           : "bg-fuchsia-600/20 hover:bg-fuchsia-600/30 border border-fuchsia-500/40 text-fuchsia-300"
                       }`}
                     >
-                      {explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW" ? "청음 중지" : "튜닝된 톤 즉시 청음"}
+                      {explorePlaying && explorePlayingVoiceId === "DESIGNER_PREVIEW" ? "청음 중지" : "생성된 보컬 샘플 듣기"}
                     </button>
 
                     <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5">
@@ -3334,7 +2809,7 @@ export default function VoiceDnaStudio() {
                 </div>
 
                 <div className="w-full mt-4 space-y-2">
-                  {loadedVoiceId ? (
+                  {loadedVoiceId && canOverwriteLoadedVoice ? (
                     <div className="grid grid-cols-2 gap-2">
                       <button
                         type="button"
@@ -3617,6 +3092,7 @@ export default function VoiceDnaStudio() {
                                   setActiveVoice(null);
                                 } else {
                                   setActiveVoice(voice);
+                                  if (voice.gender === "female" || voice.gender === "male") setStudioGender(voice.gender);
                                 }
                               }}
                               className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
@@ -3785,7 +3261,10 @@ export default function VoiceDnaStudio() {
                               <Heart className="w-4 h-4 fill-amber-400" />
                             </button>
                             <button
-                              onClick={() => setActiveVoice(voice)}
+                              onClick={() => {
+                                setActiveVoice(voice);
+                                if (voice.gender === "female" || voice.gender === "male") setStudioGender(voice.gender);
+                              }}
                               disabled={!!voice.discoveryVoiceId && (voice.previewStatus !== 'ready' || voice.reuseStatus !== 'ready')}
                               className="px-2.5 py-1 rounded bg-zinc-900 hover:bg-zinc-800 border border-white/5 text-[10px] text-zinc-300 font-bold transition-all cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                             >

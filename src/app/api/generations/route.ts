@@ -159,6 +159,22 @@ function stripPrivateGenerationMetadata(record: Record<string, unknown>): void {
   }
 }
 
+function generationAudioLineage(record: Record<string, unknown> | null) {
+  if (!record || typeof record.license_hash !== 'string' || record.license_hash.length > 64 * 1024) return null
+  try {
+    const metadata = JSON.parse(record.license_hash)
+    const audio = metadata?.audioPersistence
+    if (!audio || audio.schemaVersion !== 1 || audio.status !== 'ready' || audio.provider !== 'kie'
+      || typeof audio.generationId !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(audio.generationId)
+      || typeof audio.taskId !== 'string' || !/^[A-Za-z0-9_-]{6,160}$/.test(audio.taskId)
+      || audio.taskReference !== `suno:kie:${audio.taskId}`
+      || typeof audio.selectedClipKey !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(audio.selectedClipKey)) return null
+    return { generationId: audio.generationId as string, taskId: audio.taskId as string, selectedClipKey: audio.selectedClipKey as string }
+  } catch {
+    return null
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
@@ -215,6 +231,9 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ error: '음원을 찾을 수 없습니다.' }, { status: 404 })
       }
 
+      // Capture provenance before non-owner response redaction removes it.
+      const primaryLineage = generationAudioLineage(data)
+
       // 공개 음원도 소유자가 아니면 개인 식별 필드를 마스킹한다.
       if (data && !isOwner) {
         stripPrivateStemReferences(data)
@@ -224,22 +243,17 @@ export async function GET(request: NextRequest) {
         delete data.user_email
       }
 
-      // Sibling (서브 보컬 버전 2) 자동 검색
+      // Return an alternate only when the persisted source task proves the relationship.
       let sibling = null
       try {
-        const primaryTitle = data.title;
-        if (primaryTitle && !primaryTitle.endsWith(' (2)')) {
-          const siblingTitle = `${primaryTitle} (2)`
-          const createdTime = new Date(data.created_at)
-          const minTime = new Date(createdTime.getTime() - 3 * 60 * 1000).toISOString()
-          const maxTime = new Date(createdTime.getTime() + 3 * 60 * 1000).toISOString()
-          
+        if (data.status === 'completed' && primaryLineage && primaryLineage.generationId === data.id) {
           let query = serviceSupabase
             .from('generations')
             .select('*')
-            .eq('title', siblingTitle)
-            .gte('created_at', minTime)
-            .lte('created_at', maxTime)
+            .eq('status', 'completed')
+            .neq('id', data.id)
+            // license_hash is a text column. Narrow candidates, then parse and verify exact fields below.
+            .like('license_hash', `%${primaryLineage.generationId}%`)
 
           // 기존 RLS 우회 데이터의 소유자 매핑 유지
           const checkUserId = ownerUserId
@@ -249,9 +263,17 @@ export async function GET(request: NextRequest) {
             query = query.is('user_id', null)
           }
           
-          const { data: siblings } = await query.limit(1)
-          if (siblings && siblings.length > 0) {
-            sibling = siblings[0]
+          const { data: siblings } = await query.limit(8).abortSignal(AbortSignal.timeout(4000))
+          const proven = (siblings || []).filter(candidate => {
+            const lineage = generationAudioLineage(candidate)
+            return lineage?.generationId === primaryLineage.generationId && lineage.taskId === primaryLineage.taskId
+              && lineage.selectedClipKey !== primaryLineage.selectedClipKey
+              && (candidate.user_id || null) === ownerUserId && candidate.id !== data.id
+              && candidate.status === 'completed' && typeof candidate.audio_url === 'string' && candidate.audio_url.length > 0
+          })
+          // Saturated or ambiguous results cannot prove which alternate belongs in the B slot.
+          if (siblings && siblings.length < 8 && proven.length === 1) {
+            sibling = proven[0]
             const siblingIsOwner = Boolean(loggedInUserId && sibling.user_id === loggedInUserId)
             let siblingMetadataPublic = true
             if (sibling.license_hash) {
