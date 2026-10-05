@@ -1,0 +1,26 @@
+{
+  "status": "production_verified",
+  "verifiedAt": "2026-10-05T04:37:39.752825+00:00",
+  "commit": "955edf9",
+  "deployment": {
+    "id": "dpl_Gstgtoa3YxbrqfuHsV6EmVX4kWHT",
+    "status": "READY",
+    "url": "https://melodio-2831nu3ay-whaleloops-projects.vercel.app",
+    "alias": "https://melodio.app"
+  },
+  "scope": "VoiceDiscovery preview dock styling only",
+  "theme": "opaque charcoal and neutral gray",
+  "desktopHeightPx": 49,
+  "previousDesktopHeightPx": 117,
+  "liveChecks": {
+    "fixedBottom": true,
+    "bottomPx": 732,
+    "viewportHeightPx": 732,
+    "iconControlPx": 32,
+    "playbackObservedSeconds": 14,
+    "typecheck": "passed",
+    "productionBuild": "passed"
+  },
+  "screenshot": "artifacts/dashboard-playback-20261005/voice-player-slim-neutral.png",
+  "generationCalls": 0
+}
