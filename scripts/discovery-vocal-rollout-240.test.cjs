@@ -466,3 +466,33 @@ test('generic persona wording is normalized before truncation and hashing withou
   assert.equal(posted[0].input.vocal_start, 0);
   assert.equal(posted[0].input.vocal_end, 30);
 });
+
+test('a replacement metadata override changes only persona description and style, with the exact request hash preserved', async () => {
+  const m = registrationFixture(1), job = m.jobs[0], recorder = registrationRecorder();
+  const design = JSON.stringify(job.profile), generation = JSON.stringify(job.options);
+  job.personaDescription = ' Female low alto, woody body and dry grain. Keep the voice matte with stable sung pitch. ';
+  const expected = 'Female low alto, woody body and dry grain. Keep the vocal timbre matte with stable sung pitch.';
+  let calls = 0;
+  await registerPersonas(m, registrationConfig, { persist: recorder.persist, pause: async () => {}, fetchImpl: async (url, init) => {
+    calls++;
+    const payload = JSON.parse(init.body);
+    assert.equal(payload.input.description, expected);
+    assert.equal(payload.input.style, expected.slice(0, 200));
+    assert.equal(payload.input.task_id, job.taskId);
+    assert.equal(payload.input.audio_id, job.clips[0].id);
+    assert.equal(recorder.snapshots.at(-1)[0].personaRequestSha256, crypto.createHash('sha256').update(init.body).digest('hex'));
+    return personaResponse(job.taskId);
+  } });
+  assert.equal(calls, 1);
+  assert.equal(JSON.stringify(job.profile), design);
+  assert.equal(JSON.stringify(job.options), generation);
+  for (const invalid of ['', '   ', 42, 'x'.repeat(201), `${'x'.repeat(190)} the voice`]) {
+    const bad = registrationFixture(1);
+    bad.jobs[0].personaDescription = invalid;
+    let sideEffects = 0;
+    await assert.rejects(registerPersonas(bad, registrationConfig, { persist() { sideEffects++; }, pause: async () => {},
+      fetchImpl() { sideEffects++; throw new Error('Unexpected network'); } }), /ROLLOUT_PERSONA_HELD/);
+    assert.equal(sideEffects, 0);
+    assert.equal(bad.jobs[0].personaState, undefined);
+  }
+});

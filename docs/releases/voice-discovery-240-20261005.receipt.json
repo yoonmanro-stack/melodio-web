@@ -1,6 +1,6 @@
 {
   "createdAt": "2026-10-05T01:45:53.844Z",
-  "phase": "verified_reference_bundle_partial",
+  "phase": "all_240_references_ready_final_deployment_pending",
   "designs": 240,
   "female": 120,
   "male": 120,
@@ -11,30 +11,32 @@
     "fr": 60
   },
   "selectionPolicy": "first-A-only",
-  "generatedRequests": 240,
-  "generatedClips": 480,
+  "generatedRequests": 244,
+  "generatedClips": 488,
   "verifiedFirstASamples": 240,
-  "registeredReferences": 236,
-  "knownGenerationCredits": 2880,
+  "registeredReferences": 240,
+  "knownGenerationCredits": 2928,
   "personaPricingCredits": 0,
   "personaPricingSource": "https://kie.ai/pricing",
   "qualityReview": "unreviewed",
   "sameSingerGuarantee": false,
   "sourceManifest": "artifacts/discovery-vocals-v2-20261005/rollout-240.json",
-  "sourceManifestSha256": "9d11ca67205a2777687208e8ab31aec5c0bbe51e079cab02f8e926f9cab9360c",
+  "sourceManifestSha256": "9ed7affd8055e462c9a447a950162c7fc303f6f27e57b80bdc38b3efb3013aae",
   "verifiedChecks": {
-    "tests": 76,
+    "tests": 82,
     "typecheck": true,
     "localMockBuild": true,
     "duplicateSampleHashes": 0,
     "publicSamplesHashVerified": 240,
-    "canonicalFirstAReferences": 236,
-    "providerRetryOnAmbiguousResult": false
+    "canonicalFirstAReferences": 240,
+    "providerRetryOnAmbiguousResult": false,
+    "replacementFirstASourcesNew": 4,
+    "oldPublicAssetsAbsent": 4
   },
   "deployment": {
-    "status": "awaiting_activation"
+    "status": "pending_final_activation"
   },
-  "nextAction": "deploy_verified_236_reference_bundle",
+  "nextAction": "deploy_all_240_verified_references",
   "registrationApproval": {
     "approved": true,
     "receivedAt": "2026-10-05T01:49:21.140Z",
@@ -45,7 +47,7 @@
     "retentionUnconfirmed": true,
     "resolvedPriorApprovalHold": true
   },
-  "updatedAt": "2026-10-05T02:33:51.068695+00:00",
+  "updatedAt": "2026-10-05T02:51:39.482676+00:00",
   "previewDeployment": {
     "status": "READY",
     "id": "dpl_Fa6MGSPSkt4vxuYEEMnisYmUj6ye",
@@ -61,34 +63,9 @@
     "exactTaskAndAudioMatch": true,
     "recoveredWithoutDuplicate": true
   },
-  "heldReferences": [
-    {
-      "profileId": "discovery-v2-f-062",
-      "name": "깊은관",
-      "errorCategory": "provider-moderation",
-      "sourceVersion": "A"
-    },
-    {
-      "profileId": "discovery-v2-f-065",
-      "name": "나무통울",
-      "errorCategory": "provider-server",
-      "sourceVersion": "A"
-    },
-    {
-      "profileId": "discovery-v2-f-066",
-      "name": "그늘관",
-      "errorCategory": "provider-moderation",
-      "sourceVersion": "A"
-    },
-    {
-      "profileId": "discovery-v2-f-067",
-      "name": "먼항아리",
-      "errorCategory": "provider-moderation",
-      "sourceVersion": "A"
-    }
-  ],
+  "heldReferences": [],
   "moderationRetryApproval": {
-    "status": "pending",
+    "status": "superseded_by_user_authorized_four_new_samples",
     "profiles": [
       "discovery-v2-f-062",
       "discovery-v2-f-066",
@@ -98,21 +75,22 @@
     "automaticReviewBlockedRetry": true
   },
   "publication": {
-    "createdAt": "2026-10-05T02:33:13.470Z",
+    "createdAt": "2026-10-05T02:50:33.764Z",
     "newIdentities": 240,
     "female": 120,
     "male": 120,
     "selectedVersion": "A",
     "catalogTotal": 272,
-    "readyNewReferences": 236,
-    "heldNewReferences": 4,
+    "readyNewReferences": 240,
+    "heldNewReferences": 0,
     "designValidation": "passed",
     "qualityReview": "unreviewed",
     "sameSingerGuarantee": false,
-    "actualKnownGenerationCredits": 2880,
+    "generatedRequests": 244,
+    "actualKnownGenerationCredits": 2928,
     "unknownCostRequests": 0,
-    "catalogSha256": "3047e4a3ed98456adb970caa07041d081baee76628e0e29cbde9f5112af0c44c",
-    "registrySha256": "2e5d70120754951c983bb95471c459da77cd379abd7c4d3c9efd66619fac3126"
+    "catalogSha256": "a99a10767d89a55c11007de3a656233d555fafbb8844b786fb2447ea1b715f51",
+    "registrySha256": "38599e68de6b386d25fa3eba0b84e420d5a5734f65a3b58170b0cf9ef0b68ebb"
   },
   "genericArtistTagCorrection": {
     "profiles": 10,
@@ -121,5 +99,37 @@
     "scope": "registration_description_only",
     "originalDesignAndFirstAAudioUnchanged": true,
     "correctedReferencesReady": 10
+  },
+  "replacementApproval": {
+    "receivedAt": "2026-10-05T02:41:31.390951+00:00",
+    "userText": "보류 4개는 뭐가 문제야? 문제 해결 안되면 삭제하고 다시 생성해서 적용해줘",
+    "profiles": [
+      "discovery-v2-f-062",
+      "discovery-v2-f-065",
+      "discovery-v2-f-066",
+      "discovery-v2-f-067"
+    ],
+    "estimatedAdditionalGenerationCredits": 48,
+    "oldSamplesArchived": true,
+    "newFirstAOnly": true,
+    "creditApproval": {
+      "approved": true,
+      "userText": "크레딧 승인",
+      "approvedAt": "2026-10-05T02:42:25.810637+00:00",
+      "additionalGenerationCreditBudget": 48
+    },
+    "archiveReceipt": "artifacts/discovery-vocals-v2-20261005/replacements-20261005/receipt.json",
+    "actualAdditionalGenerationCredits": 48,
+    "newFirstASamplesReady": 4,
+    "newReferencesReady": 4,
+    "oldPublicAssetsRemoved": 4,
+    "newPublicAssetRevision": 1
+  },
+  "deployment236": {
+    "status": "READY",
+    "url": "https://melodio-emi8pwmla-whaleloops-projects.vercel.app",
+    "alias": "https://melodio.app",
+    "commit": "224620f",
+    "activeReferences": 236
   }
 }

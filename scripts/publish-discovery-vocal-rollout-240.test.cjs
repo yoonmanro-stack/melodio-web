@@ -167,6 +167,7 @@ test('the actual publication preserves all 32 baseline rows and bindings in one 
   assert.equal(receipt.selectedVersion, 'A');
   assert.equal(receipt.qualityReview, 'unreviewed');
   assert.equal(receipt.sameSingerGuarantee, false);
+  assert.equal(receipt.generatedRequests, 240);
   assert.equal(receipt.actualKnownGenerationCredits, 239 * 12);
   assert.equal(receipt.unknownCostRequests, 1);
   assert.equal(receipt.catalogSha256, digest(fixture.files.get(fixture.paths.catalog)));
@@ -363,6 +364,85 @@ test('available references rejects illegal states, existing persona IDs and inva
     mutate(fixture);
     const publisher = loadPublisher(fixture, true, ['--available-references']);
     assert.deepEqual(publisher.errors, [expected]);
+    assert.equal(publisher.process.exitCode, 1);
+    assert.equal(publisher.networkCalls, 0);
+    for (const file of [fixture.paths.catalog, fixture.paths.registry, fixture.paths.receipt]) assert.equal(fixture.files.has(file), false);
+  }
+});
+
+function replacementFixture() {
+  const fixture = publicationFixture();
+  fixture.m.replacementHistory = [61, 64, 65, 66].map(index => {
+    const job = fixture.m.jobs[index], oldJob = structuredClone(job);
+    job.replacementRevision = 1;
+    job.taskId = `replacement-task-${index}`;
+    job.clips[0].id = `replacement-audio-${index}-A`;
+    job.personaId = `replacement_persona_${index}`;
+    job.personaTaskId = job.taskId;
+    job.personaAudioId = job.clips[0].id;
+    job.sample.clipId = job.clips[0].id;
+    const sample = Buffer.from(`replacement first A sample ${job.id}`), original = Buffer.from(`replacement first A original ${job.id}`);
+    fixture.files.set(path.join(DIR, 'samples', `${job.id}-A.mp3`), sample);
+    fixture.files.set(path.join(DIR, 'original', `${job.id}-A.mp3`), original);
+    job.sample.sha256 = digest(sample);
+    job.sample.originalSha256 = digest(original);
+    return { id: job.id, profileId: job.id, revision: 1, oldJob, backups: [] };
+  });
+  return fixture;
+}
+
+test('four replacement A samples get derived cache revisions and retain archived generation costs', () => {
+  const fixture = replacementFixture();
+  fixture.m.replacementHistory[0].oldJob.creditsConsumed = null;
+  fixture.m.jobs[61].audioUrl = '/untrusted/override.mp3';
+  const publisher = loadPublisher(fixture, true);
+  assert.deepEqual(publisher.errors, []);
+  assert.equal(publisher.process.exitCode, 0);
+  assert.equal(publisher.networkCalls, 0);
+  const rows = JSON.parse(fixture.files.get(fixture.paths.catalog)).slice(32);
+  const registry = JSON.parse(fixture.files.get(fixture.paths.registry));
+  const receipt = JSON.parse(fixture.files.get(fixture.paths.receipt));
+  assert.equal(rows.filter(row => row.audioUrl.endsWith('-A-r1.mp3')).length, 4);
+  assert.equal(rows.filter(row => row.audioUrl.endsWith('-A.mp3')).length, 236);
+  for (const [index, row] of rows.entries()) {
+    const job = fixture.m.jobs[index];
+    assert.equal(row.audioUrl, `/assets/voices/discovery-v2-20261005/${job.id}-A${job.replacementRevision ? '-r1' : ''}.mp3`);
+    assert.equal(registry[row.id], job.personaId);
+    assert.equal(row.qualityReview, 'unreviewed');
+  }
+  assert.equal(receipt.generatedRequests, 244);
+  assert.equal(receipt.actualKnownGenerationCredits, (239 + 3) * 12);
+  assert.equal(receipt.unknownCostRequests, 2);
+  assert.equal(receipt.readyNewReferences, 240);
+});
+
+test('replacement revisions are bounded integers and never bypass first A artifact verification', () => {
+  for (const revision of [undefined, null, 0, -1, 1.5, '1', '../sample', 100, Infinity, Number.MAX_SAFE_INTEGER]) {
+    const fixture = publicationFixture(), publisher = loadPublisher(fixture);
+    fixture.m.jobs[61].replacementRevision = revision;
+    assert.throws(() => publisher.exports.validatedRows(fixture.m), /REPLACEMENT_REVISION/);
+  }
+  for (const directory of ['samples', 'original']) {
+    const fixture = replacementFixture(), publisher = loadPublisher(fixture);
+    fixture.files.set(path.join(DIR, directory, `${fixture.m.jobs[61].id}-A.mp3`), Buffer.from('unverified replacement'));
+    assert.throws(() => publisher.exports.validatedRows(fixture.m), /AUDIO_PROVENANCE/);
+  }
+});
+
+test('malformed or duplicate archived requests cannot silently change cumulative generation accounting', () => {
+  const patches = [
+    fixture => { fixture.m.replacementHistory = null; },
+    fixture => { delete fixture.m.replacementHistory[0].oldJob; },
+    fixture => { fixture.m.replacementHistory[0].oldJob.taskId = fixture.m.jobs[61].taskId; },
+    fixture => { fixture.m.replacementHistory[0].profileId = 'discovery-v2-f-001'; },
+    fixture => { fixture.m.replacementHistory[0].revision = 2; },
+    fixture => { fixture.m.replacementHistory.push(structuredClone(fixture.m.replacementHistory[0])); },
+  ];
+  for (const mutate of patches) {
+    const fixture = replacementFixture();
+    mutate(fixture);
+    const publisher = loadPublisher(fixture, true);
+    assert.deepEqual(publisher.errors, ['REPLACEMENT_HISTORY']);
     assert.equal(publisher.process.exitCode, 1);
     assert.equal(publisher.networkCalls, 0);
     for (const file of [fixture.paths.catalog, fixture.paths.registry, fixture.paths.receipt]) assert.equal(fixture.files.has(file), false);

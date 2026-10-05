@@ -4,10 +4,27 @@ const ROOT=path.resolve(__dirname,'..');const DIR=path.join(ROOT,'artifacts/disc
 const {validateManifest,firstClip}=require('./discovery-vocal-rollout-240.cjs');
 const hash=file=>crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const write=(file,data)=>{fs.writeFileSync(file+'.tmp',JSON.stringify(data,null,2)+'\n');fs.renameSync(file+'.tmp',file);};
+const validRevision=value=>Number.isSafeInteger(value)&&value>=1&&value<=99;
+function generationAccounting(m) {
+ const history=m.replacementHistory===undefined?[]:m.replacementHistory;
+ if(!Array.isArray(history))throw new Error('REPLACEMENT_HISTORY');
+ const jobs=[...m.jobs],tasks=new Set(jobs.map(j=>j.taskId)),revisions=new Set();
+ for(const entry of history) {
+  const old=entry?.oldJob,active=m.jobs.find(j=>j.id===entry?.id),key=`${entry?.id}:${entry?.revision}`;
+  if(!old||!active||old.id!==entry.id||entry.profileId!==entry.id||!validRevision(entry.revision)
+    ||!validRevision(active.replacementRevision)||active.replacementRevision<entry.revision||revisions.has(key)
+    ||typeof old.taskId!=='string'||!/^[A-Za-z0-9_-]{6,160}$/.test(old.taskId)||tasks.has(old.taskId))throw new Error('REPLACEMENT_HISTORY');
+  revisions.add(key);tasks.add(old.taskId);jobs.push(old);
+ }
+ return {generatedRequests:jobs.length,actualKnownGenerationCredits:jobs.reduce((n,j)=>n+(Number.isFinite(j.creditsConsumed)?j.creditsConsumed:0),0),
+   unknownCostRequests:jobs.filter(j=>!Number.isFinite(j.creditsConsumed)).length};
+}
 function validatedRows(m,{allowPending=false,allowAvailableReferences=false}={}) {
  validateManifest(m);
  const ids=new Set(),samples=new Set(),personas=new Set();
  return m.jobs.map(j=>{
+  if(Object.hasOwn(j,'replacementRevision')&&!validRevision(j.replacementRevision))throw new Error('REPLACEMENT_REVISION');
+  const revisionSuffix=j.replacementRevision===undefined?'':`-r${j.replacementRevision}`;
   const clip=firstClip(j),s=j.sample;
   const referenceReady=j.personaState==='ready'&&j.personaSourceVersion==='A'&&j.personaAudioId===clip.id&&j.personaTaskId===j.taskId
     &&j.personaModel==='style_persona'&&/^[A-Za-z0-9_-]{6,160}$/.test(j.personaId||'');
@@ -23,13 +40,14 @@ function validatedRows(m,{allowPending=false,allowAvailableReferences=false}={})
   return {id:j.id,discoveryVoiceId:j.id,name:j.profile.provisionalName,shortDescription:j.profile.shortDescription,
    desc:`${j.profile.shortDescription} ${j.profile.signatureBehavior}`,gender:j.gender,language:j.language,
    category:j.profile.family,tags:j.profile.audibleAnchors,stylePrompt:j.profile.stylePrompt,
-   audioUrl:`/assets/voices/discovery-v2-20261005/${j.id}-A.mp3`,previewStatus:'ready',previewStartSeconds:0,sampleDurationSeconds:30,
+   audioUrl:`/assets/voices/discovery-v2-20261005/${j.id}-A${revisionSuffix}.mp3`,previewStatus:'ready',previewStartSeconds:0,sampleDurationSeconds:30,
    bpm:88,lyricsPrompt:j.options.lyrics,createdAtISO:m.createdAt,reuseStatus:referenceReady?'ready':'pending',designStatus:'verified',qualityReview:'unreviewed',sampleVersion:'A'};
  });
 }
 function main() {
  const m=JSON.parse(fs.readFileSync(path.join(DIR,'rollout-240.json')));const args=process.argv||[];
  const rows=validatedRows(m,{allowPending:args.includes('--previews'),allowAvailableReferences:args.includes('--available-references')});
+ const accounting=generationAccounting(m);
  const original=JSON.parse(fs.readFileSync(path.join(ROOT,'src/data/discoveryVoices.json')));
  const registry=JSON.parse(fs.readFileSync(path.join(ROOT,'src/lib/voice/discovery-voice-personas.json')));
  const baseline=original.filter(v=>!/^discovery-v2-/.test(v.id));
@@ -43,8 +61,7 @@ function main() {
  write(path.join(out,'discoveryVoices.json'),catalog);write(path.join(out,'discovery-voice-personas.json'),registry);
  write(path.join(out,'receipt.json'),{createdAt:new Date().toISOString(),newIdentities:rows.length,female:120,male:120,
    selectedVersion:'A',catalogTotal:catalog.length,readyNewReferences,heldNewReferences,designValidation:'passed',qualityReview:'unreviewed',
-   sameSingerGuarantee:false,actualKnownGenerationCredits:m.jobs.reduce((n,j)=>n+(Number.isFinite(j.creditsConsumed)?j.creditsConsumed:0),0),
-   unknownCostRequests:m.jobs.filter(j=>!Number.isFinite(j.creditsConsumed)).length,
+   sameSingerGuarantee:false,...accounting,
    catalogSha256:hash(path.join(out,'discoveryVoices.json')),registrySha256:hash(path.join(out,'discovery-voice-personas.json'))});
  console.log(JSON.stringify({newIdentities:240,catalogTotal:catalog.length,references:readyNewReferences,heldReferences:heldNewReferences,selectedVersion:'A',qualityReview:'unreviewed'}));
 }

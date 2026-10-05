@@ -14,8 +14,11 @@ function save(m) { fs.writeFileSync(FILE + '.tmp', JSON.stringify(m, null, 2) + 
 function report(m) {
   const accepted = m.jobs.filter(j => j.taskId);
   const known = accepted.filter(j => Number.isFinite(j.creditsConsumed));
+  const archived = (m.replacementHistory || []).map(record => record.oldJob).filter(job => job?.taskId);
   console.log(JSON.stringify({ total: m.jobs.length, states: m.jobs.reduce((a,j)=>(a[j.state]=(a[j.state]||0)+1,a),{}),
-    accepted: accepted.length, knownCredits: known.reduce((a,j)=>a+j.creditsConsumed,0), unknownCostRequests: accepted.length-known.length,
+    accepted: accepted.length, generatedRequests: accepted.length+archived.length,
+    knownCredits: [...known,...archived.filter(j=>Number.isFinite(j.creditsConsumed))].reduce((a,j)=>a+j.creditsConsumed,0),
+    unknownCostRequests: accepted.length-known.length+archived.filter(j=>!Number.isFinite(j.creditsConsumed)).length,
     firstASamples: m.jobs.filter(j=>j.sample?.version==='A').length, referencesReady: m.jobs.filter(j=>j.personaState==='ready').length,
     registrationHeld: m.jobs.filter(j=>['uncertain','held','submitting'].includes(j.personaState)).length }));
 }
@@ -52,7 +55,9 @@ async function registerPersonas(m,config,{limit=CAP,concurrency=8,timeoutMs=9000
     const started=Date.now();
     const results=await Promise.allSettled(pending.slice(offset,offset+concurrency).filter(canRegister).map(async j=>{
       const clip=firstClip(j),attemptStarted=Date.now();
-      const description=normalizePersonaDescription(j.profile.stylePrompt);
+      if(j.personaDescription!==undefined&&(typeof j.personaDescription!=='string'||!j.personaDescription.trim()||j.personaDescription.trim().length>200))throw new Error('PERSONA_DESCRIPTION');
+      const description=normalizePersonaDescription(j.personaDescription===undefined?j.profile.stylePrompt:j.personaDescription.trim());
+      if(j.personaDescription!==undefined&&description.length>200)throw new Error('PERSONA_DESCRIPTION');
       const body=JSON.stringify({model:'ai-music-api/generate-persona',input:{task_id:j.taskId,audio_id:clip.id,name:j.profile.provisionalName,
         description,vocal_start:0,vocal_end:30,style:description.slice(0,200)}});
       j.personaState='submitting';j.personaSubmittedAt=new Date(attemptStarted).toISOString();j.personaAttemptId=crypto.randomUUID();
