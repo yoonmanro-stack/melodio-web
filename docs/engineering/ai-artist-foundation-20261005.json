@@ -1,0 +1,46 @@
+{
+  "objective": "Create memorable original AI singers whose approved vocal and visual references persist across Melodio projects.",
+  "productPrinciple": "Singer identity remains separate from a song's arrangement, a scene's styling and a channel's editorial brand.",
+  "menuRoles": {
+    "incubator": "Create and audition the singer, select a canonical vocal reference and photographic anchor, review identity, then approve.",
+    "persona": "Manage saved singers, personality, world, musical boundaries, profile revisions and linked works.",
+    "voiceLab": "Independent exploration, custom timbre design and owned voice registration. References feed artist records without merging the catalogs."
+  },
+  "firstRelease": {
+    "sharedCloudRecord": "Owner-scoped signed immutable records in existing melodio-private Storage, stable UUID and compare-and-swap revisions, no destructive migration.",
+    "voice": "Server-resolved official, discovery, designed or registered reference independent of favorite membership.",
+    "language": "Only the reference's available sample or registration language is presented as supported; ko/en/ja/fr. Additional languages need separate singing validation.",
+    "portrait": "Owned photographic reference upload, JPEG/PNG/WebP up to 4MiB, bytes/type/hash/signature checked and normalized to reviewed 1024px square JPEG before approval. The reference remains private.",
+    "approval": "Voice audition, portrait review and personality/appearance review are explicit. Identity edits return to draft and require renewed approval.",
+    "music": "Three studios receive artistId and revision. The server resolves the approved identity before any paid metadata or music call and rejects incompatibility instead of dropping the singer.",
+    "covers": "Artist-mode songs reuse the exact approved portrait through a signed generation snapshot; do not invent another face or dispatch an image-generation request. A/B use the same cover. Cover copies use the existing public artwork bucket.",
+    "works": "Owner-only bounded gallery tracks artist identity and revision; raw provider metadata is never exposed.",
+    "archive": "Archive singers without erasing reference history or existing songs.",
+    "legacy": "Existing browser-only vocal bindings remain untouched; no unreviewed automatic conversion into approved singers."
+  },
+  "qualityCriteria": {
+    "timbre": ["Recognizable first phrase", "Characteristic resonance and texture", "Expressive attack and release", "No unintended doubled lead or choir"],
+    "identity": ["Same reference across three contrasting genres", "Reference retained through different registers", "No silent reference substitution", "Approved appearance used consistently"],
+    "distinctiveness": "Different singers should remain distinguishable with names and portraits hidden. More profiles alone do not establish vocal diversity.",
+    "limits": "Manual readiness is creator review, not an automatic acoustic quality or identity score. A style persona is not a promise of a 100% identical cloned singer."
+  },
+  "subsequentStages": [
+    {
+      "stage": 2,
+      "deliverable": "Audition workspace comparing the same singer in three genres, retain original results and creator assessments before wider catalog expansion."
+    },
+    {
+      "stage": 3,
+      "deliverable": "Generate new photographic scenes with actual reference-image inputs. Add approval workflow for front/side/full-body anchors and compare identity; no prompt-only face-preservation claim."
+    },
+    {
+      "stage": 4,
+      "deliverable": "Persona architect interviews compile editable structured traits, lyrical perspective, behavior and musical boundaries into the same artist profile."
+    },
+    {
+      "stage": 5,
+      "deliverable": "Artist-linked video performance, releases and channel publishing with explicit external-connection status. IP registration claims require a real implementation."
+    }
+  ],
+  "releasePolicy": "Validate repository ownership, conflict handling, canonical voice resolution, studio compatibility and cover signature before deployment. Do not spend generation credits just to demonstrate a CRUD deployment."
+}

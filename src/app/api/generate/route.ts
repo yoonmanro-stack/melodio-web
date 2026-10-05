@@ -6,6 +6,11 @@ import { discoveryVoicePersona } from '@/lib/voice/discovery-voice-registry'
 import { compileVoiceDesign } from '@/lib/voice/voice-design-prompt'
 import { readDesignedVoice } from '@/lib/voice/designed-voice-repository'
 import { suppressIneligibleVoice } from "@/lib/voice/studio-selection"
+import { ArtistGenerationError, hasArtistSelection, resolveArtistGeneration } from '@/lib/artists/generation'
+import { readArtist } from '@/lib/artists/repository'
+import { resolveArtistVoice } from '@/lib/artists/voice-reference'
+import { signArtistIdentity } from '@/lib/artists/identity-signature'
+import type { ArtistGenerationSnapshot } from '@/lib/artists/types'
 /**
  * Melodio — 음악 생성 API Route (비동기 아키텍처)
  * POST /api/generate
@@ -363,6 +368,30 @@ export async function POST(request: NextRequest) {
     let voiceDesign: ReturnType<typeof compileVoiceDesign> | null
     try { voiceDesign = applyVoiceDesignRequest(rawBody) }
     catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : '음색 디자인 설정을 확인해 주세요.' }, { status: 400 }) }
+    let artistIdentity: ArtistGenerationSnapshot | null = null
+    let artistOwnerUserId: string | null = null
+    let artistIdentitySignature: string | undefined
+    if (hasArtistSelection(rawBody)) {
+      const ownerClient = await createClient()
+      const { data: { user: artistOwner } } = await ownerClient.auth.getUser()
+      if (!artistOwner) return NextResponse.json({ error: '아티스트로 작곡하려면 로그인이 필요합니다.', code: 'artist_auth_required' }, { status: 401 })
+      const artistUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const artistServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (!artistUrl || !artistServiceKey) return NextResponse.json({ error: '아티스트 저장 정보를 확인하지 못했습니다.' }, { status: 503 })
+      const artistAdmin = createSupabaseClient(artistUrl, artistServiceKey, { auth: { persistSession: false, autoRefreshToken: false } })
+      try {
+        artistIdentity = await resolveArtistGeneration(rawBody, artistOwner.id, {
+          readArtist: (userId, id) => readArtist(artistAdmin, userId, id),
+          resolveVoice: (userId, voice) => resolveArtistVoice(artistAdmin, userId, voice),
+        })
+        artistOwnerUserId = artistOwner.id
+        if (artistIdentity) artistIdentitySignature = signArtistIdentity(artistIdentity, artistOwner.id)
+      } catch (error) {
+        return NextResponse.json({ error: error instanceof ArtistGenerationError ? error.message : '아티스트 저장 정보를 확인하지 못했습니다. 다시 시도해 주세요.',
+          code: error instanceof ArtistGenerationError ? error.code : 'artist_unavailable' },
+        { status: error instanceof ArtistGenerationError ? error.httpStatus : 503 })
+      }
+    }
     suppressIneligibleVoice(rawBody)
     const payload = rawBody as PromptPayload
     if (payload.engine === 'lyria3') {
@@ -531,7 +560,7 @@ export async function POST(request: NextRequest) {
 
     // Supabase 클라이언트
     const supabase = await createClient()
-    const user = designedOwner || (await supabase.auth.getUser()).data.user
+    const user = designedOwner || (artistOwnerUserId ? { id: artistOwnerUserId } : (await supabase.auth.getUser()).data.user)
     if (voiceDesign && !user) return NextResponse.json({ error: '가창 샘플을 생성하려면 로그인이 필요합니다.' }, { status: 401 })
 
     const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
@@ -646,6 +675,10 @@ export async function POST(request: NextRequest) {
       : null
 
     const metadata = JSON.stringify({
+      artistId: artistIdentity?.id,
+      artistRevision: artistIdentity?.revision,
+      artistIdentity: artistIdentity || undefined,
+      artistIdentitySignature,
       stylePrompt: payload.stylePrompt,
       lyricsPrompt: payload.lyricsPrompt || '',
       excludePrompt: payload.excludePrompt || '',

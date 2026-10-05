@@ -1,6 +1,7 @@
 "use client";
 import { useVoice } from "@/contexts/VoiceContext";
 import { studioVoiceFields as resolveStudioVoiceFields } from "@/lib/voice/studio-selection";
+import { StudioArtistPicker, useStudioArtist } from "@/components/artists/StudioArtistPicker";
 import { SUNO_VERSIONS } from '@/lib/suno-models';
 
 import { useState, useEffect } from "react";
@@ -564,7 +565,7 @@ function buildLyricsPrompt(sections: LyricsSection[]): string {
 export default function JapanLandingClient() {
   const { studioGender, activeVoice } = useVoice();
   const [lyricLanguage, setLyricLanguage] = useState('ja');
-  const studioVoiceFields = resolveStudioVoiceFields(studioGender, activeVoice, lyricLanguage);
+
   const { user, loading } = useAuth();
   const { saveHistory } = useHistory();
   const { language } = useLanguage();
@@ -612,6 +613,13 @@ export default function JapanLandingClient() {
   const [lyricsSections, setLyricsSections] = useState<LyricsSection[]>([]);
   const [excludePrompt, setExcludePrompt] = useState("");
   const [isPublic, setIsPublic] = useState(true);
+  const artistState = useStudioArtist({ userId: user?.id, initialArtistId: searchParams.get('artistId'), lyricsLanguage: lyricLanguage,
+    hasLyrics: Boolean(lyrics.trim()) || lyricsSections.some(section => Boolean(section.content?.trim())) || tracks.some(track => Array.isArray(track.sections) && track.sections.some((section: LyricsSection) => Boolean(section.content?.trim()))),
+    onLyricsLanguageChange: setLyricLanguage, allowedLanguages: ['en', 'ja'] });
+  const artistSettings = { isInstrumental, sunoVersion, sourceMenu: 'japan', stylePrompt: styleTags };
+  const studioVoiceFields = artistState.artistVoice
+    ? { vocalGender: artistState.artistVoice.gender, activeVoice: null, voicePrompt: undefined, vdCode: undefined, lyricsLanguage: lyricLanguage }
+    : resolveStudioVoiceFields(studioGender, activeVoice, lyricLanguage);
   const [ambienceVolume, setAmbienceVolume] = useState<number>(20);
   const [dynamicElements, setDynamicElements] = useState<any>(null);
   const [isAsmrEnabled, setIsAsmrEnabled] = useState(false);
@@ -1133,6 +1141,12 @@ export default function JapanLandingClient() {
       window.location.href = `/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`;
       return;
     }
+    const artistError = artistState.getError(artistSettings);
+    if (artistError) {
+      setGenErrorMsg(artistError);
+      setGenModalState('error');
+      return;
+    }
     const activePreset = allJpPresets.find(p => p.id === selectedPresetId) || allJpPresets[0];
     if (isPlaylistMode) {
       if (tracks.length === 0) {
@@ -1280,6 +1294,7 @@ export default function JapanLandingClient() {
               presetName: activePreset?.name,
               sourceMenu: 'japan',
               ...studioVoiceFields,
+              ...artistState.requestFields,
               coverArtUrl1: img1,
               coverArtUrl2: img2,
               isPublic: isPublic,
@@ -1455,6 +1470,7 @@ export default function JapanLandingClient() {
             presetName: activePreset?.name,
             sourceMenu: 'japan',
               ...studioVoiceFields,
+              ...artistState.requestFields,
             coverArtUrl1: img1,
             coverArtUrl2: img2,
             isPublic: isPublic,
@@ -2150,6 +2166,8 @@ export default function JapanLandingClient() {
               </div>
             )}
 
+            <StudioArtistPicker state={artistState} />
+
             <PromptOutput
               payload={payload}
               stylePrompt={styleTags}
@@ -2176,6 +2194,8 @@ export default function JapanLandingClient() {
               ambientFoley={ambientFoley}
               lyricsBuilderNode={
                 <LyricsBuilder
+                  artistVoice={artistState.artistVoice}
+                  artistSelectionError={artistState.getError(artistSettings)}
                   isInstrumental={isInstrumental}
                   stylePrompt={styleTags}
                   onInstrumentalToggle={setIsInstrumental}

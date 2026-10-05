@@ -35,6 +35,7 @@ function extract(name, file = 'src/app/api/generate/route.ts') {
   return fn.getText(ast);
 }
 const studio = load('src/lib/voice/studio-selection.ts');
+const artists = load('src/lib/artists/generation.ts');
 const duration = load('src/lib/music-duration.ts');
 const designCompiler = load('src/lib/voice/voice-design-prompt.ts');
 const scrubber = loadSource(extract('scrubConflictingVocalTags', 'src/lib/voice-dna-scrubber.ts'));
@@ -63,7 +64,7 @@ async function request(input, { catalog = [ready], registry = { [ready.id]: 'off
     return { insert(row) { calls.rows.push(row); return { select() { return { single: async () => ({ data: { id: 'offline-generation' }, error: null }) }; } }; } };
   } };
   const dependencies = {
-    ...studio, ...duration, ...scrubber, ...official, ...discovery, ...persona, ...designCompiler,
+    ...studio, ...artists, ...duration, ...scrubber, ...official, ...discovery, ...persona, ...designCompiler,
     NextResponse: { json: (data, options) => ({ status: options?.status || 200, data }) },
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user } }) } }),
     createSupabaseClient: () => db,

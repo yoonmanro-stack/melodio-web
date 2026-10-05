@@ -961,12 +961,21 @@ export default function Home() {
         }
 
         setStats((previous) => ({
-          personas: 0,
+          personas: previous.personas,
           longformMvs: 0,
           shortsHooks: 0,
           customPresets: customPresetsCount,
           musicGenerated: previous.musicGenerated,
         }));
+        // Artist storage is independent of the music history request; a slow
+        // profile list must not delay the dashboard's tracks or account stats.
+        void fetch('/api/artists', { cache: 'no-store', signal: AbortSignal.timeout(8000) })
+          .then(async response => {
+            if (!response.ok) return;
+            const result = await response.json();
+            if (!Array.isArray(result.artists) || !dashboardActiveRef.current || historyCacheOwnerRef.current !== user.id) return;
+            setStats(previous => ({ ...previous, personas: result.artists.filter((artist: { status?: string }) => artist.status !== 'archived').length }));
+          }).catch(() => { /* Artist-list errors are displayed in its own workspace. */ });
       }
     } catch (err) {
       console.warn('[Dashboard] Failed to fetch dynamic profile/stats:', err);
@@ -1382,7 +1391,7 @@ export default function Home() {
                   <span className="font-semibold text-zinc-300 text-base">{stats.longformMvs}</span>
                 </div>
                 <div className="flex justify-between items-center text-sm">
-                  <span className="text-zinc-400 font-medium font-sans">Personas</span>
+                  <span className="text-zinc-400 font-medium font-sans">AI 가수</span>
                   <span className="font-semibold text-zinc-300 text-base">{stats.personas}</span>
                 </div>
               </div>
@@ -1468,7 +1477,7 @@ export default function Home() {
 
         {/* Action Cards */}
         <div className="lg:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-6">
-          <Link href="/persona" className="relative group rounded-2xl p-6 flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#4c1d95] to-[#7e22ce] border border-[#a855f7]/30 shadow-[0_0_30px_rgba(126,34,206,0.3)] hover:shadow-[0_0_40px_rgba(126,34,206,0.6)] transition-all cursor-pointer">
+          <Link href="/incubator" className="relative group rounded-2xl p-6 flex flex-col justify-between overflow-hidden bg-gradient-to-br from-[#4c1d95] to-[#7e22ce] border border-[#a855f7]/30 shadow-[0_0_30px_rgba(126,34,206,0.3)] hover:shadow-[0_0_40px_rgba(126,34,206,0.6)] transition-all cursor-pointer">
             <div className="absolute top-0 right-0 p-4 opacity-20 group-hover:opacity-40 transition-opacity">
               <Sparkles className="w-24 h-24" />
             </div>
@@ -1476,13 +1485,13 @@ export default function Home() {
               <div className="w-12 h-12 rounded-full bg-white/10 flex items-center justify-center mb-4">
                 <Sparkles className="w-6 h-6 text-white" />
               </div>
-              <h3 className="text-2xl font-bold text-white mb-2">Create Persona</h3>
+              <h3 className="text-2xl font-bold text-white mb-2">나만의 AI 가수 만들기</h3>
               <p className="text-white/70 text-sm leading-relaxed">
-                Build your unique AI Artist. Define sound, style & brand with our interactive lab.
+                목소리와 기준 얼굴을 확정하고, 가수의 성격과 세계관을 함께 설계하세요.
               </p>
             </div>
             <button className="w-full py-3 rounded-xl bg-white/10 hover:bg-white/20 backdrop-blur-md text-white border border-white/20 mt-6 font-medium transition-colors text-center">
-              Get Started
+              인큐베이터 열기
             </button>
           </Link>
 

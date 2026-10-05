@@ -16,6 +16,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useHistory } from '@/hooks/useHistory'
 import { useVoice } from '@/contexts/VoiceContext'
 import { studioVoiceFields as resolveStudioVoiceFields } from '@/lib/voice/studio-selection'
+import { StudioArtistPicker, useStudioArtist } from '@/components/artists/StudioArtistPicker'
 import { composeStylePrompt, enforceSingleSelect, resolveRotationPrompt } from '@/lib/prompt-compositor'
 import { supabase } from '@/lib/supabase'
 import GenreSelector from './GenreSelector'
@@ -124,7 +125,13 @@ export default function PromptBuilder({
   const { user } = useAuth()
   const { saveHistory } = useHistory()
   const { activeVoice, studioGender } = useVoice()
-  const studioVoiceFields = resolveStudioVoiceFields(studioGender, activeVoice, lyricsLanguage)
+  const artistState = useStudioArtist({ userId: user?.id, initialArtistId: searchParams.get('artistId'), lyricsLanguage,
+    hasLyrics: lyricsSections.some(section => Boolean(section.content?.trim())) || tracks.some(track => Array.isArray(track.sections) && track.sections.some((section: LyricsSection) => Boolean(section.content?.trim()))),
+    onLyricsLanguageChange: setLyricsLanguage })
+  const artistSettings = { isInstrumental, sunoVersion, sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge', stylePrompt, vocalSelections: selections.vocal }
+  const studioVoiceFields = artistState.artistVoice
+    ? { vocalGender: artistState.artistVoice.gender, activeVoice: null, voicePrompt: undefined, vdCode: undefined, lyricsLanguage }
+    : resolveStudioVoiceFields(studioGender, activeVoice, lyricsLanguage)
 
   const [isPro, setIsPro] = useState(false)
   const [customPresets, setCustomPresets] = useState<Preset[]>([])
@@ -661,6 +668,8 @@ export default function PromptBuilder({
     setIsGenerating(true)
     setGenModalState('submitting')
     try {
+      const artistError = artistState.getError(artistSettings)
+      if (artistError) throw new Error(artistError)
       const resolvedEngine = engine === 'auto' ? autoSelectEngine(selections, isInstrumental) : engine
 
       // 1000자 병합 및 젠더 정합성 클렌징 헬퍼 함수
@@ -783,12 +792,14 @@ export default function PromptBuilder({
               presetName: selectedPresetName,
               sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
             ...studioVoiceFields,
+            ...artistState.requestFields,
               isPublic: isPublic,
             }),
           })
 
           if (!res.ok) {
-            console.error(`Failed to generate track ${i + 1}`);
+            const result = await res.json().catch(() => null)
+            throw new Error(result?.error || `${i + 1}번 음원 생성에 실패했습니다.`)
           }
 
           if (user) {
@@ -915,11 +926,13 @@ export default function PromptBuilder({
             presetName: selectedPresetName,
             sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
             ...studioVoiceFields,
+            ...artistState.requestFields,
             isPublic: isPublic,
           }),
         })
         if (!res.ok) {
-          throw new Error('음원 생성에 실패했습니다.')
+          const result = await res.json().catch(() => null)
+          throw new Error(result?.error || '음원 생성에 실패했습니다.')
         }
         if (user) {
           await saveHistory(resolvedPayload, selections)
@@ -940,6 +953,7 @@ export default function PromptBuilder({
   if (isDrawerMode) {
     return (
       <div className="w-full flex flex-col gap-4 pb-10">
+        <StudioArtistPicker state={artistState} />
         <PromptOutput
           payload={payload}
           stylePrompt={stylePrompt}
@@ -972,6 +986,8 @@ export default function PromptBuilder({
           onInstrumentalToggle={setIsInstrumental}
           lyricsBuilderNode={
             <LyricsBuilder
+              artistVoice={artistState.artistVoice}
+              artistSelectionError={artistState.getError(artistSettings)}
               isInstrumental={isInstrumental}
               stylePrompt={stylePrompt}
               onInstrumentalToggle={setIsInstrumental}
@@ -1377,6 +1393,7 @@ export default function PromptBuilder({
 
         {/* 오른쪽: 프롬프트 출력 & 가사 빌더 & 완성 (스크롤 없이 자연스러운 100% 노출) */}
         <div className="lg:col-span-5 flex flex-col gap-6">
+          <StudioArtistPicker state={artistState} />
           <PromptOutput
             payload={payload}
             stylePrompt={stylePrompt}
@@ -1409,6 +1426,8 @@ export default function PromptBuilder({
             onInstrumentalToggle={setIsInstrumental}
             lyricsBuilderNode={
               <LyricsBuilder
+                artistVoice={artistState.artistVoice}
+                artistSelectionError={artistState.getError(artistSettings)}
                 isInstrumental={isInstrumental}
                 stylePrompt={stylePrompt}
                 onInstrumentalToggle={setIsInstrumental}

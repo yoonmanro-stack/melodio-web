@@ -49,6 +49,8 @@ interface LyricsBuilderProps {
   isJapanCampaign?: boolean
   lyricLanguage?: string
   onLyricLanguageChange?: (language: string) => void
+  artistVoice?: { name: string; gender: 'female' | 'male'; language: string }
+  artistSelectionError?: string
 
   // Voice DNA
   selectedVdCode?: string
@@ -101,6 +103,8 @@ export default function LyricsBuilder({
   isJapanCampaign = false,
   lyricLanguage,
   onLyricLanguageChange,
+  artistVoice,
+  artistSelectionError,
   selectedVdCode = 'auto',
   onSelectedVdCodeChange,
   vdOptions = [],
@@ -112,18 +116,21 @@ export default function LyricsBuilder({
     if (lyricLanguage === undefined) setLocalLanguage(value)
     onLyricLanguageChange?.(value)
   }
-  const { activeVoice, studioGender: vocalGender, setStudioGender: setVocalGender } = useVoice()
+  const { activeVoice, studioGender, setStudioGender: setVocalGender } = useVoice()
+  const hasArtistVoice = Boolean(artistVoice)
+  const vocalGender = artistVoice?.gender || studioGender
+  const artistError = artistSelectionError || (artistVoice && artistVoice.language !== language ? '아티스트와 가사 언어가 다릅니다. 가사 언어를 맞추거나 아티스트 선택을 해제해 주세요.' : '')
   const [isGenerating, setIsGenerating] = useState(false)
   const [autoTitle, setAutoTitle] = useState(true) // 제목 자동생성 토글 (기본: ON)
   const [autoTopic, setAutoTopic] = useState(true) // 주제 자동생성 토글 (기본: ON)
 
   // 가사 언어와 가창 성별에 맞는 보이스만 선택 코드에 반영한다.
   useEffect(() => {
-    const nextCode = activeVoice && matchesStudioVoice(vocalGender, activeVoice, language) ? activeVoice.id : 'auto'
+    const nextCode = !hasArtistVoice && activeVoice && matchesStudioVoice(vocalGender, activeVoice, language) ? activeVoice.id : 'auto'
     if (selectedVdCode !== nextCode) {
       onSelectedVdCodeChange?.(nextCode)
     }
-  }, [activeVoice, vocalGender, language, selectedVdCode, onSelectedVdCodeChange])
+  }, [activeVoice, hasArtistVoice, vocalGender, language, selectedVdCode, onSelectedVdCodeChange])
 
   // 복사 피드백 상태
   const [copiedYT, setCopiedYT] = useState(false)
@@ -198,6 +205,10 @@ export default function LyricsBuilder({
 
   // GPT 생성 트리거
   const handleGenerateAI = async () => {
+    if (artistError) {
+      alert(artistError)
+      return
+    }
     if (!stylePrompt) {
       alert('장르나 무드 태그를 먼저 선택해주세요!')
       return
@@ -460,6 +471,7 @@ export default function LyricsBuilder({
                   </label>
                   <select
                     value={vocalGender}
+                    disabled={Boolean(artistVoice)}
                     onChange={(e) => {
                       const val = e.target.value as any
                       setVocalGender(val)
@@ -477,12 +489,15 @@ export default function LyricsBuilder({
                   </select>
                 </div>
 
-                <div className="md:col-span-2"><StudioVoicePicker language={language} /></div>
+                <div className="md:col-span-2">{artistVoice
+                  ? <p className="rounded-xl border border-violet-400/25 bg-violet-950/15 p-3 text-xs leading-relaxed text-violet-200">{artistVoice.name}의 솔로 목소리가 적용됩니다. 성별이나 일반 보컬을 변경하려면 아티스트 선택을 해제해 주세요.</p>
+                  : <StudioVoicePicker language={language} />}</div>
+                {artistError && <p role="alert" className="md:col-span-2 text-xs text-amber-200">{artistError}</p>}
               </div>
               <div className="flex justify-center mt-1">
                 <button
                   onClick={handleGenerateAI}
-                  disabled={isGenerating}
+                  disabled={isGenerating || Boolean(artistError)}
                   className="w-full py-2.5 rounded-lg text-sm font-semibold bg-melodio-accent/80 hover:bg-melodio-accent
                              text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5 shadow-melodio-glow"
                 >
