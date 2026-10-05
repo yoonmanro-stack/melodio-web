@@ -34,7 +34,14 @@
       "traitSelectionLimit": 8,
       "incubatorControls": "passed"
     },
-    "deployment": "pending"
+    "deployment": "READY_verified_by_vercel_inspect",
+    "productionUI": {
+      "incubatorPrompt": "passed",
+      "authenticatedGenerationButton": "enabled_after_prompt",
+      "sampleDuration": 30,
+      "samplePlaybackRate": 1,
+      "actualCustomPaidGenerationAndSave": "not_executed"
+    }
   },
   "providerPersonaPricing": {
     "creditsPerRequest": 0,
@@ -43,5 +50,16 @@
     "checkedAt": "2026-10-05",
     "actualRegistrationExecuted": false,
     "retention": "not_documented_for_personas"
-  }
+  },
+  "deployment": {
+    "id": "dpl_4mbiVdkAuq3Dg7a5c2rMEhZAw1iW",
+    "state": "READY",
+    "commit": "e55656a",
+    "productionUrl": "https://melodio.app",
+    "deploymentUrl": "https://melodio-do5i0qr4r-whaleloops-projects.vercel.app"
+  },
+  "screenshots": [
+    "/private/tmp/melodio-incubator-live-20261005.jpg",
+    "/private/tmp/melodio-discovery-live-20261005.jpg"
+  ]
 }
