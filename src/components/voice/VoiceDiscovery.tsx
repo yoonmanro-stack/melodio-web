@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter } from 'next/navigation'
 import { DISCOVERY_VOICES, discoveryVoiceItem } from '@/data/discoveryVoices'
 import { useVoice } from '@/contexts/VoiceContext'
@@ -179,7 +180,7 @@ export function VoiceDiscovery() {
     if (position === DISCOVERY_PREVIEW_SECONDS) pausePreview()
   }
 
-  return <section aria-labelledby="discovery-title" className="space-y-5">
+  return <section aria-labelledby="discovery-title" className={`space-y-5 ${current ? 'pb-44' : ''}`}>
     <header className="rounded-2xl border border-cyan-400/20 bg-cyan-950/15 p-5 sm:p-6">
       <p className="text-xs font-semibold tracking-wide text-cyan-300">EXPLORE</p>
       <h2 id="discovery-title" className="mt-2 text-2xl font-bold text-white">새로운 음색을 발견하세요</h2>
@@ -231,12 +232,14 @@ export function VoiceDiscovery() {
       })}
     </div>
 
-    {current && <div className="sticky bottom-3 z-20 space-y-3 rounded-2xl border border-cyan-400/30 bg-[#12151c]/95 p-4 shadow-2xl backdrop-blur-md">
-      <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{current.name}</p><p className="mt-1 text-xs text-zinc-400">가창 샘플 · 원본 속도</p></div><button type="button" disabled={loading} onClick={() => void preview(current.discoveryVoiceId)} className="min-h-11 rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">{loading ? '불러오는 중…' : playing ? '일시 정지' : elapsed >= DISCOVERY_PREVIEW_SECONDS ? '다시 듣기' : '재생'}</button></div>
+    {current && typeof document !== 'undefined' && createPortal(<div role="region" aria-label="30초 음색 플레이어" className="fixed inset-x-0 bottom-0 z-[65] border-t border-cyan-400/30 bg-[#12151c]/95 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-2xl backdrop-blur-md">
+      <div className="mx-auto max-w-6xl space-y-2">
+      <div className="flex items-center justify-between gap-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-white">{current.name}</p><p className="mt-1 text-xs text-zinc-400">가창 샘플 · 원본 속도</p></div><div className="flex shrink-0 items-center gap-2"><button type="button" disabled={loading} onClick={() => void preview(current.discoveryVoiceId)} className="min-h-11 rounded-xl bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-50">{loading ? '불러오는 중…' : playing ? '일시 정지' : elapsed >= DISCOVERY_PREVIEW_SECONDS ? '다시 듣기' : '재생'}</button><button type="button" aria-label="음색 플레이어 닫기" onClick={() => { requestRef.current?.abort(); pausePreview(); boundsRef.current = null; setCurrentId(null); setLoading(false) }} className="min-h-11 min-w-11 rounded-xl text-xl text-zinc-400 hover:bg-white/10 hover:text-white">×</button></div></div>
       <label className="flex items-center gap-3 text-xs text-zinc-400"><span className="sr-only">가창 샘플 재생 위치</span><span className="font-mono">{timeLabel(elapsed)}</span><input type="range" min={0} max={DISCOVERY_PREVIEW_SECONDS} step={0.1} value={elapsed} disabled={loading || !!error} onChange={event => seek(Number(event.target.value))} className="min-w-0 flex-1 accent-cyan-400" /><span className="font-mono">0:30</span></label>
       <label className="flex items-center gap-3 text-xs text-zinc-400"><span>음량</span><input type="range" min={0} max={1} step={0.01} value={volume} onChange={event => { const value = Number(event.target.value); setVolume(value); if (audioRef.current) audioRef.current.volume = value }} className="w-28 accent-cyan-400" /><span>{Math.round(volume * 100)}%</span></label>
       {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
-    </div>}
+      </div>
+    </div>, document.body)}
     <p className="text-xs leading-relaxed text-zinc-500">노래 샘플 기반 음색 참조 · 곡에 따라 표현이 달라질 수 있습니다.</p>
     <audio data-voice-preview ref={audioRef} preload="none" onPause={() => {
       if (frameRef.current !== null) cancelAnimationFrame(frameRef.current)

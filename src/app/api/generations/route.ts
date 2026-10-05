@@ -288,7 +288,24 @@ export async function GET(request: NextRequest) {
       .select('*')
       .order('created_at', { ascending: false })
     if (scope === 'dashboard') listQuery = listQuery.eq('user_id', loggedInUserId)
-    const { data, error } = await listQuery
+
+    // Fetch only the final asset references, alongside the independent audio
+    // query. Story plans and provider state are unnecessary for this list.
+    const petJobsPromise = (async () => {
+      if (scope !== 'dashboard' || !loggedInUserId) return { data: [], error: null }
+      try {
+        return await serviceSupabase
+          .from('viral_pet_jobs')
+          .select('track_id:state->audio->>trackId,video_url:state->>videoUrl,poster_url:state->shots->0->>keyframeUrl')
+          .eq('user_id', loggedInUserId)
+          .eq('status', 'completed')
+          .order('updated_at', { ascending: false })
+          .abortSignal(AbortSignal.timeout(4_000))
+      } catch {
+        return { data: [], error: { message: 'Optional video lookup failed' } }
+      }
+    })()
+    const [{ data, error }, { data: jobs, error: jobError }] = await Promise.all([listQuery, petJobsPromise])
 
     if (error) {
       console.error('[API/generations] SELECT 에러:', error.message)
@@ -299,22 +316,15 @@ export async function GET(request: NextRequest) {
     // current owner's final result to their dashboard audio rows.
     const petVideos = new Map<string, string>()
     const petPosters = new Map<string, string>()
-    if (scope === 'dashboard' && loggedInUserId) {
-      const { data: jobs, error: jobError } = await serviceSupabase
-        .from('viral_pet_jobs')
-        .select('state')
-        .eq('user_id', loggedInUserId)
-        .eq('status', 'completed')
-        .order('updated_at', { ascending: false })
-      if (jobError) {
-        return NextResponse.json({ error: '완성 영상 목록을 불러오지 못했습니다' }, { status: 503 })
-      }
+    if (jobError) {
+      console.warn('[API/generations] Optional completed video references unavailable')
+    } else {
       for (const job of jobs || []) {
-        const trackId = job.state?.audio?.trackId
-        const videoUrl = job.state?.videoUrl
+        const trackId = job.track_id
+        const videoUrl = job.video_url
         if (typeof trackId === 'string' && typeof videoUrl === 'string' && isHttpAssetUrl(videoUrl) && !petVideos.has(trackId)) {
           petVideos.set(trackId, videoUrl)
-          const poster = job.state?.shots?.[0]?.keyframeUrl
+          const poster = job.poster_url
           if (typeof poster === 'string' && isHttpAssetUrl(poster)) petPosters.set(trackId, poster)
         }
       }

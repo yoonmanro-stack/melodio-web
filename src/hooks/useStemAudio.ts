@@ -5,7 +5,7 @@
  *
  * 동작 원리:
  * 1. generationId/stemUrls 미제공 시 → Web Audio API 로 더미 톤 버퍼 생성
- * 2. 제공 시 → Supabase Storage URL 로드 → 실패하면 더미 폴백
+ * 2. 제공 시 → Supabase Storage URL 로드 (preload:false는 재생 클릭까지 지연)
  * 3. Promise.all 패턴: 4개 버퍼가 모두 준비된 뒤 AudioContext.currentTime
  *    기준 단일 스케줄로 동시 start() → 샘플 단위 오차 없는 하드싱크
  * 4. GainNode 개별 연결로 Mute/Solo/Volume 즉각 반영
@@ -19,7 +19,7 @@ export type StemId = 'vocals' | 'drums' | 'bass' | 'other';
 
 export interface StemAudioState {
   id: StemId;
-  loadState: 'loading' | 'ready' | 'error';
+  loadState: 'idle' | 'loading' | 'ready' | 'error';
   muted: boolean;
   solo: boolean;
   volume: number;
@@ -30,6 +30,8 @@ export interface UseStemAudioOptions {
   generationId?: string;
   /** 직접 URL 주입 (generationId 없이 사용 가능) */
   stemUrls?: Partial<Record<StemId, string>>;
+  /** false defers AudioContext creation, fetch and decode until play. */
+  preload?: boolean;
 }
 
 export interface UseStemAudioReturn {
@@ -115,20 +117,20 @@ const DEFAULT_VOLUMES: Record<StemId, number> = {
   vocals: 0.85, drums: 0.9, bass: 0.75, other: 0.8,
 };
 
-function makeInitialStates(): Record<StemId, StemAudioState> {
+function makeInitialStates(loadState: StemAudioState['loadState'] = 'loading'): Record<StemId, StemAudioState> {
   return Object.fromEntries(
     STEM_IDS.map((id) => [
       id,
-      { id, loadState: 'loading' as const, muted: false, solo: false, volume: DEFAULT_VOLUMES[id] },
+      { id, loadState, muted: false, solo: false, volume: DEFAULT_VOLUMES[id] },
     ])
   ) as Record<StemId, StemAudioState>;
 }
 
 // ─── 메인 훅 ──────────────────────────────────────────────────────────────────
 export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioReturn {
-  const { generationId, stemUrls } = options;
+  const { generationId, stemUrls, preload = true } = options;
 
-  const [stemStates, setStemStates] = useState<Record<StemId, StemAudioState>>(makeInitialStates);
+  const [stemStates, setStemStates] = useState<Record<StemId, StemAudioState>>(() => makeInitialStates(preload ? 'loading' : 'idle'));
   const [isPlaying, setIsPlaying]   = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(LOOP_DURATION); // 동적 곡 길이 상태 (기본 12초)
@@ -144,6 +146,10 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
   const offsetRef    = useRef(0);
   const rafRef       = useRef(0);
   const isPlayingRef = useRef(false);
+  const durationRef = useRef(LOOP_DURATION);
+  const demoModeRef = useRef(false);
+  const loadRef = useRef<(() => Promise<boolean>) | null>(null);
+  const playRequestRef = useRef(0);
 
   // ─── AudioContext 초기화 + 버퍼 로드 ──────────────────────────────────────
   useEffect(() => {
@@ -160,26 +166,22 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
 
     // Reset URL maps 및 시간 초기화
     setOriginalWavUrls({ vocals: null, drums: null, bass: null, other: null });
-    setStemStates(makeInitialStates());
+    setStemStates(makeInitialStates(preload ? 'loading' : 'idle'));
     setDuration(LOOP_DURATION);
+    durationRef.current = LOOP_DURATION;
     setCurrentTime(0);
+    setIsPlaying(false);
     offsetRef.current = 0;
+    ctxRef.current = null;
+    let ctx: AudioContext | null = null;
+    let loadPromise: Promise<boolean> | null = null;
 
-    const ctx = new AudioContext();
-    ctxRef.current = ctx;
-
-    for (const id of STEM_IDS) {
-      const gain = ctx.createGain();
-      gain.gain.value = DEFAULT_VOLUMES[id];
-      gain.connect(ctx.destination);
-      effectGains[id] = gain;
-    }
-
-    const loadData = async () => {
+    const loadData = async (ctx: AudioContext): Promise<boolean> => {
       let previewUrlsToFetch: Partial<Record<StemId, string>> = {};
       let originalUrlsMapped: Record<StemId, string | null> = { vocals: null, drums: null, bass: null, other: null };
       let isStemSplit = false;
       const isDemoMode = !generationId && !stemUrls;
+      demoModeRef.current = isDemoMode;
 
       if (stemUrls && (stemUrls.vocals || stemUrls.drums || stemUrls.bass || stemUrls.other)) {
         previewUrlsToFetch = stemUrls;
@@ -243,17 +245,20 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
           }
         }),
       );
-      if (cancelled) return;
+      if (cancelled) return false;
       setOriginalWavUrls(Object.fromEntries(resolvedOriginalEntries) as Record<StemId, string | null>);
 
+      let hasError = false;
       const tasks = STEM_IDS.map(async (id) => {
         let loadState: StemAudioState['loadState'] = 'ready';
         try {
           const url = await resolveStemStorageUrl(previewUrlsToFetch[id] ?? null);
+          if (cancelled) return;
           if (url) {
             const resp = await fetch(url, { signal: loadController.signal });
             if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
             const raw = await resp.arrayBuffer();
+            if (cancelled) return;
             effectBuffers[id] = await ctx.decodeAudioData(raw);
           } else {
             // 실제 트랙에서 누락/실패한 채널은 테스트 톤으로 위장하지 않는다.
@@ -274,6 +279,7 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
           loadState = isDemoMode ? 'ready' : 'error';
         }
         if (cancelled) return;
+        if (loadState === 'error') hasError = true;
         setStemStates((prev) => ({
           ...prev,
           [id]: { ...prev[id], loadState },
@@ -281,7 +287,7 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
       });
 
       await Promise.all(tasks);
-      if (cancelled) return;
+      if (cancelled) return false;
 
       // 로드된 실제 오디오 버퍼의 최대 길이를 구해서 재생 시간(duration)으로 바인딩
       let maxDuration = isDemoMode ? LOOP_DURATION : 0;
@@ -291,24 +297,44 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
           maxDuration = buf.duration;
         }
       }
-      setDuration(maxDuration || LOOP_DURATION);
-      console.log(`[useStemAudio] Audio buffers loaded. Duration: ${maxDuration} seconds.`);
+      durationRef.current = maxDuration || LOOP_DURATION;
+      setDuration(durationRef.current);
+      return !hasError;
     };
 
-    loadData();
+    const load = (): Promise<boolean> => {
+      if (cancelled) return Promise.resolve(false);
+      if (loadPromise) return loadPromise;
+      // Construct synchronously inside play() so resume retains the user gesture.
+      ctx = new AudioContext();
+      ctxRef.current = ctx;
+      setStemStates(prev => Object.fromEntries(STEM_IDS.map(id => [id, { ...prev[id], loadState: 'loading' }])) as Record<StemId, StemAudioState>);
+      for (const id of STEM_IDS) {
+        const gain = ctx.createGain();
+        gain.gain.value = DEFAULT_VOLUMES[id];
+        gain.connect(ctx.destination);
+        effectGains[id] = gain;
+      }
+      loadPromise = loadData(ctx);
+      return loadPromise;
+    };
+    loadRef.current = load;
+    if (preload) void load();
 
     return () => {
       cancelled = true;
+      playRequestRef.current += 1;
+      if (loadRef.current === load) loadRef.current = null;
       loadController.abort();
       cancelAnimationFrame(rafRef.current);
       isPlayingRef.current = false;
       for (const id of STEM_IDS) {
         try { effectSources[id]?.stop(); } catch { /* 무시 */ }
       }
-      void ctx.close().catch(() => {});
+      if (ctx) void ctx.close().catch(() => {});
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [generationId, stemUrls?.vocals, stemUrls?.drums, stemUrls?.bass, stemUrls?.other]);
+  }, [generationId, stemUrls?.vocals, stemUrls?.drums, stemUrls?.bass, stemUrls?.other, preload]);
 
   const allLoaded = STEM_IDS.every((id) => stemStates[id].loadState === 'ready');
   const hasLoadError = STEM_IDS.some((id) => stemStates[id].loadState === 'error');
@@ -321,7 +347,7 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
     const current = Math.max(0, t);
 
     // 재생 완료 시 정지 처리
-    if (current >= duration) {
+    if (current >= durationRef.current) {
       setIsPlaying(false);
       isPlayingRef.current = false;
       setCurrentTime(0);
@@ -334,7 +360,7 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
       setCurrentTime(current);
       rafRef.current = requestAnimationFrame(tick);
     }
-  }, [duration]);
+  }, []);
 
   // ─── 전 스템 동시 스케줄 (하드싱크 핵심) ──────────────────────────────────
   const scheduleAll = useCallback((fromOffset: number) => {
@@ -349,7 +375,7 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
     const startAt = ctx.currentTime + 0.05;
     playStartRef.current = startAt - fromOffset;
 
-    const isDummy = duration === LOOP_DURATION;
+    const isDummy = demoModeRef.current;
 
     for (const id of STEM_IDS) {
       const buf  = buffersRef.current[id];
@@ -374,24 +400,37 @@ export function useStemAudio(options: UseStemAudioOptions = {}): UseStemAudioRet
       }
       sourcesRef.current[id] = src;
     }
-  }, [duration]);
+  }, []);
 
   // ─── 재생 ─────────────────────────────────────────────────────────────────
   const play = useCallback(async () => {
+    const load = loadRef.current;
+    if (!load) return;
+    const request = ++playRequestRef.current;
+    const loaded = load();
     const ctx = ctxRef.current;
-    if (!ctx || !allLoaded) return;
-    if (ctx.state === 'suspended') await ctx.resume();
+    if (!ctx) return;
+    // Resume before awaiting fetch/decode; browsers require a user gesture.
+    const resumed = ctx.state === 'suspended' ? ctx.resume() : Promise.resolve();
+    let ready: boolean;
+    try {
+      [ready] = await Promise.all([loaded, resumed]);
+    } catch {
+      return;
+    }
+    if (!ready || request !== playRequestRef.current || ctx !== ctxRef.current) return;
 
     scheduleAll(offsetRef.current);
     setIsPlaying(true);
     isPlayingRef.current = true;
     rafRef.current = requestAnimationFrame(tick);
-  }, [allLoaded, scheduleAll, tick]);
+  }, [scheduleAll, tick]);
 
   // ─── 일시정지 ─────────────────────────────────────────────────────────────
   const pause = useCallback(() => {
+    playRequestRef.current += 1;
     const ctx = ctxRef.current;
-    if (ctx) {
+    if (ctx && isPlayingRef.current) {
       offsetRef.current = ctx.currentTime - playStartRef.current;
     }
     for (const id of STEM_IDS) {

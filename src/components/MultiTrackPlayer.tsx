@@ -316,6 +316,7 @@ export default function MultiTrackPlayer({
   const progress  = currentTime / duration;
   const hasSolo   = Object.values(stemStates).some((s) => s.solo);
   const loadedCnt = Object.values(stemStates).filter((s) => s.loadState === 'ready').length;
+  const isIdle = Object.values(stemStates).every((s) => s.loadState === 'idle');
 
   const handleSeek = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
@@ -386,6 +387,8 @@ export default function MultiTrackPlayer({
                 <AlertCircle className="w-3.5 h-3.5" />
                 <span>일부 스템 로드 실패</span>
               </motion.div>
+            ) : isIdle ? (
+              <span className="text-[11px] text-zinc-400">재생하면 스템을 불러옵니다</span>
             ) : !allLoaded ? (
               <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
                 className="flex items-center gap-1.5 text-[11px] text-zinc-400"
@@ -469,7 +472,8 @@ export default function MultiTrackPlayer({
 
           <button
             onClick={handlePlayPause}
-            disabled={!allLoaded}
+            disabled={!allLoaded && !isIdle}
+            aria-label={isPlaying ? '스템 일시정지' : '스템 재생'}
             className="w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
             style={{
               background: 'linear-gradient(135deg, #c76ad8, #5abdd4)',
@@ -481,7 +485,7 @@ export default function MultiTrackPlayer({
                 <motion.div key="error" initial={{ scale: 0.7 }} animate={{ scale: 1 }}>
                   <AlertCircle className="w-4 h-4 text-white" />
                 </motion.div>
-              ) : !allLoaded ? (
+              ) : !allLoaded && !isIdle ? (
                 <motion.div key="spinner" initial={{ scale: 0.7 }} animate={{ scale: 1 }}>
                   <Loader2 className="w-4 h-4 text-white animate-spin" />
                 </motion.div>

@@ -62,6 +62,7 @@ type Generation = {
   status: string;
   created_at: string;
   user_id?: string;
+  is_liked?: boolean;
   title?: string;
   audio_url?: string;
   source_audio_url?: string;
@@ -225,41 +226,14 @@ const TrackLibrarySkeleton = () => {
   );
 };
 
-// ─── 음원 실시간 길이(Duration) 획득용 컴포넌트 ───
-const TrackDuration = ({ audioUrl, initialDuration }: { audioUrl?: string; initialDuration?: number }) => {
-  const [duration, setDuration] = useState<number | null>(initialDuration || null);
-
-  useEffect(() => {
-    if (!audioUrl) {
-      if (initialDuration && initialDuration > 0) setDuration(initialDuration);
-      return;
-    }
-
-    const audio = new Audio();
-    audio.src = audioUrl;
-    audio.preload = 'metadata';
-
-    const handleLoadedMetadata = () => {
-      if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration)) {
-        setDuration(Math.floor(audio.duration));
-      }
-    };
-
-    audio.addEventListener('loadedmetadata', handleLoadedMetadata);
-    audio.load();
-
-    return () => {
-      audio.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      audio.src = '';
-    };
-  }, [audioUrl, initialDuration]);
-
-  if (duration === null || duration <= 0) {
-    return <span>2:30</span>; // 로딩중 및 기존 음원 에러 시 기본값
+// Duration badges use stored measurements; media loads belong to playback.
+const TrackDuration = ({ initialDuration }: { initialDuration?: number }) => {
+  if (!initialDuration || !Number.isFinite(initialDuration) || initialDuration <= 0) {
+    return <span>--:--</span>;
   }
-
+  const duration = Math.floor(initialDuration);
   const mins = Math.floor(duration / 60);
-  const secs = Math.round(duration % 60);
+  const secs = duration % 60;
   return <span>{mins}:{secs < 10 ? '0' : ''}{secs}</span>;
 };
 
@@ -351,20 +325,7 @@ const isTrackStemSplit = (item: Generation): boolean => Boolean(
 
 export default function Home() {
   const { removeGenerationFromQueue } = usePlaylistPlayback();
-  const [history, setHistory] = useState<Generation[]>(() => {
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('melodio_cached_generations');
-        if (cached) {
-          const parsed = JSON.parse(cached);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed.filter((item) => !isStemUploadTrack(item));
-          }
-        }
-      } catch {}
-    }
-    return [];
-  });
+  const [history, setHistory] = useState<Generation[]>([]);
   const [activeGenId, setActiveGenId] = useState<string>('');
   const [deletingTrackId, setDeletingTrackId] = useState<string | null>(null);
 
@@ -387,6 +348,7 @@ export default function Home() {
   const audio = useStemAudio({ 
     generationId: activeSplitTrack?.id,
     stemUrls,
+    preload: false,
   });
 
   // ─── HTML5 Audio 기반 원곡 재생 ───
@@ -436,6 +398,7 @@ export default function Home() {
   const [copiedTracklist, setCopiedTracklist] = useState(false);
   const [allPresets, setAllPresets] = useState<any[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(() => history.length === 0);
+  const [historyError, setHistoryError] = useState<string | null>(null);
   const [generatingCovers, setGeneratingCovers] = useState<Record<string, boolean>>({});
   const [downloadingTrackId, setDownloadingTrackId] = useState<string | null>(null);
   const [downloadErrorToast, setDownloadErrorToast] = useState<string | null>(null);
@@ -837,12 +800,12 @@ export default function Home() {
     };
   }, [playNext, playDashboardAudio]);
 
-  // 스템 플레이어가 재생을 시작하면, 싱글 트랙 재생을 일시정지시킵니다.
-  useEffect(() => {
-    if (audio.isPlaying && isTrackPlaying) {
-      audioRef.current?.pause();
-    }
-  }, [audio.isPlaying, isTrackPlaying]);
+  // Switch on the user's play action; stale React playback state must not
+  // pause a newly selected full track after the stems have already stopped.
+  const playDashboardStems = useCallback(() => {
+    audioRef.current?.pause();
+    audio.play();
+  }, [audio.play]);
   
   // 동적 상태 추가
   const [userName, setUserName] = useState<string>('Alex');
@@ -912,21 +875,58 @@ export default function Home() {
     }
   };
 
-  const fetchUserDataAndStats = async () => {
+  const dashboardActiveRef = useRef(true);
+  const historyLoadedRef = useRef(history.length > 0);
+  const historyCacheOwnerRef = useRef<string | null>(null);
+  const historyFetchInFlightRef = useRef(false);
+  const historyRefreshQueuedRef = useRef(false);
+
+  const fetchUserDataAndStats = useCallback(async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
+      if (!dashboardActiveRef.current) return;
       if (user) {
+        historyCacheOwnerRef.current = user.id;
         setUserId(user.id);
+        if (!historyLoadedRef.current) {
+          try {
+            const cached = localStorage.getItem(`melodio_cached_generations:${user.id}`);
+            const parsed: unknown = cached ? JSON.parse(cached) : null;
+            if (Array.isArray(parsed)) {
+              const ownedRows = parsed.filter((item): item is Generation => (
+                item && typeof item === 'object' && item.user_id === user.id && !isStemUploadTrack(item)
+              ));
+              if (ownedRows.length > 0) {
+                historyLoadedRef.current = true;
+                setHistory(ownedRows);
+                setIsHistoryLoading(false);
+              }
+            }
+          } catch { /* Fetch the current owner's durable rows if their cache is unavailable. */ }
+        }
         if (user.email) {
           const part = user.email.split('@')[0];
           setUserName(part.charAt(0).toUpperCase() + part.slice(1));
         }
 
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('stripe_customer_id, tokens_balance')
-          .eq('id', user.id)
-          .single();
+        const [{ data: profile }, channelRes, autoRes] = await Promise.all([
+          supabase
+            .from('profiles')
+            .select('stripe_customer_id, tokens_balance')
+            .eq('id', user.id)
+            .single(),
+          supabase
+            .from('youtube_channels')
+            .select('*')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+          supabase
+            .from('youtube_automations')
+            .select('id')
+            .eq('user_id', user.id)
+            .maybeSingle(),
+        ]);
+        if (!dashboardActiveRef.current) return;
 
         if (profile) {
           const hasSub = !!profile.stripe_customer_id;
@@ -943,26 +943,8 @@ export default function Home() {
           setTokenPercent(Math.min(100, Math.round((usedTokens / maxTokens) * 100)));
         }
 
-        // 유튜브 연동 채널 및 자동화 활성화 정보 조회
-        const [channelRes, autoRes] = await Promise.all([
-          supabase
-            .from('youtube_channels')
-            .select('*')
-            .eq('user_id', user.id)
-            .maybeSingle(),
-          supabase
-            .from('youtube_automations')
-            .select('*')
-            .eq('user_id', user.id)
-            .maybeSingle()
-        ]);
         setYoutubeChannel(channelRes.data);
         setHasActiveAutomation(!!autoRes.data);
-
-        const { count: promptCount } = await supabase
-          .from('prompt_history')
-          .select('*', { count: 'exact', head: true })
-          .eq('user_id', user.id);
 
         let customPresetsCount = 0;
         try {
@@ -986,46 +968,59 @@ export default function Home() {
     } catch (err) {
       console.warn('[Dashboard] Failed to fetch dynamic profile/stats:', err);
     }
-  };
+  }, []);
 
-  const fetchHistory = async () => {
-    try {
-      if (history.length === 0) {
-        setIsHistoryLoading(true);
-      }
-      const res = await fetch('/api/generations?scope=dashboard');
-      if (res.ok) {
-        const { generations } = await res.json();
-        const historyList = (generations || []).filter((item: Generation) => !isStemUploadTrack(item));
-        setHistory(historyList);
-        setStats((previous) => ({
-          ...previous,
-          musicGenerated: historyList.filter((item: Generation) => item.status === 'completed').length,
-        }));
-        try {
-          localStorage.setItem('melodio_cached_generations', JSON.stringify(historyList));
-        } catch {}
-        const splitTracks = historyList.filter((item: Generation) => !isStemUploadTrack(item) && isTrackStemSplit(item));
-        if (splitTracks.length > 0) {
-          if (!activeGenId || !splitTracks.some((t: any) => t.id === activeGenId)) {
-            setActiveGenId(splitTracks[0].id);
-          }
-        }
-        // 좋아요 초기값 동기화
-        const initialLikes: Record<string, boolean> = {};
-        historyList.forEach((gen: any) => {
-          if (gen.is_liked) {
-            initialLikes[gen.id] = true;
-          }
-        });
-        setLikedTracks(initialLikes);
-      }
-    } catch (err) {
-      console.error('Failed to fetch generations:', err);
-    } finally {
-      setIsHistoryLoading(false);
+  const fetchHistory = useCallback(async () => {
+    if (historyFetchInFlightRef.current) {
+      historyRefreshQueuedRef.current = true;
+      return;
     }
-  };
+    historyFetchInFlightRef.current = true;
+    try {
+      do {
+        historyRefreshQueuedRef.current = false;
+        if (!historyLoadedRef.current) setIsHistoryLoading(true);
+        try {
+          const res = await fetch('/api/generations?scope=dashboard', { cache: 'no-store' });
+          if (!res.ok) throw new Error(`Track history request failed (${res.status})`);
+          const { generations } = await res.json();
+          if (!Array.isArray(generations)) throw new Error('Invalid track history response');
+          if (!dashboardActiveRef.current) return;
+          setHistoryError(null);
+          const historyList = generations.filter((item: Generation) => !isStemUploadTrack(item));
+          historyLoadedRef.current = true;
+          setHistory(historyList);
+          setStats((previous) => ({
+            ...previous,
+            musicGenerated: historyList.filter((item: Generation) => item.status === 'completed').length,
+          }));
+          try {
+            const owner = historyCacheOwnerRef.current;
+            if (owner && historyList.every((item: Generation) => item.user_id === owner)) {
+              localStorage.setItem(`melodio_cached_generations:${owner}`, JSON.stringify(historyList));
+            }
+          } catch {}
+          const splitTracks = historyList.filter((item: Generation) => !isStemUploadTrack(item) && isTrackStemSplit(item));
+          if (splitTracks.length > 0) setActiveGenId((previous) => (
+            splitTracks.some((track: Generation) => track.id === previous) ? previous : splitTracks[0].id
+          ));
+          // 좋아요 초기값 동기화
+          const initialLikes: Record<string, boolean> = {};
+          historyList.forEach((gen: Generation) => {
+            if (gen.is_liked) initialLikes[gen.id] = true;
+          });
+          setLikedTracks(initialLikes);
+        } catch (err) {
+          console.error('Failed to fetch generations:', err instanceof Error ? err.message : 'Unknown error');
+          if (dashboardActiveRef.current) setHistoryError('곡 목록을 불러오지 못했습니다. 다시 시도해 주세요.');
+        } finally {
+          if (dashboardActiveRef.current) setIsHistoryLoading(false);
+        }
+      } while (historyRefreshQueuedRef.current && dashboardActiveRef.current);
+    } finally {
+      historyFetchInFlightRef.current = false;
+    }
+  }, []);
 
   const handleGenerateCoverArt = async (item: Generation) => {
     if (generatingCovers[item.id]) return;
@@ -1093,25 +1088,33 @@ export default function Home() {
   };
 
   useEffect(() => {
+    dashboardActiveRef.current = true;
     fetchUserDataAndStats();
     fetchHistory();
 
+    return () => { dashboardActiveRef.current = false; };
+  }, [fetchUserDataAndStats, fetchHistory]);
+
+  useEffect(() => {
+    if (!userId) return;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     const channel = supabase
-      .channel('schema-db-changes')
+      .channel(`dashboard-generations-${userId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'generations' },
+        { event: '*', schema: 'public', table: 'generations', filter: `user_id=eq.${userId}` },
         () => {
-          fetchHistory();
-          fetchUserDataAndStats();
+          clearTimeout(refreshTimer);
+          refreshTimer = setTimeout(() => { fetchHistory(); }, 500);
         }
       )
       .subscribe();
 
     return () => {
+      clearTimeout(refreshTimer);
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [userId, fetchHistory]);
 
   // ─── 좋아요 토글 ───
   const toggleLike = async (id: string) => {
@@ -1647,6 +1650,12 @@ export default function Home() {
 
         {/* 곡 목록 리스트 */}
         <div className="space-y-3">
+          {historyError && (
+            <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-xs text-amber-200">
+              <span>{historyError}</span>
+              <button type="button" onClick={() => { fetchHistory(); }} className="shrink-0 rounded-lg border border-amber-500/30 px-3 py-2 font-semibold">다시 불러오기</button>
+            </div>
+          )}
           {isHistoryLoading ? (
             <TrackLibrarySkeleton />
           ) : paginatedHistory.length === 0 ? (
@@ -1721,21 +1730,7 @@ export default function Home() {
                           {/* 재생 시간 배지 (Suno 스타일 - 하단 중앙 반투명 블랙 백그라운드) */}
                           {item.status === 'completed' && (
                             <div className="absolute bottom-1 left-1/2 -translate-x-1/2 bg-black/60 px-1.5 py-0.5 rounded-md text-[9px] font-bold text-white/90 font-mono tracking-wider shadow-sm z-10">
-                              <TrackDuration 
-                                audioUrl={item.audio_url} 
-                                initialDuration={(() => {
-                                  const metaSource = item.license_hash || item.duration_mode;
-                                  if (metaSource && metaSource !== 'clip' && metaSource !== 'full') {
-                                    try {
-                                      const meta = JSON.parse(metaSource);
-                                      if (meta.duration && meta.duration > 0) {
-                                        return Number(meta.duration);
-                                      }
-                                    } catch { /* ignore */ }
-                                  }
-                                  return undefined;
-                                })()} 
-                              />
+                              <TrackDuration initialDuration={getStoredTrackDuration(item)} />
                             </div>
                           )}
 
@@ -2079,7 +2074,7 @@ export default function Home() {
                   bass: activeSplitTrack.stem_bass_url || null,
                   other: activeSplitTrack.stem_other_url || null,
                 }}
-                play={audio.play}
+                play={playDashboardStems}
                 pause={audio.pause}
                 reset={audio.reset}
                 seek={audio.seek}
