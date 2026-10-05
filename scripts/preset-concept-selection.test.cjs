@@ -5,6 +5,12 @@ const path = require('node:path');
 const ts = require('typescript');
 
 const modalPath = path.join(__dirname, '../src/components/prompt-builder/CreatePresetModal.tsx');
+const thumbnailModule = { exports: {} };
+new Function('module', 'exports', ts.transpileModule(
+  fs.readFileSync(path.join(__dirname, '../src/lib/preset-thumbnail.ts'), 'utf8'),
+  { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } },
+).outputText)(thumbnailModule, thumbnailModule.exports);
+const { getPresetThumbnail } = thumbnailModule.exports;
 const seedA = {
   label: '🔥 [힐링] 숲속 휴식…',
   value: '비가 그친 새벽의 울창한 숲에서 안개 너머 오래된 나무 오두막을 바라보며 느끼는 고요한 휴식과 따뜻한 위로',
@@ -129,6 +135,7 @@ function harness(overrides = {}) {
     '@/contexts/LanguageContext': { useLanguage: () => ({ language: 'ko' }) },
     '@/data/nicheMasterSeeds': { MASTER_NICHE_SEEDS: { healing: [seedA, seedB] } },
     '@/data/channelConcepts': { CHANNEL_CONCEPTS: [] },
+    '@/lib/preset-thumbnail': thumbnailModule.exports,
   };
   const fetch = async (url, options) => {
     requests.push({ url, body: JSON.parse(options.body) });
@@ -348,4 +355,67 @@ test('analysis failure is visible, keeps the reference and draft, and can be ret
   tree = h.render();
   assert.equal(elements(tree, node => node.props?.role === 'alert').length, 0);
   assert.equal(nameField(tree).props.value, generatedPreset.name);
+});
+
+test('the concept preview uses the same bundled artwork as the preset grid', () => {
+  for (const id of ['dead-mall-nostalgia', 'joseon-hip-hop', 'joseon-hiphop', 'traditional-trot-master', 'highway-disco-trot', 'acoustic-folk-trot']) {
+    const preset = { ...baselinePreset(), id, metadata: {} };
+    const expectedSource = getPresetThumbnail(preset);
+    assert.ok(expectedSource, `${id} must have explicit bundled artwork`);
+    const tree = harness({ editingPreset: preset }).render();
+    one(tree, node => node.type === 'img' && node.props.src === expectedSource, `preview artwork for ${id}`);
+  }
+});
+
+test('legacy thumbnail fields resolve consistently and survive saving a personal copy', () => {
+  const source = getPresetThumbnail({ ...baselinePreset(), id: 'joseon-hip-hop', metadata: {} });
+  for (const imageFields of [
+    { metadata: { thumbnail_url: source } },
+    { metadata: { cardImage: source } },
+    { metadata: {}, thumbnailUrl: source },
+    { metadata: {}, thumbnail_url: source },
+    { metadata: { thumbnail_url: 'javascript:invalid', cardImage: source } },
+  ]) {
+    const preset = { ...baselinePreset(), id: 'custom-personal-copy', ...imageFields };
+    const h = harness({ editingPreset: preset });
+    const tree = h.render();
+    one(tree, node => node.type === 'img' && node.props.src === source, 'personal-copy preview');
+    saveButton(tree).props.onClick();
+    const saved = { ...preset, id: 'custom-saved-copy', metadata: h.saves[0].metadata };
+    assert.equal(saved.metadata.thumbnail_url, source);
+    assert.equal(getPresetThumbnail(saved, true), source, 'changing the preset ID must retain its selected artwork');
+  }
+});
+
+test('a failed preview image shows its concept fallback and a generated replacement can load', async () => {
+  const preset = baselinePreset();
+  const h = harness({ editingPreset: preset });
+  let tree = h.render();
+  const image = one(tree, node => node.type === 'img' && node.props.src === preset.metadata.thumbnail_url, 'original preview image');
+  image.props.onError();
+  tree = h.render();
+  assert.equal(elements(tree, node => node.type === 'img').length, 0, 'a broken image must be removed');
+  const fallback = one(tree, node => node.props?.role === 'img' && node.props['aria-label'] === `${preset.name} — 이미지 없음`, 'concept fallback');
+  assert.ok(content(fallback).includes(preset.name));
+  assert.ok(content(fallback).includes(preset.emoji));
+  await one(tree, node => node.type === 'button' && content(node).trim() === '현재 컨셉으로 썸네일 생성', 'thumbnail generation button').props.onClick();
+  tree = h.render();
+  one(tree, node => node.type === 'img' && node.props.src === generatedThumbnail.imageUrl, 'replacement preview image');
+  saveButton(tree).props.onClick();
+  assert.equal(h.saves[0].metadata.thumbnail_url, generatedThumbnail.imageUrl);
+});
+
+test('reopening retries a failed source and an absent thumbnail displays a concept fallback', () => {
+  const preset = baselinePreset();
+  const h = harness({ editingPreset: preset });
+  let tree = h.render();
+  one(tree, node => node.type === 'img', 'preview image').props.onError();
+  tree = h.render();
+  assert.equal(elements(tree, node => node.type === 'img').length, 0);
+  assert.equal(h.render({ isOpen: false }), null);
+  tree = h.render({ isOpen: true });
+  one(tree, node => node.type === 'img' && node.props.src === preset.metadata.thumbnail_url, 'retried preview image');
+  tree = h.render({ editingPreset: { ...preset, id: 'custom-missing-image', metadata: {} } });
+  assert.equal(elements(tree, node => node.type === 'img').length, 0);
+  one(tree, node => node.props?.role === 'img' && node.props['aria-label'] === `${preset.name} — 이미지 없음`, 'missing-artwork concept fallback');
 });

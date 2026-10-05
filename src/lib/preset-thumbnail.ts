@@ -10,12 +10,12 @@ export const BUNDLED_PRESET_THUMBNAILS: Readonly<Record<string, string>> = {
   'matcha-kyoto-jazz': `${ASSET_BASE}/matcha-kyoto-jazz.png`,
   'french-vintage-chanson': `${ASSET_BASE}/french-vintage-chanson.png`,
   'deep-sleep-drift': `${ASSET_BASE}/deep-sleep-drift.png`,
-  'dead-mall-nostalgia': '/preset-thumbnails/dead-mall-nostalgia.svg',
-  'joseon-hip-hop': '/preset-thumbnails/joseon-hip-hop.svg',
-  'joseon-hiphop': '/preset-thumbnails/joseon-hip-hop.svg',
-  'traditional-trot-master': '/preset-thumbnails/traditional-trot-master.svg',
-  'highway-disco-trot': '/preset-thumbnails/highway-disco-trot.svg',
-  'acoustic-folk-trot': '/preset-thumbnails/acoustic-folk-trot.svg',
+  'dead-mall-nostalgia': '/preset-thumbnails/dead-mall-nostalgia-photo-v1.webp',
+  'joseon-hip-hop': '/preset-thumbnails/joseon-hip-hop-photo-v1.webp',
+  'joseon-hiphop': '/preset-thumbnails/joseon-hip-hop-photo-v1.webp',
+  'traditional-trot-master': '/preset-thumbnails/traditional-trot-master-photo-v1.webp',
+  'highway-disco-trot': '/preset-thumbnails/highway-disco-trot-photo-v1.webp',
+  'acoustic-folk-trot': '/preset-thumbnails/acoustic-folk-trot-photo-v1.webp',
 }
 
 function cleanThumbnailUrl(value: unknown): string | null {

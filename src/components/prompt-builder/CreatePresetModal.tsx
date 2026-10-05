@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { MASTER_NICHE_SEEDS } from '@/data/nicheMasterSeeds'
 import { CHANNEL_CONCEPTS } from '@/data/channelConcepts'
+import { getPresetThumbnail } from '@/lib/preset-thumbnail'
 
 interface CreatePresetModalProps {
   isOpen: boolean
@@ -172,6 +173,7 @@ export default function CreatePresetModal({
   const [additionalRequest, setAdditionalRequest] = useState('')
   const [aiGeneratedThumbnailUrl, setAiGeneratedThumbnailUrl] = useState('')
   const [aiGeneratedThumbnailUrls, setAiGeneratedThumbnailUrls] = useState<string[]>([])
+  const [failedThumbnailUrl, setFailedThumbnailUrl] = useState<string | null>(null)
   const [isGeneratingThumbnail, setIsGeneratingThumbnail] = useState(false)
   const [isAnalyzingImage, setIsAnalyzingImage] = useState(false)
   const [isAnalyzingText, setIsAnalyzingText] = useState(false)
@@ -488,6 +490,7 @@ export default function CreatePresetModal({
       setIsAnalyzingImage(false)
       setIsAnalyzingText(false)
       setAnalysisError('')
+      setFailedThumbnailUrl(null)
       setSelectedNicheReference(null)
       nicheDraftBaseline.current = null
       setDynamicElements(editingPreset?.metadata?.dynamic_elements || null)
@@ -513,8 +516,9 @@ export default function CreatePresetModal({
         setEmoji(editingPreset.emoji)
         setGradient(editingPreset.gradient || SAMPLE_COLORS[0])
         setCustomPrompt(editingPreset.customPrompt || '')
-        setRefImages(editingPreset.metadata?.thumbnail_url ? [editingPreset.metadata.thumbnail_url] : [])
-        setAiGeneratedThumbnailUrl(editingPreset.metadata?.thumbnail_url || '')
+        const existingThumbnail = getPresetThumbnail(editingPreset, editingPreset.id.startsWith('custom-'))
+        setRefImages(existingThumbnail ? [existingThumbnail] : [])
+        setAiGeneratedThumbnailUrl(existingThumbnail || '')
         setAiGeneratedThumbnailUrls(editingPreset.metadata?.thumbnail_urls || [])
         setAdditionalRequest('')
       } else {
@@ -533,6 +537,11 @@ export default function CreatePresetModal({
   }, [isOpen, editingPreset, currentStylePrompt, language])
 
   if (!isOpen) return null
+
+  const existingThumbnail = editingPreset
+    ? getPresetThumbnail(editingPreset, editingPreset.id.startsWith('custom-'))
+    : null
+  const thumbnailUrl = aiGeneratedThumbnailUrl || refImages[0] || existingThumbnail
 
   const handleSave = () => {
     if (!name.trim()) {
@@ -559,7 +568,7 @@ export default function CreatePresetModal({
         category: category,
         concept_reference: selectedNicheReference?.value || null,
         inferred_genre: inferredGenre,
-        thumbnail_url: aiGeneratedThumbnailUrl || (refImages.length > 0 ? refImages[0] : undefined),
+        thumbnail_url: thumbnailUrl || undefined,
         thumbnail_urls: aiGeneratedThumbnailUrls.length > 0 
           ? aiGeneratedThumbnailUrls 
           : (refImages.length > 0 ? refImages : (editingPreset?.metadata?.thumbnail_urls || [])),
@@ -572,27 +581,6 @@ export default function CreatePresetModal({
     onClose()
   }
 
-  // 프리셋 카드 색상 자동 매핑을 위해 DEFAULT_THUMBNAILS 매핑 정의
-  const DEFAULT_THUMBNAILS: Record<string, string> = {
-    'developer-debugging': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png',
-    'iced-oolong-tea': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png',
-    'tokyo-midnight-1984': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png',
-    'matcha-kyoto-jazz': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png',
-    'french-vintage-chanson': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png',
-    'deep-sleep-drift': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png',
-    'dead-mall-nostalgia': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png'
-  }
-
-  const getPreviewThumbnail = () => {
-    if (aiGeneratedThumbnailUrl) return aiGeneratedThumbnailUrl;
-    if (refImages.length > 0) return refImages[0];
-    if (editingPreset?.metadata?.thumbnail_url) return editingPreset.metadata.thumbnail_url;
-    if ((editingPreset as any)?.thumbnailUrl) return (editingPreset as any).thumbnailUrl;
-    const id = editingPreset?.id || '';
-    return DEFAULT_THUMBNAILS[id] || null;
-  };
-
-  const thumbnailUrl = getPreviewThumbnail();
   // 컨셉명, 장르, 이미지 중 하나라도 있어야 실제 카드 표시
   const hasPreviewContent = !!name.trim() || !!inferredGenre || !!thumbnailUrl;
   const genreText = inferredGenre || fallbackGenreFromPreset(customPrompt, desc, name);
@@ -966,16 +954,19 @@ export default function CreatePresetModal({
                       <span className="w-5 h-5 border-2 border-fuchsia-500 border-t-transparent rounded-full animate-spin mb-2" />
                       <span className="text-[9px] text-zinc-500 font-mono">저작권 프리 AI 썸네일 생성 중...</span>
                     </div>
-                  ) : thumbnailUrl ? (
+                  ) : thumbnailUrl && thumbnailUrl !== failedThumbnailUrl ? (
                     <img
+                      key={thumbnailUrl}
                       src={thumbnailUrl}
                       alt=""
+                      onError={() => setFailedThumbnailUrl(thumbnailUrl)}
                       className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.025] group-hover:saturate-[1.03]"
                       loading="lazy"
                     />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center bg-zinc-900">
-                      <span className="text-zinc-700 text-[10px] font-mono">이미지 없음</span>
+                    <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-slate-800 via-zinc-900 to-indigo-950 px-6 text-center" role="img" aria-label={`${name} — 이미지 없음`}>
+                      <span className="text-4xl" aria-hidden="true">{emoji || '🎵'}</span>
+                      <span className="max-w-full text-xs font-medium text-zinc-300 line-clamp-2">{name}</span>
                     </div>
                   )}
                 </div>

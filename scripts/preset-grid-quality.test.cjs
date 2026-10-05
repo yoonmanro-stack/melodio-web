@@ -57,7 +57,10 @@ test('built-in thumbnails are explicit and the three trot styles have different 
   assert.equal(new Set(paths).size, 3);
   for (const asset of paths) {
     assert.ok(fs.existsSync(path.join(root, 'public', asset)));
-    assert.match(fs.readFileSync(path.join(root, 'public', asset), 'utf8'), /<svg/);
+    assert.match(asset, /-photo-v1\.webp$/);
+    const file = fs.readFileSync(path.join(root, 'public', asset));
+    assert.equal(file.toString('ascii', 0, 4), 'RIFF');
+    assert.equal(file.toString('ascii', 8, 12), 'WEBP');
   }
   assert.equal(h.thumbnail.getPresetThumbnail({ id: 'custom-1' }, true), null);
   assert.equal(h.thumbnail.getPresetThumbnail({ id: 'grime', metadata: { thumbnail_url: 'javascript:alert(1)' } }), null);
