@@ -1,0 +1,60 @@
+{
+  "phase": "voice-library-thumbnail-playback-production-verification",
+  "date_kst": "2026-10-05",
+  "deployment": {
+    "id": "dpl_DukNGhVxv5hgoK5CVZCZfAsr7zag",
+    "status": "READY",
+    "url": "https://melodio-4o6f8oc0h-whaleloops-projects.vercel.app",
+    "alias": "https://melodio.app",
+    "code_commit": "055ba9b"
+  },
+  "changes": [
+    "Thumbnail-only sample playback with hover, focus and touch controls",
+    "Visible favorite removal and delete labels",
+    "Actual pause and same-sample resume without resetting position",
+    "Maximum 30-second preview with actual seek and volume",
+    "Neutral viewport-bottom 58px desktop dock; obsolete inactive controls removed"
+  ],
+  "verification": {
+    "focused_node_tests": {
+      "passed": 22,
+      "failed": 0
+    },
+    "release_typecheck": "passed",
+    "production_build": "passed",
+    "browser": "Chrome authenticated live UI",
+    "preview": "Veyra existing singing sample",
+    "pause_initial_position_seconds": 0.3,
+    "seek_seconds": 6,
+    "resume_paused_position_seconds": 6.3,
+    "footer_resume_paused_position_seconds": 6.5,
+    "thumbnail_icon_opacity_when_hovered": 1,
+    "dock_height_px": 58,
+    "dock_bottom_px": 788,
+    "viewport_height_px": 788,
+    "dock_background_rgb": [
+      34,
+      34,
+      37
+    ],
+    "player_close": "passed",
+    "console_error_count": 0,
+    "favorites_after_cleanup_and_reload": 0,
+    "personal_voice_names_after_reload": [
+      "QR.Yoon"
+    ],
+    "later_live_ui_favorites": [
+      "Veyra"
+    ]
+  },
+  "scope_notes": [
+    "No paid generation was performed.",
+    "Temporary Veyra favorite used for live verification was removed.",
+    "Previously broken test voices were removed in the earlier user-authorized cleanup; no deleted personal voice was recreated.",
+    "A later live UI snapshot showed Veyra favorited again after the verified cleanup and reload. No further favorite mutation was made, to preserve subsequent user activity."
+  ],
+  "evidence": [
+    "artifacts/dashboard-playback-20261005/voice-thumbnail-preview.png",
+    "artifacts/dashboard-playback-20261005/voice-thumbnail-final.png"
+  ]
+}
