@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Joseon hip hop and gugak fusion</title>
+  <desc id="desc">A Korean palace roof above a vinyl turntable and traditional drum, in red and jade.</desc>
+  <defs>
+    <linearGradient id="night" x2="0" y2="1"><stop stop-color="#102b2c"/><stop offset="1" stop-color="#0d171d"/></linearGradient>
+    <radialGradient id="moon"><stop stop-color="#db593a"/><stop offset="1" stop-color="#9b3429"/></radialGradient>
+    <linearGradient id="drum" x2="1" y2="0"><stop stop-color="#765138"/><stop offset=".5" stop-color="#bc8050"/><stop offset="1" stop-color="#765138"/></linearGradient>
+  </defs>
+  <path fill="url(#night)" d="M0 0h960v540H0z"/>
+  <circle cx="662" cy="157" r="108" fill="url(#moon)"/>
+  <path fill="#18393a" d="m0 285 152-93 109 45 147-84 129 110 118-71 141 59 164-56v345H0z"/>
+  <path fill="#0c2027" stroke="#4f7770" stroke-width="3" d="M388 208q89 25 147-38l37-42q32 28 48 50 45 39 115 48 75 7 133-9-22 33-70 39H411q-26-6-44-24z"/>
+  <path fill="#224844" d="M446 250h337v21H446z"/>
+  <path fill="#512c29" d="M477 273h14v116h-14zm93 0h14v116h-14zm94 0h14v116h-14zm93 0h14v116h-14z"/>
+  <path stroke="#798b71" stroke-width="4" d="M477 289h293m-293 23h293"/>
+  <path fill="#233e39" d="M450 389h345v13H450z"/>
+  <path fill="#142227" d="M0 401h960v139H0z"/>
+  <g transform="translate(356 401)">
+    <path fill="#3a5152" stroke="#6d8380" stroke-width="3" d="m0 18 57-35h266l30 93H-15z"/>
+    <ellipse cx="157" cy="29" rx="109" ry="44" fill="#0b171d" stroke="#53605d" stroke-width="2"/>
+    <ellipse cx="157" cy="29" rx="87" ry="35" fill="none" stroke="#273b3e" stroke-width="2"/>
+    <ellipse cx="157" cy="29" rx="65" ry="26" fill="none" stroke="#273b3e" stroke-width="2"/>
+    <ellipse cx="157" cy="29" rx="33" ry="13" fill="#bc503b"/>
+    <ellipse cx="157" cy="29" rx="5" ry="2" fill="#efc595"/>
+    <path fill="none" stroke="#bcb99f" stroke-width="7" d="m284 7-22 36-41 10"/>
+    <path stroke="#22343b" stroke-width="11" d="m221 52-15 4"/>
+    <path fill="#cb5641" d="M21 60h32v9H21z"/>
+  </g>
+  <g transform="translate(167 340) rotate(-8)">
+    <path fill="url(#drum)" d="M-64 18q64 27 128 0v100q-64 27-128 0z"/>
+    <ellipse cy="18" rx="64" ry="28" fill="#c9b690" stroke="#734e35" stroke-width="6"/>
+    <path fill="none" stroke="#dec297" stroke-width="4" d="m-59 33 30 78 28-70 32 70 28-78M-61 94l32-58 28 87 32-87 29 58"/>
+    <ellipse cy="118" rx="64" ry="22" fill="none" stroke="#d1ad77" stroke-width="6"/>
+    <path stroke="#d4b188" stroke-width="6" stroke-linecap="round" d="m-80-5 56 21M-8-6l69 38"/>
+  </g>
+  <text x="68" y="92" fill="#7fb6a0" font-family="Arial,sans-serif" font-size="17" letter-spacing="5">GUGAK × BOOM BAP</text>
+  <text x="64" y="147" fill="#f2dbb8" font-family="Georgia,serif" font-size="43">Joseon Hip Hop</text>
+  <text x="69" y="180" fill="#c58469" font-family="Arial,sans-serif" font-size="14" letter-spacing="3">TRADITION IN THE GROOVE</text>
+  <path stroke="#598175" stroke-opacity=".5" stroke-width="4" d="M808 458v-17m12 17v-33m12 33v-51m12 51v-22m12 22v-42m12 42v-63m12 63v-29"/>
+</svg>

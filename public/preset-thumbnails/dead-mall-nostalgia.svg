@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Abandoned mall nostalgia</title>
+  <desc id="desc">An empty pastel shopping mall with a still escalator, tiled floor and dim pink neon.</desc>
+  <defs>
+    <linearGradient id="atrium" x2="0" y2="1"><stop stop-color="#25213c"/><stop offset=".6" stop-color="#56516d"/><stop offset="1" stop-color="#302c46"/></linearGradient>
+    <linearGradient id="floor" x2="0" y2="1"><stop stop-color="#84748a"/><stop offset="1" stop-color="#262337"/></linearGradient>
+    <linearGradient id="glass" x2="1" y2="1"><stop stop-color="#bb96b6" stop-opacity=".55"/><stop offset="1" stop-color="#616e91" stop-opacity=".1"/></linearGradient>
+  </defs>
+  <path fill="url(#atrium)" d="M0 0h960v540H0z"/>
+  <path fill="#171827" d="M0 0h960v71H0z"/>
+  <path fill="#59526d" d="m176 0 106 70h396L784 0z"/>
+  <path fill="#343346" d="m207 0 91 53h366L753 0z"/>
+  <path stroke="#bcb0bd" stroke-opacity=".4" stroke-width="3" d="M320 0v52M480 0v52M640 0v52"/>
+  <path fill="#6c5e78" d="M0 109h960v22H0zm0 132h960v23H0z"/>
+  <path fill="#aaa0af" d="M0 129h960v6H0zm0 133h960v5H0z"/>
+  <path fill="#242438" d="M36 148h211v76H36zm249 0h158v76H285zm197 0h199v76H482zm237 0h205v76H719zM36 283h211v98H36zm249 0h158v98H285zm197 0h199v98H482zm237 0h205v98H719z"/>
+  <path stroke="#647080" stroke-width="3" d="M54 185h175m-175 13h175m-175 13h175m306-26h163m-163 13h163m-163 13h163m246-26h168m-168 13h168m-168 13h168"/>
+  <path fill="#948092" d="M257 73h20v327h-20zm197 0h20v327h-20zm237 0h20v327h-20z"/>
+  <path fill="url(#floor)" d="M0 396h960v144H0z"/>
+  <path stroke="#bf97ab" stroke-opacity=".25" stroke-width="2" d="M0 419h960M0 451h960M0 498h960M470 396 16 540M480 396l-181 144M490 396l103 144M500 396l344 144"/>
+  <path fill="#313343" stroke="#b4a6b8" stroke-width="8" d="m396 433 180-176h104L500 433z"/>
+  <path fill="#686777" d="m432 410 130-128h71L503 410z"/>
+  <path stroke="#b0a2ad" stroke-width="3" d="M448 394h72m-59-14h72m-57-14h70m-56-14h69m-55-14h69m-55-14h69m-55-14h69m-55-14h69"/>
+  <path fill="url(#glass)" stroke="#b4a0b6" stroke-width="3" d="m383 415 174-177h35L418 415zm120 1 174-178h31L534 416z"/>
+  <path fill="#635b72" d="M0 71h960v38H0z"/>
+  <text x="70" y="99" fill="#d2a6c2" font-family="Arial,sans-serif" font-size="17" letter-spacing="4">1992 · AFTER HOURS</text>
+  <text x="62" y="350" fill="#d0b5d2" font-family="Arial,sans-serif" font-size="18" letter-spacing="2">DEAD MALL</text>
+  <path stroke="#e99bcd" stroke-width="3" stroke-opacity=".7" d="M60 359h169"/>
+  <ellipse cx="170" cy="463" rx="125" ry="17" fill="#cb79b7" opacity=".07"/>
+  <path fill="#3a4e4b" d="m815 380-12-47 17 17 10-33 9 33 20-22-11 52z"/>
+  <path fill="#8d7282" d="m803 380 5 25h39l5-25z"/>
+</svg>

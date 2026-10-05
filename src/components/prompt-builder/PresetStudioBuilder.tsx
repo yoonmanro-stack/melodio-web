@@ -9,6 +9,9 @@ import type { TagSelections, LyricsSection, Preset, PromptPayload, MusicEngine }
 import type { Database } from '@/types/database'
 import { categories, SINGLE_SELECT_CATEGORIES } from '@/data/categories'
 import { presets } from '@/data/presets'
+import { mergePublicPresetCatalog, findStudioPreset } from '@/lib/preset-catalog'
+import { resolvePresetApplication, parsePresetLyrics, resolveGeneratedPresetStyle } from '@/lib/preset-application'
+import { resolveMusicDuration } from '@/lib/music-duration'
 import { useAuth } from '@/hooks/useAuth'
 import { useHistory } from '@/hooks/useHistory'
 import { useVoice } from '@/contexts/VoiceContext'
@@ -126,12 +129,14 @@ export default function PromptBuilder({
   const [isPro, setIsPro] = useState(false)
   const [customPresets, setCustomPresets] = useState<Preset[]>([])
   const [dbPresets, setDbPresets] = useState<Preset[]>([])
+  const publicPresetCatalog = useMemo(() => mergePublicPresetCatalog(dbPresets, presets), [dbPresets])
   const [isCreatePresetOpen, setIsCreatePresetOpen] = useState(false)
   const [isProPaywallOpen, setIsProPaywallOpen] = useState(false)
   const [editingPreset, setEditingPreset] = useState<Preset | null>(null)
   const [viralTrends, setViralTrends] = useState<{ spotify: any[], tiktok: any[] } | null>(null)
   const [selectedPresetId, setSelectedPresetId] = useState<string>('')
   const [selectedPresetName, setSelectedPresetName] = useState<string>('')
+  const selectedStudioPreset = findStudioPreset(selectedPresetId, customPresets, publicPresetCatalog)
   const [dynamicElements, setDynamicElements] = useState<any>(null)
   const [ambienceVolume, setAmbienceVolume] = useState<number>(20)
 
@@ -243,7 +248,7 @@ export default function PromptBuilder({
         const supabase = createClient()
         const { data, error } = await supabase
           .from('curation_playbooks')
-          .select('*')
+          .select('key_name,title,content,metadata,updated_at')
           .in('category', ['genre', 'curation'])
           .order('updated_at', { ascending: false })
         if (data) {
@@ -269,7 +274,7 @@ export default function PromptBuilder({
               desc: pb.metadata?.description || extractedDesc,
               gradient: pb.metadata?.gradient || 'linear-gradient(135deg, #10b981, #059669)',
               selections: {},
-              customPrompt: pb.metadata?.studio_grade_prompt || pb.metadata?.suno_tags || pb.metadata?.moods || 'lofi, relaxing, chill',
+              customPrompt: pb.metadata?.studio_grade_prompt || pb.metadata?.suno_tags || '',
               isDb: true,
               updated_at: pb.updated_at,
               metadata: pb.metadata
@@ -286,7 +291,7 @@ export default function PromptBuilder({
 
   // 3. 커스텀 프리셋 저장 및 삭제 핸들러
   const handleSaveCustomPreset = (data: { id?: string; name: string; desc: string; emoji: string; gradient: string; customPrompt: string; metadata?: any }) => {
-    if (data.id) {
+    if (data.id && customPresets.some(preset => preset.id === data.id)) {
       // 수정 모드
       const updated = customPresets.map(p => {
         if (p.id === data.id) {
@@ -328,6 +333,7 @@ export default function PromptBuilder({
       setCustomPresets(updated)
       localStorage.setItem('melodio_custom_presets', JSON.stringify(updated))
       setIsCreatePresetOpen(false)
+      setEditingPreset(null)
     }
   }
 
@@ -427,104 +433,19 @@ export default function PromptBuilder({
     }
   }
 
-  // 로컬 스타일 프롬프트 랜덤화 함수 (Pro 유저만 1,000자 스튜디오 마스터링 프롬프트 제공)
-  const randomizeStylePromptLocal = (baseStyle: string, isProUser: boolean = false): string => {
-    if (!isProUser) {
-      // 무료 회원: 1000자 스튜디오 마스터링 프롬프트 주입 엄격 차단 (200자 이내 콤팩트 태그만 제공)
-      let cleaned = (baseStyle || '')
-        .replace(/\[High-fidelity studio mastering[^\]]*\]/gi, '')
-        .replace(/\[high-fidelity[^\]]*\]/gi, '')
-        .replace(/,\s*,/g, ',')
-        .trim();
-      if (cleaned.length > 200) {
-        cleaned = cleaned.slice(0, 200).split(',').slice(0, -1).join(', ').trim() || cleaned.slice(0, 200);
-      }
-      return cleaned || 'lofi relaxing study music';
-    }
-
-    const keys = ['A minor', 'C major', 'E minor', 'G major', 'D minor', 'F major', 'B minor', 'A major', 'E major', 'D major', 'G# minor', 'F# minor'];
-    const randomKey = keys[Math.floor(Math.random() * keys.length)];
-
-    let bpm = 90;
-    const baseLower = baseStyle.toLowerCase();
-    if (baseLower.includes('lo-fi') || baseLower.includes('lofi') || baseLower.includes('zen') || baseLower.includes('meditation')) {
-      bpm = Math.floor(Math.random() * 15) + 70; // 70-85 BPM
-    } else if (baseLower.includes('future') || baseLower.includes('funk') || baseLower.includes('rock') || baseLower.includes('pop') || baseLower.includes('anime')) {
-      bpm = Math.floor(Math.random() * 25) + 110; // 110-135 BPM
-    } else {
-      bpm = Math.floor(Math.random() * 25) + 80; // 80-105 BPM
-    }
-
-    const textures = [
-      'vintage vinyl crackle',
-      'warm analog tape saturation',
-      'valve preamp warmth',
-      'spacious room reverb',
-      'subtle cassette tape hiss',
-      'warm hardware chorus',
-      'dreamy stereo delay'
-    ];
-    const randomTexture = textures[Math.floor(Math.random() * textures.length)];
-
-    const instruments = [
-      'warm Fender Rhodes chords',
-      'plucky acoustic guitar accents',
-      'dreamy analog synth swells',
-      'DX7 style bell highlights',
-      'jazzy electric bass accents',
-      'soft shaker percussion',
-      'classic vintage synth leads',
-      'clean stratocaster plucks',
-      'smooth saxophone riffs'
-    ];
-    const randomInstrument = instruments[Math.floor(Math.random() * instruments.length)];
-
-    const suffix = `key of ${randomKey}, ${bpm} BPM, ${randomTexture}, featuring ${randomInstrument}`;
-    
-    let cleanedBase = baseStyle || '';
-    cleanedBase = cleanedBase.replace(/key\s+of\s+[a-g]#?\s+(minor|major),?/gi, '');
-    cleanedBase = cleanedBase.replace(/\d+\s*bpm,?/gi, '');
-    cleanedBase = cleanedBase.replace(/\[high-fidelity[^\]]*\]/gi, '');
-    cleanedBase = cleanedBase.replace(/,\s*,/g, ',');
-    cleanedBase = cleanedBase.trim().replace(/^,/, '').replace(/,$/, '').trim();
-
-    if (!cleanedBase) {
-      cleanedBase = 'lofi relaxing study music';
-    }
-    
-    return `${cleanedBase}, ${suffix}, [High-fidelity studio mastering, professional grade audio]`.replace(/,\s*,/g, ',');
-  };
-
-  // 로컬 제목 랜덤화 함수
-  const randomizeTitleLocal = (baseTitle: string): string => {
-    const prefixes = [
-      '기억 속의', '새벽녘의', '은은한', '푸른', '꿈속의', '아득한', '나른한', '어스름한', '빛나는', '투명한',
-      '바람 끝의', '노을빛', '차가운', '따스한', '달빛 아래', '조용한', '비 내리는', '기적 같은', '작은', '잊혀진'
-    ];
-    const suffixes = [
-      '멜로디', '여정', '선율', '조각', '기억', '순간', '하루', '온도', '속삭임', '풍경',
-      '노래', '흐름', '공간', '위로', '호흡', '꿈', '이야기', '그늘', '시간', '길목'
-    ];
-    const randomPrefix = prefixes[Math.floor(Math.random() * prefixes.length)];
-    const randomSuffix = suffixes[Math.floor(Math.random() * suffixes.length)];
-    return `${randomPrefix} ${baseTitle.replace(/\[|\]/g, '')} ${randomSuffix}`.trim();
-  };
-
   // 프리셋 적용
   const handlePresetApply = async (preset: Preset) => {
     isApplyingPresetRef.current = true
+    preset = findStudioPreset(preset.id, customPresets, publicPresetCatalog) || preset
     
-    const baseStyle = (isPro && preset.metadata?.studio_grade_prompt) || 
-                      preset.customPrompt || 
-                      (preset.selections && Object.keys(preset.selections).length > 0 ? composeStylePrompt(preset.selections, isInstrumental).prompt : '') ||
-                      preset.desc || 
-                      preset.name || 
-                      'lofi relaxing study music'
-    const uniqueStyle = randomizeStylePromptLocal(baseStyle, isPro)
-    
-    appliedPresetPromptRef.current = uniqueStyle
+    const composedFallback = preset.selections && Object.keys(preset.selections).length > 0
+      ? composeStylePrompt(preset.selections, isInstrumental).prompt : ''
+    const application = resolvePresetApplication(preset, composedFallback)
+
+    appliedPresetPromptRef.current = application.stylePrompt
     setSelections(preset.selections || {})
-    setStylePrompt(uniqueStyle)
+    setStylePrompt(application.stylePrompt)
+    setExcludePrompt(application.excludePrompt)
     setSelectedPresetId(preset.id || '')
     setSelectedPresetName(preset.name || '')
     
@@ -540,19 +461,8 @@ export default function PromptBuilder({
     setYoutubeTags('')
     setSnsHashtags('')
 
-    const isInst = uniqueStyle.toLowerCase().includes('instrumental') || 
-                   uniqueStyle.toLowerCase().includes('no vocals') || 
-                   uniqueStyle.toLowerCase().includes('instrumental only') ||
-                   preset.desc?.toLowerCase().includes('연주곡') ||
-                   preset.name?.toLowerCase().includes('연주');
-
-    if (isInst) {
-      setIsInstrumental(true)
-      setLyricsSections([])
-    } else {
-      setIsInstrumental(false)
-      setLyricsSections([]) // Clear for AI Auto-lyrics pending state
-    }
+    setIsInstrumental(application.isInstrumental)
+    setLyricsSections(application.isInstrumental ? [] : parsePresetLyrics(application.lyricsTemplate))
 
     // 프리셋 카드 선택 시 Style Prompt 영역으로 자동 스크롤 및 포커스
     setTimeout(() => {
@@ -580,13 +490,7 @@ export default function PromptBuilder({
     const presetId = searchParams.get('preset')
     if (!presetId) return
 
-    let targetPreset = presets.find((p) => p.id === presetId)
-    if (!targetPreset && customPresets.length > 0) {
-      targetPreset = customPresets.find((p) => p.id === presetId)
-    }
-    if (!targetPreset && dbPresets.length > 0) {
-      targetPreset = dbPresets.find((p) => p.id === presetId)
-    }
+    let targetPreset = findStudioPreset(presetId, customPresets, publicPresetCatalog)
 
     // 만약 로컬/DB 프리셋 목록에 존재하지 않더라도, 쿼리에 style과 name이 있다면 임시 가상 프리셋으로 자동 복원!
     if (!targetPreset) {
@@ -821,7 +725,7 @@ export default function PromptBuilder({
             : mergeAndClampStyle(resolveRotationPrompt(stylePrompt), trackDescription);
 
           // ASMR Foley 연동 기입
-          const asmrPreset = dbPresets.find(p => p.id === selectedPresetId) || presets.find(p => p.id === selectedPresetId);
+          const asmrPreset = selectedStudioPreset;
           const ambientFoley = asmrPreset?.metadata?.ambient_foley;
           if (isAsmrEnabled && ambientFoley) {
             if (!finalStylePrompt.includes(ambientFoley)) {
@@ -894,13 +798,7 @@ export default function PromptBuilder({
         setGenModalState('success')
       } else {
         // 템플릿 기본값 대조용 프리셋 탐색
-        let currentPreset = presets.find((p) => p.id === selectedPresetId)
-        if (!currentPreset && customPresets.length > 0) {
-          currentPreset = customPresets.find((p) => p.id === selectedPresetId)
-        }
-        if (!currentPreset && dbPresets.length > 0) {
-          currentPreset = dbPresets.find((p) => p.id === selectedPresetId)
-        }
+        let currentPreset = selectedStudioPreset
         if (!currentPreset && editingPreset && editingPreset.id === selectedPresetId) {
           currentPreset = editingPreset
         }
@@ -921,8 +819,8 @@ export default function PromptBuilder({
         let finalYoutubeTags = youtubeTags
         let finalSnsHashtags = snsHashtags
 
-        if (isPresetDefault) {
-          const targetDuration = 180; // 표준 곡 길이 180초 (3분 ~ 3분 30초 최적화)
+        if (isPresetDefault && !isInstrumental) {
+          const targetDuration = resolveMusicDuration({ sourceMenu: sourceMenu || 'audio-forge' }).seconds
           const topic = currentPreset?.desc || currentPreset?.name || '자유로운 감성곡';
 
           const lyricRes = await fetch('/api/lyrics/generate', {
@@ -949,10 +847,8 @@ export default function PromptBuilder({
               finalTitle = lyricData.title
               setTitle(finalTitle)
             }
-            if (lyricData.stylePrompt) {
-              finalStyle = lyricData.stylePrompt
-              setStylePrompt(finalStyle)
-            }
+            finalStyle = resolveGeneratedPresetStyle(finalStyle, lyricData.stylePrompt, Boolean(currentPreset))
+            setStylePrompt(finalStyle)
             if (lyricData.youtubeTags) {
               finalYoutubeTags = lyricData.youtubeTags
               setYoutubeTags(finalYoutubeTags)
@@ -980,7 +876,7 @@ export default function PromptBuilder({
 
         // ASMR Foley 연동 기입
         let finalSingleStyleWithAsmr = finalSingleStylePrompt;
-        const asmrPreset = dbPresets.find(p => p.id === selectedPresetId) || presets.find(p => p.id === selectedPresetId);
+        const asmrPreset = selectedStudioPreset;
         const ambientFoley = asmrPreset?.metadata?.ambient_foley;
         if (isAsmrEnabled && ambientFoley) {
           if (!finalSingleStyleWithAsmr.includes(ambientFoley)) {
@@ -1051,8 +947,7 @@ export default function PromptBuilder({
           isAsmrEnabled={isAsmrEnabled}
           onAsmrToggle={setIsAsmrEnabled}
           ambientFoley={
-            dbPresets.find(p => p.id === selectedPresetId)?.metadata?.ambient_foley ||
-            presets.find(p => p.id === selectedPresetId)?.metadata?.ambient_foley ||
+            selectedStudioPreset?.metadata?.ambient_foley ||
             ''
           }
           excludePrompt={excludePrompt}
@@ -1489,8 +1384,7 @@ export default function PromptBuilder({
             isAsmrEnabled={isAsmrEnabled}
             onAsmrToggle={setIsAsmrEnabled}
             ambientFoley={
-              dbPresets.find(p => p.id === selectedPresetId)?.metadata?.ambient_foley ||
-              presets.find(p => p.id === selectedPresetId)?.metadata?.ambient_foley ||
+              selectedStudioPreset?.metadata?.ambient_foley ||
               ''
             }
             excludePrompt={excludePrompt}

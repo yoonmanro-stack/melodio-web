@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Highway disco trot</title>
+  <desc id="desc">A neon highway, disco ball and tour bus under a vivid night sky.</desc>
+  <defs>
+    <linearGradient id="night" x2="0" y2="1"><stop stop-color="#16103f"/><stop offset=".6" stop-color="#4c145a"/><stop offset="1" stop-color="#100c2e"/></linearGradient>
+    <linearGradient id="road" x2="0" y2="1"><stop stop-color="#9e3182"/><stop offset="1" stop-color="#191334"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#fc75ca" stop-opacity=".7"/><stop offset="1" stop-color="#fc75ca" stop-opacity="0"/></radialGradient>
+    <clipPath id="ball"><circle cx="729" cy="138" r="73"/></clipPath>
+  </defs>
+  <path fill="url(#night)" d="M0 0h960v540H0z"/>
+  <ellipse cx="565" cy="260" rx="430" ry="220" fill="url(#glow)"/>
+  <path fill="#1c1741" d="m0 313 83-84 61 42 59-87 96 115 77-56 84 69 89-61 70 69 53-66 90 51 60-81 118 68 20-83v166H0z"/>
+  <path fill="url(#road)" d="m463 296 83 0 354 244H48z"/>
+  <path stroke="#f35cbf" stroke-width="5" d="M463 297 47 540M546 297l353 243"/>
+  <path stroke="#56e6ed" stroke-width="4" d="M442 310 0 515M566 310l394 217"/>
+  <path fill="#f3cae8" d="m502 323 7 0 6 25h-14zm0 48h20l10 41h-31zm0 77h40l21 71h-63z"/>
+  <path stroke="#dd6ec6" stroke-opacity=".2" d="M0 388h960M0 432h960M0 493h960"/>
+  <path stroke="#9b91f9" stroke-width="2" d="M729 0v65"/>
+  <circle cx="729" cy="138" r="78" fill="#ce72c0" opacity=".15"/>
+  <circle cx="729" cy="138" r="73" fill="#758acb"/>
+  <g clip-path="url(#ball)" stroke="#28164a" stroke-width="2">
+    <path fill="#e5d3f3" d="M672 65h20v28h-20zm25 0h24v28h-24zm31 0h26v28h-26zm32 0h25v28h-25zM656 100h24v26h-24zm29 0h27v26h-27zm33 0h28v26h-28zm34 0h29v26h-29zm36 0h27v26h-27z"/>
+    <path fill="#df8ace" d="M650 133h29v26h-29zm35 0h27v26h-27zm33 0h28v26h-28zm34 0h29v26h-29zm35 0h28v26h-28zM657 166h23v25h-23zm29 0h26v25h-26zm32 0h28v25h-28zm34 0h28v25h-28zm34 0h23v25h-23z"/>
+    <path fill="#5be0e8" d="M674 199h22v24h-22zm28 0h25v24h-25zm31 0h25v24h-25zm30 0h22v24h-22z"/>
+    <path fill="none" d="M686 65q-36 73 0 146m31-146q-13 73 0 146m31-146q15 73 0 146m31-146q35 73 0 146"/>
+  </g>
+  <path fill="#dafcff" d="m799 99 5-17 5 17 17 5-17 5-5 17-5-17-17-5z"/>
+  <path fill="#f8c4e6" d="m660 187 4-13 4 13 13 4-13 4-4 13-4-13-13-4z"/>
+  <g transform="translate(205 340) rotate(-4)">
+    <rect width="214" height="97" rx="16" fill="#f795ca"/>
+    <path fill="#38215d" d="M11 13h191v44H11z"/>
+    <path stroke="#ac82c5" stroke-width="4" d="M54 13v44m42-44v44m43-44v44m37-44v44"/>
+    <path fill="#ffd8ee" d="M8 67h199v7H8z"/>
+    <circle cx="45" cy="98" r="17" fill="#171332"/><circle cx="173" cy="98" r="17" fill="#171332"/>
+    <circle cx="45" cy="98" r="8" fill="#a58bbb"/><circle cx="173" cy="98" r="8" fill="#a58bbb"/>
+    <rect x="204" y="68" width="7" height="15" rx="3" fill="#fff0b4"/>
+  </g>
+  <text x="70" y="104" fill="#66e4e9" font-family="Arial,sans-serif" font-size="18" letter-spacing="5">NONSTOP PARTY</text>
+  <text x="67" y="157" fill="#fff0fb" font-family="Arial,sans-serif" font-size="43" font-weight="700">Highway Disco</text>
+  <text x="70" y="190" fill="#ef9dcd" font-family="Arial,sans-serif" font-size="17" letter-spacing="4">KOREAN DANCE TROT</text>
+  <g fill="#ebcaf8"><circle cx="110" cy="254" r="2"/><circle cx="845" cy="249" r="2"/><circle cx="433" cy="65" r="2"/><circle cx="553" cy="131" r="2"/></g>
+</svg>

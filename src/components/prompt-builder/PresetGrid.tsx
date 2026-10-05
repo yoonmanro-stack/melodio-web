@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useSyncExternalStore } from 'react'
 import type { Preset } from '@/types'
 import { presets } from '@/data/presets'
 import { useLanguage } from '@/contexts/LanguageContext'
+import { canonicalPresetId, getPresetCategory, getPresetGenreLabel, mergePublicPresetCatalog } from '@/lib/preset-catalog'
+import { getPresetThumbnail, getPresetUsageCount } from '@/lib/preset-thumbnail'
 import { Trash2, Pencil, ChevronLeft, ChevronRight, Search, Heart, Calendar, Headphones, Maximize2, X } from 'lucide-react'
 
 interface PresetGridProps {
@@ -18,45 +20,80 @@ interface PresetGridProps {
   selectedPresetId?: string
 }
 
-const DEFAULT_THUMBNAILS: Record<string, string> = {
-  'developer-debugging': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png',
-  'iced-oolong-tea': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png',
-  'tokyo-midnight-1984': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png',
-  'matcha-kyoto-jazz': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png',
-  'french-vintage-chanson': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png',
-  'deep-sleep-drift': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png',
-  'dead-mall-nostalgia': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png',
-  'joseon-hip-hop': 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png'
+type PresetFilter = 'all' | 'custom' | ReturnType<typeof getPresetCategory>
+
+const FILTER_TABS: { value: PresetFilter; label: string }[] = [
+  { value: 'all', label: '전체 프리셋' },
+  { value: 'healing', label: '👼 마음의 위로 & 힐링' },
+  { value: 'focus', label: '✏️ 몰입 & 생산성' },
+  { value: 'retro', label: '📻 아날로그 & 향수' },
+  { value: 'cafe', label: '☕ 카페 & 오프라인 공간' },
+  { value: 'drive', label: '🚗 드라이브 & 감성 여행' },
+  { value: 'cinematic', label: '🎬 서사 & 시네마틱 스토리' },
+  { value: 'custom', label: '✨ 나만의 컨셉' },
+]
+
+const LIKED_PRESETS_STORAGE_KEY = 'melodio_liked_presets'
+const LIKED_PRESETS_CHANGED_EVENT = 'melodio_liked_presets_changed'
+
+function readLikedPresetsSnapshot(): string {
+  try {
+    return localStorage.getItem(LIKED_PRESETS_STORAGE_KEY) ?? '[]'
+  } catch {
+    return '[]'
+  }
 }
 
-const DEFAULT_THUMBNAIL_POOL = Object.values(DEFAULT_THUMBNAILS)
-
-/** 프리셋 id 로 안정적인 해시를 만든다 (같은 프리셋은 항상 같은 폴백 이미지) */
-const hashId = (s: string) => {
-  let h = 0
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0
-  return h
+function parseLikedPresets(snapshot: string): string[] {
+  try {
+    const parsed: unknown = JSON.parse(snapshot)
+    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
+  } catch {
+    return []
+  }
 }
 
-const getPresetThumbnail = (p: Preset) => {
-  if (!p) return DEFAULT_THUMBNAILS['dead-mall-nostalgia']
-  const cleanUrl = (url?: string) => (url && !url.includes('unsplash.com') ? url : null);
-  const found = cleanUrl(p.metadata?.thumbnail_url) || cleanUrl(p.metadata?.cardImage) || cleanUrl((p as any).thumbnailUrl) || cleanUrl((p as any).thumbnail_url);
-  if (found) return found;
+function subscribeToLikedPresets(onChange: () => void) {
+  window.addEventListener('storage', onChange)
+  window.addEventListener(LIKED_PRESETS_CHANGED_EVENT, onChange)
+  return () => {
+    window.removeEventListener('storage', onChange)
+    window.removeEventListener(LIKED_PRESETS_CHANGED_EVENT, onChange)
+  }
+}
 
-  const id = p.id || '';
-  if (DEFAULT_THUMBNAILS[id]) return DEFAULT_THUMBNAILS[id];
+const emptyLikedPresetsSnapshot = () => '[]'
 
-  /*
-   * 여기 폴백이 예전에는 무조건 'tokyo-midnight-1984' 였다.
-   * DEFAULT_THUMBNAILS 는 초창기 프리셋 8개의 키만 갖고 있는데, 옵시디언에서
-   * 동기화된 장르 프리셋의 키는 스네이크 케이스(afro_cuban_jazz 등)라 하나도
-   * 매칭되지 않았고, 결과적으로 카탈로그 195개가 전부 같은 그림이 됐다.
-   *
-   * 지금은 프리셋별 실제 썸네일이 DB에 채워져 있으므로 여기까지 오는 경우는
-   * 드물지만, 또 한 장으로 뭉치지 않도록 id 해시로 분산시킨다.
-   */
-  return DEFAULT_THUMBNAIL_POOL[hashId(id) % DEFAULT_THUMBNAIL_POOL.length];
+function translatePreset(preset: Preset, language: string): Preset {
+  const metadata = preset.metadata ?? {}
+  const localizedText = (field: 'name' | 'desc') => {
+    const candidates = [metadata[`${field}_${language}`], preset[`${field}_${language}`], metadata[`${field}_en`], preset[`${field}_en`], preset[field]]
+    return candidates.find((value): value is string => typeof value === 'string' && value.trim().length > 0) ?? preset[field]
+  }
+  return { ...preset, name: localizedText('name'), desc: localizedText('desc') }
+}
+
+function PresetArtwork({ preset, source }: { preset: Preset; source: string | null }) {
+  const [failed, setFailed] = useState(false)
+  if (source && !failed) {
+    return (
+      <img
+        src={source}
+        alt={preset.name}
+        onError={() => setFailed(true)}
+        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.025] group-hover:saturate-[1.03]"
+        loading="lazy"
+      />
+    )
+  }
+  return (
+    <div className="relative flex h-full w-full flex-col items-center justify-center gap-2 overflow-hidden bg-gradient-to-br from-slate-800 via-zinc-900 to-indigo-950 px-6 text-center" role="img" aria-label={`${preset.name} — 이미지 없음`}>
+      <div className="absolute h-48 w-48 rounded-full border border-white/5" aria-hidden="true" />
+      <div className="absolute h-32 w-32 rounded-full border border-white/5" aria-hidden="true" />
+      <span className="relative text-4xl" aria-hidden="true">{preset.emoji || '🎵'}</span>
+      <span className="relative max-w-full text-xs font-medium text-zinc-300 line-clamp-2">{preset.name}</span>
+    </div>
+  )
 }
 
 /** 프리셋 원클릭 적용 그리드 (4x4, 페이지당 최대 16개 페이징 + 검색 필터 기능 탑재) */
@@ -72,138 +109,29 @@ export default function PresetGrid({
   selectedPresetId
 }: PresetGridProps) {
   const { language } = useLanguage()
-  const [currentPage, setCurrentPage] = useState(1)
+  const [requestedPage, setCurrentPage] = useState(1)
+  const [referenceTime] = useState(() => Date.now())
   const itemsPerPage = 16 // 4x4 격자 노출 한도
 
   // 검색 및 필터 상태
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterType, setFilterType] = useState<'all' | 'healing' | 'focus' | 'retro' | 'custom'>('all')
+  const [filterType, setFilterType] = useState<PresetFilter>('all')
 
-  const [likedPresets, setLikedPresets] = useState<string[]>([])
+  const likedPresetsSnapshot = useSyncExternalStore(subscribeToLikedPresets, readLikedPresetsSnapshot, emptyLikedPresetsSnapshot)
+  const likedPresets = parseLikedPresets(likedPresetsSnapshot)
 
-  useEffect(() => {
-    const saved = localStorage.getItem('melodio_liked_presets')
-    if (saved) {
-      try {
-        setLikedPresets(JSON.parse(saved))
-      } catch (e) {
-        console.error(e)
-      }
-    }
-  }, [])
-
-  const toggleLikePreset = (id: string) => {
-    setLikedPresets(prev => {
-      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
-      localStorage.setItem('melodio_liked_presets', JSON.stringify(next))
-      return next
-    })
+  const toggleLikePreset = (id: string, isCustom: boolean) => {
+    const previous = parseLikedPresets(readLikedPresetsSnapshot())
+    const matches = (savedId: string) => isCustom ? savedId === id : canonicalPresetId(savedId) === id
+    const next = previous.some(matches) ? previous.filter(savedId => !matches(savedId)) : [...previous, id]
+    localStorage.setItem(LIKED_PRESETS_STORAGE_KEY, JSON.stringify(next))
+    window.dispatchEvent(new Event(LIKED_PRESETS_CHANGED_EVENT))
   }
-
-  // 6대 채널 컨셉 카테고리 맵핑 헬퍼
-  const getPresetCategory = (p: Preset): string => {
-    if ((p as any).category) return (p as any).category;
-    if (p.metadata?.category) return p.metadata.category;
-    const id = p.id || '';
-    if (id === 'developer-debugging') return 'focus';
-    if (id === 'iced-oolong-tea') return 'healing';
-    if (id === 'tokyo-midnight-1984') return 'drive';
-    if (id === 'matcha-kyoto-jazz') return 'cafe';
-    if (id === 'french-vintage-chanson') return 'cafe';
-    if (id === 'deep-sleep-drift') return 'healing';
-    if (id === 'dead-mall-nostalgia') return 'retro';
-    if (id === 'joseon-hip-hop') return 'cinematic';
-    return 'healing';
-  }
-
-  // 장르 뱃지 맵핑 헬퍼
-  const getPresetGenre = (p: Preset): string => {
-    if (p.metadata?.inferred_genre) return p.metadata.inferred_genre;
-    const id = p.id || '';
-    if (id === 'developer-debugging') return 'Cyberpunk Synthwave';
-    if (id === 'iced-oolong-tea') return 'Mellow Lo-Fi Beat';
-    if (id === 'tokyo-midnight-1984') return 'City Pop';
-    if (id === 'matcha-kyoto-jazz') return 'Kyoto Jazz Piano';
-    if (id === 'french-vintage-chanson') return 'French Chanson';
-    if (id === 'deep-sleep-drift') return 'Sleep Ambient';
-    if (id === 'dead-mall-nostalgia') return 'Liquid DnB & Garage';
-    if (id === 'joseon-hip-hop') return 'Joseon Hip Hop Boom Bap';
-    
-    // 커스텀 프리셋 지능형 폴백 매핑
-    const text = `${p.customPrompt || ''} ${p.desc || ''}`.toLowerCase();
-    if (text.includes('joseon') || text.includes('gugak') || text.includes('조선')) return 'Joseon Hip Hop Boom Bap';
-    if (text.includes('synthwave') || text.includes('retro') || text.includes('80s')) return 'Synthwave';
-    if (text.includes('lofi') || text.includes('lo-fi') || text.includes('chill')) return 'Mellow Lo-Fi';
-    if (text.includes('jazz')) return 'Jazz Lofi';
-    if (text.includes('ambient') || text.includes('meditation')) return 'Sleep Ambient';
-    if (text.includes('ballad') || text.includes('acoustic')) return 'Acoustic';
-    if (text.includes('pop')) return 'Pop';
-    if (text.includes('folk')) return 'Folk';
-    return 'Lofi BGM';
-  }
-
-  // Helper: stable simulated usage statistics mapping
-  const getPresetUsage = (p: Preset) => {
-    if (!p) return { recent: 0, cumulative: 0 }
-    const id = p.id || ''
-    const recent = typeof p.metadata?.recent_usage_count === 'number'
-      ? p.metadata.recent_usage_count
-      : (Math.abs((id.charCodeAt(0) || 0) * 7) % 50);
-      
-    const cumulative = typeof p.metadata?.usage_count === 'number'
-      ? p.metadata.usage_count
-      : recent + (Math.abs((id.charCodeAt(1) || 0) * 11) % 150);
-      
-    return { recent, cumulative };
-  };
 
   const safeDbPresets = (dbPresets || []).filter(p => p && p.id);
-  
-  // Translate presets dynamically based on selected language
-  const translatedPresets = presets.map(p => {
-    const name = (p as any)[`name_${language}`] || (p as any).name_en || (p as any).name_ko || p.name;
-    const desc = (p as any)[`desc_${language}`] || (p as any).desc_en || (p as any).desc_ko || p.desc;
-    return { ...p, name, desc };
-  });
-
-  const translatedSafeDbPresets = safeDbPresets.map(p => {
-    const meta = p.metadata || {};
-    const name = meta[`name_${language}`] || (p as any)[`name_${language}`] || meta.name_en || p.name;
-    const desc = meta[`desc_${language}`] || (p as any)[`desc_${language}`] || meta.desc_en || p.desc;
-    return { ...p, name, desc };
-  });
-
-  const translatedCustomPresets = (customPresets || []).map(p => {
-    const meta = p.metadata || {};
-    const name = meta[`name_${language}`] || (p as any)[`name_${language}`] || meta.name_en || p.name;
-    const desc = meta[`desc_${language}`] || (p as any)[`desc_${language}`] || meta.desc_en || p.desc;
-    return { ...p, name, desc };
-  });
-
-  const dbAndDefault = [...translatedSafeDbPresets, ...translatedPresets.filter(p => p && p.id && !new Set(translatedSafeDbPresets.map(x => x.id)).has(p.id))];
-
-  // Determine New, Best, and Crown keys
-  const activeNewKeys = new Set(
-    dbAndDefault
-      .filter(p => p && p.id && p.isDb && p.updated_at && (Date.now() - new Date(p.updated_at).getTime() < 24 * 60 * 60 * 1000))
-      .map(p => p.id)
-  );
-
-  const bestPresets = dbAndDefault
-    .filter(p => p && p.id && !activeNewKeys.has(p.id))
-    .map(p => ({ p, usage: getPresetUsage(p).recent }))
-    .sort((a, b) => b.usage - a.usage)
-    .slice(0, 8);
-
-  const activeBestKeys = new Set(bestPresets.map(x => x.p.id));
-
-  const crownPresets = dbAndDefault
-    .filter(p => p && p.id)
-    .map(p => ({ p, usage: getPresetUsage(p).cumulative }))
-    .sort((a, b) => b.usage - a.usage)
-    .slice(0, 8);
-
-  const activeCrownKeys = new Set(crownPresets.map(x => x.p.id));
+  // Apply catalog repairs before translating; personal presets retain their own records.
+  const dbAndDefault = mergePublicPresetCatalog(safeDbPresets, presets).map(p => translatePreset(p, language))
+  const translatedCustomPresets = (customPresets || []).map(p => translatePreset(p, language))
 
   // 통합 필터링 로직
   const filteredItems = [
@@ -217,7 +145,7 @@ export default function PresetGrid({
         (p.name || '').toLowerCase().includes(query) ||
         (p.desc || '').toLowerCase().includes(query) ||
         (p.customPrompt || '').toLowerCase().includes(query) ||
-        getPresetGenre(p).toLowerCase().includes(query);
+        getPresetGenreLabel(p).toLowerCase().includes(query);
       if (!matchSearch) return false;
     }
 
@@ -245,13 +173,7 @@ export default function PresetGrid({
 
   const totalItems = allItems.length
   const totalPages = Math.ceil(totalItems / itemsPerPage) || 1
-
-  // 만약 검색/필터 변경으로 인해 현재 페이지 번호가 최대 페이지수를 초과하면 1페이지로 자동 조절
-  useEffect(() => {
-    if (currentPage > totalPages) {
-      setCurrentPage(1)
-    }
-  }, [totalPages, currentPage])
+  const currentPage = requestedPage > totalPages ? 1 : requestedPage
 
   // 현재 페이지에 노출될 아이템 슬라이싱
   const startIndex = (currentPage - 1) * itemsPerPage
@@ -274,20 +196,11 @@ export default function PresetGrid({
         <div className="flex flex-wrap items-center gap-2">
           {/* 타입 필터 탭 */}
           <div className="flex bg-black/40 border border-white/15 p-0.5 rounded-lg text-[10px] font-medium flex-wrap gap-y-1">
-            {[
-              { value: 'all', label: '전체 BGM' },
-              { value: 'healing', label: '👼 마음의 위로 & 힐링' },
-              { value: 'focus', label: '✏️ 몰입 & 생산성' },
-              { value: 'retro', label: '📻 아날로그 & 향수' },
-              { value: 'cafe', label: '☕ 카페 & 오프라인 공간' },
-              { value: 'drive', label: '🚗 드라이브 & 감성 여행' },
-              { value: 'cinematic', label: '🎬 서사 & 시네마틱 스토리' },
-              { value: 'custom', label: '✨ 나만의 컨셉' },
-            ].map((tab) => (
+            {FILTER_TABS.map((tab) => (
               <button
                 key={tab.value}
                 onClick={() => {
-                  setFilterType(tab.value as any)
+                  setFilterType(tab.value)
                   setCurrentPage(1)
                 }}
                 className={`px-2.5 py-1 rounded-md transition-all ${
@@ -336,7 +249,7 @@ export default function PresetGrid({
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-3.5">
-          {paginatedItems.map((item, idx) => {
+          {paginatedItems.map((item) => {
             if (item.type === 'create') {
               return (
                 <button
@@ -369,18 +282,16 @@ export default function PresetGrid({
 
             const isCustom = item.type === 'custom'
             const preset = item.data!
-            const isNew = preset.isDb && preset.updated_at && (Date.now() - new Date(preset.updated_at).getTime() < 24 * 60 * 60 * 1000);
-            const showNewBadge = isNew || (activeNewKeys.has(preset.id));
-            const showBestBadge = activeBestKeys.has(preset.id);
-            const showCrownBadge = activeCrownKeys.has(preset.id);
-            const thumbnailUrl = getPresetThumbnail(preset)
-            const { recent, cumulative } = getPresetUsage(preset)
-            const isLiked = likedPresets.includes(preset.id)
-
-            // Date format formatting
-            const dateStr = preset.updated_at 
-              ? new Date(preset.updated_at).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\s/g, '')
-              : '2026.07.12'
+            const updatedTime = Date.parse(preset.updated_at ?? '')
+            const updateAge = referenceTime - updatedTime
+            const recentlyUpdated = Number.isFinite(updatedTime) && updateAge >= 0 && updateAge < 24 * 60 * 60 * 1000
+            const thumbnailUrl = getPresetThumbnail(preset, isCustom)
+            const usageCount = getPresetUsageCount(preset)
+            const genreLabel = getPresetGenreLabel(preset)
+            const isLiked = likedPresets.some(id => isCustom ? id === preset.id : canonicalPresetId(id) === preset.id)
+            const dateStr = Number.isFinite(updatedTime)
+              ? new Date(updatedTime).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\s/g, '')
+              : null
 
             const isSelected = preset.id === selectedPresetId
             return (
@@ -397,38 +308,27 @@ export default function PresetGrid({
                   onClick={() => onApply(preset)}
                   className="relative aspect-[16/9] w-full overflow-hidden bg-zinc-900 shrink-0 cursor-pointer border-b border-white/5"
                 >
-                  <img 
-                    src={thumbnailUrl} 
-                    alt=""
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png'
-                    }}
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-[1.025] group-hover:saturate-[1.03]"
-                    loading="lazy"
-                  />
+                  <PresetArtwork key={`${preset.id}:${thumbnailUrl ?? ''}`} preset={preset} source={thumbnailUrl} />
                   
                   {/* On Hover Info Overlay */}
                   <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-250 flex flex-col justify-between items-start p-4 z-10">
                     {/* Top: Metadata items (Left-aligned, larger & brighter) */}
-                    <div className="flex flex-col gap-1.5 items-start rounded-xl bg-white/50 px-2.5 py-2 text-left text-zinc-900 shadow-lg backdrop-blur-sm">
-                      {isCustom ? (
-                        <>
+                    {dateStr !== null || usageCount !== null ? (
+                      <div className="flex flex-col gap-1.5 items-start rounded-xl bg-white/50 px-2.5 py-2 text-left text-zinc-900 shadow-lg backdrop-blur-sm">
+                        {dateStr !== null ? (
                           <div className="text-xs font-mono flex items-center gap-2">
                             <Calendar className="w-3.5 h-3.5 text-fuchsia-600 shrink-0" />
-                            <span>생성일: {dateStr}</span>
+                            <span>수정일: {dateStr}</span>
                           </div>
+                        ) : null}
+                        {usageCount !== null ? (
                           <div className="text-xs font-mono flex items-center gap-2">
                             <Headphones className="w-3.5 h-3.5 text-fuchsia-600 shrink-0" />
-                            <span>이용횟수: {cumulative}회</span>
+                            <span>이용횟수: {usageCount}회</span>
                           </div>
-                        </>
-                      ) : (
-                        <div className="text-xs font-mono flex items-center gap-2">
-                          <Headphones className="w-3.5 h-3.5 text-fuchsia-600 shrink-0" />
-                          <span>이용횟수: {cumulative}회</span>
-                        </div>
-                      )}
-                    </div>
+                        ) : null}
+                      </div>
+                    ) : null}
                     
                     {/* Bottom: Enlarged Maximize Button (180% size) - For All Presets */}
                     <div className="w-full flex justify-end mt-auto">
@@ -449,11 +349,13 @@ export default function PresetGrid({
                 {/* 2. Bottom Content Area */}
                 <div className="pt-3 px-3.5 pb-4.5 flex-1 flex flex-col justify-between min-w-0">
                   <div className="min-w-0">
-                    <div className="mb-1.5 flex items-center">
-                      <span className="text-[9px] font-extrabold text-fuchsia-300 bg-fuchsia-500/10 border border-fuchsia-500/20 px-1.5 py-0.5 rounded uppercase tracking-wider scale-90 origin-left">
-                        {getPresetGenre(preset)}
-                      </span>
-                    </div>
+                    {genreLabel ? (
+                      <div className="mb-1.5 flex items-center">
+                        <span className="text-[9px] font-extrabold text-fuchsia-300 bg-fuchsia-500/10 border border-fuchsia-500/20 px-1.5 py-0.5 rounded uppercase tracking-wider scale-90 origin-left">
+                          {genreLabel}
+                        </span>
+                      </div>
+                    ) : null}
                     <div className="flex items-start justify-between gap-1">
                       <h4 
                         onClick={() => onEditPreset?.(preset)}
@@ -474,28 +376,18 @@ export default function PresetGrid({
                     <div className="flex items-center gap-1 scale-90 origin-left">
                       {isCustom ? (
                         <span className="text-[8.5px] px-2 py-0.5 rounded-md bg-zinc-900 border border-zinc-700/80 text-zinc-300 font-mono tracking-wider uppercase font-bold shadow-sm">
-                          Custom Set
+                          나만의 프리셋
                         </span>
                       ) : (
                         <span className="text-[8.5px] px-2 py-0.5 rounded-md bg-zinc-950 border border-zinc-900 text-zinc-500 font-mono tracking-wider uppercase font-semibold">
-                          Signature
+                          공용 프리셋
                         </span>
                       )}
-                      {showNewBadge && (
-                        <span className="text-[8px] text-emerald-500 font-mono uppercase font-semibold">
-                          New
+                      {recentlyUpdated ? (
+                        <span className="text-[8px] text-emerald-500 font-mono font-semibold" title="지난 24시간 안에 수정된 프리셋">
+                          최근 수정
                         </span>
-                      )}
-                      {showBestBadge && (
-                        <span className="text-[8px] text-amber-500 font-mono uppercase font-semibold">
-                          Best
-                        </span>
-                      )}
-                      {showCrownBadge && (
-                        <span className="text-[8px] text-yellow-500 font-mono uppercase font-semibold">
-                          Crown
-                        </span>
-                      )}
+                      ) : null}
                     </div>
 
                     {/* Likes & Custom Action Buttons */}
@@ -528,7 +420,7 @@ export default function PresetGrid({
                       <button
                         onClick={(e) => {
                           e.stopPropagation()
-                          toggleLikePreset(preset.id)
+                          toggleLikePreset(preset.id, isCustom)
                         }}
                         className={`transition-colors p-0.5 ${isLiked ? 'text-red-500' : 'text-zinc-500 hover:text-zinc-300'}`}
                         title={isLiked ? "좋아요 취소" : "좋아요"}
@@ -548,7 +440,7 @@ export default function PresetGrid({
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-1.5 mt-4 pt-3 border-t border-white/5">
           <button
-            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+            onClick={() => setCurrentPage(Math.max(currentPage - 1, 1))}
             disabled={currentPage === 1}
             className="p-1 rounded bg-zinc-900/40 border border-zinc-800 text-zinc-500 hover:text-zinc-300 disabled:opacity-30 transition-all flex items-center justify-center"
             title="이전 페이지"
@@ -574,7 +466,7 @@ export default function PresetGrid({
           })}
           
           <button
-            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+            onClick={() => setCurrentPage(Math.min(currentPage + 1, totalPages))}
             disabled={currentPage === totalPages}
             className="p-1 rounded bg-white/5 border border-white/10 text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:text-zinc-400 transition-all flex items-center justify-center"
             title="다음 페이지"

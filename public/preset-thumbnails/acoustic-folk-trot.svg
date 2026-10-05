@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Acoustic folk trot at a hometown station</title>
+  <desc id="desc">A warm acoustic guitar beside a quiet rural station in blue evening mist.</desc>
+  <defs>
+    <linearGradient id="sky" x2="0" y2="1"><stop stop-color="#1b3740"/><stop offset=".6" stop-color="#6e8c8a"/><stop offset="1" stop-color="#253d3e"/></linearGradient>
+    <linearGradient id="wood" x2="1" y2="1"><stop stop-color="#edc389"/><stop offset=".5" stop-color="#b57b46"/><stop offset="1" stop-color="#654429"/></linearGradient>
+    <radialGradient id="lamp"><stop stop-color="#ffda98" stop-opacity=".7"/><stop offset="1" stop-color="#ffda98" stop-opacity="0"/></radialGradient>
+  </defs>
+  <path fill="url(#sky)" d="M0 0h960v540H0z"/>
+  <circle cx="794" cy="90" r="28" fill="#cfdbce" opacity=".65"/>
+  <path fill="#3d5f60" d="m0 301 121-95 103 66 153-137 135 131 134-89 159 106 155-63v320H0z"/>
+  <path fill="#345153" d="m0 356 188-94 150 92 185-110 154 101 173-69 110 47v217H0z"/>
+  <path stroke="#c5d3c5" stroke-opacity=".2" stroke-width="19" d="M0 320h960M0 344h960M0 370h960"/>
+  <path fill="#23383a" d="M0 420h960v120H0z"/>
+  <path stroke="#c1b99a" stroke-width="4" d="m286 540 390-138M494 540l230-138"/>
+  <path stroke="#807d6b" stroke-width="5" d="m326 519 204 4m-139-29 171 3m-115-22 141 3m-88-19 115 3m-71-16 95 2m-58-13 78 2m-45-12 61 1"/>
+  <path fill="#354244" d="M479 319h192v98H479z"/>
+  <path fill="#192c31" d="m453 325 124-90 121 90z"/>
+  <path fill="none" stroke="#76918c" stroke-width="4" d="m456 323 121-86 119 86"/>
+  <path fill="#efc17f" d="M499 340h44v48h-44zm72 0h70v48h-70z"/>
+  <path stroke="#7b7660" stroke-width="3" d="M521 340v48m84-48v48"/>
+  <ellipse cx="565" cy="369" rx="160" ry="110" fill="url(#lamp)" opacity=".5"/>
+  <path fill="#253338" d="M820 250h7v176h-7z"/>
+  <path stroke="#253338" stroke-width="8" fill="none" d="M823 253v-30q0-12-18-12h-28"/>
+  <path fill="#eed29c" d="M770 212h27l5 17h-36z"/>
+  <ellipse cx="784" cy="230" rx="73" ry="86" fill="url(#lamp)"/>
+  <g transform="translate(158 334) rotate(17) scale(.8)">
+    <path d="M10 24c-46-2-81 44-54 76-50 61-25 138 49 145 76 7 117-62 74-128 29-29-4-82-48-83z" fill="url(#wood)" stroke="#e5b47a" stroke-width="5"/>
+    <path d="M14 30V-112h21V36" fill="#563b2d" stroke="#c79667" stroke-width="4"/>
+    <path d="m10-115-8-50 37-5 9 50z" fill="#8c5f3c"/>
+    <path stroke="#bbbeae" stroke-width="4" d="m3-152-12 2m14 14-12 2m13 11-12 2m51-38 12-2m-11 16 12-2m-10 14 12-2"/>
+    <circle cx="23" cy="100" r="27" fill="#36291f" stroke="#e6c190" stroke-width="5"/>
+    <path stroke="#5f402d" stroke-width="11" d="M0 173h47"/>
+    <path stroke="#efe1b8" stroke-width="1" d="M15-155v328m4-328v328m5-328v328m5-328v328m5-328v328"/>
+  </g>
+  <text x="69" y="91" fill="#c4d8c5" font-family="Arial,sans-serif" font-size="17" letter-spacing="5">HOMETOWN STATION</text>
+  <text x="67" y="140" fill="#f1e8cb" font-family="Georgia,serif" font-size="40">Acoustic Folk Trot</text>
+  <text x="70" y="174" fill="#bdcdc0" font-family="Arial,sans-serif" font-size="14" letter-spacing="3">GUITAR · HARMONICA · MEMORIES</text>
+  <path fill="#bd8e4f" opacity=".7" d="m734 445 13-18 7 19-12 9zm144 26 16-14 1 19-12 4zm-173 39 13-14 7 18-15 5z"/>
+</svg>

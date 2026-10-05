@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-labelledby="title desc">
+  <title id="title">Traditional Korean trot</title>
+  <desc id="desc">A vintage microphone and saxophone on a warm amber stage.</desc>
+  <defs>
+    <linearGradient id="stage" x2="0" y2="1"><stop stop-color="#37221e"/><stop offset="1" stop-color="#110f13"/></linearGradient>
+    <radialGradient id="light"><stop stop-color="#ffe3a4" stop-opacity=".45"/><stop offset="1" stop-color="#ffe3a4" stop-opacity="0"/></radialGradient>
+    <linearGradient id="brass" x2="1" y2="1"><stop stop-color="#f7d795"/><stop offset=".5" stop-color="#b16d36"/><stop offset="1" stop-color="#f8dfab"/></linearGradient>
+    <linearGradient id="mic" x2="1" y2="0"><stop stop-color="#7c6860"/><stop offset=".5" stop-color="#ebded0"/><stop offset="1" stop-color="#a48b7a"/></linearGradient>
+  </defs>
+  <path fill="url(#stage)" d="M0 0h960v540H0z"/>
+  <ellipse cx="586" cy="190" rx="420" ry="310" fill="url(#light)"/>
+  <path fill="#683b29" opacity=".55" d="M0 0h150l-42 342L0 410zM960 0H816l41 348 103 64z"/>
+  <path fill="none" stroke="#ae7444" stroke-opacity=".3" stroke-width="3" d="M34 0 11 345M74 0 42 365M112 0 76 326M928 0l21 345M888 0l29 365M850 0l34 326"/>
+  <path fill="#cf985b" opacity=".09" d="m427 0-200 465h518L590 0z"/>
+  <ellipse cx="515" cy="462" rx="294" ry="28" fill="#f0c27f" opacity=".08"/>
+  <path stroke="#d0b491" stroke-width="13" d="M458 257v191"/>
+  <ellipse cx="458" cy="448" rx="61" ry="11" fill="#847061"/>
+  <rect x="402" y="108" width="111" height="167" rx="48" fill="url(#mic)"/>
+  <rect x="415" y="120" width="86" height="144" rx="34" fill="#453d39"/>
+  <path stroke="#d9c9b5" stroke-width="8" stroke-linecap="round" d="M430 139h55m-62 20h69m-72 20h75m-75 20h75m-72 20h69m-61 20h53"/>
+  <path fill="none" stroke="#998273" stroke-width="9" d="M391 192v43c0 33 26 62 66 62s67-29 67-62v-43"/>
+  <path d="m629 127-28 56 18 143c8 72 75 88 109 37l33-53" fill="none" stroke="url(#brass)" stroke-width="26" stroke-linecap="round"/>
+  <path d="m708 333 25-82 81 59-65 44z" fill="url(#brass)"/>
+  <ellipse cx="776" cy="283" rx="20" ry="48" transform="rotate(-54 776 283)" fill="#3b231c" stroke="#eac487" stroke-width="7"/>
+  <path d="m631 127 19-25 27 10" fill="none" stroke="#d4b888" stroke-width="10" stroke-linecap="round"/>
+  <path d="m611 203 10 105" stroke="#fce3ab" stroke-width="4"/>
+  <g fill="#f2d194" stroke="#9b6339" stroke-width="3"><circle cx="609" cy="224" r="10"/><circle cx="614" cy="255" r="10"/><circle cx="618" cy="286" r="10"/></g>
+  <path stroke="#e8bc75" stroke-opacity=".4" d="M69 438h236M69 456h143"/>
+  <text x="70" y="105" fill="#e5be81" font-family="Georgia,serif" font-size="19" letter-spacing="5">KOREAN TROT</text>
+  <text x="69" y="160" fill="#f6e4c7" font-family="Georgia,serif" font-size="38">Traditional</text>
+  <text x="72" y="190" fill="#ba926d" font-family="Arial,sans-serif" font-size="14" letter-spacing="3">SAXOPHONE · ACCORDION</text>
+  <g fill="#f4d7a4" opacity=".45"><circle cx="307" cy="84" r="2"/><circle cx="740" cy="82" r="2"/><circle cx="356" cy="342" r="2"/><circle cx="808" cy="414" r="2"/></g>
+</svg>

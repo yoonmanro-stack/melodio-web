@@ -27,7 +27,7 @@ function extractFunction(relativePath, name) {
   return declaration.getText(ast);
 }
 
-const { resolveMusicDuration } = loadPureModule('src/lib/music-duration.ts');
+const { resolveMusicDuration, buildInstrumentalArrangement } = loadPureModule('src/lib/music-duration.ts');
 const scrubModule = { exports: {} };
 new Function('exports', ts.transpileModule(
   extractFunction('src/lib/voice-dna-scrubber.ts', 'scrubConflictingVocalTags'), { compilerOptions },
@@ -54,23 +54,23 @@ async function submit(overrides = {}) {
   };
   const calls = [];
   const module = { exports: {} };
-  new Function('exports', 'submitKieSunoJob', 'resolveMusicDuration', 'resolveDurationSeconds', 'scrubConflictingVocalTags', 'console', submitCode)(
+  new Function('exports', 'submitKieSunoJob', 'resolveMusicDuration', 'resolveDurationSeconds', 'scrubConflictingVocalTags', 'buildInstrumentalArrangement', 'console', submitCode)(
     module.exports,
     async options => {
       calls.push(provider.buildKieSunoRequest(options).input);
       return { taskId: 'offline-duration-check', model: 'V6' };
     },
-    resolveMusicDuration, provider.resolveDurationSeconds, scrubModule.exports.scrubConflictingVocalTags,
+    resolveMusicDuration, provider.resolveDurationSeconds, scrubModule.exports.scrubConflictingVocalTags, buildInstrumentalArrangement,
     { log() {}, error() {} },
   );
   // Supply a playbook so no knowledge-database import can run for short prompts.
   const result = await module.exports.submit(payload, { metadata: { suno_tags: 'full-band production' } }, personaId, 'style_persona');
   assert.equal(calls.length, 1);
   const input = calls[0];
-  assert.equal(input.prompt, lyrics, 'All six sections must reach the provider without truncation');
-  assert.equal(input.persona_id, personaId);
-  assert.equal(input.persona_model, 'style_persona');
-  assert.equal(input.vocal_gender, 'f');
+  if (!payload.isInstrumental) assert.equal(input.prompt, lyrics, 'All six sections must reach the provider without truncation');
+  assert.equal(input.persona_id, payload.isInstrumental ? undefined : personaId);
+  assert.equal(input.persona_model, payload.isInstrumental ? undefined : 'style_persona');
+  if (!payload.isInstrumental) assert.equal(input.vocal_gender, 'f');
   assert.equal(input.custom_mode, true);
   assert.equal(result.requestedDurationSeconds, input.duration, 'Receipt must record actual submitted duration');
   return { input, result };
@@ -87,6 +87,28 @@ test('all three studios preserve a full song for the incident voice and misleadi
       assert.doesNotMatch(input.style, /minimal backing beat/i, 'Style adjectives must not trigger the viral mix header');
     }
   }
+});
+
+test('instrumental arrangement uses the submitted duration and keeps the chosen instruments', async () => {
+  for (const seconds of [30, 195, 210]) {
+    const { input } = await submit({
+      isInstrumental: true, lyricsPrompt: '', vocalGender: undefined,
+      metadata: { durationSeconds: seconds },
+      stylePrompt: 'Instrumental ambient, 45 BPM, harp and analog pads, no drums',
+    });
+    assert.equal(input.duration, seconds);
+    assert.equal(input.prompt, buildInstrumentalArrangement(seconds));
+    assert.doesNotMatch(input.prompt, /piano|bass|solo|full climax/i);
+    assert.match(input.style, /45 BPM/);
+    assert.match(input.style, /harp and analog pads/);
+    assert.equal(input.vocal_gender, undefined);
+  }
+});
+
+test('a selected short recipe does not acquire unrelated playbook tags', async () => {
+  const { input } = await submit({ presetId: 'french-vintage-chanson', stylePrompt: 'female vocals, accordion, 85 BPM' });
+  assert.match(input.style, /accordion, 85 BPM/);
+  assert.doesNotMatch(input.style, /full-band production/);
 });
 
 test('the complete incident-style prompt sends 195 seconds with full lyrics and its persona', async () => {

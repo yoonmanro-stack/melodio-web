@@ -1,4 +1,4 @@
-import { resolveMusicDuration } from '@/lib/music-duration'
+import { resolveMusicDuration, buildInstrumentalArrangement } from '@/lib/music-duration'
 import { resolveOfficialVoice } from '@/lib/voice/official-voice-selection'
 import { officialVoicePersona } from '@/lib/voice/official-voice-registry'
 import { assertExclusiveVoiceSelection, resolveDiscoveryVoice } from '@/lib/voice/discovery-voice-selection'
@@ -186,7 +186,9 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
   // Match playbooks from DB (Obsidian synced) to enrich tags ONLY if prompt is short and unmastered
   let effectiveStylePrompt = baseStylePrompt
   const isAlreadyStudioMastered = baseStylePrompt.includes('[High-fidelity studio mastering') || baseStylePrompt.length > 250;
-  if (!isAlreadyStudioMastered) {
+  const selectedPresetId = (payload as PromptPayload & { presetId?: unknown }).presetId
+  const hasSelectedPreset = typeof selectedPresetId === 'string' && Boolean(selectedPresetId.trim())
+  if (!isAlreadyStudioMastered && !hasSelectedPreset) {
     if (matchedPlaybook) {
       const extraTags = matchedPlaybook.metadata?.suno_tags
       if (extraTags) {
@@ -235,7 +237,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
       effectiveStylePrompt = `[Full Instrumental Master, rich melodic lead, lush arrangement, dynamic progression] ${effectiveStylePrompt}`
     }
     if (!finalLyricsPrompt.trim()) {
-      finalLyricsPrompt = `[Target Duration: 3:30, Full Extended Instrumental Master]\n[Instrumental Intro]\n[Melodic Main Theme - Piano & Bass]\n[Instrumental Verse 1]\n[Rich Melodic Chorus 1]\n[Instrumental Verse 2 - Dynamic Lead Development]\n[Extended Solo & Piano Bridge]\n[Rich Melodic Chorus 2 - Full Climax]\n[Outro & Gradual Fade Out]`
+      finalLyricsPrompt = buildInstrumentalArrangement(durationPlan.seconds)
     }
   }
 
