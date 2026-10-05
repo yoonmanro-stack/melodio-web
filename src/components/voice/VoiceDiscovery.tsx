@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation'
 import { DISCOVERY_VOICES, discoveryVoiceItem } from '@/data/discoveryVoices'
 import { useVoice } from '@/contexts/VoiceContext'
 import { DISCOVERY_PREVIEW_SECONDS, discoveryPreviewPosition, discoveryPreviewWindow } from '@/lib/voice/discovery-preview'
+import styles from './VoicePlaybackRange.module.css'
+import { voicePlaybackTrackStyle } from './voice-playback-style'
 
 const LANGUAGES = [
   { id: 'en', label: 'English' },
@@ -241,7 +243,7 @@ export function VoiceDiscovery() {
         </button>
         <label className="col-span-3 row-start-2 flex min-w-0 items-center gap-2 text-[11px] tabular-nums text-zinc-300 md:col-span-1 md:col-start-3 md:row-start-1">
           <span className="sr-only">가창 샘플 재생 위치</span><span>{timeLabel(elapsed)}</span>
-          <input type="range" min={0} max={DISCOVERY_PREVIEW_SECONDS} step={0.1} value={elapsed} disabled={loading || !!error} onChange={event => seek(Number(event.target.value))} className="h-4 min-w-0 flex-1 accent-zinc-200" />
+          <input type="range" min={0} max={DISCOVERY_PREVIEW_SECONDS} step={0.1} value={elapsed} disabled={loading || !!error} onChange={event => seek(Number(event.target.value))} className={`${styles.track} min-w-0 flex-1`} style={voicePlaybackTrackStyle(elapsed, DISCOVERY_PREVIEW_SECONDS)} />
           <span>0:30</span>
         </label>
         <label className="hidden items-center gap-2 text-zinc-300 md:col-start-4 md:row-start-1 md:flex">

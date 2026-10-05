@@ -17,6 +17,8 @@ import { useVoice } from "@/contexts/VoiceContext";
 import { DEMO_LYRICS } from "@/data/demo-lyrics";
 import { VoiceDiscovery } from "@/components/voice/VoiceDiscovery";
 import { CustomVoiceDesigner } from "@/components/voice/CustomVoiceDesigner";
+import playbackStyles from "@/components/voice/VoicePlaybackRange.module.css";
+import { voicePlaybackTrackStyle } from "@/components/voice/voice-playback-style";
 import { QUICK_START_TEMPLATES, type QuickStartTemplateId } from "@/lib/voice/quick-start-templates";
 import { restoreDesignAttributes } from "@/lib/voice/restore-design-attributes";
 import { getSingingSampleUrl } from "@/lib/voice/singing-sample-url";
@@ -2964,9 +2966,9 @@ export default function VoiceDnaStudio() {
                           </div>
                           
                           {/* Shared Progress Bar */}
-                          <div className="h-1.5 w-full bg-zinc-800 rounded-full overflow-hidden relative cursor-pointer group/progress">
+                          <div className="h-1.5 w-full bg-[#52525b] rounded-full overflow-hidden relative cursor-pointer group/progress">
                             <div 
-                              className="h-full bg-gradient-to-r from-fuchsia-500 to-purple-500 transition-all duration-100 ease-out"
+                              className="h-full bg-zinc-200 transition-all duration-100 ease-out"
                               style={{ width: `${demoProgress}%` }}
                             />
                           </div>
@@ -3510,7 +3512,7 @@ export default function VoiceDnaStudio() {
               </button>
               <label className="col-span-3 row-start-2 flex min-w-0 items-center gap-2 text-[11px] tabular-nums text-zinc-300 md:col-span-1 md:col-start-3 md:row-start-1">
                 <span className="sr-only">보컬 샘플 재생 위치</span><span>{`0:${Math.floor(elapsedSeconds).toString().padStart(2, '0')}`}</span>
-                <input type="range" min={0} max={previewSeconds} step={0.1} value={elapsedSeconds} onChange={event => seekExploreVoicePreview(Number(event.target.value) / previewSeconds * 100)} className="h-4 min-w-0 flex-1 accent-zinc-200" />
+                <input type="range" min={0} max={previewSeconds} step={0.1} value={elapsedSeconds} onChange={event => seekExploreVoicePreview(Number(event.target.value) / previewSeconds * 100)} className={`${playbackStyles.track} min-w-0 flex-1`} style={voicePlaybackTrackStyle(elapsedSeconds, previewSeconds)} />
                 <span>{`0:${Math.ceil(previewSeconds).toString().padStart(2, '0')}`}</span>
               </label>
               <label className="hidden items-center gap-2 text-zinc-300 md:col-start-4 md:row-start-1 md:flex">

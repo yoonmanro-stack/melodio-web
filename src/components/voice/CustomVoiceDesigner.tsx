@@ -6,6 +6,8 @@ import { useVoice, type VoiceItem } from '@/contexts/VoiceContext'
 import { createClient } from '@/lib/supabase/client'
 import { VOICE_DESIGN_TRAITS, compileVoiceDesign, type VoiceDesignInput } from '@/lib/voice/voice-design-prompt'
 import { DISCOVERY_PREVIEW_SECONDS, discoveryPreviewPosition, discoveryPreviewWindow } from '@/lib/voice/discovery-preview'
+import styles from './VoicePlaybackRange.module.css'
+import { voicePlaybackTrackStyle } from './voice-playback-style'
 
 type CompiledDesign = ReturnType<typeof compileVoiceDesign>
 type PendingDesign = { id: string; userId: string; profile: CompiledDesign | null }
@@ -180,7 +182,7 @@ function DesignSamplePlayer({ url, version, onValidityChange }: { url: string; v
 
   return <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
     <div className="flex items-center justify-between gap-3"><p className="text-sm font-semibold text-white">샘플 {version} · 가창 30초</p><button type="button" disabled={!ready} onClick={() => void togglePlay()} className="min-h-10 rounded-lg bg-cyan-400 px-4 py-2 text-sm font-semibold text-zinc-950 disabled:opacity-40">{!ready ? '불러오는 중…' : playing ? '일시 정지' : elapsed >= 30 ? '다시 듣기' : '듣기'}</button></div>
-    <label className="flex items-center gap-3 text-xs text-zinc-400"><span className="sr-only">샘플 {version} 재생 위치</span><span className="font-mono">0:{Math.floor(elapsed).toString().padStart(2, '0')}</span><input type="range" min={0} max={30} step={0.1} value={elapsed} disabled={!ready} onChange={event => { const seconds = discoveryPreviewPosition(Number(event.target.value)); if (audioRef.current) audioRef.current.currentTime = seconds; setElapsed(seconds); if (seconds === 30) pause() }} className="min-w-0 flex-1 accent-cyan-400" /><span className="font-mono">0:30</span></label>
+    <label className="flex items-center gap-3 text-xs text-zinc-400"><span className="sr-only">샘플 {version} 재생 위치</span><span className="font-mono">0:{Math.floor(elapsed).toString().padStart(2, '0')}</span><input type="range" min={0} max={30} step={0.1} value={elapsed} disabled={!ready} onChange={event => { const seconds = discoveryPreviewPosition(Number(event.target.value)); if (audioRef.current) audioRef.current.currentTime = seconds; setElapsed(seconds); if (seconds === 30) pause() }} className={`${styles.track} min-w-0 flex-1`} style={voicePlaybackTrackStyle(elapsed, DISCOVERY_PREVIEW_SECONDS)} /><span className="font-mono">0:30</span></label>
     {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
     <audio data-voice-preview ref={audioRef} src={url} preload="metadata" onLoadedMetadata={event => {
       const valid = !!discoveryPreviewWindow(event.currentTarget.duration)

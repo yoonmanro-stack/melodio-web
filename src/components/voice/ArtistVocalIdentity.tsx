@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useVoice } from '@/contexts/VoiceContext'
+import { VoicePreviewPlayer } from './VoicePreviewPlayer'
 
 type Binding = { name: string; voiceId: string; updatedAt: string }
 const BINDINGS_CHANGED = 'melodio-artist-vocal-bindings-changed'
@@ -58,7 +59,7 @@ export function ArtistVocalIdentity({ artistName }: { artistName: string }) {
     </label>
     {selected && <div className="mt-3 rounded-xl bg-black/20 p-4">
       <p className="font-medium">{selected.name}</p><p className="mt-1 text-sm text-zinc-400">{selected.desc}</p>
-      {selected.audioUrl && <audio key={selected.id} data-voice-preview controls preload="none" src={selected.audioUrl} onTimeUpdate={event => { if (event.currentTarget.currentTime >= 30) event.currentTarget.pause() }} onPlay={event => { if (event.currentTarget.currentTime >= 30) event.currentTarget.currentTime = 0; document.querySelectorAll<HTMLAudioElement>('audio[data-voice-preview]').forEach(audio => { if (audio !== event.currentTarget) audio.pause() }) }} className="mt-3 w-full" />}
+      {selected.audioUrl && <VoicePreviewPlayer key={selected.id} src={selected.audioUrl} limitSeconds={30} className="mt-3" />}
       <p className="mt-3 break-all text-xs text-zinc-500">음색 참조 ID · {selected.designedVoiceId || selected.discoveryVoiceId || selected.customVoiceId}</p>
     </div>}
     <button type="button" disabled={!user || !selected || !artistName.trim()} onClick={bindVoice} className="mt-4 w-full rounded-xl bg-cyan-500 px-4 py-3 font-semibold text-black disabled:bg-zinc-800 disabled:text-zinc-500">이 가수의 보컬로 지정</button>

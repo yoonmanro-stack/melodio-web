@@ -62,6 +62,7 @@ function modalFixture(audioUrl) {
     useState(initial) { const index = cursor++; if (!(index in slots)) slots[index] = initial; return [slots[index], value => { slots[index] = typeof value === 'function' ? value(slots[index]) : value; }]; },
     useRef(initial) { const index = cursor++; return slots[index] ||= { current: initial }; },
     useEffect() {},
+    useCallback(callback) { return callback; },
   };
   class OfflineAudio {
     src = '';
@@ -102,7 +103,7 @@ test('VoiceModal plays an actual sample and reports playback only after play suc
   assert.match(fixture.button().props['aria-label'], /일시정지/);
 });
 
-test('StudioVoicePicker uses the shared URL guard before mounting native preview controls', () => {
+test('StudioVoicePicker uses the shared URL guard before mounting the preview player', () => {
   const source = fs.readFileSync('src/components/voice/StudioVoicePicker.tsx', 'utf8');
   const ast = ts.createSourceFile('StudioVoicePicker.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   let declaration;
