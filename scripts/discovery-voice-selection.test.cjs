@@ -157,8 +157,9 @@ test('pending catalog reuse throws before any external work even with a registry
 test('shared selection and restoration eligibility uses canonical Discovery readiness and preserves other voice types', () => {
   const id = 'discovery-v2-f-001';
   let canonical = { ...ready, id, discoveryVoiceId: id, reuseStatus: 'pending' };
-  const { selectableVoice } = loadSource(`import { discoveryVoiceItem } from 'offline-catalog';\n${extract('selectableVoice', 'src/contexts/VoiceContext.tsx')}\nexport { selectableVoice };`, {
+  const { selectableVoice } = loadSource(`import { discoveryVoiceItem } from 'offline-catalog';\nimport { applyVoiceNameOverride } from 'offline-names';\n${extract('selectableVoice', 'src/contexts/VoiceContext.tsx')}\nexport { selectableVoice };`, {
     'offline-catalog': { discoveryVoiceItem: value => value === id ? canonical : null },
+    'offline-names': load('src/lib/voice/voice-name-overrides.ts'),
   });
   const forged = { ...canonical, reuseStatus: 'ready', previewStatus: 'ready', stylePrompt: 'browser override', isFavorite: true };
   assert.equal(selectableVoice(forged), null);

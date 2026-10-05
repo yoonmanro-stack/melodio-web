@@ -346,6 +346,8 @@ export default function VoiceDnaStudio() {
   const [loadedVoiceAudioUrl, setLoadedVoiceAudioUrl] = useState<string | null>(null);
   const [editingCollectionVoiceId, setEditingCollectionVoiceId] = useState<string | null>(null);
   const [editingCollectionVoiceName, setEditingCollectionVoiceName] = useState("");
+  const [editingCollectionVoiceSection, setEditingCollectionVoiceSection] = useState<"created" | "favorites">("created");
+  const [collectionVoiceNameError, setCollectionVoiceNameError] = useState<string | null>(null);
   // ─── State Management ──────────────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState<"explore" | "design" | "collections" | "decoder">("explore");
   const [voiceType, setVoiceType] = useState<VoiceType>("default");
@@ -486,6 +488,63 @@ export default function VoiceDnaStudio() {
     const version = voice.sampleVersion || voice.sample_version;
     const sample = version === "B" ? secondary || primary : primary;
     return getSingingSampleUrl(sample);
+  };
+
+  const beginCollectionVoiceRename = (voice: { id: string; name: string }, section: "created" | "favorites") => {
+    setEditingCollectionVoiceId(voice.id);
+    setEditingCollectionVoiceName(voice.name);
+    setEditingCollectionVoiceSection(section);
+    setCollectionVoiceNameError(null);
+  };
+  const saveCollectionVoiceRename = (voiceId: string) => {
+    const name = editingCollectionVoiceName.trim();
+    if (!name || name.length > 80) {
+      setCollectionVoiceNameError("이름을 1~80자로 입력해 주세요.");
+      return;
+    }
+    updateVoice(voiceId, { name });
+    setEditingCollectionVoiceId(null);
+    setCollectionVoiceNameError(null);
+  };
+  const cancelCollectionVoiceRename = () => {
+    setEditingCollectionVoiceId(null);
+    setCollectionVoiceNameError(null);
+  };
+  const renderCollectionVoiceName = (voice: { id: string; name: string }, section: "created" | "favorites") => {
+    if (editingCollectionVoiceId === voice.id && editingCollectionVoiceSection === section) {
+      const errorId = `voice-name-error-${section}-${voice.id}`;
+      return <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-1">
+          <input
+            type="text"
+            value={editingCollectionVoiceName}
+            onChange={event => { setEditingCollectionVoiceName(event.target.value); setCollectionVoiceNameError(null); }}
+            onKeyDown={event => {
+              if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                event.preventDefault();
+                saveCollectionVoiceRename(voice.id);
+              } else if (event.key === "Escape") {
+                event.preventDefault();
+                cancelCollectionVoiceRename();
+              }
+            }}
+            maxLength={80}
+            autoFocus
+            aria-label={`${voice.name} 새 이름`}
+            aria-invalid={!!collectionVoiceNameError}
+            aria-describedby={collectionVoiceNameError ? errorId : undefined}
+            className="min-w-0 flex-1 rounded-lg border border-fuchsia-500 bg-black/80 px-2 py-1 text-xs font-bold text-white focus:outline-none focus:ring-1 focus:ring-fuchsia-400"
+          />
+          <button type="button" onClick={() => saveCollectionVoiceRename(voice.id)} aria-label={`${voice.name} 이름 저장`} title="이름 저장" className="shrink-0 rounded bg-fuchsia-600 p-1 text-white hover:bg-fuchsia-500 focus-visible:outline-2 focus-visible:outline-white"><Check aria-hidden="true" className="h-3.5 w-3.5" /></button>
+          <button type="button" onClick={cancelCollectionVoiceRename} aria-label="이름 수정 취소" title="취소" className="shrink-0 rounded bg-zinc-800 p-1 text-zinc-300 hover:text-white focus-visible:outline-2 focus-visible:outline-white"><X aria-hidden="true" className="h-3.5 w-3.5" /></button>
+        </div>
+        {collectionVoiceNameError && <p id={errorId} role="alert" className="text-[10px] text-rose-400">{collectionVoiceNameError}</p>}
+      </div>;
+    }
+    return <div className="flex min-w-0 items-center gap-1.5">
+      <h4 title={voice.name} className={`${section === "favorites" ? "text-xs leading-tight" : "text-sm"} min-w-0 truncate font-bold text-white`}>{voice.name}</h4>
+      <button type="button" onClick={() => beginCollectionVoiceRename(voice, section)} aria-label={`${voice.name} 이름 수정`} title="이름 수정" className="shrink-0 rounded p-1 text-zinc-300 hover:bg-white/10 hover:text-fuchsia-300 focus-visible:outline-2 focus-visible:outline-white"><Edit2 aria-hidden="true" className="h-3.5 w-3.5" /></button>
+    </div>;
   };
 
   const renderStoredVoiceSampleControl = (voice: any, isPlaying: boolean) => {
@@ -3108,60 +3167,7 @@ export default function VoiceDnaStudio() {
                             </div>
 
                             <div className="min-w-0 flex-1">
-                              {editingCollectionVoiceId === voice.id ? (
-                                <div className="flex items-center gap-1">
-                                  <input
-                                    type="text"
-                                    value={editingCollectionVoiceName}
-                                    onChange={(e) => setEditingCollectionVoiceName(e.target.value)}
-                                    onKeyDown={(e) => {
-                                      if (e.key === 'Enter') {
-                                        if (editingCollectionVoiceName.trim()) {
-                                          updateVoice(voice.id, { name: editingCollectionVoiceName.trim() });
-                                        }
-                                        setEditingCollectionVoiceId(null);
-                                      } else if (e.key === 'Escape') {
-                                        setEditingCollectionVoiceId(null);
-                                      }
-                                    }}
-                                    autoFocus
-                                    className="px-2 py-0.5 rounded-lg bg-black/80 border border-fuchsia-500 text-xs font-bold text-white focus:outline-none w-full"
-                                  />
-                                  <button
-                                    onClick={() => {
-                                      if (editingCollectionVoiceName.trim()) {
-                                        updateVoice(voice.id, { name: editingCollectionVoiceName.trim() });
-                                      }
-                                      setEditingCollectionVoiceId(null);
-                                    }}
-                                    className="p-1 rounded bg-fuchsia-600 text-white hover:bg-fuchsia-500 cursor-pointer"
-                                    title="저장"
-                                  >
-                                    <Check className="w-3 h-3" />
-                                  </button>
-                                  <button
-                                    onClick={() => setEditingCollectionVoiceId(null)}
-                                    className="p-1 rounded bg-zinc-800 text-zinc-400 hover:text-white cursor-pointer"
-                                    title="취소"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-1.5 group/title">
-                                  <h4 className="text-sm font-bold text-white truncate">{voice.name}</h4>
-                                  <button
-                                    onClick={() => {
-                                      setEditingCollectionVoiceId(voice.id);
-                                      setEditingCollectionVoiceName(voice.name);
-                                    }}
-                                    className="opacity-0 group-hover/title:opacity-100 p-0.5 text-zinc-400 hover:text-fuchsia-400 transition-opacity cursor-pointer"
-                                    title="이름 수정"
-                                  >
-                                    <Edit2 className="w-3 h-3" />
-                                  </button>
-                                </div>
-                              )}
+                              {renderCollectionVoiceName(voice, "created")}
 
                               <p className="text-[11px] text-zinc-400 line-clamp-2 mt-0.5 leading-snug" title={voice.desc || voice.stylePrompt}>
                                 {voice.desc || voice.stylePrompt}
@@ -3248,9 +3254,7 @@ export default function VoiceDnaStudio() {
                           </div>
 
                           <div className="flex-1 min-w-0 pr-4">
-                            <h4 className="text-xs font-bold text-white truncate leading-tight">
-                              {voice.name}
-                            </h4>
+                            {renderCollectionVoiceName(voice, "favorites")}
                             <p className="text-[10px] text-zinc-400 leading-tight mt-0.5 truncate">
                               {voice.desc || voice.stylePrompt}
                             </p>

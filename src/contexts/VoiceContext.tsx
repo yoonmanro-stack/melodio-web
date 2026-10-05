@@ -6,12 +6,15 @@ import { discoveryVoiceItem } from "@/data/discoveryVoices";
 import { restoreDesignAttributes } from "@/lib/voice/restore-design-attributes";
 import { resolveLegacyGeneratedSample } from "@/lib/voice/generated-sample-selection";
 import { fetchGeneratedSamplePreview, isGenerationId } from "@/lib/voice/generated-sample-preview";
+import { VOICE_NAME_OVERRIDES_KEY, applyVoiceNameOverride, collectVoiceNameOverrides, normalizeVoiceName, readVoiceNameOverrides } from "@/lib/voice/voice-name-overrides";
 import type { VoiceDnaRecord } from "@/lib/voice-dna-scrubber";
 import React, { createContext, useCallback, useContext, useState, useEffect, useRef } from "react";
 
 export interface VoiceItem {
   id: string;
   name: string;
+  /** Personal display name only; canonical voice and sample identity remain unchanged. */
+  nameOverride?: string;
   desc?: string;
   gender: "female" | "male" | "duet";
   language?: string;
@@ -96,7 +99,7 @@ function selectableVoice(voice: VoiceItem): VoiceItem | null {
   const canonical = discoveryVoiceItem(voice.discoveryVoiceId || voice.id);
   if (!voice.discoveryVoiceId && !canonical) return voice;
   if (!canonical || canonical.previewStatus !== 'ready' || canonical.reuseStatus !== 'ready' || !canonical.audioUrl) return null;
-  return { ...canonical, isFavorite: voice.isFavorite };
+  return applyVoiceNameOverride({ ...canonical, isFavorite: voice.isFavorite }, voice.nameOverride);
 }
 
 function registeredVoiceItem(value: unknown): VoiceItem | null {
@@ -150,6 +153,7 @@ function persistCustomVoices(allVoices: VoiceItem[]) {
       }));
     localStorage.setItem("melodio_user_voices", JSON.stringify(customOnly));
     localStorage.setItem("melodio_voice_favorites", JSON.stringify(allVoices.filter(v => v.isFavorite).map(v => v.id)));
+    localStorage.setItem(VOICE_NAME_OVERRIDES_KEY, JSON.stringify(collectVoiceNameOverrides(allVoices)));
   } catch (err) {
     console.warn("Failed to persist user voices to localStorage", err);
   }
@@ -169,6 +173,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const legacySampleHints = useRef(new Map<string, { generationId: string; expectedAudioUrl: string; sampleVersion: 'A' | 'B' }>());
   const sampleRevisions = useRef(new Map<string, number>());
+  const nameOverrides = useRef<Record<string, string>>(Object.create(null));
 
   // 로컬스토리지 복원
   useEffect(() => {
@@ -176,7 +181,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       const savedGender = localStorage.getItem('melodio_studio_vocal_gender');
       if (savedGender && ['female', 'male', 'duet', 'mixed'].includes(savedGender)) setStudioGenderState(savedGender as StudioVocalGender);
       const favoriteIds = JSON.parse(localStorage.getItem("melodio_voice_favorites") || "null");
-      if (Array.isArray(favoriteIds)) setVoices(current => current.map(v => ({ ...v, isFavorite: favoriteIds.includes(v.id) })));
+      try { nameOverrides.current = readVoiceNameOverrides(JSON.parse(localStorage.getItem(VOICE_NAME_OVERRIDES_KEY) || "null")); } catch { /* Invalid aliases do not affect voice restoration. */ }
+      setVoices(current => current.map(v => applyVoiceNameOverride({ ...v, isFavorite: Array.isArray(favoriteIds) ? favoriteIds.includes(v.id) : v.isFavorite }, nameOverrides.current[v.id])));
       const saved = localStorage.getItem("melodio_user_voices");
       let legacyDnas: unknown = [];
       try { legacyDnas = JSON.parse(localStorage.getItem("custom_voice_dnas") || "[]"); } catch { /* Older settings may not exist. */ }
@@ -186,9 +192,11 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
           const customOnly: VoiceItem[] = parsed
             .filter((v: any) => v && typeof v === "object" && v.sourceType !== "default")
             .map((v: any): VoiceItem | null => {
+              const alias = normalizeVoiceName(nameOverrides.current[v.id] ?? v.nameOverride);
+              if (alias && typeof v.id === 'string') nameOverrides.current[v.id] = alias;
               if (typeof v.discoveryVoiceId === "string") {
                 const canonical = discoveryVoiceItem(v.discoveryVoiceId);
-                if (canonical) return { ...canonical, isFavorite: !!v.isFavorite };
+                if (canonical) return applyVoiceNameOverride({ ...canonical, isFavorite: !!v.isFavorite }, alias);
                 return null;
               }
               const gender = v.gender === "male" || v.gender === "female" || v.gender === "duet" ? v.gender : "female";
@@ -207,7 +215,8 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
 
               return {
                 id: v.id || `voice-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-                name: v.name || `${genderLabel} 보컬 음색 스타일`,
+                name: alias || v.name || `${genderLabel} 보컬 음색 스타일`,
+                nameOverride: alias || undefined,
                 desc: v.desc || "보컬 음색 스타일",
                 gender,
                 language: v.language || "Korean",
@@ -235,7 +244,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
                 designAttributes: restoreDesignAttributes(v.designAttributes),
               };
             }).filter((v: VoiceItem | null): v is VoiceItem => v !== null);
-          setVoices([...INITIAL_SYSTEM_VOICES, ...customOnly].map(v => ({ ...v, isFavorite: Array.isArray(favoriteIds) ? favoriteIds.includes(v.id) : v.isFavorite })));
+          setVoices([...INITIAL_SYSTEM_VOICES, ...customOnly].map(v => applyVoiceNameOverride({ ...v, isFavorite: Array.isArray(favoriteIds) ? favoriteIds.includes(v.id) : v.isFavorite }, nameOverrides.current[v.id])));
 
         }
       }
@@ -333,7 +342,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
           const previous = new Map(prev.filter((voice) => voice.customVoiceId).map((voice) => [voice.customVoiceId, voice]));
           const ready = [...registered.values()].map((voice) => {
             const existing = previous.get(voice.customVoiceId);
-            return existing ? { ...voice, createdAt: existing.createdAt, isFavorite: existing.isFavorite } : voice;
+            return applyVoiceNameOverride(existing ? { ...voice, createdAt: existing.createdAt, isFavorite: existing.isFavorite } : voice, nameOverrides.current[voice.id]);
           });
           const updated = [...ready, ...prev.filter((voice) => !voice.customVoiceId)];
           persistCustomVoices(updated);
@@ -342,7 +351,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         setActiveVoiceState((current) => {
           if (!current?.customVoiceId) return current;
           const refreshed = registered.get(current.customVoiceId);
-          if (refreshed) return { ...refreshed, createdAt: current.createdAt, isFavorite: current.isFavorite };
+          if (refreshed) return applyVoiceNameOverride({ ...refreshed, createdAt: current.createdAt, isFavorite: current.isFavorite }, nameOverrides.current[refreshed.id]);
           try { localStorage.removeItem("melodio_active_voice_id"); } catch {}
           return null;
         });
@@ -378,13 +387,16 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
         if (controller.signal.aborted) return;
         const incoming = ready.filter((row): row is VoiceItem => row !== null);
         setVoices(previous => {
-          const updated = [...incoming.map(row => ({ ...row, isFavorite: previous.find(item => item.designedVoiceId === row.designedVoiceId)?.isFavorite ?? true })),
+          const updated = [...incoming.map(row => applyVoiceNameOverride({ ...row, isFavorite: previous.find(item => item.designedVoiceId === row.designedVoiceId)?.isFavorite ?? true }, nameOverrides.current[row.id])),
             ...previous.filter(row => !row.designedVoiceId)];
           persistCustomVoices(updated);
           return updated;
         });
-        setActiveVoiceState(previous => previous?.designedVoiceId
-          ? incoming.find(row => row.designedVoiceId === previous.designedVoiceId) || null : previous);
+        setActiveVoiceState(previous => {
+          if (!previous?.designedVoiceId) return previous;
+          const refreshed = incoming.find(row => row.designedVoiceId === previous.designedVoiceId);
+          return refreshed ? applyVoiceNameOverride(refreshed, nameOverrides.current[refreshed.id]) : null;
+        });
       } catch { /* Keep saved choices during a transient connection error. */ }
     })();
     return () => controller.abort();
@@ -398,7 +410,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const closeCreateModal = () => setIsCreateModalOpen(false);
 
   const setActiveVoice = (voice: VoiceItem | null) => {
-    const selected = voice ? selectableVoice(voice) : null;
+    const selected = voice ? selectableVoice(applyVoiceNameOverride(voice, nameOverrides.current[voice.id] ?? voice.nameOverride)) : null;
     if (voice && !selected) return;
     setActiveVoiceState(selected);
     if (selected) {
@@ -443,7 +455,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   const saveDiscoveryVoice = (id: string): VoiceItem | null => {
     const canonical = discoveryVoiceItem(id);
     if (!canonical) return null;
-    const saved = { ...canonical, isFavorite: true };
+    const saved = applyVoiceNameOverride({ ...canonical, isFavorite: true }, nameOverrides.current[canonical.id]);
     setVoices(previous => {
       const updated = previous.some(voice => voice.discoveryVoiceId === canonical.discoveryVoiceId)
         ? previous.map(voice => voice.discoveryVoiceId === canonical.discoveryVoiceId ? saved : voice)
@@ -456,9 +468,9 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
 
   const syncDesignedVoice = (voice: VoiceItem) => {
     if (!voice.designedVoiceId || !/^[0-9a-f-]{36}$/i.test(voice.designedVoiceId)) return;
-    const saved: VoiceItem = { ...voice, id: `designed-voice-${voice.designedVoiceId}`, sourceType: 'dna_designed',
+    const saved: VoiceItem = applyVoiceNameOverride({ ...voice, id: `designed-voice-${voice.designedVoiceId}`, sourceType: 'dna_designed',
       audioUrl: '', audioUrlB: undefined, voice_model_id: undefined, is100PercentSync: false,
-      isFavorite: true, sampleDurationSeconds: 30, previewStartSeconds: 0, previewStatus: 'ready' };
+      isFavorite: true, sampleDurationSeconds: 30, previewStartSeconds: 0, previewStatus: 'ready' }, nameOverrides.current[`designed-voice-${voice.designedVoiceId}`]);
     setVoices(previous => {
       const updated = [saved, ...previous.filter(item => item.designedVoiceId !== saved.designedVoiceId)];
       persistCustomVoices(updated);
@@ -484,21 +496,33 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
       const exists = prev.some((item) => item.customVoiceId === voiceData.customVoiceId);
       const updated = exists
         ? prev.map((item) => item.customVoiceId === voiceData.customVoiceId
-          ? { ...item, ...registered, createdAt: item.createdAt, isFavorite: item.isFavorite }
+          ? applyVoiceNameOverride({ ...item, ...registered, createdAt: item.createdAt, isFavorite: item.isFavorite }, nameOverrides.current[registered.id])
           : item)
-        : [registered, ...prev];
+        : [applyVoiceNameOverride(registered, nameOverrides.current[registered.id]), ...prev];
       persistCustomVoices(updated);
       return updated;
     });
   }, []);
 
   const updateVoice = (id: string, updates: Partial<VoiceItem>) => {
+    const safeUpdates = { ...updates };
+    delete safeUpdates.nameOverride;
+    if (Object.prototype.hasOwnProperty.call(updates, 'name')) {
+      const name = normalizeVoiceName(updates.name);
+      if (name) {
+        safeUpdates.name = name;
+        safeUpdates.nameOverride = name;
+        nameOverrides.current[id] = name;
+      } else delete safeUpdates.name;
+    }
+    const nameOnly = Object.keys(safeUpdates).every(key => key === 'name' || key === 'nameOverride');
     if (['designAttributes', 'sampleGenerationId', 'sampleVersion'].some(key => Object.prototype.hasOwnProperty.call(updates, key))) {
       legacySampleHints.current.delete(id);
       sampleRevisions.current.set(id, (sampleRevisions.current.get(id) || 0) + 1);
     }
     const applyUpdates = (voice: VoiceItem): VoiceItem => {
-      const merged = { ...voice, ...updates };
+      const merged = applyVoiceNameOverride({ ...voice, ...safeUpdates }, nameOverrides.current[id]);
+      if (nameOnly) return merged;
       const unchangedSample = isGenerationId(voice.sampleGenerationId) && voice.sampleGenerationId === merged.sampleGenerationId;
       return { ...merged,
         audioUrl: unchangedSample ? voice.audioUrl : '', audioUrlB: undefined,
@@ -517,6 +541,7 @@ export function VoiceProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteVoice = (id: string) => {
+    delete nameOverrides.current[id];
     legacySampleHints.current.delete(id);
     sampleRevisions.current.set(id, (sampleRevisions.current.get(id) || 0) + 1);
     const target = voices.find((voice) => voice.id === id);

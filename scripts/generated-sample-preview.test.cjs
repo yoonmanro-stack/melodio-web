@@ -10,6 +10,7 @@ function load(file, imports = {}) {
   return exports;
 }
 const restore = load('src/lib/voice/restore-design-attributes.ts');
+const names = load('src/lib/voice/voice-name-overrides.ts');
 const selection = load('src/lib/voice/generated-sample-selection.ts', { './restore-design-attributes': restore });
 const previewModule = load('src/lib/voice/generated-sample-preview.ts', { './generated-sample-selection': selection });
 const { fetchGeneratedSamplePreview, isGenerationId } = previewModule;
@@ -61,7 +62,8 @@ function evaluate(node, globals) {
 function harness(storage = new Map()) {
   const state = { voices: [], active: null };
   const g = {
-    ...restore, ...selection, ...previewModule, process: { env: { NEXT_PUBLIC_SUPABASE_URL: origin } },
+    ...restore, ...selection, ...previewModule, ...names, process: { env: { NEXT_PUBLIC_SUPABASE_URL: origin } },
+    nameOverrides: { current: Object.create(null) },
     INITIAL_SYSTEM_VOICES: [], legacySampleHints: { current: new Map() }, sampleRevisions: { current: new Map() },
     localStorage: { getItem: k => storage.get(k) || null, setItem: (k, v) => storage.set(k, v) },
     setStudioGenderState() {},

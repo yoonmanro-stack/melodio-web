@@ -507,3 +507,59 @@ test('completion records independent actual A/B generation IDs only for complete
     assert.deepEqual(requests, ['/api/generate', `/api/generations?id=${aId}`]);
   }
 });
+
+test('both collections share an always-visible rename action and update only a valid name', () => {
+  const original = {
+    id: 'saved-voice', name: 'Original', audioUrl: 'https://fixture.invalid/sample',
+    sampleGenerationId: '550e8400-e29b-41d4-a716-446655440000', discoveryVoiceId: 'catalog-voice',
+  };
+  const updates = [], state = {}, g = {
+    editingCollectionVoiceId: null, editingCollectionVoiceName: '', editingCollectionVoiceSection: 'created',
+    collectionVoiceNameError: null, Edit2() {}, Check() {}, X() {},
+    setEditingCollectionVoiceId(value) { state.id = value; },
+    setEditingCollectionVoiceName(value) { state.name = value; },
+    setEditingCollectionVoiceSection(value) { state.section = value; },
+    setCollectionVoiceNameError(value) { state.error = value; },
+    updateVoice(id, value) { updates.push([id, plain(value)]); },
+  };
+  g.beginCollectionVoiceRename = evaluate(named('beginCollectionVoiceRename'), g);
+  for (const section of ['created', 'favorites']) {
+    const display = evaluate(named('renderCollectionVoiceName'), g)(original, section);
+    const pencil = display.props.children[1];
+    assert.equal(pencil.props['aria-label'], 'Original 이름 수정');
+    assert.doesNotMatch(pencil.props.className, /opacity-0|hidden|group-hover/);
+    pencil.props.onClick();
+    assert.equal(state.id, original.id);
+    assert.equal(state.name, original.name);
+    assert.equal(state.section, section);
+    assert.equal(updates.length, 0);
+    const actions = [];
+    const active = { ...g, editingCollectionVoiceId: original.id, editingCollectionVoiceName: 'Alias', editingCollectionVoiceSection: section,
+      saveCollectionVoiceRename(id) { actions.push(['save', id]); }, cancelCollectionVoiceRename() { actions.push(['cancel']); } };
+    const edit = evaluate(named('renderCollectionVoiceName'), active)(original, section);
+    const input = edit.props.children[0].props.children[0];
+    assert.equal(input.props.maxLength, 80);
+    assert.equal(input.props['aria-label'], 'Original 새 이름');
+    input.props.onKeyDown({ key: 'Enter', nativeEvent: { isComposing: true }, preventDefault() {} });
+    assert.equal(actions.length, 0, 'IME Enter must finish composition without saving');
+    input.props.onKeyDown({ key: 'Enter', nativeEvent: { isComposing: false }, preventDefault() {} });
+    input.props.onKeyDown({ key: 'Escape', nativeEvent: { isComposing: false }, preventDefault() {} });
+    assert.deepEqual(actions, [['save', original.id], ['cancel']]);
+    const other = section === 'created' ? 'favorites' : 'created';
+    assert.equal(evaluate(named('renderCollectionVoiceName'), active)(original, other).props.children[1].type, 'button', 'A duplicated voice edits only the selected section');
+  }
+  for (const name of ['', '   ', 'x'.repeat(81)]) {
+    evaluate(named('saveCollectionVoiceRename'), { ...g, editingCollectionVoiceName: name })(original.id);
+    assert.equal(updates.length, 0);
+    assert.match(state.error, /1~80/);
+  }
+  evaluate(named('saveCollectionVoiceRename'), { ...g, editingCollectionVoiceName: '  사용자 이름  ' })(original.id);
+  assert.deepEqual(updates, [[original.id, { name: '사용자 이름' }]]);
+  assert.equal(state.id, null);
+  assert.equal(original.audioUrl, 'https://fixture.invalid/sample');
+  assert.equal(original.sampleGenerationId, '550e8400-e29b-41d4-a716-446655440000');
+  evaluate(named('cancelCollectionVoiceRename'), g)();
+  assert.equal(updates.length, 1);
+  assert.match(source, /renderCollectionVoiceName\(voice, "created"\)/);
+  assert.match(source, /renderCollectionVoiceName\(voice, "favorites"\)/);
+});
