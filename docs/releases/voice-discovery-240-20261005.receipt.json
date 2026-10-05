@@ -1,6 +1,6 @@
 {
   "createdAt": "2026-10-05T01:45:53.844Z",
-  "phase": "all_240_references_ready_final_deployment_pending",
+  "phase": "complete",
   "designs": 240,
   "female": 120,
   "male": 120,
@@ -31,12 +31,32 @@
     "canonicalFirstAReferences": 240,
     "providerRetryOnAmbiguousResult": false,
     "replacementFirstASourcesNew": 4,
-    "oldPublicAssetsAbsent": 4
+    "oldPublicAssetsAbsent": 4,
+    "liveBrowser": {
+      "catalogRows": 272,
+      "previewReady": 272,
+      "compositionReferencesReady": 240,
+      "sample": "discovery-v2-f-062",
+      "sourceAssetRevision": 1,
+      "durationSeconds": 30,
+      "playbackRate": 1,
+      "playbackError": null,
+      "autoStopAt30": true,
+      "allThreeStudioButtonsEnabled": true,
+      "screenshot": "artifacts/discovery-vocals-v2-20261005/review/live-240-ready-overview.jpg"
+    }
   },
   "deployment": {
-    "status": "pending_final_activation"
+    "status": "READY",
+    "id": "dpl_J4ja7LowhWzDwv2BrafKPrCWZ1k8",
+    "url": "https://melodio-p7rtmdgf7-whaleloops-projects.vercel.app",
+    "alias": "https://melodio.app",
+    "commit": "f6a7a63",
+    "activeReferences": 240,
+    "verifiedFromCLI": true,
+    "verifiedFromLiveUI": true
   },
-  "nextAction": "deploy_all_240_verified_references",
+  "nextAction": "none",
   "registrationApproval": {
     "approved": true,
     "receivedAt": "2026-10-05T01:49:21.140Z",
@@ -131,5 +151,11 @@
     "alias": "https://melodio.app",
     "commit": "224620f",
     "activeReferences": 236
+  },
+  "completedAt": "2026-10-05T03:00:53.335003+00:00",
+  "storageAfter": {
+    "freeGiB": 154,
+    "allocatedCodexSessionsGiB": 21,
+    "unexpectedSessionGrowth": false
   }
 }
