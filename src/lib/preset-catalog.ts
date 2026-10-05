@@ -58,11 +58,15 @@ export function applyPublicPresetCorrections(preset: Preset): Preset {
 }
 
 export function isPublicPresetVisible(preset: Preset): boolean {
-  const status = preset.metadata?.publication_status
-  const quality = preset.metadata?.quality_status
+  const status = String(preset.metadata?.publication_status || '').toLowerCase()
+  const quality = String(preset.metadata?.quality_status || '').toLowerCase()
+  const reviewed = Boolean(presetCatalogCategories[canonicalPresetId(preset.id)])
+  const explicitlyPublished = status === 'published' || status === 'active'
   const recipe = preset.customPrompt || preset.metadata?.studio_grade_prompt || preset.metadata?.suno_tags
-  return !['draft', 'held', 'archived', 'hidden'].includes(status)
-    && !['failed', 'rejected', 'held'].includes(quality)
+  return (reviewed || explicitlyPublished)
+    && preset.metadata?.is_test !== true && preset.metadata?.test_only !== true
+    && !['draft', 'held', 'archived', 'hidden', 'pending'].includes(status)
+    && !['failed', 'rejected', 'held', 'pending', 'unreviewed', 'test'].includes(quality)
     && typeof preset.name === 'string' && Boolean(preset.name.trim())
     && typeof recipe === 'string' && Boolean(recipe.trim())
 }

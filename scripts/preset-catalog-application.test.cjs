@@ -79,6 +79,13 @@ test('a held database entry cannot resurrect from the bundled fallback', () => {
   assert.equal(mergePublicPresetCatalog([makePreset('uk_grime', { metadata: { quality_status: 'failed' } }), makePreset('grime')], []).length, 0);
 });
 
+test('new unreviewed public entries wait for publication and explicit test rows stay hidden', () => {
+  assert.equal(mergePublicPresetCatalog([makePreset('new-unreviewed')], []).length, 0);
+  assert.equal(mergePublicPresetCatalog([makePreset('new-reviewed', { metadata: { publication_status: 'published' } })], []).length, 1);
+  assert.equal(mergePublicPresetCatalog([makePreset('new-reviewed', { metadata: { publication_status: 'published', quality_status: 'pending' } })], []).length, 0);
+  assert.equal(mergePublicPresetCatalog([makePreset('uk_grime', { metadata: { is_test: true } })], []).length, 0);
+});
+
 test('personal records bypass public corrections and aliases without losing exclusions or lyrics', () => {
   const personal = makePreset('grime', {
     customPrompt: 'my original harp recipe, 63 BPM', excludePrompt: 'no autotune',
