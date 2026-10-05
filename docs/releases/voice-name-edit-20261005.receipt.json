@@ -1,0 +1,45 @@
+{
+  "phase": "voice-name-edit-production-verification",
+  "date_kst": "2026-10-05",
+  "deployment": {
+    "id": "dpl_C19U1EF6f7pkaoFkSr88PPybvvPo",
+    "status": "READY",
+    "url": "https://melodio-o37ftoz8a-whaleloops-projects.vercel.app",
+    "alias": "https://melodio.app",
+    "code_commit": "0a2ed975add8065dd33abc5e970e9f72cc596011"
+  },
+  "changes": [
+    "Always-visible name edit pencils in created and favorite vocal collections",
+    "Shared name edit with save, cancel, Enter, Escape and 1-80 character validation",
+    "Personal display aliases survive reload, selection and server refresh",
+    "Name-only edits preserve live preview audio and trusted voice identity"
+  ],
+  "verification": {
+    "focused_node_tests": {
+      "passed": 51,
+      "failed": 0
+    },
+    "release_typecheck": "passed",
+    "production_build": "passed",
+    "live_favorite_edit_button": {
+      "visible": true,
+      "opacity": 1
+    },
+    "live_alias_reload": "Veyra 확인 retained after reload",
+    "live_renamed_preview": "playing and paused at 10.3 seconds",
+    "final_favorite_name": "Veyra",
+    "console_error_count": 0,
+    "live_created_collection_count": 0
+  },
+  "scope_notes": [
+    "User opted to re-register personal voice; source recovery and proposed reconnect feature canceled before implementation.",
+    "Legacy upload implementation stored a temporary blob URL, not durable source audio; no identifiable QR.Yoon original found in scoped project files.",
+    "Existing private source registration is separate; new personal registration or its playback is not claimed verified.",
+    "Created collection editing verified through shared renderer and focused tests; current live collection was empty.",
+    "No personal voice was deleted or recreated by this change; no paid generation or direct admin data read performed.",
+    "Temporary Veyra display-name change was restored to its original name; favorite membership retained."
+  ],
+  "evidence": [
+    "artifacts/dashboard-playback-20261005/voice-name-edit-final.png"
+  ]
+}
