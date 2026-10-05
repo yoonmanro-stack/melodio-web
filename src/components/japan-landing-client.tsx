@@ -1,5 +1,6 @@
 "use client";
 import { useVoice } from "@/contexts/VoiceContext";
+import { studioVoiceFields as resolveStudioVoiceFields } from "@/lib/voice/studio-selection";
 import { SUNO_VERSIONS } from '@/lib/suno-models';
 
 import { useState, useEffect } from "react";
@@ -561,7 +562,9 @@ function buildLyricsPrompt(sections: LyricsSection[]): string {
 }
 
 export default function JapanLandingClient() {
-  const { studioVoiceFields } = useVoice();
+  const { studioGender, activeVoice } = useVoice();
+  const [lyricLanguage, setLyricLanguage] = useState('ja');
+  const studioVoiceFields = resolveStudioVoiceFields(studioGender, activeVoice, lyricLanguage);
   const { user, loading } = useAuth();
   const { saveHistory } = useHistory();
   const { language } = useLanguage();
@@ -2191,6 +2194,8 @@ export default function JapanLandingClient() {
                   }}
                   sections={lyricsSections}
                   onSectionsChange={setLyricsSections}
+                  lyricLanguage={lyricLanguage}
+                  onLyricLanguageChange={setLyricLanguage}
                   playlistTitle={playlistTitle}
                   onPlaylistTitleChange={setPlaylistTitle}
                   playlistDescription={playlistDescription}

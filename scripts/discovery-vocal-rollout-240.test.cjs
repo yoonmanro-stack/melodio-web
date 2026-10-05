@@ -496,3 +496,75 @@ test('a replacement metadata override changes only persona description and style
     assert.equal(bad.jobs[0].personaState, undefined);
   }
 });
+
+test('persona name overrides affect only provider names and preserve public profiles, IDs and request receipts', async () => {
+  const m = registrationFixture(4), recorder = registrationRecorder();
+  m.jobs[0].profile.provisionalName = 'Zoé Rivage';
+  m.jobs[0].personaName = ` ${m.jobs[0].id} `;
+  m.jobs[1].personaName = 'x';
+  m.jobs[2].personaName = 'é'.repeat(80);
+  const originals = m.jobs.slice(0, 4).map(job => ({ id: job.id, profile: structuredClone(job.profile),
+    options: structuredClone(job.options), taskId: job.taskId, clips: structuredClone(job.clips), sample: structuredClone(job.sample) }));
+  const expectedNames = [m.jobs[0].id, 'x', 'é'.repeat(80), m.jobs[3].profile.provisionalName];
+  const posted = [];
+  await registerPersonas(m, registrationConfig, { persist: recorder.persist, pause: async () => {}, fetchImpl: async (_url, init) => {
+    const payload = JSON.parse(init.body), index = posted.length;
+    posted.push(payload);
+    assert.equal(payload.input.name, expectedNames[index]);
+    assert.equal(payload.input.description, normalizePersonaDescription(originals[index].profile.stylePrompt));
+    assert.equal(payload.input.task_id, originals[index].taskId);
+    assert.equal(payload.input.audio_id, originals[index].clips[0].id);
+    const receipt = recorder.snapshots.at(-1).find(job => job.id === originals[index].id);
+    assert.equal(receipt.personaState, 'submitting');
+    assert.equal(receipt.personaRequestSha256, crypto.createHash('sha256').update(init.body).digest('hex'));
+    assert.ok(receipt.personaAttemptId);
+    return personaResponse(payload.input.task_id);
+  } });
+  assert.equal(posted.length, 4);
+  for (const [index, original] of originals.entries()) {
+    const job = m.jobs[index];
+    for (const field of ['id', 'profile', 'options', 'taskId', 'clips', 'sample']) assert.deepEqual(job[field], original[field]);
+    assert.equal(job.personaState, 'ready');
+    assert.equal(job.personaAudioId, original.clips[0].id);
+    assert.equal(job.personaTaskId, original.taskId);
+    assert.equal(job.personaSourceVersion, 'A');
+  }
+  assert.equal(m.jobs[0].profile.provisionalName, 'Zoé Rivage');
+  assert.equal(m.jobs[0].personaName, ` ${m.jobs[0].id} `);
+  assert.equal(Object.hasOwn(m.jobs[3], 'personaName'), false);
+});
+
+test('invalid persona names anywhere in the selected jobs prevent every persistence and provider dispatch', async () => {
+  for (const invalid of [undefined, null, 42, {}, '', '   ', 'x'.repeat(81), 'bad\u0000name', 'bad\nname',
+    '\ttrimmed control', 'bad\u007fname', 'bad\u0085name']) {
+    const m = registrationFixture(9);
+    m.jobs[8].personaName = invalid;
+    const before = structuredClone(m);
+    let effects = 0;
+    await assert.rejects(registerPersonas(m, registrationConfig, { continueOnHeld: true,
+      persist() { effects++; }, pause: async () => {}, fetchImpl() { effects++; throw new Error('Unexpected network'); } }), /PERSONA_NAME/);
+    assert.equal(effects, 0);
+    assert.deepEqual(m, before);
+  }
+});
+
+test('name override validation preserves selection limits and skips existing held attempt receipts', async () => {
+  const m = registrationFixture(3), recorder = registrationRecorder();
+  Object.assign(m.jobs[0], { personaState: 'held', personaName: '', personaAttemptId: 'existing_held_attempt',
+    personaRequestSha256: 'existing_request_hash', personaHttpStatus: 200, personaProviderCode: 400,
+    personaErrorCategory: 'provider_error' });
+  m.jobs[2].personaName = '';
+  const heldBefore = structuredClone(m.jobs[0]), untouchedBefore = structuredClone(m.jobs[2]);
+  let calls = 0;
+  await registerPersonas(m, registrationConfig, { limit: 1, continueOnHeld: true, persist: recorder.persist,
+    pause: async () => {}, fetchImpl: async (_url, init) => {
+      calls++;
+      const input = JSON.parse(init.body).input;
+      assert.equal(input.task_id, m.jobs[1].taskId);
+      assert.equal(input.name, m.jobs[1].profile.provisionalName);
+      return personaResponse(input.task_id);
+    } });
+  assert.equal(calls, 1);
+  assert.deepEqual(m.jobs[0], heldBefore);
+  assert.deepEqual(m.jobs[2], untouchedBefore);
+});

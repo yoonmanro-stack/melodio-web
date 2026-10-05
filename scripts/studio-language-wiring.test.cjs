@@ -8,10 +8,10 @@ function load(file, dependencies = {}, fetch = () => { throw new Error('Unexpect
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.ReactJSX },
   }).outputText;
-  new Function('module', 'exports', 'require', 'fetch', 'alert', code)(module, module.exports, name => {
+  new Function('module', 'exports', 'require', 'fetch', 'alert', 'window', code)(module, module.exports, name => {
     assert.ok(Object.hasOwn(dependencies, name), `Unexpected dependency: ${name}`);
     return dependencies[name];
-  }, fetch, message => { throw new Error(message); });
+  }, fetch, message => { throw new Error(message); }, { setTimeout: () => 0 });
   return module.exports;
 }
 
@@ -59,14 +59,21 @@ function harness(name, { runEffects = false, props = {}, context = {} } = {}) {
     '@/lib/suno-models': { SUNO_VERSIONS: ['v6'], currentSunoVersion: () => 'v6' },
     '@/data/categories': { categories: [], SINGLE_SELECT_CATEGORIES: [] },
     '@/data/presets': { presets: [] },
-    '@/hooks/useAuth': { useAuth: () => ({ user: null }) },
+    '@/hooks/useAuth': { useAuth: () => ({ user: name === 'JapanLandingClient' ? { id: 'offline-user' } : null }) },
     '@/hooks/useHistory': { useHistory: () => ({ saveHistory: noop }) },
     '@/lib/prompt-compositor': { composeStylePrompt: () => ({ prompt: '' }), enforceSingleSelect: value => value, resolveRotationPrompt: value => value },
     '@/lib/supabase': { supabase: {} },
     '@/components/voice/StudioVoicePicker': { StudioVoicePicker: 'StudioVoicePicker' },
+    'next/link': { default: 'Link' },
+    '@/contexts/LanguageContext': { useLanguage: () => ({ language: 'ko' }) },
+    '@/data/jp-presets-translations': { jpPresetTranslations: {} },
+    '@/lib/audio-playback': {},
   };
   for (const child of ['GenreSelector', 'CategorySection', 'LyricsBuilder', 'PresetGrid', 'PromptOutput', 'CreatePresetModal', 'ProPaywallModal']) dependencies[`./${child}`] = { default: child };
-  const Component = load(`src/components/prompt-builder/${name}.tsx`, dependencies, async (url, options) => {
+  for (const child of ['LyricsBuilder', 'PromptOutput', 'CreatePresetModal', 'PublicTrackGrid']) dependencies[`./prompt-builder/${child}`] = { default: child };
+  const file = name === 'JapanLandingClient' ? 'src/components/japan-landing-client.tsx' : `src/components/prompt-builder/${name}.tsx`;
+  const Component = load(file, dependencies, async (url, options) => {
+    if (url === '/api/generations') return { ok: true, json: async () => ({ generations: [] }) };
     requests.push({ url, body: JSON.parse(options.body) });
     return { ok: true, json: async () => ({ success: true, title: 'Generated', sections: [{ id: 'verse', type: 'verse', content: 'Generated lyric' }] }) };
   }).default;
@@ -79,6 +86,42 @@ function harness(name, { runEffects = false, props = {}, context = {} } = {}) {
   }
   return { render, requests, context: voiceContext };
 }
+
+test('Japan studio language gates both single and playlist requests independently of UI locale', async () => {
+  const koreanVoice = { id: 'korean-female', gender: 'female', language: 'ko', stylePrompt: 'Korean voice' };
+  const h = harness('JapanLandingClient', { context: { activeVoice: koreanVoice } });
+  const output = tree => elements(tree, node => node.type === 'PromptOutput')[0].props;
+  let result = output(h.render());
+  assert.equal(result.lyricsBuilderNode.props.lyricLanguage, 'ja');
+  assert.equal(result.lyricsBuilderNode.props.isJapanCampaign, true);
+  result.lyricsBuilderNode.props.onSectionsChange([{ id: 'verse', type: 'verse', content: '日本語の歌詞' }]);
+  result = output(h.render());
+  await result.onGenerate();
+  assert.equal(h.requests[0].body.lyricsLanguage, 'ja');
+  assert.equal(h.requests[0].body.activeVoice, null);
+  assert.equal(h.requests[0].body.voicePrompt, undefined);
+  assert.equal(h.requests[0].body.sourceMenu, 'japan');
+
+  result = output(h.render());
+  result.lyricsBuilderNode.props.onLyricLanguageChange('en');
+  const englishVoice = { ...koreanVoice, id: 'english-female', language: 'en' };
+  h.context.activeVoice = englishVoice;
+  result.lyricsBuilderNode.props.onPlaylistModeToggle(true);
+  result.lyricsBuilderNode.props.onTracksChange([{ title: 'Track', sections: [{ id: 'verse', type: 'verse', content: 'English lyrics' }] }]);
+  result = output(h.render());
+  assert.equal(result.lyricsBuilderNode.props.lyricLanguage, 'en');
+  await result.onGenerate();
+  assert.equal(h.requests[1].body.lyricsLanguage, 'en');
+  assert.equal(h.requests[1].body.activeVoice.id, englishVoice.id);
+
+  result = output(h.render());
+  result.lyricsBuilderNode.props.onLyricLanguageChange('ja');
+  result = output(h.render());
+  await result.onGenerate();
+  assert.equal(h.requests[2].body.lyricsLanguage, 'ja');
+  assert.equal(h.requests[2].body.activeVoice, null);
+  assert.equal(h.requests[2].body.voicePrompt, undefined);
+});
 
 function lyricProps(overrides = {}) {
   return {

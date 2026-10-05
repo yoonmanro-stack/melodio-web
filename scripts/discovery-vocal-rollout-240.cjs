@@ -51,6 +51,9 @@ async function registerPersonas(m,config,{limit=CAP,concurrency=8,timeoutMs=9000
   if(!Number.isInteger(timeoutMs)||timeoutMs<30000||timeoutMs>120000)throw new Error('PERSONA_TIMEOUT');
   if(typeof continueOnHeld!=='boolean')throw new Error('PERSONA_CONTINUATION');
   const pending=m.jobs.filter(canRegister).slice(0,limit);
+  // Validate every selected override before any sibling can persist or dispatch.
+  for(const j of pending)if(Object.hasOwn(j,'personaName')&&(typeof j.personaName!=='string'||!j.personaName.trim()
+    ||Array.from(j.personaName.trim()).length>80||/[\u0000-\u001f\u007f-\u009f]/u.test(j.personaName)))throw new Error('PERSONA_NAME');
   for(let offset=0;offset<pending.length;offset+=concurrency) {
     const started=Date.now();
     const results=await Promise.allSettled(pending.slice(offset,offset+concurrency).filter(canRegister).map(async j=>{
@@ -58,7 +61,7 @@ async function registerPersonas(m,config,{limit=CAP,concurrency=8,timeoutMs=9000
       if(j.personaDescription!==undefined&&(typeof j.personaDescription!=='string'||!j.personaDescription.trim()||j.personaDescription.trim().length>200))throw new Error('PERSONA_DESCRIPTION');
       const description=normalizePersonaDescription(j.personaDescription===undefined?j.profile.stylePrompt:j.personaDescription.trim());
       if(j.personaDescription!==undefined&&description.length>200)throw new Error('PERSONA_DESCRIPTION');
-      const body=JSON.stringify({model:'ai-music-api/generate-persona',input:{task_id:j.taskId,audio_id:clip.id,name:j.profile.provisionalName,
+      const body=JSON.stringify({model:'ai-music-api/generate-persona',input:{task_id:j.taskId,audio_id:clip.id,name:Object.hasOwn(j,'personaName')?j.personaName.trim():j.profile.provisionalName,
         description,vocal_start:0,vocal_end:30,style:description.slice(0,200)}});
       j.personaState='submitting';j.personaSubmittedAt=new Date(attemptStarted).toISOString();j.personaAttemptId=crypto.randomUUID();
       j.personaTaskId=j.taskId;j.personaAudioId=clip.id;j.personaSourceVersion='A';j.personaTimeoutMs=timeoutMs;
