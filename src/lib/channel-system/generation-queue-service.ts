@@ -6,6 +6,7 @@ import type { ChannelDna, LyricsSection } from '../../types'
 import type { Database, Json } from '../../types/database'
 import { generateLyrics, type LyricsGeneratorResult } from '../engines/lyrics-generator'
 import { createClient } from '../supabase/server'
+import { compileLyricsSections } from '../lyrics/compile-sections'
 import {
   ChannelSystemAuthenticationError,
   ChannelSystemPersistenceError,
@@ -148,10 +149,7 @@ async function loadDna(client: Client, dnaVersionId: string): Promise<ChannelDna
 }
 
 function renderSections(sections: LyricsSection[]) {
-  return sections.map((section) => {
-    const cue = section.description ? `\n[${section.description}]` : ''
-    return `[${section.type}]${cue}\n${section.content}`
-  }).join('\n\n')
+  return compileLyricsSections(sections).lyricsPrompt
 }
 
 function language(value?: string): Parameters<typeof generateLyrics>[0]['language'] {

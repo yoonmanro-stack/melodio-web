@@ -12,6 +12,7 @@ import { presets } from '@/data/presets'
 import { mergePublicPresetCatalog, findStudioPreset } from '@/lib/preset-catalog'
 import { resolvePresetApplication, parsePresetLyrics, resolveGeneratedPresetStyle } from '@/lib/preset-application'
 import { resolveMusicDuration } from '@/lib/music-duration'
+import { compileLyricsSections } from '@/lib/lyrics/compile-sections'
 import { useAuth } from '@/hooks/useAuth'
 import { useHistory } from '@/hooks/useHistory'
 import { useVoice } from '@/contexts/VoiceContext'
@@ -27,21 +28,9 @@ import PromptOutput from './PromptOutput'
 import CreatePresetModal from './CreatePresetModal'
 import ProPaywallModal from './ProPaywallModal'
 
-/** 가사 섹션 → Suno 형식 프롬프트 변환 (연주 지시어 포함) */
+/** 가사에는 구조 태그와 실제 노랫말만 전달한다. */
 function buildLyricsPrompt(sections: LyricsSection[]): string {
-  return sections
-    .map((s) => {
-      let label = s.type.charAt(0).toUpperCase() + s.type.slice(1)
-      if (s.type === 'pre-chorus') {
-        label = 'Pre-Chorus'
-      }
-      // description이 있으면 [Verse: soft piano, breathy vocal] 형태로 빌드
-      const header = s.description?.trim()
-        ? `[${label}: ${s.description.trim()}]`
-        : `[${label}]`
-      return `${header}\n${s.content}`
-    })
-    .join('\n\n')
+  return compileLyricsSections(sections).lyricsPrompt
 }
 
 /** Lyria 3가 제공되지 않는 동안 자동 선택은 Suno를 사용한다. */

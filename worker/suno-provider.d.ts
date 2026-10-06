@@ -2,6 +2,8 @@ export type SunoModel = 'V6' | 'V6_MINI' | 'V6_WILD';
 export interface SunoJobOptions {
   style: string;
   lyrics?: string;
+  /** Structured source used to keep arrangement descriptions out of sung lyrics. */
+  lyricsSections?: unknown;
   title?: string;
   instrumental?: boolean;
   model?: string;

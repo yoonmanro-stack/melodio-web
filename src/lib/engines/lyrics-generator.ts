@@ -11,6 +11,15 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 export const LYRICS_MODEL = 'gpt-5.6-sol' as const
 export const LYRICS_PROVIDER_TIMEOUT_MS = 180_000
 
+const LYRICS_FIELD_CONTRACT = `
+## LYRICS AND MUSIC DIRECTION FIELD CONTRACT
+- sections[].content contains only the words to be sung. Brief structural or performance tags are allowed only when required by the song's structure contract. Never put instrument, vocal-gender, microphone, arrangement, or mixing instructions in content.
+- sections[].description is separate music-production context: write concise, plain English musical directions with NO square brackets, section tags, outer wrappers, or nested brackets. Example: male vocal, gentle acoustic strumming, brushed drums, warm double bass.
+- Never copy stylePrompt or a section description into sung content. An instrumental section with no sung words must have empty content; keep its directions in description.
+- Write titles, sung lyrics, tags, and listener-facing summaries in the requested language. Section description fields must always stay in unbracketed English, even when the lyrics are Korean, Japanese, or another language.
+- If lyricsPrompt is included, compose it from structural section tags and the sung content only. Section descriptions must never appear in lyricsPrompt.
+`
+
 export interface LyricsModelUsage {
   requestedModel: typeof LYRICS_MODEL
   actualModel: string
@@ -596,7 +605,7 @@ ${profile.thematicPillars.map(p => `   - **${p.title}**: ${p.subThemes.join(', '
 3. **RHYTHM & MELODY SHIFT**:
    - **Verses** should have narrative sentences that paint the emotional backstory.
    - **Choruses** MUST feature highly rhythmic, punchy, syncopated repetitive hooks that immediately capture the ear.
-4. **AI STRUCTURAL CUES**: In section "description" fields, include dynamic musical cues (e.g. '[Upbeat Brass Stabs]', '[Mournful Accordion Solo]', '[Saxophone Climax]', '[Gentle Acoustic Strumming]', '[Fade Out]').`
+4. **MUSIC DIRECTIONS**: Keep arrangement and vocal-performance cues only in section "description" fields as plain, unbracketed English (e.g. upbeat brass stabs, mournful accordion solo, saxophone climax, gentle acoustic strumming, fade out). They are production context, never words to be sung.`
 
   const vleMasterMarkdown = loadVLEMasterPrompt()
 
@@ -616,8 +625,8 @@ ${buildStructureDirective()}
   const customUserDirectives = `
 ## 🎯 CUSTOM USER DIRECTIVES & PRECISE INCLUSION RULES:
 If the theme/topic contains specific user instructions, custom lyrics, phrases in quotes, or musical preferences:
-1. **Verbatim Phrase Inclusion**: If the user has requested to include a specific phrase or sentence (especially if enclosed in quotes like "내가 널 버릴거야~"), you MUST strictly include this exact phrase inside the generated lyrics.
-2. **Style & Vocal Adjustment**: Reflect musical or vocal performance requests inside the section "description" fields.`
+1. **Verbatim Phrase Inclusion**: If the user explicitly requests words to be sung (for example "내가 널 버릴거야~"), preserve that exact lyric phrase. Quoted musical, instrument, or vocal-performance instructions are production directions and must not become sung words.
+2. **Style & Vocal Adjustment**: Reflect musical or vocal performance requests only inside the section "description" fields as plain, unbracketed English.`
 
   if (viralMode) {
     return `You are a legendary viral content creator and CM-song director specializing in addictive short-form songs.
@@ -638,12 +647,13 @@ Language: ${languageInstruction}
   "sections": [
     {
       "type": "intro or verse or chorus or outro",
-      "content": "lyrics text",
-      "description": "Suno musical instruction"
+      "content": "Only sung lyric words and any structural tags required by the structure contract; no production descriptions",
+      "description": "Plain English music-production directions, no square brackets"
     }
   ]
 }
-${playbookInstructions || ''}`
+${playbookInstructions || ''}
+${LYRICS_FIELD_CONTRACT}`
   }
 
   return `You are a world-class, chart-topping songwriter and music producer specializing in ${profile.nameKo} and global playlist curation. You have deep expertise in Suno AI music generation.
@@ -655,7 +665,7 @@ ${customUserDirectives}
 Your task: Generate a professional-grade song package (title, SEO tags, hashtags, and structured lyrics) for the style: "${stylePrompt}".
 ${topic ? `The theme/topic is: "${topic}".` : ''}
 
-You MUST write all titles, lyrics, tags, and descriptions strictly in the requested language style: "${languageInstruction}".
+You MUST write all titles, sung lyrics, and tags strictly in the requested language style: "${languageInstruction}". Section description fields must be plain, unbracketed English.
 
 ## JSON Schema (Strict)
 {
@@ -665,12 +675,13 @@ You MUST write all titles, lyrics, tags, and descriptions strictly in the reques
   "sections": [
     {
       "type": "intro or verse or pre-chorus or chorus or bridge or outro",
-      "content": "Pure lyrics text (newline separated). NO section tags inside.",
-      "description": "REQUIRED: Suno-optimized musical instruction (e.g., 'Passionate male vocal, mournful saxophone intro', 'Dynamic female vocal, upbeat brass rhythm')"
+      "content": "Only sung lyric words (newline separated). NO section headers or music-production directions inside.",
+      "description": "Plain, unbracketed English musical directions (e.g., passionate male vocal, mournful saxophone intro)"
     }
   ]
 }
 ${playbookInstructions || ''}
+${LYRICS_FIELD_CONTRACT}
 `
 }
 
@@ -721,7 +732,7 @@ ${profile.bannedCliches}
 Your task is to generate a comprehensive ${trackCount}-track playlist package based on the requested style: "${stylePrompt}".
 ${topic ? `The entire playlist theme/topic is: "${topic}".` : ''}
 
-You MUST write all playlistTitles, descriptions, track titles, and lyrics strictly in the requested language style: "${languageInstruction}".
+You MUST write playlist titles, YouTube descriptions, track titles, tags, and sung lyrics strictly in the requested language style: "${languageInstruction}". Section description fields must be plain, unbracketed English.
 
 You MUST return a JSON object matching this schema:
 {
@@ -738,8 +749,8 @@ You MUST return a JSON object matching this schema:
       "sections": [
         {
           "type": "intro or verse or pre-chorus or chorus or bridge or outro",
-          "content": "Lyrics for this section",
-          "description": "Musical cue (e.g., 'Nostalgic accordion solo', 'Punchy brass drop')"
+          "content": "Only sung lyric words for this section; no music-production directions",
+          "description": "Plain, unbracketed English musical directions (e.g., nostalgic accordion solo, punchy brass drop)"
         }
       ]
     }
@@ -752,5 +763,6 @@ Rules:
 3. Outro Control: Keep Outro short (1-2 lines) with "Fade Out" or "Instrumental Outro" in the description.
 4. Strictly return valid JSON.
 ${playbookInstructions || ''}
+${LYRICS_FIELD_CONTRACT}
 `
 }

@@ -32,6 +32,7 @@ import { submitKieSunoJob, kieTaskReference, sunoVersionLabel } from '../../../.
 import { validatePetEpisode, type PetEpisode } from '@/lib/vle/petEpisode'
 import { registeredVoicePersona } from '@/lib/voice/custom-voice-integrity'
 import { readCustomVoice } from '@/lib/voice/custom-voice-repository'
+import { compileLyricsSections, prepareLyricsSubmission, assertSafeVocalLyrics, LyricsInstructionError } from '@/lib/lyrics/compile-sections'
 
 type ViralBriefSnapshot = {
   sourceTopic: string
@@ -69,20 +70,6 @@ function readViralBriefSnapshot(value: unknown): ViralBriefSnapshot | null {
 
 // 제출만 하므로 긴 타임아웃 불필요 (Vercel 타임아웃 60초로 확장)
 export const maxDuration = 60;
-
-function buildLyricsPromptFromSections(sections: unknown): string {
-  if (!Array.isArray(sections)) return ''
-  return sections
-    .filter((section: any) => section && typeof section === 'object' && String(section.content || '').trim())
-    .map((section: any) => {
-      const rawType = String(section.type || 'verse')
-      const label = rawType.charAt(0).toUpperCase() + rawType.slice(1)
-      const description = String(section.description || '').trim()
-      const content = String(section.content || '').trim()
-      return `[${label}]\n${description ? `[${description}]\n` : ''}${content}`
-    })
-    .join('\n\n')
-}
 
 function inferVocalLabel(payload: PromptPayload, selections: any, vdCode?: string): string {
   if (payload.isInstrumental) return 'Instrumental'
@@ -427,7 +414,7 @@ export async function POST(request: NextRequest) {
     // 화면의 구조화된 가사 섹션을 서버의 단일 기준으로 사용한다. 클라이언트에서
     // 조립한 lyricsPrompt가 비었거나 오래된 상태여도 화면에 표시된 섹션과 동일한
     // 프롬프트를 서버에서 다시 만든다.
-    const canonicalLyricsPrompt = buildLyricsPromptFromSections(lyricsSections)
+    const canonicalLyricsPrompt = compileLyricsSections(lyricsSections).lyricsPrompt
     if (!payload.isInstrumental && canonicalLyricsPrompt) {
       payload.lyricsPrompt = canonicalLyricsPrompt
     }
@@ -442,6 +429,8 @@ export async function POST(request: NextRequest) {
       || viralBrief.stylePrompt !== payload.stylePrompt)) {
       return NextResponse.json({ error: '기획한 상황·가사·음악 스타일이 다릅니다. 다시 기획해 주세요.' }, { status: 400 })
     }
+
+    if (!payload.isInstrumental && !queueItemId) assertSafeVocalLyrics(payload.lyricsPrompt || '')
 
     if (!payload.stylePrompt) {
       return NextResponse.json({ error: 'stylePrompt가 필요합니다' }, { status: 400 })
@@ -631,6 +620,17 @@ export async function POST(request: NextRequest) {
       claimedQueueItemId = queueItemId
     }
 
+    // Restore approved Queue content before separating lyrics and production notes.
+    // Keep independently approved short-form snapshots exact.
+    if (!viralBrief && !petEpisode) {
+      const preparedLyrics = prepareLyricsSubmission({ stylePrompt: payload.stylePrompt,
+        lyricsPrompt: payload.lyricsPrompt, lyricsSections, isInstrumental: payload.isInstrumental,
+        vocalGender: rawBody.vocalGender || rawBody.activeVoice?.gender })
+      payload.stylePrompt = preparedLyrics.stylePrompt
+      payload.lyricsPrompt = preparedLyrics.lyricsPrompt
+    }
+    if (!payload.isInstrumental) assertSafeVocalLyrics(payload.lyricsPrompt || '')
+
     // 0. 장르 플레이북 매칭
     let matchedPlaybook: any = null
     try {
@@ -680,6 +680,7 @@ export async function POST(request: NextRequest) {
       artistIdentity: artistIdentity || undefined,
       artistIdentitySignature,
       stylePrompt: payload.stylePrompt,
+      vocalGender: rawBody.vocalGender || rawBody.activeVoice?.gender,
       lyricsPrompt: payload.lyricsPrompt || '',
       excludePrompt: payload.excludePrompt || '',
       engine: payload.engine || 'suno_v5',
@@ -805,6 +806,7 @@ export async function POST(request: NextRequest) {
         console.error('[API/generate] Queue 실패 상태 기록 오류:', queueError)
       }
     }
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ error: message, ...(error instanceof LyricsInstructionError ? { code: error.code } : {}) },
+      { status: error instanceof LyricsInstructionError ? 400 : 500 })
   }
 }

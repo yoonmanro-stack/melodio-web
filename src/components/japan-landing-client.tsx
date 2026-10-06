@@ -50,6 +50,7 @@ import LyricsBuilder from "./prompt-builder/LyricsBuilder";
 import { Wand2, Tag, PenTool, ListMusic, Music2, Copy } from "lucide-react";
 import type { MusicEngine, PromptPayload, LyricsSection, Preset } from "@/types";
 import { composeStylePrompt, resolveRotationPrompt } from "@/lib/prompt-compositor";
+import { compileLyricsSections } from "@/lib/lyrics/compile-sections";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { jpPresetTranslations } from "@/data/jp-presets-translations";
 import { getAudioPlaybackError, getExpiredAudioPlaybackError, getStoredTrackDuration } from "@/lib/audio-playback";
@@ -551,15 +552,9 @@ const isPublicJpTrack = (item: any) => {
   }
 };
 
-/** 가사 섹션 → Suno 형식 프롬프트 변환 (연주 지시어 포함) */
+/** 가사에는 구조 태그와 실제 노랫말만 전달한다. */
 function buildLyricsPrompt(sections: LyricsSection[]): string {
-  return sections
-    .map((s) => {
-      let label = s.type.charAt(0).toUpperCase() + s.type.slice(1)
-      const desc = s.description ? `[${s.description}]` : ''
-      return `[${label}]\n${desc ? desc + '\n' : ''}${s.content}`
-    })
-    .join('\n\n')
+  return compileLyricsSections(sections).lyricsPrompt
 }
 
 export default function JapanLandingClient() {

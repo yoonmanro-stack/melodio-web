@@ -1,4 +1,5 @@
 /** Shared by the Next.js submission route and the Mac mini music worker. */
+const { prepareLyricsSubmission, assertSafeVocalLyrics } = require('./lyrics-policy');
 const KIE_MODEL = 'ai-music-api/generate';
 const KIE_API_ORIGIN = 'https://api.kie.ai';
 const SUNO_TIMEOUT_MS = 15 * 60 * 1000;
@@ -52,9 +53,14 @@ function getKieConfig() {
 }
 
 function buildKieSunoRequest(options) {
-  const style = String(options.style || '').trim();
-  const lyrics = String(options.lyrics || '').trim();
   const instrumental = options.instrumental === true;
+  const prepared = Array.isArray(options.lyricsSections)
+    ? prepareLyricsSubmission({ stylePrompt: options.style, lyricsPrompt: options.lyrics,
+      lyricsSections: options.lyricsSections, isInstrumental: instrumental, vocalGender: options.vocalGender })
+    : { stylePrompt: String(options.style || ''), lyricsPrompt: String(options.lyrics || '') };
+  const style = prepared.stylePrompt.trim();
+  const lyrics = prepared.lyricsPrompt.trim();
+  if (!instrumental) assertSafeVocalLyrics(lyrics);
   if (!style) throw new Error('음악 스타일 프롬프트를 입력해 주세요.');
   if (lyrics.length > 5000) throw new Error('Suno V6 가사는 5,000자 이내로 입력해 주세요.');
   const customMode = instrumental || lyrics.length > 0;

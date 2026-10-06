@@ -114,6 +114,7 @@ const originalFetch = global.fetch;
 global.fetch = async () => { paidCalls++; throw Error('network forbidden in test'); };
 const studioSelection = loadTS('src/lib/voice/studio-selection.ts');
 const routeImports = {
+  '@/lib/lyrics/compile-sections': require('../worker/lyrics-policy'),
   '@/lib/music-duration': {}, '@/lib/voice/official-voice-selection': { resolveOfficialVoice: () => null },
   '@/lib/voice/official-voice-registry': {}, '@/lib/voice/discovery-voice-selection': { assertExclusiveVoiceSelection: () => {}, resolveDiscoveryVoice: () => null },
   '@/lib/voice/discovery-voice-registry': {}, '@/lib/voice/voice-design-prompt': {}, '@/lib/voice/designed-voice-repository': {},
@@ -130,6 +131,16 @@ const routeImports = {
 const { POST } = loadTS('src/app/api/generate/route.ts', name => {
   if (!(name in routeImports)) throw Error(`unmocked route import: ${name}`);
   return routeImports[name];
+});
+test('all three actual studio routes reject raw production blocks before paid I/O', async () => {
+  for (const sourceMenu of ['style-library', 'preset-studio', 'japan']) {
+    paidCalls = 0;
+    const result = await POST({ json: async () => ({ sourceMenu, stylePrompt: 'Acoustic pop', isInstrumental: false,
+      lyricsPrompt: '[male vocal, [gentle acoustic guitar] [brush drums]]\n오늘을 노래해' }) });
+    assert.equal(result.status, 400);
+    assert.equal(result.body.code, 'lyrics_instruction_in_content');
+    assert.equal(paidCalls, 0);
+  }
 });
 test('actual route rejects foreign, stale, unavailable and incompatible artists before metadata or provider calls', async () => {
   const cases = [
