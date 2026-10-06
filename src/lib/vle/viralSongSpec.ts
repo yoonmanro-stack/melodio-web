@@ -1,3 +1,5 @@
+import { assertSafeVocalLyrics } from '@/lib/lyrics/compile-sections';
+
 /**
  * VIRAL SONG SPEC — 25~30초 바이럴 숏폼 음원의 유일한 길이·구조 기준.
  *
@@ -260,6 +262,14 @@ export interface ViralLyricsStructure {
  * 블록과 실제 [가사] 블록이 서로 달랐다. 이 함수는 아무것도 버리지 않는다.
  */
 export function formatLyricsToSuno(structure: ViralLyricsStructure): string {
+  // Validate before formatting can erase brackets that identify leaked directions.
+  for (const value of [
+    ...(Array.isArray(structure.hook) ? structure.hook : []),
+    ...(Array.isArray(structure.verse) ? structure.verse : []),
+    structure.tagOutro, structure.finalPunch,
+  ]) {
+    if (typeof value === 'string') assertSafeVocalLyrics(value);
+  }
   const clean = (s: unknown): string =>
     typeof s === 'string' ? s.replace(/["\[\]]/g, '').trim() : '';
   const cleanList = (arr: unknown, max: number): string[] =>

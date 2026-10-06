@@ -134,12 +134,19 @@ const { POST } = loadTS('src/app/api/generate/route.ts', name => {
 });
 test('all three actual studio routes reject raw production blocks before paid I/O', async () => {
   for (const sourceMenu of ['style-library', 'preset-studio', 'japan']) {
-    paidCalls = 0;
-    const result = await POST({ json: async () => ({ sourceMenu, stylePrompt: 'Acoustic pop', isInstrumental: false,
-      lyricsPrompt: '[male vocal, [gentle acoustic guitar] [brush drums]]\n오늘을 노래해' }) });
-    assert.equal(result.status, 400);
-    assert.equal(result.body.code, 'lyrics_instruction_in_content');
-    assert.equal(paidCalls, 0);
+    for (const lyricsPrompt of ['[male vocal, [gentle acoustic guitar] [brush drums]]',
+      '[male vocal, warm guitar]', '[male vocal,\nwarm guitar]', '[Chorus] [male vocal, warm guitar]',
+      'Arrangement: male vocal, warm guitar', 'male vocal, warm guitar, brush drums']) {
+      for (const structured of [false, true]) {
+        paidCalls = 0;
+        const result = await POST({ json: async () => ({ sourceMenu, stylePrompt: 'Acoustic pop', isInstrumental: false,
+          lyricsPrompt: structured ? 'stale browser value' : lyricsPrompt,
+          ...(structured ? { lyricsSections: [{ type: 'verse', content: lyricsPrompt, description: 'soft guitar' }] } : {}) }) });
+        assert.equal(result.status, 400);
+        assert.equal(result.body.code, 'lyrics_instruction_in_content');
+        assert.equal(paidCalls, 0);
+      }
+    }
   }
 });
 test('actual route rejects foreign, stale, unavailable and incompatible artists before metadata or provider calls', async () => {

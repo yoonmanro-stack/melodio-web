@@ -6,7 +6,7 @@ import type { ChannelDna, LyricsSection } from '../../types'
 import type { Database, Json } from '../../types/database'
 import { generateLyrics, type LyricsGeneratorResult } from '../engines/lyrics-generator'
 import { createClient } from '../supabase/server'
-import { compileLyricsSections } from '../lyrics/compile-sections'
+import { compileLyricsSections, assertSafeVocalLyrics } from '../lyrics/compile-sections'
 import {
   ChannelSystemAuthenticationError,
   ChannelSystemPersistenceError,
@@ -285,7 +285,8 @@ export function createGenerationQueueService(client: Client) {
           if (!('sections' in result)) throw new Error('단일 곡 가사 응답이 아닙니다.')
           const single = result as LyricsGeneratorResult
           const sections = single.sections
-          const lyricsPrompt = single.lyricsPrompt || renderSections(sections)
+          const lyricsPrompt = renderSections(sections) || single.lyricsPrompt || ''
+          assertSafeVocalLyrics(lyricsPrompt)
           const hash = hashLyrics(lyricsPrompt)
           if (!siblingHashes.has(hash)) {
             compiled = { sections, lyricsPrompt, hash }

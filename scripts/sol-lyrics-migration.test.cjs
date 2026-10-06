@@ -15,6 +15,7 @@ function loadLyrics() {
   const offlineProbe = { knowledgeCalls: 0 };
   const knowledge = { getPlaybookByKey: async () => { offlineProbe.knowledgeCalls++; return null; }, matchPlaybooksByPrompt: async () => { offlineProbe.knowledgeCalls++; return []; }, matchEpisodesByCategoryAndTopic: async () => { offlineProbe.knowledgeCalls++; return []; } };
   const modules = {
+    '@/lib/lyrics/compile-sections': require(path.join(root, 'worker/lyrics-policy.js')),
     '@/lib/db/knowledge': knowledge,
     '@/lib/engines/infinite-story-matrix': { generateBoundlessCreativeVector: () => ({ uniqueEntropySeed: 'offline', perspectiveType: 'authored perspective', thematicDimension: 'authored theme', sensoryFocus: 'authored sensory focus' }) },
     '@/lib/vle/vleEngine': { loadVLEMasterPrompt: () => '' },
@@ -76,7 +77,7 @@ test('single full-song success uses one fixed Sol request and preserves structur
   assert.match(fixture.calls[0].body.messages[1].content, /Language: Korean/);
   assert.equal(result.title, singlePayload().title); assert.equal(result.youtubeTags, '감성, 일상'); assert.equal(result.snsHashtags, '#감성');
   assert.equal(result.sections[0].content, '작성된 가사'); assert.equal(result.sections[0].description, 'intimate female vocal');
-  assert.match(result.sections[0].id, /^gpt-/); assert.equal(result.lyricsPrompt, '[VERSE]\n작성된 가사\n\n[CHORUS]\n작성된 후렴');
+  assert.match(result.sections[0].id, /^gpt-/); assert.equal(result.lyricsPrompt, '[Verse]\n작성된 가사\n\n[Chorus]\n작성된 후렴');
   assert.match(result.stylePrompt, /^acoustic pop,/);
   assert.deepEqual(JSON.parse(JSON.stringify(result.modelUsage)), { requestedModel: MODEL, actualModel: MODEL, reasoningEffort: 'high', inputTokens: 1200, outputTokens: 800, reasoningTokens: 500 });
 });
@@ -89,11 +90,11 @@ test('playlist success preserves requested track count, titles, sections and pla
   assert.equal(result.tracks[2].trackNumber, 3); assert.equal(result.tracks[2].title, '작성한 곡 3'); assert.equal(result.tracks[2].sections[0].content, '서로 다른 가사 3');
   assert.equal(result.modelUsage.actualModel, MODEL); assert.equal(result.modelUsage.inputTokens, 1200);
 });
-test('short duration and supplied lyrics prompt retain their contracts through Sol migration', async () => {
+test('short duration preserves its timing contract and compiles canonical sections over the supplied raw prompt', async () => {
   const { generateLyrics } = loadLyrics(); const payload = singlePayload(); payload.lyricsPrompt = '[VERSE]\n작성자가 반환한 가사';
   const fixture = responder(payload);
   const result = await generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds: 30 }, fixture.dependencies);
-  assert.match(fixture.calls[0].body.messages[0].content, /TARGET: 26 TO 29.5 SECONDS/); assert.equal(result.lyricsPrompt, payload.lyricsPrompt); verifyFixedSol(fixture.calls[0]);
+  assert.match(fixture.calls[0].body.messages[0].content, /TARGET: 26 TO 29.5 SECONDS/); assert.equal(result.lyricsPrompt, '[Verse]\n작성된 가사\n\n[Chorus]\n작성된 후렴'); verifyFixedSol(fixture.calls[0]);
 });
 test('missing injected key fails before DB, provider or mock generation for both modes', async () => {
   const { generateLyrics, offlineProbe } = loadLyrics(); let calls = 0;

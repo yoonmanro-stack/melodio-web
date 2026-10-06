@@ -118,6 +118,62 @@ function prepareLyricsSubmission({ stylePrompt, lyricsPrompt, lyricsSections, is
 }
 
 const PRODUCTION_TERMS = /\b(?:vocals?|guitars?|drums?|bass|pianos?|saxophones?|synth(?:esizer)?s?|microphone|vibrato|mixing|mastering|production|arrangement|analog|console|tape|reverb|compression|tempo|bpm|guitare|batterie|contrebasse|analogique|r[eé]verb[eé]ration)\b|\b(?:male|female)\s+voice\b|\bvoix\s+(?:masculine|f[eé]minine)\b|통기타|기타\s*스트로크|브러시\s*드럼|콘트라베이스|마이크|비브라토|꺾기|아날로그|콘솔|테이프|리버브|편곡|창법|믹싱|마스터링|보컬|アコースティックギター|ドラム|コントラバス|マイク|ビブラート|アナログ|ミックス|リバーブ|ボーカル|編曲/i;
+const PRODUCTION_LABEL = /^(?:arrangement|production|mixing|music[ -]?directions?|vocal[ -]?style|편곡(?:\s*지시)?|제작|믹싱|음악\s*(?:지시|설명|방향)|연주\s*지시|보컬\s*스타일|창법|編曲|プロダクション|ミキシング|音楽(?:の)?(?:指示|ディレクション)|ボーカル(?:の)?スタイル|歌唱スタイル)\s*[:：]\s*(.+)$/i;
+// Metadata lists have noun/adjective phrases; ordinary first-person narratives
+// about guitars and microphones must remain available as authored sung words.
+const AUTHORED_WORDS = /\b(?:i|i'm|i've|i'll|me|my|mine|you|your|yours|we|our|ours|us|he|his|she|her|hers|they|their|theirs|love|miss|remember|dream|heart|hearts|soul|souls|forever|memory|memories|falls?|remembers?|cries|weeps|waits?|shines|returns?|comes?|runs?|finds?|calls?|holds?|dances?|flies|carries|sings?|je|moi|mon|ma|mes|tu|toi|ton|ta|tes|nous|notre|nos|vous|votre|vos|amour|souvenir|souviens|chante|pleure|attend|revient|danse|coeur|cœur)\b|(?:^|\s)(?:나|내|너|그대|당신|우리)(?:는|의|가|를|와|에게)?(?:\s|$)|사랑|마음|추억|기억|노래해|부르네|私|僕|君|あなた|わたし|ぼく|きみ|思い出|歌う|歌って|が(?:泣|待|帰|歌|揺|呼|踊)/i;
+// Mood/genre nouns alone do not make a technical cue an authored sentence.
+const METADATA_MOOD_WORDS = /\b(?:soul|souls|heart|hearts|love|dream|forever|memory|memories|amour|souvenir|coeur|cœur)\b|사랑|마음|추억|기억|思い出/gi;
+
+function hasAuthoredWords(value) {
+  return AUTHORED_WORDS.test(value.replace(METADATA_MOOD_WORDS, ''));
+}
+
+function productionList(value, minimumClauses) {
+  const clauses = normalizeDescription(value).split(/[,，、]/).map(clause => clause.trim()).filter(Boolean);
+  const unique = [...new Set(clauses.map(clause => clause.toLowerCase()))];
+  return unique.length >= minimumClauses && clauses.every(clause => PRODUCTION_TERMS.test(clause) && !hasAuthoredWords(clause));
+}
+
+/** Return top-level blocks only when the entire line is bracket metadata. */
+function bracketOnlyLine(value) {
+  const blocks = [];
+  let depth = 0;
+  let current = '';
+  for (const char of value) {
+    if (char === '[') {
+      if (depth++ === 0) current = '';
+      else current += char;
+    } else if (char === ']') {
+      if (depth === 0) return null;
+      if (--depth === 0) blocks.push(current);
+      else current += char;
+    } else if (depth > 0) current += char;
+    else if (char.trim()) return null;
+  }
+  if (depth > 0) blocks.push(current);
+  return blocks.length ? { blocks, unfinished: depth > 0 } : null;
+}
+
+function structuralBlock(value) {
+  const match = value.trim().match(/^([a-z][a-z\s_-]*?)(?:[\s_-]*(\d{1,3}))?$/i);
+  return Boolean(match && Object.hasOwn(SECTION_LABELS, match[1].toLowerCase().replace(/[\s_-]/g, '')));
+}
+
+function assertSafeBracketMetadata(metadata) {
+  const blocks = metadata.blocks.filter(block => !structuralBlock(block));
+  for (const block of blocks) {
+    const normalized = normalizeDescription(block);
+    const labeled = normalized.match(PRODUCTION_LABEL);
+    if (labeled || productionList(block, 2)) {
+      throw new LyricsInstructionError();
+    }
+    if ((/[\[\]]/.test(block) || block.length >= 78) && PRODUCTION_TERMS.test(block) && !hasAuthoredWords(normalized)) {
+      throw new LyricsInstructionError();
+    }
+  }
+  if (productionList(blocks.join(', '), 2)) throw new LyricsInstructionError();
+}
 
 class LyricsInstructionError extends Error {
   constructor() {
@@ -131,35 +187,30 @@ class LyricsInstructionError extends Error {
 function assertSafeVocalLyrics(lyrics) {
   if (typeof lyrics !== 'string') return;
   const lines = lyrics.split(/\r?\n/);
+  // Check each row before walking multiline brackets, so an unfinished authored
+  // bracket cannot hide an explicit production label on a later row.
+  for (const line of lines) {
+    const first = line.trimStart();
+    const labeled = first.match(PRODUCTION_LABEL);
+    if (labeled) throw new LyricsInstructionError();
+    const metadata = bracketOnlyLine(first);
+    if (metadata) assertSafeBracketMetadata(metadata);
+    if (!first.startsWith('[') && productionList(first, 3)) throw new LyricsInstructionError();
+  }
   for (let startLine = 0; startLine < lines.length; startLine++) {
     const first = lines[startLine].trimStart();
     if (!first.startsWith('[')) continue;
-    let depth = 0;
-    let nested = false;
-    let block = '';
-    let closed = false;
-    let standalone = true;
+    let block = first;
+    let metadata = bracketOnlyLine(block);
     let endLine = startLine;
-    for (; endLine < lines.length && !closed; endLine++) {
-      const line = endLine === startLine ? first : lines[endLine];
-      if (endLine !== startLine) block += '\n';
-      for (let offset = 0; offset < line.length; offset++) {
-        const char = line[offset];
-        block += char;
-        if (char === '[') { depth++; if (depth > 1) nested = true; }
-        if (char === ']') depth--;
-        if (depth === 0) {
-          closed = true;
-          standalone = !line.slice(offset + 1).trim();
-          break;
-        }
-      }
+    // Inspect incomplete blocks too: later authored words must not hide an
+    // already explicit production list left unclosed by a generated response.
+    while (metadata?.unfinished && endLine + 1 < lines.length) {
+      block += `\n${lines[++endLine]}`;
+      metadata = bracketOnlyLine(block);
+      if (metadata) assertSafeBracketMetadata(metadata);
     }
-    // An unfinished metadata block is also unsafe when its intent is explicit.
-    if (standalone && (nested || block.length >= 80) && PRODUCTION_TERMS.test(block)) {
-      throw new LyricsInstructionError();
-    }
-    startLine = endLine - 1;
+    startLine = endLine;
   }
 }
 

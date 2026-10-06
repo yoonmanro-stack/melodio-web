@@ -179,3 +179,114 @@ test('gender conflicts do not consume reserved space or accumulate shortened cla
   const solo = prepareLyricsSubmission(soloInput);
   assert.equal(prepareLyricsSubmission({ ...soloInput, stylePrompt: solo.stylePrompt }).stylePrompt, solo.stylePrompt);
 });
+
+test('explicit standalone production labels are rejected outside brackets in multiple languages', () => {
+  const lines = [
+    'Arrangement: male vocal, acoustic guitar strumming, brushed drums, close microphone and analog tape production.',
+    'Production: warm analog tape and intimate microphone texture',
+    'Mixing: close vocal with silky reverb',
+    'Music direction: warm guitar with brushed drums',
+    'Vocal style: male vocal and deep vibrato',
+    '편곡: 부드러운 통기타 스트로크와 브러시 드럼',
+    '음악 지시：가까운 마이크 질감과 따뜻한 아날로그 콘솔',
+    '창법: 깊은 비브라토와 섬세한 꺾기',
+    '編曲：アコースティックギターとドラム',
+    'ボーカルスタイル: 男性ボーカルとビブラート',
+  ];
+  for (const line of lines) assert.throws(() => assertSafeVocalLyrics(`[Verse]\n${line}\nActual sung words`), LyricsInstructionError);
+  assert.throws(() => assertSafeVocalLyrics('[unfinished sung words\nMixing: close vocal'), LyricsInstructionError);
+});
+
+test('dense production-only comma lists cannot enter raw or structured sung content', () => {
+  const lines = [
+    'male vocal, acoustic guitar strumming, brushed drums, warm double bass, close microphone, analog tape production',
+    '남성 보컬, 부드러운 통기타 스트로크, 브러시 드럼과 콘트라베이스, 따뜻한 아날로그 콘솔',
+    '男性ボーカル、アコースティックギター、ドラム、アナログコンソール',
+    'voix masculine, guitare acoustique, batterie légère, production analogique',
+  ];
+  for (const line of lines) {
+    assert.throws(() => assertSafeVocalLyrics(line), LyricsInstructionError);
+    assert.throws(() => assertSafeVocalLyrics(compileLyricsSections([section(line)]).lyricsPrompt), LyricsInstructionError);
+  }
+});
+
+test('adjacent metadata blocks and short multiattribute technical blocks are rejected', () => {
+  const lines = ['[male vocal, [soft guitar]] [analog tape]', '[male vocal] [warm guitar]', '[male vocal, warm guitar]', '[soft guitar, brushed drums]'];
+  for (const line of lines) assert.throws(() => assertSafeVocalLyrics(line), LyricsInstructionError);
+  assert.doesNotThrow(() => assertSafeVocalLyrics('[Verse] [Spoken]\n[male vocal]\n[soft guitar]'));
+});
+
+test('authored lyrics about instruments and intentional inline brackets stay intact', () => {
+  const lyrics = [
+    'My guitar remembers you, your drums echo in my heart, our bass sings the memories',
+    'The guitar weeps at dawn, the drums wait in silence, the bass calls across the night',
+    '내 기타는 당신을 기억하고, 브러시 드럼은 내 마음을 노래해, 콘트라베이스와 우리 추억이 남아',
+    '君と聴くアコースティックギター、私のドラム、僕のアナログな思い出',
+    'アコースティックギターが泣いている、ドラムが待つ、コントラバスが帰る',
+    'Ma guitare se souvient, mon cœur bat comme une batterie, notre amour sur une bande analogique',
+    'La guitare pleure au matin, la batterie attend, la contrebasse revient dans la nuit',
+    'guitar, guitar, guitar',
+    'I sing [male vocal, warm guitar] as the words of this song.',
+    '[I hold my guitar, you keep the drums in your heart]',
+    'Production is what they call it, but I remember your guitar.',
+    '[Spoken] Arrangement: I remember your guitar',
+  ].join('\n');
+  assert.doesNotThrow(() => assertSafeVocalLyrics(lyrics));
+  assert.equal(compileLyricsSections([section(lyrics, reportedDescription)]).lyricsPrompt, `[Verse]\n${lyrics}`);
+});
+
+test('short multiline and unfinished production blocks reject in all four lyric languages', () => {
+  const blocks = [
+    '[soul vocal,\nwarm guitar]',
+    '[남성 보컬,\n부드러운 통기타 스트로크]',
+    '[男性ボーカル、\nアコースティックギター]',
+    '[voix masculine,\nguitare acoustique]',
+  ];
+  for (const block of blocks) {
+    assert.ok(block.length < 80);
+    for (const variant of [block, block.slice(0, -1), `${block.slice(0, -1)}\nI remember you`]) {
+      assert.throws(() => assertSafeVocalLyrics(variant), LyricsInstructionError);
+    }
+  }
+});
+
+test('adjacent structural tags cannot exempt independent production blocks in any lyric language', () => {
+  const blocks = ['[male vocal, warm guitar]', '[남성 보컬, 통기타 스트로크]', '[男性ボーカル、ドラム]', '[voix masculine, guitare acoustique]'];
+  for (const block of blocks) {
+    for (const variant of [`[Chorus] ${block}`, `${block} [Outro]`, `[Verse 2] ${block} [Spoken]`, `[Chorus] ${block.replace(/[,、]/, ',\n')}`]) {
+      assert.throws(() => assertSafeVocalLyrics(variant), LyricsInstructionError);
+    }
+  }
+  assert.throws(() => assertSafeVocalLyrics('[Verse] [male vocal] [warm guitar] [Outro]'), LyricsInstructionError);
+  assert.doesNotThrow(() => assertSafeVocalLyrics('[Verse 2] [Spoken]\n[Chorus] [soft guitar]\nSing these words'));
+});
+
+test('nested and long authored bracketed lyrics survive in English, Korean, Japanese and French', () => {
+  const authored = [
+    'I [hold] my guitar and remember you',
+    '나는 [오래된] 통기타 소리로 당신을 기억해',
+    '僕の[古い]アコースティックギターが君を呼ぶ',
+    'Je [garde] ma guitare et je pense à toi',
+  ];
+  for (const words of authored) {
+    const nested = `[${words}]`;
+    const long = `[${`${words.replace(/[\[\]]/g, '')} `.repeat(5).trim()}]`;
+    assert.ok(long.length >= 80);
+    for (const lyrics of [nested, long, `[Verse]\n${nested}\n${long}`, `I sing ${nested} as words`]) {
+      assert.doesNotThrow(() => assertSafeVocalLyrics(lyrics));
+      assert.equal(compileLyricsSections([section(lyrics)]).lyricsPrompt, `[Verse]\n${lyrics}`);
+    }
+  }
+});
+
+test('mood nouns and authored words do not exempt explicit production labels or technical lists', () => {
+  const unsafe = [
+    '[soul vocal, warm guitar]', '[dream pop vocal, warm piano]',
+    '[soul vocal [warm guitar]]', 'soul vocal, warm guitar, brushed drums',
+    'Production: I want warm soul vocals', 'Arrangement: lush strings and pads',
+    '[Production: I want soul vocals]', '[Mixing: my warm guitar]',
+    '편곡: 나의 따뜻한 통기타', '編曲：僕のアコースティックギター', 'Production: ma guitare et mon amour',
+  ];
+  for (const lyrics of unsafe) assert.throws(() => assertSafeVocalLyrics(lyrics), LyricsInstructionError);
+  assert.doesNotThrow(() => assertSafeVocalLyrics('[I pour my soul into this guitar, you keep the drums in your heart]'));
+});

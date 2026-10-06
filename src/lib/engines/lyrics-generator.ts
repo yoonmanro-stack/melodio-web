@@ -6,6 +6,7 @@ import type { LyricsSection, LyricsSectionType } from '@/types'
 import type { PlaylistGeneratorResult, PlaylistTrack } from '@/types/playlist'
 import type { CurationPlaybook } from '@/lib/db/knowledge'
 import { generateBoundlessCreativeVector } from '@/lib/engines/infinite-story-matrix'
+import { compileLyricsSections, assertSafeVocalLyrics } from '@/lib/lyrics/compile-sections'
 
 const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 export const LYRICS_MODEL = 'gpt-5.6-sol' as const
@@ -445,6 +446,7 @@ ${narrativeDirective}`
           description: s.description ? s.description.trim() : undefined,
         }
       })
+      assertSafeVocalLyrics(compileLyricsSections(sections).lyricsPrompt)
       return {
         trackNumber: t.trackNumber || (tIdx + 1),
         title: t.title || `Track ${tIdx + 1}`,
@@ -483,12 +485,10 @@ ${narrativeDirective}`
       }
     })
 
+    const lyricsPrompt = compileLyricsSections(sections).lyricsPrompt
+      || (typeof parsed.lyricsPrompt === 'string' ? parsed.lyricsPrompt : '')
+    assertSafeVocalLyrics(lyricsPrompt)
     console.log(`[Lyrics Generator] Single track success, ${sections.length} sections`)
-    
-    let lyricsPrompt = parsed.lyricsPrompt;
-    if (!lyricsPrompt) {
-      lyricsPrompt = sections.map(s => `[${s.type.toUpperCase()}]\n${s.content}`).join('\n\n');
-    }
 
     return {
       title: parsed.title,
