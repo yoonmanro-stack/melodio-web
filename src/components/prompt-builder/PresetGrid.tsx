@@ -6,6 +6,7 @@ import { presets } from '@/data/presets'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { canonicalPresetId, getPresetCategory, getPresetGenreLabel, mergePublicPresetCatalog } from '@/lib/preset-catalog'
 import { getPresetThumbnail, getPresetUsageCount } from '@/lib/preset-thumbnail'
+import { PresetSampleButton, PresetSamplePlayer, usePresetSamples } from '@/components/presets/PresetSamples'
 import { Trash2, Pencil, ChevronLeft, ChevronRight, Search, Heart, Calendar, Headphones, Maximize2, X } from 'lucide-react'
 
 interface PresetGridProps {
@@ -178,9 +179,11 @@ export default function PresetGrid({
   // 현재 페이지에 노출될 아이템 슬라이싱
   const startIndex = (currentPage - 1) * itemsPerPage
   const paginatedItems = allItems.slice(startIndex, startIndex + itemsPerPage)
+  const samplePlayer = usePresetSamples('preset-studio', paginatedItems.flatMap(item => item.type === 'create' ? [] : [item.data!]))
 
   return (
-    <div className="section-card font-sans">
+    <div className={`section-card font-sans ${samplePlayer.current ? 'mb-20' : ''}`}>
+      <PresetSamplePlayer controller={samplePlayer} />
       {/* 상단 헤더: 타이틀, 세그먼트 필터, 검색 입력란 */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 pb-3 border-b border-white/5">
         <div className="flex items-center gap-3">
@@ -190,6 +193,7 @@ export default function PresetGrid({
             <p className="text-xs text-melodio-muted">
               원클릭으로 전체 설정 적용 (가로 2열 x 세로 8행 — {currentPage}/{totalPages} 페이지)
             </p>
+            <p className="mt-1 text-[10px] text-zinc-500">썸네일에서 이 프리셋으로 만든 최신 공개곡을 들어보세요.</p>
           </div>
         </div>
 
@@ -311,7 +315,7 @@ export default function PresetGrid({
                   <PresetArtwork key={`${preset.id}:${thumbnailUrl ?? ''}`} preset={preset} source={thumbnailUrl} />
                   
                   {/* On Hover Info Overlay */}
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-250 flex flex-col justify-between items-start p-4 z-10">
+                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-250 flex flex-col justify-between items-start p-4 z-10">
                     {/* Top: Metadata items (Left-aligned, larger & brighter) */}
                     {dateStr !== null || usageCount !== null ? (
                       <div className="flex flex-col gap-1.5 items-start rounded-xl bg-white/50 px-2.5 py-2 text-left text-zinc-900 shadow-lg backdrop-blur-sm">
@@ -344,6 +348,7 @@ export default function PresetGrid({
                       </button>
                     </div>
                   </div>
+                  <PresetSampleButton preset={preset} controller={samplePlayer} />
                 </div>
 
                 {/* 2. Bottom Content Area */}

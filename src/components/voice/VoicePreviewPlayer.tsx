@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react'
 import { Download, Loader2, Pause, Play, Volume2, VolumeX } from 'lucide-react'
 import styles from './VoicePlaybackRange.module.css'
 import { voicePlaybackTrackStyle } from './voice-playback-style'
+import { registerActiveAudio } from '@/lib/globalAudio'
 
 function clock(seconds: number) {
   const whole = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0
@@ -78,6 +79,7 @@ export function VoicePreviewPlayer({ src, limitSeconds, audioRef, onError, class
       const seconds = event.currentTarget.duration
       if (Number.isFinite(seconds)) { setDuration(limitSeconds ? Math.min(seconds, limitSeconds) : seconds); setReady(true) }
     }} onPlay={event => {
+      registerActiveAudio(event.currentTarget)
       document.querySelectorAll<HTMLAudioElement>('audio[data-voice-preview]').forEach(other => { if (other !== event.currentTarget) other.pause() })
       setPlaying(true)
     }} onPlaying={() => setLoading(false)} onWaiting={() => setLoading(true)} onPause={() => { setPlaying(false); setLoading(false) }} onEnded={() => { setPlaying(false); setLoading(false) }} onTimeUpdate={event => {

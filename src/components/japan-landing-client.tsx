@@ -55,6 +55,8 @@ import { compileLyricsSections } from "@/lib/lyrics/compile-sections";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { jpPresetTranslations } from "@/data/jp-presets-translations";
 import { getAudioPlaybackError, getExpiredAudioPlaybackError, getStoredTrackDuration } from "@/lib/audio-playback";
+import { registerActiveAudio } from '@/lib/globalAudio';
+import { PresetSampleButton, PresetSamplePlayer, usePresetSamples } from '@/components/presets/PresetSamples';
 
 // ─── 음원 앨범 커버 페이드인 이미지 컴포넌트 ───
 const FadeInImage = ({ src, alt, className = "" }: { src: string; alt: string; className?: string }) => {
@@ -771,6 +773,7 @@ export default function JapanLandingClient() {
         gradient: p.gradient || "from-[#fcb045] to-[#fd1d1d]",
         customPrompt: p.customPrompt,
         lyricsTemplate: p.lyricsTemplate,
+        instrumentalOnly: p.instrumentalOnly ?? trans.instrumentalOnly ?? trans.isInstrumental,
         selections: {},
         metadata: {
           cardImage: p.cardImage,
@@ -827,6 +830,8 @@ export default function JapanLandingClient() {
       );
     });
   }, [allJpPresets, presetTab, presetSearchQuery]);
+  const visibleJpPresets = filteredJpPresets.slice((jpPage - 1) * JAPAN_PRESETS_PER_PAGE, jpPage * JAPAN_PRESETS_PER_PAGE);
+  const samplePlayer = usePresetSamples('japan', visibleJpPresets);
 
   const handleSaveCustomPreset = (data: { id?: string; name: string; desc: string; emoji: string; gradient: string; customPrompt: string; metadata?: any }) => {
     if (data.id) {
@@ -939,7 +944,10 @@ export default function JapanLandingClient() {
     el.preload = 'auto';
     const handleStopped = () => setIsTrackPlaying(false);
     const handlePlaying = () => {
-      if (!el.paused && playbackAttemptRef.current && (!el.currentSrc || el.currentSrc === el.src)) setIsTrackPlaying(true);
+      if (!el.paused && playbackAttemptRef.current && (!el.currentSrc || el.currentSrc === el.src)) {
+        registerActiveAudio(el, handleStopped);
+        setIsTrackPlaying(true);
+      }
     };
     const handleError = () => {
       const attempt = playbackAttemptRef.current;
@@ -1894,7 +1902,7 @@ export default function JapanLandingClient() {
 
             {/* 데스크톱 2열 × 7행, 페이지당 14개 */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {filteredJpPresets.slice((jpPage - 1) * JAPAN_PRESETS_PER_PAGE, jpPage * JAPAN_PRESETS_PER_PAGE).map((preset) => {
+              {visibleJpPresets.map((preset) => {
                 const isSelected = selectedPresetId === preset.id;
                 const cardImage = (preset.metadata as any)?.cardImage || (preset.metadata as any)?.thumbnail_url || (preset as any).cardImage || (preset as any).thumbnailUrl || (preset as any).thumbnail_url;
                 const category = (preset.metadata as any)?.category || (preset as any).category || "CUSTOM BGM";
@@ -1938,6 +1946,7 @@ export default function JapanLandingClient() {
                       >
                         <Maximize2 className="w-3.5 h-3.5" />
                       </button>
+                      <PresetSampleButton preset={preset} controller={samplePlayer} />
                     </div>
 
                     {/* 2. Lower Content Area */}
@@ -2238,7 +2247,7 @@ export default function JapanLandingClient() {
 
         {/* 공개 여부와 무관하게 현재 사용자의 생성 상태를 항상 표시 */}
         {generationJob && (
-          <div className={`fixed bottom-6 right-6 z-[100] w-[min(380px,calc(100vw-3rem))] rounded-2xl border p-4 shadow-2xl backdrop-blur-xl ${
+          <div className={`fixed ${samplePlayer.current ? 'bottom-20' : 'bottom-6'} right-6 z-[100] w-[min(380px,calc(100vw-3rem))] rounded-2xl border p-4 shadow-2xl backdrop-blur-xl ${
             generationJob.status === 'completed'
               ? 'border-emerald-400/40 bg-emerald-950/90'
               : generationJob.status === 'error'
@@ -3259,7 +3268,9 @@ export default function JapanLandingClient() {
       </footer>
 
       {/* ━━━ A/B/C VARIANT CONTROLLER (REVIEW & DEVELOPER CONSOLE) ━━━ */}
-      <div className="fixed bottom-6 right-6 z-50 p-2 rounded-2xl bg-zinc-900/90 border border-white/10 backdrop-blur-xl flex flex-col gap-2 shadow-2xl items-center">
+      <PresetSamplePlayer controller={samplePlayer} />
+      {samplePlayer.current && <div className="h-20" aria-hidden="true" />}
+      <div className={`fixed ${samplePlayer.current ? 'bottom-20' : 'bottom-6'} right-6 z-50 p-2 rounded-2xl bg-zinc-900/90 border border-white/10 backdrop-blur-xl flex flex-col gap-2 shadow-2xl items-center`}>
         <span className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest px-2 pt-1">
           A/B Test View
         </span>

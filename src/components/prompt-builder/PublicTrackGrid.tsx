@@ -266,6 +266,7 @@ export default function PublicTrackGrid({
     const handleOtherAudioStart = (e: any) => {
       if (e.detail?.audio && audioRef.current && e.detail.audio !== audioRef.current) {
         setLocalIsPlaying(false)
+        if (e.detail.audio.hasAttribute?.('data-preset-sample')) setLocalPlayingTrack(null)
       }
     }
     window.addEventListener('melodio-audio-started', handleOtherAudioStart)
