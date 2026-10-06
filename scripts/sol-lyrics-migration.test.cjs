@@ -5,11 +5,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
+const { execFileSync } = require('node:child_process');
 const root = path.resolve(__dirname, '..');
 const CHAT = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-5.6-sol';
 const KEY = 'offline-fixture-key';
-function loadLyrics() {
+function loadLyrics(sourceOverride) {
   const filename = path.join(root, 'src/lib/engines/lyrics-generator.ts');
   const module = { exports: {} };
   const offlineProbe = { knowledgeCalls: 0 };
@@ -21,7 +22,7 @@ function loadLyrics() {
     '@/lib/vle/vleEngine': { loadVLEMasterPrompt: () => '' },
     '@/lib/vle/viralSongSpec': { buildStructureDirective: () => '' },
   };
-  const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { fileName: filename, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+  const source = ts.transpileModule(sourceOverride ?? fs.readFileSync(filename, 'utf8'), { fileName: filename, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   vm.runInNewContext(source, {
     module, exports: module.exports,
     require(name) { if (Object.hasOwn(modules, name)) return modules[name]; throw new Error(`Unmocked module: ${name}`); },
@@ -85,73 +86,73 @@ test('single full-song success uses one fixed Sol request and preserves structur
   assert.deepEqual(JSON.parse(JSON.stringify(result.modelUsage)), { requestedModel: MODEL, actualModel: MODEL, reasoningEffort: 'high', inputTokens: 1200, outputTokens: 800, reasoningTokens: 500 });
 });
 
-test('ordinary songs use a compact complete form and a flexible writing budget without a clock', async () => {
+test('ordinary songs restore the established backend six-section form without clock controls or new density budgets', async () => {
   const { generateLyrics } = loadLyrics();
+  // The verified pre-regression backend reference; requests are still entirely mocked.
+  const legacy = loadLyrics(execFileSync('git', ['show', 'a8b61c2:src/lib/engines/lyrics-generator.ts'], {
+    cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024,
+  }));
+  const legacyFixture = responder();
+  await legacy.generateLyrics({ stylePrompt: 'acoustic pop', language: 'ja' }, legacyFixture.dependencies);
+  const legacyPrompt = legacyFixture.calls[0].body.messages[0].content;
+  const types = prompt => [...prompt.matchAll(/^[1-6]\. .*\(type: "([^"]+)"\)/gm)].map(match => match[1]);
+  const legacyTypes = types(legacyPrompt);
+  assert.deepEqual(legacyTypes, ['intro', 'verse', 'chorus', 'verse', 'chorus', 'outro']);
+  assert.match(legacyPrompt, /Do NOT add Bridge or 3rd Chorus/);
   for (const durationSeconds of [undefined, 120, 180, 195, 210, 360]) {
     const fixture = responder();
     await generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds }, fixture.dependencies);
     const prompt = fixture.calls[0].body.messages[0].content;
-    assert.match(prompt, /compact, complete song/);
-    assert.match(prompt, /distinct second verse/);
-    assert.match(prompt, /two or three purposeful appearances in total/);
-    assert.match(prompt, /bridge or another contrasting development is optional/);
-    assert.match(prompt, /final chorus or equivalent closing refrain/);
-    assert.match(prompt, /natural outro short/);
-    assert.match(prompt, /enough original lyrical material/);
-    assert.match(prompt, /Adapt this arc to the genre/);
-    assert.match(prompt, /roughly 24–32 concise sung lines/);
-    assert.match(prompt, /Usually use 6–8 sections/);
-    assert.match(prompt, /never a double final chorus/);
-    assert.match(prompt, /guides, not exact counts or a reason to truncate/);
-    assert.match(prompt, /Avoid long instrumental breaks, extended solos, repeated ending cycles/);
-    assert.match(prompt, /never trim returned lyrics to meet a count/);
-    assert.doesNotMatch(prompt, /CRITICAL DURATION|TARGET:.*SECONDS|\b\d+:\d{2}\b|Total lyrics:|generate EXACTLY this structure|Do NOT add (?:Bridge|Pre-chorus)/);
+    assert.deepEqual(types(prompt), legacyTypes);
+    assert.equal([...prompt.matchAll(/^[2-5]\. .* - 4 lines/gm)].length, 4);
+    assert.match(prompt, /Use two distinct verses and two chorus appearances/);
+    assert.match(prompt, /Do NOT add a Pre-chorus, Bridge, third Chorus/);
+    assert.match(prompt, /Keep Intro and Outro short/);
+    assert.match(prompt, /Finish the final sung phrase and resolve the music with a natural cadence/);
+    assert.match(prompt, /not a reason to truncate requested lyric phrases or returned lyrics/);
+    assert.doesNotMatch(prompt, /CRITICAL DURATION|TARGET:.*SECONDS|\b\d+:\d{2}\b|Total lyrics:|FLEXIBLE LYRIC DENSITY|6–8 sections|24–32|20–28|Hangul syllable blocks|written lyric characters|160–220 sung words/);
     assert.match(prompt, /sections\[\]\.content contains only the words to be sung/);
     assert.match(prompt, /Section description fields must always stay in unbracketed English/);
     assert.equal(fixture.calls.length, 1);
     verifyFixedSol(fixture.calls[0]);
   }
 });
-test('ordinary lyric density uses each language’s sung units for both single songs and playlists', async () => {
+test('single songs and playlists use the same backend structure for Korean, English, Japanese and French', async () => {
   const { generateLyrics } = loadLyrics();
   const languages = [
-    ['en', /For English, aim for roughly 160–220 sung words/, /For (?:French|Japanese|Korean), aim/],
-    ['fr', /For French, aim for roughly 160–220 sung words/, /For (?:English|Japanese|Korean), aim/],
-    ['ja', /For Japanese, aim for roughly 320–480 written lyric characters/, /For (?:English|French|Korean), aim/],
-    ['ko', /For Korean, aim for roughly 260–400 Hangul syllable blocks/, /For (?:English|French|Japanese), aim/],
+    ['ko', 'Korean'], ['en', 'English'], ['ja', 'Japanese'], ['fr', 'French'],
   ];
-  for (const [language, expected, unrelated] of languages) {
+  let sharedCore;
+  for (const [language, label] of languages) {
     for (const isPlaylistMode of [false, true]) {
       const fixture = responder(isPlaylistMode ? playlistPayload(2) : singlePayload());
       await generateLyrics({ stylePrompt: 'acoustic pop', language, isPlaylistMode, trackCount: 2 }, fixture.dependencies);
       const prompt = fixture.calls[0].body.messages[0].content;
-      assert.match(prompt, expected);
-      assert.doesNotMatch(prompt, unrelated);
-      assert.match(prompt, /Treat this density as a writing preference, never a hard limit/);
-      if (language === 'ja' || language === 'ko') assert.match(prompt, /Do not apply an English whitespace-word budget/);
+      const core = prompt.match(/## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT\n([\s\S]*?)(?=\n## |$)/)?.[1].trim();
+      assert.ok(core);
+      if (sharedCore === undefined) sharedCore = core;
+      assert.equal(core, sharedCore);
+      assert.match(prompt, new RegExp(`requested language style: "${label}"`));
+      assert.doesNotMatch(prompt, /FLEXIBLE LYRIC DENSITY|24–32|20–28|6–8 sections|Total lyrics:|\b\d+:\d{2}\b/);
+      if (isPlaylistMode) assert.match(prompt, /For each track, generate Intro, Verse 1, Chorus, Verse 2, Chorus, Outro sections/);
       assert.equal(fixture.calls.length, 1);
       verifyFixedSol(fixture.calls[0]);
     }
   }
 });
-test('Japanese and Korean slow enka or ballads prefer fewer phrases while preserving a complete natural ending', async () => {
+test('restoring ordinary structure leaves every dedicated short-form directive identical to the original backend', async () => {
   const { generateLyrics } = loadLyrics();
-  for (const [language, stylePrompt, density] of [
-    ['ja', 'Japanese enka, 72 BPM, expressive female voice', /280–420 written lyric characters/],
-    ['ja', '日本語のバラード, warm female voice', /280–420 written lyric characters/],
-    ['ko', '서정적인 발라드, intimate male voice', /220–360 Hangul syllable blocks/],
-    ['ko', 'slow acoustic folk, warm female voice', /220–360 Hangul syllable blocks/],
-  ]) {
-    const fixture = responder();
-    await generateLyrics({ stylePrompt, language }, fixture.dependencies);
-    const prompt = fixture.calls[0].body.messages[0].content;
-    assert.match(prompt, /roughly 20–28 concise sung lines/);
-    assert.match(prompt, density);
-    assert.match(prompt, /expressive breathing room, not extra verses or refrain cycles/);
-    assert.match(prompt, /never a double final chorus/);
-    assert.match(prompt, /never trim returned lyrics to meet a count/);
-    assert.doesNotMatch(prompt, /roughly 24–32 concise sung lines|TARGET:.*SECONDS|\b\d+:\d{2}\b/);
-    verifyFixedSol(fixture.calls[0]);
+  const legacy = loadLyrics(execFileSync('git', ['show', 'a8b61c2:src/lib/engines/lyrics-generator.ts'], {
+    cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024,
+  }));
+  for (const durationSeconds of [15, 30, 45, 60]) {
+    const old = responder(), current = responder();
+    await legacy.generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds }, old.dependencies);
+    await generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds }, current.dependencies);
+    const directive = fixture => fixture.calls[0].body.messages[0].content.match(/## 🚨 CRITICAL DURATION[\s\S]*?(?=\n## 📝)/)?.[0].trim();
+    assert.ok(directive(old));
+    assert.equal(directive(current), directive(old));
+    verifyFixedSol(current.calls[0]);
   }
 });
 test('playlist success preserves requested track count, titles, sections and playlist metadata', async () => {
@@ -161,8 +162,8 @@ test('playlist success preserves requested track count, titles, sections and pla
   assert.match(fixture.calls[0].body.messages[1].content, /full 3-track playlist/);
   const prompt = fixture.calls[0].body.messages[0].content;
   assert.match(prompt, /COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT/);
-  assert.match(prompt, /every track a compact, complete, genre-appropriate structure/);
-  assert.match(prompt, /Apply the flexible writing budget separately to each track/);
+  assert.match(prompt, /For each track, generate Intro, Verse 1, Chorus, Verse 2, Chorus, Outro sections/);
+  assert.match(prompt, /Outro Control: Keep Outro short \(1-2 lines\) with a natural resolved ending/);
   assert.match(prompt, /do not invent timestamps/);
   assert.doesNotMatch(prompt, /\b\d+:\d{2}\b|Total lyrics:|generate EXACTLY this structure/);
   assert.equal(result.playlistTitle, '선택한 플레이리스트'); assert.equal(result.youtubeDescription, '작성한 목록 설명'); assert.equal(result.tracks.length, 3);
@@ -189,7 +190,7 @@ test('dedicated ultra-short and mid-form lyric requests retain their explicit ti
     verifyFixedSol(fixture.calls[0]);
   }
 });
-test('Japan single and playlist instrumental prompts request compact natural compositions without changing the selected sound', () => {
+test('Japan single and playlist preserve their selected arrangement and remove only the timed fade', () => {
   const filename = path.join(root, 'src/components/japan-landing-client.tsx');
   const source = fs.readFileSync(filename, 'utf8');
   const ast = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
@@ -214,11 +215,7 @@ test('Japan single and playlist instrumental prompts request compact natural com
       return module.exports;
     };
     const instrumentalStyle = evaluate(true);
-    assert.match(instrumentalStyle, /compact complete instrumental composition/, mode);
-    assert.match(instrumentalStyle, /brief introduction, main theme and concise contrast/, mode);
-    assert.match(instrumentalStyle, /purposeful theme return/, mode);
-    assert.match(instrumentalStyle, /final theme resolution and short natural outro/, mode);
-    assert.match(instrumentalStyle, /no extended solos or repeated ending cycles/, mode);
+    assert.equal(instrumentalStyle, `${selectedStyle}, natural ending`, mode);
     assert.ok(instrumentalStyle.startsWith(selectedStyle), 'Chosen instruments, ambience and tempo must survive');
     assert.doesNotMatch(instrumentalStyle, /\b\d+:\d{2}\b|duration|seconds|complete instrumental development/i);
     assert.equal(evaluate(false), `${selectedStyle}; authored vocal context`, 'Vocal branch must preserve its selected style and section context');

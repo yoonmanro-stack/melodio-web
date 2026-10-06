@@ -28,7 +28,7 @@ import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 import { GoogleAuth } from 'google-auth-library'
 import { titlePlaybooks } from '@/data/titlePlaybooks'
 import { scrubConflictingVocalTags } from '@/lib/voice-dna-scrubber'
-import { submitKieSunoJob, kieTaskReference, sunoVersionLabel } from '../../../../worker/suno-provider'
+import { submitKieSunoJob, kieTaskReference, sunoVersionLabel, fitSunoStylePrompt } from '../../../../worker/suno-provider'
 import { validatePetEpisode, type PetEpisode } from '@/lib/vle/petEpisode'
 import { registeredVoicePersona } from '@/lib/voice/custom-voice-integrity'
 import { readCustomVoice } from '@/lib/voice/custom-voice-repository'
@@ -269,14 +269,14 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
   if (durationPlan.naturalFullSong) {
     effectiveStylePrompt = removeClockDurationInstructions(effectiveStylePrompt)
     if (payload.isInstrumental) finalLyricsPrompt = removeClockDurationInstructions(finalLyricsPrompt)
-    effectiveStylePrompt = `Compact complete ${payload.isInstrumental ? 'instrumental composition; introduce a clear theme, a concise variation and contrast, then return to the theme once' : 'song; perform all supplied lyric sections with purposeful chorus returns'}; brief intro and natural resolved outro; avoid extended solos, repeated ending cycles and length-padding; no abrupt cutoff. ${effectiveStylePrompt}`
+    effectiveStylePrompt = `${payload.isInstrumental ? 'Follow the supplied instrumental arrangement' : 'Perform all supplied lyric sections'}; allow the final musical phrase to resolve with a natural ending; no abrupt cutoff. ${effectiveStylePrompt}`
   } else if (durationPlan.seconds !== undefined) {
     const targetClock = `${Math.floor(durationPlan.seconds / 60)}:${String(Math.round(durationPlan.seconds % 60)).padStart(2, '0')}`
     effectiveStylePrompt = `Target duration ${durationPlan.seconds} seconds (${targetClock}); complete song; finish the final sung phrase; natural ending. ${effectiveStylePrompt}`
   }
 
   if (effectiveStylePrompt.length > 1000) {
-    effectiveStylePrompt = effectiveStylePrompt.slice(0, 1000)
+    effectiveStylePrompt = fitSunoStylePrompt(effectiveStylePrompt)
   }
 
   const result = await submitKieSunoJob({

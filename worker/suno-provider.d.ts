@@ -36,6 +36,7 @@ export class SunoProviderError extends Error { code: number }
 export function resolveSunoModel(version?: string): SunoModel;
 export function sunoVersionLabel(model?: string): string;
 export function resolveDurationSeconds(value: unknown, fallback?: number): number;
+export function fitSunoStylePrompt(value: unknown, limit?: number): string;
 export function kieTaskReference(taskId: string): string;
 export function parseSunoTaskReference(reference: string): { provider: 'kie' | 'legacy'; taskId: string };
 export function normalizeKieConfig(config: SunoConfig): SunoConfig;

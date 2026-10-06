@@ -54,13 +54,13 @@ async function submit(overrides = {}) {
   };
   const calls = [];
   const module = { exports: {} };
-  new Function('exports', 'submitKieSunoJob', 'resolveMusicDuration', 'resolveDurationSeconds', 'scrubConflictingVocalTags', 'buildInstrumentalArrangement', 'removeClockDurationInstructions', 'console', submitCode)(
+  new Function('exports', 'submitKieSunoJob', 'resolveMusicDuration', 'resolveDurationSeconds', 'scrubConflictingVocalTags', 'buildInstrumentalArrangement', 'removeClockDurationInstructions', 'fitSunoStylePrompt', 'console', submitCode)(
     module.exports,
     async options => {
       calls.push(provider.buildKieSunoRequest(options).input);
       return { taskId: 'offline-duration-check', model: 'V6' };
     },
-    resolveMusicDuration, provider.resolveDurationSeconds, scrubModule.exports.scrubConflictingVocalTags, buildInstrumentalArrangement, removeClockDurationInstructions,
+    resolveMusicDuration, provider.resolveDurationSeconds, scrubModule.exports.scrubConflictingVocalTags, buildInstrumentalArrangement, removeClockDurationInstructions, provider.fitSunoStylePrompt,
     { log() {}, error() {} },
   );
   // Supply a playbook so no knowledge-database import can run for short prompts.
@@ -98,9 +98,9 @@ test('ordinary instrumental arrangements ignore old lengths and keep the chosen 
     });
     assert.equal(Object.hasOwn(input, 'duration'), false);
     assert.equal(input.prompt, buildInstrumentalArrangement());
-    assert.match(input.prompt, /Theme Variation/);
-    assert.match(input.prompt, /Natural Resolution and Outro/);
-    assert.equal(input.prompt.split('\n').length, 7);
+    assert.match(input.prompt, /Main Theme Variation/);
+    assert.match(input.prompt, /Outro and Natural Ending/);
+    assert.equal(input.prompt.split('\n').length, 8);
     assert.doesNotMatch(input.prompt, /piano|bass|solo|full climax/i);
     assert.match(input.style, /45 BPM/);
     assert.match(input.style, /harp and analog pads/);
@@ -164,9 +164,9 @@ test('long style prompts retain natural ending instructions inside the provider 
   });
   assert.equal(Object.hasOwn(input, 'duration'), false);
   assert.ok(input.style.length <= 1000);
-  assert.match(input.style, /^Compact complete song;/);
+  assert.match(input.style, /^Perform all supplied lyric sections;/);
   assert.match(input.style, /perform all supplied lyric sections/i);
-  assert.match(input.style, /avoid extended solos, repeated ending cycles and length-padding/);
+  assert.match(input.style, /final musical phrase to resolve with a natural ending/);
   assert.doesNotMatch(input.style, /0:28|28-second|abrupt finish/i);
 });
 

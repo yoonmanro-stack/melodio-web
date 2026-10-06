@@ -37,7 +37,7 @@ export function resolveMusicDuration(request: DurationRequest) {
 
 /** Arrangement cues stay independent of the instruments chosen in the recipe. */
 export function buildInstrumentalArrangement(seconds?: number): string {
-  if (seconds === undefined) return `[Compact Complete Instrumental]\n[Brief Instrumental Intro]\n[Main Theme]\n[Theme Variation]\n[Brief Contrasting Passage]\n[Main Theme Return]\n[Natural Resolution and Outro]`
+  if (seconds === undefined) return `[Complete Instrumental]\n[Instrumental Intro]\n[Main Theme]\n[Instrumental Development]\n[Main Theme Variation]\n[Instrumental Bridge]\n[Final Main Theme]\n[Outro and Natural Ending]`
   const clock = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
   return `[Target Duration: ${clock}, Complete Instrumental]\n[Instrumental Intro]\n[Main Theme]\n[Instrumental Development]\n[Main Theme Variation]\n[Instrumental Bridge]\n[Final Main Theme]\n[Outro and Natural Ending]`
 }

@@ -23,6 +23,18 @@ function resolveDurationSeconds(value, fallback = 195) {
   return Number.isFinite(seconds) && seconds >= 10 && seconds <= 360 ? seconds : fallback;
 }
 
+/** Preserve complete style clauses/words so an instrument cannot become a partial artist name. */
+function fitSunoStylePrompt(value, limit = 1000) {
+  const text = String(value || '').trim();
+  if (text.length <= limit) return text;
+  const prefix = text.slice(0, limit + 1);
+  const clauseEnd = Math.max(...[',', ';', '\n', '、', '。'].map(mark => prefix.lastIndexOf(mark)));
+  if (clauseEnd >= limit * 0.65) return text.slice(0, clauseEnd).trim();
+  const wordEnd = prefix.search(/\s\S*$/u);
+  if (wordEnd > 0) return text.slice(0, wordEnd).trim();
+  throw new Error('음악 스타일 설명이 너무 깁니다. 문장이나 태그를 나누어 줄여 주세요.');
+}
+
 function kieTaskReference(taskId) {
   return `suno:kie:${taskId}`;
 }
@@ -189,6 +201,6 @@ async function fetchSunoTask(reference, config, fetchImpl = fetch) {
   return normalizeKieSunoStatus(result, taskId);
 }
 
-module.exports = { SUNO_TIMEOUT_MS, SunoProviderError, resolveSunoModel, sunoVersionLabel, resolveDurationSeconds,
+module.exports = { SUNO_TIMEOUT_MS, SunoProviderError, resolveSunoModel, sunoVersionLabel, resolveDurationSeconds, fitSunoStylePrompt,
   kieTaskReference, parseSunoTaskReference, normalizeKieConfig, getKieConfig, buildKieSunoRequest, submitKieSunoJob,
   normalizeKieSunoStatus, fetchSunoTask };

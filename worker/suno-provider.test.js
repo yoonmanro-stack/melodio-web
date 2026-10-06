@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { submitKieSunoJob, fetchSunoTask, buildKieSunoRequest, resolveSunoModel, resolveDurationSeconds,
-  kieTaskReference, parseSunoTaskReference, normalizeKieConfig, getKieConfig,
+  kieTaskReference, parseSunoTaskReference, normalizeKieConfig, getKieConfig, fitSunoStylePrompt,
   normalizeKieSunoStatus } = require('./suno-provider');
 const { LyricsInstructionError } = require('./lyrics-policy');
 
@@ -94,6 +94,19 @@ test('model limits do not silently truncate vocal lyrics', () => {
   const body = buildKieSunoRequest({ style: 'a'.repeat(1200), title: 'b'.repeat(90), instrumental: true });
   assert.equal(body.input.style.length, 1000);
   assert.equal(body.input.title.length, 80);
+});
+
+test('fitting an added production prefix never turns shamisen into the partial tag shami', () => {
+  const prefix = 'Compact complete song, natural ending, ';
+  const padding = 'warm acoustic guitar, '.repeat(60);
+  const full = prefix + padding + 'shamisen ornament, gentle strings';
+  const fitted = fitSunoStylePrompt(full);
+  assert.ok(fitted.length <= 1000);
+  assert.ok(fitted.startsWith(prefix));
+  assert.ok(full.startsWith(fitted));
+  assert.match(fitted, /warm acoustic guitar$/);
+  assert.equal(fitSunoStylePrompt('shamisen, koto, graceful melody'), 'shamisen, koto, graceful melody');
+  assert.throws(() => fitSunoStylePrompt('x'.repeat(1001)), /설명이 너무 깁니다/);
 });
 
 test('natural full songs omit duration despite old metadata and retain voice persona and complete lyrics', () => {
