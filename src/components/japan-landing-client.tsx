@@ -1805,6 +1805,7 @@ export default function JapanLandingClient() {
 
     return (
       <div className="max-w-6xl mx-auto pt-4 h-full flex flex-col pb-20 relative font-sans space-y-8 animate-fade-in text-white">
+        <PresetSamplePlayer controller={samplePlayer} />
         {/* 헤더 — 통일된 표준 브랜드 헤더 */}
         <header className="mb-8 border-b border-white/10 pb-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
