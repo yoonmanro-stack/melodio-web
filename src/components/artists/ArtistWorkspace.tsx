@@ -41,6 +41,7 @@ function ArtistIncubator({ initialArtistId, initialStep, user, authLoading }: { 
   const [listLoading, setListLoading] = useState(true)
   const [listError, setListError] = useState('')
   const [error, setError] = useState('')
+  const [portraitError, setPortraitError] = useState<{ message: string; userId: string; artistId: string | null } | null>(null)
   const [notice, setNotice] = useState('')
   const [saving, setSaving] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -67,7 +68,7 @@ function ArtistIncubator({ initialArtistId, initialStep, user, authLoading }: { 
   useEffect(() => { activeUser.current = userId; return () => { activeUser.current = undefined } }, [userId])
 
   const loadArtists = useCallback(async (signal?: AbortSignal) => {
-    setListLoading(true); setListError('')
+    setListLoading(true); setListError(''); setPortraitError(null)
     try {
       if (!userId) { setArtists([]); setSelected(null); setForm(newArtistDraft()); initializedUser.current = null; return }
       const data = await artistResponse<{ artists: ArtistProfile[] }>(await fetch('/api/artists', { cache: 'no-store', signal }))
@@ -113,9 +114,10 @@ function ArtistIncubator({ initialArtistId, initialStep, user, authLoading }: { 
   function canSwitch(message = '저장하지 않은 변경 사항이 있습니다. 변경 사항을 버리고 다른 가수를 열까요?') { return !requestBusy.current && (!dirty || window.confirm(message)) }
   function chooseArtist(artist: ArtistProfile | null) {
     if (artist?.id === selected?.id || (!artist && !selected) || !canSwitch()) return
-    setSelected(artist); setForm(artist ? artistToDraft(artist) : newArtistDraft()); setStep(0); setError(''); setNotice(''); setSaveUncertain(false)
+    setSelected(artist); setForm(artist ? artistToDraft(artist) : newArtistDraft()); setStep(0); setError(''); setPortraitError(null); setNotice(''); setSaveUncertain(false)
   }
   function change(patch: Partial<ArtistDraft>, kind: 'identity' | 'voice' | 'portrait' | 'checks' = 'identity') {
+    if (kind === 'portrait') setPortraitError(null)
     setForm(current => {
       const checks = { ...current.checks }
       if (kind === 'identity') checks.identityReviewed = false
@@ -127,7 +129,7 @@ function ArtistIncubator({ initialArtistId, initialStep, user, authLoading }: { 
     setNotice(''); setError('')
   }
   function acceptArtist(artist: ArtistProfile) {
-    setSelected(artist); setForm(artistToDraft(artist))
+    setSelected(artist); setForm(artistToDraft(artist)); setPortraitError(null)
     setArtists(previous => [artist, ...previous.filter(row => row.id !== artist.id)])
     window.dispatchEvent(new Event('melodio-artists-changed'))
   }
@@ -160,8 +162,9 @@ function ArtistIncubator({ initialArtistId, initialStep, user, authLoading }: { 
 
   async function uploadPortrait(file: File) {
     if (requestBusy.current || archived || !user) return
-    requestBusy.current = true; setUploading(true); setError('')
+    requestBusy.current = true; setUploading(true); setError(''); setNotice(''); setPortraitError(null)
     const uploadingUserId = user.id
+    const uploadingArtistId = selected?.id || null
     try {
       const prepared = await prepareArtistPortraitUpload(file)
       if (activeUser.current !== uploadingUserId) return
@@ -170,7 +173,7 @@ function ArtistIncubator({ initialArtistId, initialStep, user, authLoading }: { 
       if (!result.portrait?.assetId) throw new Error('업로드한 사진을 확인하지 못했습니다.')
       if (activeUser.current !== uploadingUserId) return
       change({ portrait: result.portrait }, 'portrait'); setNotice('사진을 업로드했습니다. 프로필에 연결하려면 초안을 저장해 주세요.')
-    } catch (reason) { if (activeUser.current === uploadingUserId) setError(reason instanceof Error ? reason.message : '사진을 업로드하지 못했습니다.') }
+    } catch (reason) { if (activeUser.current === uploadingUserId) setPortraitError({ message: reason instanceof Error ? reason.message : '사진을 업로드하지 못했습니다.', userId: uploadingUserId, artistId: uploadingArtistId }) }
     finally { requestBusy.current = false; setUploading(false) }
   }
 
@@ -204,7 +207,7 @@ function ArtistIncubator({ initialArtistId, initialStep, user, authLoading }: { 
           </div>
           <nav aria-label="가수 완성 단계" className="grid grid-cols-4 gap-1 border-b border-white/10 p-3 sm:px-6">{STEPS.map((item, index) => <button type="button" key={item.label} disabled={busy} aria-current={step === index ? 'step' : undefined} onClick={() => setStep(index)} className={`flex flex-col items-center justify-center gap-1.5 rounded-xl px-1 py-3 text-xs sm:flex-row sm:gap-2 ${step === index ? 'bg-purple-500/15 text-purple-200' : 'text-zinc-500 hover:bg-white/5'}`}><item.icon size={15} /><span>{index + 1}. {item.label}</span></button>)}</nav>
           <fieldset disabled={busy || archived || !user || authLoading || listLoading} className="min-w-0 px-5 py-6 disabled:opacity-70 sm:px-7"><legend className="sr-only">가수 프로필 편집</legend><h3 className="mb-5 text-lg font-semibold">{STEPS[step].title}</h3>
-            {step === 0 ? <ArtistProfileFields form={form} onChange={change} /> : step === 1 ? <ArtistVoiceStep key={selected?.id || 'new'} form={form} onChange={change} savedVoiceName={selected?.voice?.name} /> : step === 2 ? <ArtistPortraitStep form={form} onChange={change} onUpload={uploadPortrait} uploading={uploading} /> : <div className="space-y-5">
+            {step === 0 ? <ArtistProfileFields form={form} onChange={change} /> : step === 1 ? <ArtistVoiceStep key={selected?.id || 'new'} form={form} onChange={change} savedVoiceName={selected?.voice?.name} /> : step === 2 ? <ArtistPortraitStep form={form} onChange={change} onUpload={uploadPortrait} uploading={uploading} uploadError={portraitError && portraitError.userId === userId && portraitError.artistId === (selected?.id || null) ? portraitError.message : undefined} /> : <div className="space-y-5">
               <div className="grid gap-4 rounded-xl border border-white/10 bg-black/15 p-4 sm:grid-cols-2"><div><p className="text-xs text-zinc-500">가수 이름</p><p className="mt-1 text-sm font-medium">{form.name || '이름 입력 전'}</p><p className="mt-2 text-xs text-zinc-500">{form.tagline || '한 줄 소개 입력 전'}</p></div><div><p className="text-xs text-zinc-500">보컬</p><p className="mt-1 text-sm font-medium">{voiceName || '보컬을 다시 확인해 주세요'}</p><p className="mt-2 text-xs text-zinc-500">{form.voice ? VOICE_KIND_LABELS[form.voice.kind] : '선택 전'}</p></div><div><p className="text-xs text-zinc-500">성격과 매력</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{form.personality || '작성 전'}</p></div><div><p className="text-xs text-zinc-500">비주얼 방향</p><p className="mt-1 whitespace-pre-wrap text-sm text-zinc-300">{form.visualDirection || '작성 전'}</p></div></div>
               {(form.backstory || form.speakingStyle) && <div className="grid gap-4 rounded-xl border border-white/10 bg-white/[0.02] p-4 sm:grid-cols-2">{form.backstory && <div><p className="text-xs text-zinc-500">배경 이야기와 세계관</p><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-300">{form.backstory}</p></div>}{form.speakingStyle && <div><p className="text-xs text-zinc-500">말투와 표현 방식</p><p className="mt-2 whitespace-pre-wrap text-sm text-zinc-300">{form.speakingStyle}</p></div>}</div>}
               <div className="space-y-2.5">{[{ label: '보컬 선택과 확인', done: !!form.voice && form.checks.voiceAuditioned, target: 1 }, { label: '참조 사진과 비주얼 확인', done: !!form.portrait && !!form.visualDirection.trim() && form.checks.portraitReviewed, target: 2 }].map(item => <button type="button" key={item.label} onClick={() => setStep(item.target)} className="flex w-full items-center justify-between rounded-xl border border-white/10 px-4 py-3 text-left text-sm"><span className="flex items-center gap-2">{item.done ? <Check size={16} className="text-emerald-300" /> : <span className="h-4 w-4 rounded-full border border-zinc-600" />}{item.label}</span><span className={item.done ? 'text-emerald-300' : 'text-zinc-500'}>{item.done ? '확인됨' : '확인하기'} →</span></button>)}</div>

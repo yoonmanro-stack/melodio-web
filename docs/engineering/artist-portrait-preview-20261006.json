@@ -1,0 +1,8 @@
+{
+  "objective": "Fix portrait uploads and show failed upload messages beside the file picker",
+  "cause": "Production melodio-private bucket lacked image/jpeg in its MIME allowlist; server normalizes all portraits to JPEG. A normal upload failure leaves portrait null. Upload errors previously appeared only below the complete editor.",
+  "storageFix": "Permit image/jpeg while preserving private access, existing audio/JSON types, byte limits and policies. Verify real synthetic signed portrait storage and readback before marking complete.",
+  "uiFix": "Scoped upload error next to file picker; cleared on retry, switching artist/account and server reload. Successful portrait response keeps current private preview flow.",
+  "sourceLimitBytes": 10485760,
+  "personalDataChanges": 0
+}

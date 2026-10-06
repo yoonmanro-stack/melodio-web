@@ -6,11 +6,12 @@ import { ImagePlus, Loader2 } from 'lucide-react'
 import type { ArtistDraft } from './artist-form'
 import { FIELD_CLASS } from './artist-form'
 
-export function ArtistPortraitStep({ form, onChange, onUpload, uploading }: {
+export function ArtistPortraitStep({ form, onChange, onUpload, uploading, uploadError }: {
   form: ArtistDraft
   onChange: (patch: Partial<ArtistDraft>, kind?: 'identity' | 'portrait' | 'checks') => void
   onUpload: (file: File) => Promise<void>
   uploading: boolean
+  uploadError?: string
 }) {
   const [loadedAssetId, setLoadedAssetId] = useState('')
   const [errorAssetId, setErrorAssetId] = useState('')
@@ -27,8 +28,9 @@ export function ArtistPortraitStep({ form, onChange, onUpload, uploading }: {
         <p className="mt-2 text-sm leading-relaxed text-zinc-500">촬영 사진 또는 직접 준비한 사실적인 인물 이미지를 사용하세요. 등록한 기준 사진은 계정에 비공개로 저장됩니다. 곡 제작 시 커버 사본이 공개 이미지로 저장됩니다.</p>
         <label className="mt-5 flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-purple-400/30 bg-purple-500/10 px-4 py-3 text-sm font-medium text-purple-200 hover:bg-purple-500/15">
           {uploading ? <Loader2 size={17} className="animate-spin" /> : <ImagePlus size={17} />}{uploading ? '사진을 업로드하는 중…' : form.portrait ? '참조 사진 바꾸기' : '참조 사진 업로드'}
-          <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading} className="sr-only" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void onUpload(file) }} />
+          <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading} aria-describedby={uploadError ? 'artist-portrait-upload-error' : undefined} className="sr-only" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void onUpload(file) }} />
         </label>
+        {uploadError && <p id="artist-portrait-upload-error" role="alert" className="mt-2 text-sm leading-relaxed text-rose-300">{uploadError}</p>}
         <p className="mt-2 text-xs text-zinc-500">JPEG · PNG · WebP, 최대 10MB</p>
         <p className="mt-3 text-xs leading-relaxed text-zinc-400">업로드 후 정사각형으로 중앙 크롭됩니다. 표시된 사진에서 얼굴이 잘리지 않았는지 확인한 뒤 승인하세요.</p>
         {form.portrait && <><p className="mt-3 break-words text-xs text-zinc-400">업로드한 사진 · {form.portrait.fileName}</p><button type="button" onClick={() => onChange({ portrait: null }, 'portrait')} className="mt-2 self-start text-xs text-zinc-500 hover:text-rose-300">프로필에서 사진 연결 해제</button></>}
