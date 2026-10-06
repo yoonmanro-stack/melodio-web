@@ -30,6 +30,7 @@ export function usePresetSamples(sourceMenu: 'japan' | 'preset-studio', presets:
   const [volume, setVolume] = useState(0.8)
   const [playbackError, setPlaybackError] = useState('')
   const audio = useRef<HTMLAudioElement>(null)
+  const playbackElement = useRef<HTMLAudioElement | null>(null)
   const active = useRef<CurrentSample | null>(null)
   const attempt = useRef(0)
 
@@ -70,13 +71,12 @@ export function usePresetSamples(sourceMenu: 'japan' | 'preset-studio', presets:
   }, [])
 
   useEffect(() => {
-    const element = audio.current
     function onOtherAudio(event: Event) {
       const other = (event as CustomEvent<{ audio?: HTMLMediaElement }>).detail?.audio
-      if (other && other !== element) close()
+      if (other && other !== audio.current) close()
     }
     window.addEventListener('melodio-audio-started', onOtherAudio)
-    return () => { attempt.current += 1; element?.pause(); window.removeEventListener('melodio-audio-started', onOtherAudio) }
+    return () => { attempt.current += 1; playbackElement.current?.pause(); window.removeEventListener('melodio-audio-started', onOtherAudio) }
   }, [close])
 
   function sampleFor(id: string) { return lookup.key === requestKey ? lookup.response?.samples[id] ?? null : null }
@@ -89,6 +89,7 @@ export function usePresetSamples(sourceMenu: 'japan' | 'preset-studio', presets:
     const element = audio.current
     const selected = active.current
     if (!element || !selected) return
+    playbackElement.current = element
     const version = ++attempt.current
     if (element.ended) element.currentTime = 0
     setPlaybackError(''); setBuffering(true)
