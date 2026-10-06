@@ -11,7 +11,7 @@ export default function PresetStudioPage() {
         <PresetStudioBuilder sourceMenu="preset-studio" />
       </Suspense>
       <div className="max-w-6xl mx-auto px-4 pb-24 border-t border-white/5 pt-6 mt-4">
-        <PublicTrackGrid sourceMenu="preset-studio" itemsPerPage={16} />
+        <PublicTrackGrid sourceMenu="preset-studio" itemsPerPage={20} />
       </div>
     </div>
   );
