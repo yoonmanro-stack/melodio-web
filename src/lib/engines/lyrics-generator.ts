@@ -62,13 +62,30 @@ const LYRICS_FIELD_CONTRACT = `
 
 const NATURAL_SONG_STRUCTURE = `
 ## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT
-- Compose a complete song with enough original lyrical material for a satisfying musical journey. Let the genre, phrasing, tempo, and emotional development determine its natural length; do not impose a target duration, forced cutoff, or fixed lyric-line count.
-- For verse-chorus styles, establish the scene in a first verse, build a memorable chorus, develop the story in a distinct second verse, and return to the chorus with greater emotional meaning. Use pre-choruses where the genre benefits from them.
-- Include a bridge or another contrasting development that introduces a new perspective, melodic direction, or musical release. Lead into a final chorus or equivalent closing refrain that resolves the song's narrative and emotional arc.
-- Shape an intentional introduction and a natural outro with room for the final phrase and musical resolution. Choose an instrumental, sung, or mixed ending appropriate to the genre instead of cutting off a complete thought.
-- Adapt this arc to the genre: strophic folk or chanson may develop successive verses and a refrain; rap may use contrasting verses and hooks; trot may build expressive returns; jazz or other forms may use their own satisfying thematic development. Avoid giving every song the same template.
-- Write substantial, distinctive verses and a singable recurring hook. Do not compress a full song into a teaser or single hook, and do not pad it with generic repetitions. Preserve purposeful chorus returns and meaningful musical breathing room.
+- Compose a compact, complete song with enough original lyrical material for a satisfying musical journey. Let its phrasing and emotional arc finish naturally; do not impose a clock duration, forced cutoff, or exact lyric-line count.
+- For verse-chorus styles, establish the scene in a first verse, build a memorable chorus, and develop the story in a distinct second verse. Give the chorus two or three purposeful appearances in total, including the final chorus or equivalent closing refrain that resolves the emotional arc. Use one final chorus, never a double final chorus; do not append extra chorus cycles after that resolution.
+- Use a brief pre-chorus only when it improves the transition. A brief bridge or another contrasting development is optional: include it only when it adds a new perspective or musical release, then move directly to the final resolution. Do not require extra sections just to lengthen the song.
+- Usually use 6–8 sections and follow the flexible writing budget below. A verse normally needs 4–6 short lines, a chorus 3–4, an optional bridge 2–4, and a sung outro 1–2. These are guides, not exact counts or a reason to truncate a complete phrase; vary them for the genre and natural language phrasing.
+- Keep the introduction brief and the natural outro short, with space for the final phrase and a clear musical cadence. Instrumental intro or outro sections may have empty content. Avoid long instrumental breaks, extended solos, repeated ending cycles, and lengthy fade-outs; preserve expressive vocal timbre, emotional detail, and useful musical breathing room.
+- Adapt this arc to the genre: strophic folk or chanson can use two distinct verses and a recurring refrain; rap can use contrasting verses and hooks; trot can build expressive returns; jazz can use concise thematic contrast. Keep the form individual while avoiding a third narrative verse or extra development that merely repeats an established idea.
+- Write distinctive verses and a singable recurring hook. Do not compress a full song into a teaser or single hook, and do not pad it with generic repetitions. Let the final resolution conclude the story.
 `
+
+function naturalSongStructure(languageInstruction: string, stylePrompt: string): string {
+  const isSlowEastAsianSong = (languageInstruction === 'Japanese' || languageInstruction === 'Korean')
+    && /\b(?:ballad|enka|slow|downtempo|largo|adagio)\b|演歌|バラード|엔카|발라드|느린/i.test(stylePrompt)
+  const sungLineBudget = isSlowEastAsianSong ? '20–28' : '24–32'
+  const densityGuidance = languageInstruction === 'English'
+    ? 'For English, aim for roughly 160–220 sung words in total, including chorus returns, with one concise melodic phrase per line.'
+    : languageInstruction === 'French'
+      ? 'For French, aim for roughly 160–220 sung words in total, including refrain returns; use natural elisions and one concise melodic phrase per line.'
+      : languageInstruction === 'Japanese'
+        ? `For Japanese, aim for roughly ${isSlowEastAsianSong ? '280–420' : '320–480'} written lyric characters in total, including chorus returns but excluding section labels; use one short, natural sung phrase per line rather than several sentences. Do not apply an English whitespace-word budget.`
+        : languageInstruction === 'Korean'
+          ? `For Korean, aim for roughly ${isSlowEastAsianSong ? '220–360' : '260–400'} Hangul syllable blocks in total, including chorus returns but excluding spaces and section labels; use one short, natural sung phrase per line rather than several sentences. Do not apply an English whitespace-word budget.`
+          : 'For mixed or other languages, use one concise melodic phrase per line and the sung-line budget above; judge density by the language’s natural syllables and phrasing, not an English whitespace-word count.'
+  return `${NATURAL_SONG_STRUCTURE}\n## FLEXIBLE LYRIC DENSITY\n- Use a flexible writing budget of roughly ${sungLineBudget} concise sung lines across the entire song, including written chorus returns.${isSlowEastAsianSong ? ' Slow enka and ballad phrasing needs fewer lines and expressive breathing room, not extra verses or refrain cycles.' : ''}\n- ${densityGuidance}\n- Treat this density as a writing preference, never a hard limit. Preserve requested lyric phrases and a complete emotional resolution; never trim returned lyrics to meet a count.\n`
+}
 
 export interface LyricsModelUsage {
   requestedModel: typeof LYRICS_MODEL
@@ -579,7 +596,7 @@ function getSingleSystemPrompt(
   // 명시적인 숏폼만 길이를 제한하고, 일반 곡은 완결된 음악적 전개를 사용한다.
   let durationStructureInstruction = ''
   if (targetDuration === undefined) {
-    durationStructureInstruction = NATURAL_SONG_STRUCTURE
+    durationStructureInstruction = naturalSongStructure(languageInstruction, stylePrompt)
   } else if (targetDuration <= 15) {
     durationStructureInstruction = `
 ## 🚨 CRITICAL DURATION RULE — TARGET: ${targetDuration} SECONDS (Ultra Short-form)
@@ -723,7 +740,7 @@ function getPlaylistSystemPrompt(
   return `You are a 1-million subscriber YouTuber who runs a high-engagement music playlist channel specializing in ${profile.nameKo}.
 
 ${genderMixRules}
-${NATURAL_SONG_STRUCTURE}
+${naturalSongStructure(languageInstruction, stylePrompt)}
 
 ## 🌟 PLAYLIST DIVERSITY MANDATE (${profile.nameKo}):
 To run a successful 20~40 track playlist channel, each track MUST explore a distinct thematic angle across the genre's universe:
@@ -761,7 +778,7 @@ You MUST return a JSON object matching this schema:
 
 Rules:
 1. Generate exactly ${trackCount} tracks inside the "tracks" array. Each track MUST have a completely UNIQUE theme, title, and lyrics from the ${profile.nameKo} pillars.
-2. Give every track a complete, genre-appropriate structure with substantial distinct verses, purposeful chorus or refrain returns, contrasting development, a final resolution, and a natural outro.
+2. Give every track a compact, complete, genre-appropriate structure with two distinct verses, purposeful chorus or refrain returns, optional brief contrasting development, a final resolution, and a short natural outro. Apply the flexible writing budget separately to each track.
 3. Vary the musical form and emotional journey across tracks. Keep arrangement and ending directions in the description fields, separate from sung words.
 4. Strictly return valid JSON.
 ${playbookInstructions || ''}

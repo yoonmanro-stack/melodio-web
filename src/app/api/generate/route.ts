@@ -269,7 +269,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
   if (durationPlan.naturalFullSong) {
     effectiveStylePrompt = removeClockDurationInstructions(effectiveStylePrompt)
     if (payload.isInstrumental) finalLyricsPrompt = removeClockDurationInstructions(finalLyricsPrompt)
-    effectiveStylePrompt = `Complete full-length ${payload.isInstrumental ? 'instrumental composition; develop and return to the main theme' : 'song; perform all supplied lyric sections with a developed returning chorus'}; resolve the final musical phrase and allow a natural outro; no abrupt cutoff. ${effectiveStylePrompt}`
+    effectiveStylePrompt = `Compact complete ${payload.isInstrumental ? 'instrumental composition; introduce a clear theme, a concise variation and contrast, then return to the theme once' : 'song; perform all supplied lyric sections with purposeful chorus returns'}; brief intro and natural resolved outro; avoid extended solos, repeated ending cycles and length-padding; no abrupt cutoff. ${effectiveStylePrompt}`
   } else if (durationPlan.seconds !== undefined) {
     const targetClock = `${Math.floor(durationPlan.seconds / 60)}:${String(Math.round(durationPlan.seconds % 60)).padStart(2, '0')}`
     effectiveStylePrompt = `Target duration ${durationPlan.seconds} seconds (${targetClock}); complete song; finish the final sung phrase; natural ending. ${effectiveStylePrompt}`
@@ -724,6 +724,7 @@ export async function POST(request: NextRequest) {
       requestedDurationMode: durationMode,
       requestedDurationSource: durationSource,
       naturalFullSong: durationSource === 'studio-natural',
+      naturalPreferredRange: durationSource === 'studio-natural' ? { minimumSeconds: 160, maximumSeconds: 240, enforcement: 'preference' } : undefined,
       coverArtUrl2: coverArtUrl2, // 두 번째 곡용 커버 이미지 보관
       description: generatedDescription,
       tags: generatedTags,

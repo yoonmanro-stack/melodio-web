@@ -1224,7 +1224,7 @@ export default function JapanLandingClient() {
           const trackDescription = targetSection?.description?.trim() || '';
 
           let finalStylePrompt = isInstrumental
-            ? `${resolveRotationPrompt(styleTags).trim()}, complete instrumental development, final theme resolution, natural outro and ending`
+            ? `${resolveRotationPrompt(styleTags).trim()}, compact complete instrumental composition, brief introduction, main theme and concise contrast, purposeful theme return, final theme resolution and short natural outro, no extended solos or repeated ending cycles`
             : mergeAndClampStyle(resolveRotationPrompt(styleTags), trackDescription);
 
           // ASMR Foley 레이어 결합
@@ -1391,7 +1391,7 @@ export default function JapanLandingClient() {
         const trackDescription = targetSection?.description?.trim() || '';
 
         let finalSingleStylePrompt = isInstrumental
-          ? `${resolveRotationPrompt(styleTags).trim()}, complete instrumental development, final theme resolution, natural outro and ending`
+          ? `${resolveRotationPrompt(styleTags).trim()}, compact complete instrumental composition, brief introduction, main theme and concise contrast, purposeful theme return, final theme resolution and short natural outro, no extended solos or repeated ending cycles`
           : mergeAndClampStyle(resolveRotationPrompt(styleTags), trackDescription);
 
         // ASMR Foley 레이어 결합

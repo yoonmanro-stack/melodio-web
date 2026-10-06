@@ -98,8 +98,9 @@ test('ordinary instrumental arrangements ignore old lengths and keep the chosen 
     });
     assert.equal(Object.hasOwn(input, 'duration'), false);
     assert.equal(input.prompt, buildInstrumentalArrangement());
-    assert.match(input.prompt, /Theme Development/);
-    assert.match(input.prompt, /Final Resolution/);
+    assert.match(input.prompt, /Theme Variation/);
+    assert.match(input.prompt, /Natural Resolution and Outro/);
+    assert.equal(input.prompt.split('\n').length, 7);
     assert.doesNotMatch(input.prompt, /piano|bass|solo|full climax/i);
     assert.match(input.style, /45 BPM/);
     assert.match(input.style, /harp and analog pads/);
@@ -163,8 +164,9 @@ test('long style prompts retain natural ending instructions inside the provider 
   });
   assert.equal(Object.hasOwn(input, 'duration'), false);
   assert.ok(input.style.length <= 1000);
-  assert.match(input.style, /^Complete full-length song;/);
-  assert.match(input.style, /complete full-length song; perform all supplied lyric sections/i);
+  assert.match(input.style, /^Compact complete song;/);
+  assert.match(input.style, /perform all supplied lyric sections/i);
+  assert.match(input.style, /avoid extended solos, repeated ending cycles and length-padding/);
   assert.doesNotMatch(input.style, /0:28|28-second|abrupt finish/i);
 });
 
@@ -182,4 +184,14 @@ test('old clock directions are removed without altering tempo or vintage era mar
   assert.match(input.style, /1950s soul, 195 BPM/);
   assert.match(input.style, /warm bass/);
   assert.equal(removeClockDurationInstructions('[Target Duration: 3:30, Complete Instrumental] [Main Theme]'), '[Main Theme]');
+});
+
+test('ordinary songs record a preferred range without sending either a range or duration to the provider', async () => {
+  const plan = resolveMusicDuration({ sourceMenu: 'japan' });
+  assert.deepEqual(plan.preferredSeconds, { minimum: 160, maximum: 240 });
+  assert.equal(plan.seconds, undefined);
+  const { input } = await submit({ sourceMenu: 'japan' });
+  assert.equal(Object.hasOwn(input, 'duration'), false);
+  assert.doesNotMatch(input.style, /160 seconds|240 seconds|2:40|4:00|Target duration/i);
+  assert.equal(resolveMusicDuration({ sourceMenu: 'voice-discovery-sample', metadata: { durationSeconds: 30 } }).preferredSeconds, undefined);
 });
