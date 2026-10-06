@@ -6,7 +6,7 @@ import PublicTrackGrid from "@/components/prompt-builder/PublicTrackGrid";
 
 export default function PresetStudioPage() {
   return (
-    <div className="h-full w-full overflow-y-auto">
+    <div className="min-h-full w-full">
       <Suspense fallback={<div className="p-8 text-zinc-500">Loading Preset Studio...</div>}>
         <PresetStudioBuilder sourceMenu="preset-studio" />
       </Suspense>
