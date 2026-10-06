@@ -18,6 +18,7 @@ import { useHistory } from '@/hooks/useHistory'
 import { useVoice } from '@/contexts/VoiceContext'
 import { studioVoiceFields as resolveStudioVoiceFields } from '@/lib/voice/studio-selection'
 import { StudioArtistPicker, useStudioArtist } from '@/components/artists/StudioArtistPicker'
+import { resolveArtistMusicStyle } from '@/lib/artists/studio-style'
 import { composeStylePrompt, enforceSingleSelect, resolveRotationPrompt } from '@/lib/prompt-compositor'
 import { supabase } from '@/lib/supabase'
 import GenreSelector from './GenreSelector'
@@ -96,7 +97,7 @@ export default function PromptBuilder({
   const [playlistSnsHashtags, setPlaylistSnsHashtags] = useState('')
   const [tracks, setTracks] = useState<any[]>([])
   const [activeTrackIdx, setActiveTrackIdx] = useState(0)
-  const [stylePrompt, setStylePrompt] = useState('')
+  const [manualStylePrompt, setStylePrompt] = useState('')
 
   useEffect(() => {
     if (externalStylePrompt !== undefined) {
@@ -124,6 +125,7 @@ export default function PromptBuilder({
   const artistState = useStudioArtist({ userId: user?.id, initialArtistId: searchParams.get('artistId'), lyricsLanguage,
     hasLyrics: lyricsSections.some(section => Boolean(section.content?.trim())) || tracks.some(track => Array.isArray(track.sections) && track.sections.some((section: LyricsSection) => Boolean(section.content?.trim()))),
     onLyricsLanguageChange: setLyricsLanguage })
+  const stylePrompt = resolveArtistMusicStyle(manualStylePrompt, artistState.defaultMusicStyle)
   const artistSettings = { isInstrumental, sunoVersion, sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge', stylePrompt, vocalSelections: selections.vocal }
   const studioVoiceFields = artistState.artistVoice
     ? { vocalGender: artistState.artistVoice.gender, activeVoice: null, voicePrompt: undefined, vdCode: undefined, lyricsLanguage }

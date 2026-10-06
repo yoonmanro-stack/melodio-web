@@ -2,6 +2,7 @@
 import { useVoice } from "@/contexts/VoiceContext";
 import { studioVoiceFields as resolveStudioVoiceFields } from "@/lib/voice/studio-selection";
 import { StudioArtistPicker, useStudioArtist } from "@/components/artists/StudioArtistPicker";
+import { resolveArtistMusicStyle } from "@/lib/artists/studio-style";
 import { SUNO_VERSIONS } from '@/lib/suno-models';
 
 import { useState, useEffect } from "react";
@@ -571,7 +572,7 @@ export default function JapanLandingClient() {
   const [selectedPresetId, setSelectedPresetId] = useState<string>("romance-pop");
   const [title, setTitle] = useState("Tokyo Neon Romance");
   const [topic, setTopic] = useState("비 내리는 도쿄의 밤거리, 흘러간 사랑");
-  const [styleTags, setStyleTags] = useState("80s Japanese City Pop, nostalgic, upbeat, synth brass, clean electric guitar, female vocal");
+  const [manualStyleTags, setStyleTags] = useState("80s Japanese City Pop, nostalgic, upbeat, synth brass, clean electric guitar, female vocal");
   const [lyrics, setLyrics] = useState("");
   const [isInstrumental, setIsInstrumental] = useState(false);
   const [isGeneratingLyrics, setIsGeneratingLyrics] = useState(false);
@@ -611,6 +612,7 @@ export default function JapanLandingClient() {
   const artistState = useStudioArtist({ userId: user?.id, initialArtistId: searchParams.get('artistId'), lyricsLanguage: lyricLanguage,
     hasLyrics: Boolean(lyrics.trim()) || lyricsSections.some(section => Boolean(section.content?.trim())) || tracks.some(track => Array.isArray(track.sections) && track.sections.some((section: LyricsSection) => Boolean(section.content?.trim()))),
     onLyricsLanguageChange: setLyricLanguage, allowedLanguages: ['en', 'ja'] });
+  const styleTags = resolveArtistMusicStyle(manualStyleTags, artistState.defaultMusicStyle);
   const artistSettings = { isInstrumental, sunoVersion, sourceMenu: 'japan', stylePrompt: styleTags };
   const studioVoiceFields = artistState.artistVoice
     ? { vocalGender: artistState.artistVoice.gender, activeVoice: null, voicePrompt: undefined, vdCode: undefined, lyricsLanguage: lyricLanguage }

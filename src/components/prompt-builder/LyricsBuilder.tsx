@@ -209,8 +209,10 @@ export default function LyricsBuilder({
       alert(artistError)
       return
     }
-    if (!stylePrompt) {
-      alert('장르나 무드 태그를 먼저 선택해주세요!')
+    if (!stylePrompt.trim()) {
+      alert(artistVoice
+        ? '아티스트의 기본 장르가 없거나 음악 스타일이 비어 있습니다. 프리셋을 선택하거나 STYLE PROMPT에 장르·분위기를 입력해 주세요.'
+        : '프리셋을 선택하거나 STYLE PROMPT에 장르·분위기를 입력해 주세요.')
       return
     }
     setIsGenerating(true)

@@ -832,7 +832,7 @@ export default function Home() {
   const [categoryTab, setCategoryTab] = useState<'all' | 'audio-forge' | 'style-library' | 'japan'>('all');
   const [sortBy, setSortBy] = useState('newest');
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 20;
 
   // 관리 드롭다운 메뉴 및 좋아요, 수정 모달
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
@@ -1328,10 +1328,13 @@ export default function Home() {
   }, [filtered]);
 
   const totalPages = Math.ceil(filtered.length / itemsPerPage) || 1;
+  const activePage = Math.min(currentPage, totalPages);
   const paginatedHistory = filtered.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
+    (activePage - 1) * itemsPerPage,
+    activePage * itemsPerPage
   );
+  const pageWindowStart = Math.max(1, Math.min(activePage - 2, totalPages - 4));
+  const visiblePages = Array.from({ length: Math.min(5, totalPages) }, (_, index) => pageWindowStart + index);
 
   // 페이지 경계 보완
   useEffect(() => {
@@ -2035,27 +2038,45 @@ export default function Home() {
 
         {/* 페이지네이션 하단 바 */}
         {totalPages > 1 && (
-          <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/5">
-            <span className="text-xs text-zinc-500">
-              Page {currentPage} of {totalPages}
-            </span>
-            <div className="flex items-center gap-2">
-              <button 
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                disabled={currentPage === 1}
-                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:bg-white/5 transition-all"
+          <nav aria-label="음원 목록 페이지" className="mt-6 flex flex-col items-center gap-3 border-t border-white/5 pt-5">
+            <p aria-live="polite" aria-atomic="true" className="text-center text-sm text-zinc-400">
+              총 {filtered.length}곡 · <span className="font-medium text-zinc-200">{activePage} / {totalPages}</span> 페이지
+            </p>
+            <div className="flex items-center justify-center gap-2">
+              <button
+                type="button"
+                aria-label="이전 페이지"
+                onClick={() => setCurrentPage(Math.max(1, activePage - 1))}
+                disabled={activePage === 1}
+                className="inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-zinc-300 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 disabled:cursor-not-allowed disabled:opacity-30"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft aria-hidden="true" className="h-4 w-4" />
+                <span className="hidden sm:inline">이전</span>
               </button>
-              <button 
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                disabled={currentPage === totalPages}
-                className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-zinc-400 hover:text-white disabled:opacity-30 disabled:hover:bg-white/5 transition-all"
+              {visiblePages.map(page => (
+                <button
+                  key={page}
+                  type="button"
+                  aria-label={`${page} 페이지`}
+                  aria-current={page === activePage ? 'page' : undefined}
+                  onClick={() => setCurrentPage(page)}
+                  className={`${Math.abs(page - activePage) > 1 ? 'hidden sm:inline-flex' : 'inline-flex'} h-11 min-w-11 items-center justify-center rounded-lg border px-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 ${page === activePage ? 'border-violet-400/60 bg-violet-500/20 text-violet-200' : 'border-white/10 bg-white/5 text-zinc-300 hover:bg-white/10 hover:text-white'}`}
+                >
+                  {page}
+                </button>
+              ))}
+              <button
+                type="button"
+                aria-label="다음 페이지"
+                onClick={() => setCurrentPage(Math.min(totalPages, activePage + 1))}
+                disabled={activePage === totalPages}
+                className="inline-flex h-11 min-w-11 items-center justify-center gap-1 rounded-lg border border-white/10 bg-white/5 px-3 text-sm text-zinc-300 transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 disabled:cursor-not-allowed disabled:opacity-30"
               >
-                <ChevronRight className="w-4 h-4" />
+                <span className="hidden sm:inline">다음</span>
+                <ChevronRight aria-hidden="true" className="h-4 w-4" />
               </button>
             </div>
-          </div>
+          </nav>
         )}
       </div>
       

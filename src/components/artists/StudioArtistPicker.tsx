@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useEffect, useId, useRef, useState } from 'react'
 import { ARTIST_LANGUAGE_LABELS, type ArtistProfile } from '@/lib/artists/types'
+import { buildArtistMusicStyle } from '@/lib/artists/studio-style'
 
 type ArtistOptions = {
   userId?: string
@@ -109,6 +110,7 @@ export function useStudioArtist(options: ArtistOptions) {
   }
   return {
     artists, artist, loading, loadError, error, hasSelection, isAuthenticated: Boolean(userId),
+    defaultMusicStyle: artist ? buildArtistMusicStyle(artist.genres) : '',
     requestFields: artist ? { artistId: artist.id, artistRevision: artist.revision } : {},
     artistVoice: voice ? { name: artist!.name, gender: voice.gender, language: voice.language } : undefined,
     select: (id: string) => { if (!id) applyArtist(null); else { const profile = artists.find(item => item.id === id); if (profile) applyArtist(profile) } },
@@ -136,6 +138,9 @@ export function StudioArtistPicker({ state }: { state: ReturnType<typeof useStud
     {state.loading && <p role="status" className="mt-2 text-xs text-zinc-400">아티스트를 불러오는 중…</p>}
     {!state.loading && !state.artists.length && !state.loadError && <p className="mt-2 text-xs text-zinc-400">{state.isAuthenticated ? '작곡 준비를 마친 아티스트가 없습니다. 작업실에서 목소리·초상·정체성을 확인해 주세요.' : '로그인 후 내 아티스트를 선택할 수 있습니다.'}</p>}
     {state.artist && <p className="mt-2 text-xs leading-relaxed text-violet-200">{state.artist.name} · {state.artist.voice!.name} · 솔로 보컬 적용. 일반 보컬 선택은 아티스트를 해제한 뒤 변경할 수 있습니다.</p>}
+    {state.artist && <p className="mt-1 text-xs leading-relaxed text-zinc-400">{state.artist.genres.length
+      ? `기본 장르: ${state.artist.genres.join(', ')}. 음악 스타일이 비어 있으면 적용합니다. 프리셋이나 직접 입력한 스타일도 사용할 수 있습니다.`
+      : '등록된 기본 장르가 없습니다. 프리셋을 선택하거나 STYLE PROMPT에 장르·분위기를 입력해 주세요.'}</p>}
     {(state.error || state.loadError) && <p role="alert" className="mt-2 text-xs leading-relaxed text-amber-200">{state.error || state.loadError}</p>}
   </section>
 }
