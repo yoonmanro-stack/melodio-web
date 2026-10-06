@@ -60,6 +60,16 @@ const LYRICS_FIELD_CONTRACT = `
 - If lyricsPrompt is included, compose it from structural section tags and the sung content only. Section descriptions must never appear in lyricsPrompt.
 `
 
+const NATURAL_SONG_STRUCTURE = `
+## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT
+- Compose a complete song with enough original lyrical material for a satisfying musical journey. Let the genre, phrasing, tempo, and emotional development determine its natural length; do not impose a target duration, forced cutoff, or fixed lyric-line count.
+- For verse-chorus styles, establish the scene in a first verse, build a memorable chorus, develop the story in a distinct second verse, and return to the chorus with greater emotional meaning. Use pre-choruses where the genre benefits from them.
+- Include a bridge or another contrasting development that introduces a new perspective, melodic direction, or musical release. Lead into a final chorus or equivalent closing refrain that resolves the song's narrative and emotional arc.
+- Shape an intentional introduction and a natural outro with room for the final phrase and musical resolution. Choose an instrumental, sung, or mixed ending appropriate to the genre instead of cutting off a complete thought.
+- Adapt this arc to the genre: strophic folk or chanson may develop successive verses and a refrain; rap may use contrasting verses and hooks; trot may build expressive returns; jazz or other forms may use their own satisfying thematic development. Avoid giving every song the same template.
+- Write substantial, distinctive verses and a singable recurring hook. Do not compress a full song into a teaser or single hook, and do not pad it with generic repetitions. Preserve purposeful chorus returns and meaningful musical breathing room.
+`
+
 export interface LyricsModelUsage {
   requestedModel: typeof LYRICS_MODEL
   actualModel: string
@@ -85,7 +95,7 @@ export interface GenerateLyricsParams {
   trackCount?: number
   vocalGender?: 'mixed' | 'female' | 'male' | 'duet'
   presetId?: string
-  /** 목표 음원 길이 (초). Suno는 가사 분량으로 곡 길이를 제어하므로 필수. */
+  /** 전용 숏폼의 목표 길이 (60초 이하). 일반 곡은 자연스러운 구성과 길이를 사용한다. */
   durationSeconds?: number
   /** 풍자곡/숏폼 모드 여부 */
   viralMode?: boolean
@@ -554,8 +564,8 @@ function getSingleSystemPrompt(
   genreProfile?: GenreThematicProfile
 ): string {
   const profile = genreProfile || detectGenreThematicProfile(stylePrompt, topic)
-  const targetDuration = durationSeconds || 180 // 기본 3분 (3분 ~ 3분 30초 최적화)
-  const isShortForm = targetDuration <= 60
+  const targetDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds)
+    && durationSeconds > 0 && durationSeconds <= 60 ? durationSeconds : undefined
 
   let genderInstruction = ''
   if (vocalGender === 'female') {
@@ -566,9 +576,11 @@ function getSingleSystemPrompt(
     genderInstruction = '\n- VOCAL GENDER RULE: You MUST write the song as a male and female duet. Assign duet parts in the lyrics and specify "beautiful male and female duet harmonies" or "interplay of male and female vocals" in the section "description" fields.'
   }
 
-  // Duration에 따른 가사 구조 및 분량 지시
+  // 명시적인 숏폼만 길이를 제한하고, 일반 곡은 완결된 음악적 전개를 사용한다.
   let durationStructureInstruction = ''
-  if (targetDuration <= 15) {
+  if (targetDuration === undefined) {
+    durationStructureInstruction = NATURAL_SONG_STRUCTURE
+  } else if (targetDuration <= 15) {
     durationStructureInstruction = `
 ## 🚨 CRITICAL DURATION RULE — TARGET: ${targetDuration} SECONDS (Ultra Short-form)
 Suno AI determines song length by the amount of lyrics. You MUST generate EXACTLY this structure:
@@ -596,45 +608,6 @@ Total lyrics: 8 lines. Keep total character count strictly between 220 and 255 c
 6. Outro (type: "outro") - 1-2 lines
 
 Total lyrics: 15-18 lines.`
-  } else if (targetDuration <= 120) {
-    durationStructureInstruction = `
-## 🚨 CRITICAL DURATION RULE — TARGET: ${targetDuration} SECONDS (Compact 2 Minutes)
-1. Intro (type: "intro") - 1-2 lines
-2. Verse 1 (type: "verse") - 4 lines
-3. Chorus (type: "chorus") - 4 lines
-4. Verse 2 (type: "verse") - 4 lines
-5. Chorus (type: "chorus") - 4 lines
-6. Outro (type: "outro") - 1-2 lines
-
-Total lyrics: 14-16 lines. Do NOT add Pre-chorus or Bridge.`
-  } else if (targetDuration <= 180) {
-    durationStructureInstruction = `
-## 🚨 CRITICAL DURATION RULE — TARGET: ${targetDuration} SECONDS (Optimal 3:00 - 3:30 Minutes)
-You MUST generate EXACTLY this structure to target 3:00 to 3:30 minutes of final audio and PREVENT costly 4+ minute overruns:
-1. Intro (type: "intro") - 1-2 lines
-2. Verse 1 (type: "verse") - 4 lines
-3. Chorus (type: "chorus") - 4 lines (main hook)
-4. Verse 2 (type: "verse") - 4 lines
-5. Chorus (type: "chorus") - 4 lines
-6. Outro (type: "outro") - 1-2 lines ([Outro] [Fade out at 3:15])
-
-Total lyrics: 16-18 lines MAX. Do NOT add Bridge or 3rd Chorus. Keep it tight and rhythmic so Suno strictly finishes between 3:00 and 3:30.`
-  } else {
-    durationStructureInstruction = `
-## 🚨 CRITICAL DURATION RULE — TARGET: ${targetDuration} SECONDS (Long-form 3:30+ Minutes)
-1. Intro (type: "intro") - 2 lines
-2. Verse 1 (type: "verse") - 4 lines
-3. Pre-Chorus (type: "pre-chorus") - 3 lines
-4. Chorus (type: "chorus") - 4 lines
-5. Verse 2 (type: "verse") - 4 lines
-6. Pre-Chorus (type: "pre-chorus") - 3 lines
-7. Chorus (type: "chorus") - 4 lines
-8. Bridge/Solo (type: "bridge") - 4 lines
-9. Chorus (type: "chorus") - 4 lines
-10. Final Chorus (type: "chorus") - 4 lines
-11. Outro (type: "outro") - 2 lines (long fade out)
-
-Total lyrics: 34-40 lines.`
   }
 
   // 가사 문학성 및 고도화 지침
@@ -736,18 +709,6 @@ function getPlaylistSystemPrompt(
 ): string {
   const profile = genreProfile || detectGenreThematicProfile(stylePrompt, topic)
 
-  const timelineExample = Array.from({ length: trackCount }, (_, idx) => {
-    const mins = idx * 3
-    const timeStr = mins < 10 ? '0' + mins + ':00' : mins + ':00'
-    return timeStr + ' Track ' + (idx + 1)
-  }).join('\\n')
-
-  const timelineRules = Array.from({ length: Math.min(10, trackCount) }, (_, idx) => {
-    const mins = idx * 3
-    const timeStr = mins < 10 ? '0' + mins + ':00' : mins + ':00'
-    return '   - ' + timeStr + ' Track ' + (idx + 1)
-  }).join('\n')
-
   let genderMixRules = ''
   if (vocalGender === 'female') {
     genderMixRules = '\n- VOCAL GENDER RULE: ALL tracks must be for a female vocalist.'
@@ -762,6 +723,7 @@ function getPlaylistSystemPrompt(
   return `You are a 1-million subscriber YouTuber who runs a high-engagement music playlist channel specializing in ${profile.nameKo}.
 
 ${genderMixRules}
+${NATURAL_SONG_STRUCTURE}
 
 ## 🌟 PLAYLIST DIVERSITY MANDATE (${profile.nameKo}):
 To run a successful 20~40 track playlist channel, each track MUST explore a distinct thematic angle across the genre's universe:
@@ -777,7 +739,7 @@ You MUST write playlist titles, YouTube descriptions, track titles, tags, and su
 You MUST return a JSON object matching this schema:
 {
   "playlistTitle": "🎵 ${profile.personaTitleFormula}",
-  "youtubeDescription": "A warm, emotional curator comment (1-2 paragraphs) welcoming listeners, followed by timestamps: '${timelineExample}'",
+  "youtubeDescription": "A warm, emotional curator comment (1-2 paragraphs) welcoming listeners, followed by an ordered track list using the generated titles. Audio timestamps will be added after the rendered track lengths are known; do not invent timestamps.",
   "youtubeTags": "combined, playlist, tags, separated, by, commas, for, SEO",
   "snsHashtags": "#hashtag1 #hashtag2 #playlist #youtube #etc",
   "tracks": [
@@ -799,8 +761,8 @@ You MUST return a JSON object matching this schema:
 
 Rules:
 1. Generate exactly ${trackCount} tracks inside the "tracks" array. Each track MUST have a completely UNIQUE theme, title, and lyrics from the ${profile.nameKo} pillars.
-2. For each track, generate Intro, Verse 1, Chorus, Verse 2, Chorus, Outro sections.
-3. Outro Control: Keep Outro short (1-2 lines) with "Fade Out" or "Instrumental Outro" in the description.
+2. Give every track a complete, genre-appropriate structure with substantial distinct verses, purposeful chorus or refrain returns, contrasting development, a final resolution, and a natural outro.
+3. Vary the musical form and emotional journey across tracks. Keep arrangement and ending directions in the description fields, separate from sung words.
 4. Strictly return valid JSON.
 ${playbookInstructions || ''}
 ${LYRICS_FIELD_CONTRACT}

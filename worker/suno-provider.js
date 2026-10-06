@@ -76,7 +76,7 @@ function buildKieSunoRequest(options) {
   if (customMode) {
     input.style = style.slice(0, 1000);
     input.title = (String(options.title || '').trim() || 'Untitled').slice(0, 80);
-    input.duration = resolveDurationSeconds(options.durationSeconds);
+    if (options.naturalFullSong !== true) input.duration = resolveDurationSeconds(options.durationSeconds);
     if (options.exclude?.trim()) input.negative_tags = options.exclude.trim();
     if (!instrumental && ['m', 'f'].includes(options.vocalGender)) input.vocal_gender = options.vocalGender;
     const personaId = String(options.personaId || '').trim();

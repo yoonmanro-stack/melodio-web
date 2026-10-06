@@ -11,7 +11,6 @@ import { categories, SINGLE_SELECT_CATEGORIES } from '@/data/categories'
 import { presets } from '@/data/presets'
 import { mergePublicPresetCatalog, findStudioPreset } from '@/lib/preset-catalog'
 import { resolvePresetApplication, parsePresetLyrics, resolveGeneratedPresetStyle } from '@/lib/preset-application'
-import { resolveMusicDuration } from '@/lib/music-duration'
 import { compileLyricsSections } from '@/lib/lyrics/compile-sections'
 import { useAuth } from '@/hooks/useAuth'
 import { useHistory } from '@/hooks/useHistory'
@@ -830,7 +829,6 @@ export default function PromptBuilder({
         let finalSnsHashtags = snsHashtags
 
         if (isPresetDefault && !isInstrumental) {
-          const targetDuration = resolveMusicDuration({ sourceMenu: sourceMenu || 'style-library' }).seconds
           const topic = currentPreset?.desc || currentPreset?.name || '자유로운 감성곡';
 
           const lyricRes = await fetch('/api/lyrics/generate', {
@@ -842,7 +840,6 @@ export default function PromptBuilder({
               language: lyricsLanguage,
               vocalGender: studioVoiceFields.vocalGender,
               presetId: selectedPresetId,
-              durationSeconds: targetDuration,
             })
           })
           const lyricData = await lyricRes.json()

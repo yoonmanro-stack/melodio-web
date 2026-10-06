@@ -9,6 +9,8 @@ export interface SunoJobOptions {
   model?: string;
   exclude?: string;
   durationSeconds?: number | string;
+  /** Complete studio songs end naturally; do not send an imposed duration. */
+  naturalFullSong?: boolean;
   vocalGender?: string;
   /** Server-resolved Kie/Suno Voice ID. */
   personaId?: string;

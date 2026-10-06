@@ -37,6 +37,9 @@ function extract(name, file = 'src/app/api/generate/route.ts') {
 const studio = load('src/lib/voice/studio-selection.ts');
 const artists = load('src/lib/artists/generation.ts');
 const duration = load('src/lib/music-duration.ts');
+const lyrics = load('src/lib/lyrics/compile-sections.ts', {
+  '../../../worker/lyrics-policy': require(path.join(root, 'worker/lyrics-policy.js')),
+});
 const designCompiler = load('src/lib/voice/voice-design-prompt.ts');
 const scrubber = loadSource(extract('scrubConflictingVocalTags', 'src/lib/voice-dna-scrubber.ts'));
 const official = load('src/lib/voice/official-voice-selection.ts', { '@/data/officialVocalCatalog.json': officialCatalog, '@/lib/voice/studio-selection': studio });
@@ -64,7 +67,7 @@ async function request(input, { catalog = [ready], registry = { [ready.id]: 'off
     return { insert(row) { calls.rows.push(row); return { select() { return { single: async () => ({ data: { id: 'offline-generation' }, error: null }) }; } }; } };
   } };
   const dependencies = {
-    ...studio, ...artists, ...duration, ...scrubber, ...official, ...discovery, ...persona, ...designCompiler,
+    ...studio, ...artists, ...duration, ...lyrics, ...scrubber, ...official, ...discovery, ...persona, ...designCompiler,
     NextResponse: { json: (data, options) => ({ status: options?.status || 200, data }) },
     createClient: async () => ({ auth: { getUser: async () => ({ data: { user } }) } }),
     createSupabaseClient: () => db,
@@ -85,7 +88,7 @@ async function request(input, { catalog = [ready], registry = { [ready.id]: 'off
     },
   };
   const exports = {};
-  const source = ['buildLyricsPromptFromSections', 'submitSunoJob', 'applyVoiceDesignRequest', 'POST'].map(name => extract(name)).join('\n');
+  const source = ['submitSunoJob', 'applyVoiceDesignRequest', 'POST'].map(name => extract(name)).join('\n');
   new Function('exports', ...Object.keys(dependencies), ts.transpileModule(source, { compilerOptions }).outputText)(exports, ...Object.values(dependencies));
   return { response: await exports.POST({ json: async () => structuredClone(input) }), calls };
 }
@@ -107,7 +110,7 @@ test('unknown IDs, conflicting IDs, gender, lyrics, menus and incompatible model
 test('the actual route binds a ready Discovery persona in all studio aliases and sample requests', async () => {
   for (const sourceMenu of ['style-library', 'preset-studio', 'japan', 'audio-forge', 'audio', 'voice-discovery-sample']) {
     const sample = sourceMenu === 'voice-discovery-sample';
-    const input = body({ sourceMenu, metadata: sample ? { durationSeconds: 30 } : {},
+    const input = body({ sourceMenu, metadata: { durationSeconds: 30 },
       lyricsSections: [{ type: 'verse', content: 'Bonjour le jour' }, { type: 'chorus', content: 'Encore toujours' }] });
     const { response, calls } = await request(input);
     assert.equal(response.status, 200);
@@ -117,7 +120,7 @@ test('the actual route binds a ready Discovery persona in all studio aliases and
     assert.equal(submitted.persona_model, 'style_persona');
     assert.equal(submitted.vocal_gender, 'f');
     assert.equal(submitted.model, 'V6');
-    assert.equal(submitted.duration, sample ? 30 : 195);
+    assert.equal(submitted.duration, sample ? 30 : undefined);
     assert.ok(submitted.style.includes(ready.stylePrompt));
     assert.ok(!submitted.style.includes('browser-overridden'));
     assert.ok(submitted.prompt.includes('[Chorus]\nEncore toujours'));
@@ -127,8 +130,37 @@ test('the actual route binds a ready Discovery persona in all studio aliases and
     assert.equal(metadata.officialVoiceId, null);
     assert.equal(metadata.customVoiceRegistrationId, null);
     assert.equal(metadata.voiceFeatureMode, 'suno_style_persona');
+    assert.equal(metadata.requestedDurationSeconds, sample ? 30 : undefined);
+    assert.equal(metadata.requestedDurationMode, sample ? 'short-form' : 'full-song');
+    assert.equal(metadata.requestedDurationSource, sample ? 'explicit-duration' : 'studio-natural');
+    assert.equal(metadata.naturalFullSong, !sample);
     assert.equal(calls.rows[0].is_public, false);
   }
+});
+
+test('the actual studio route compiles canonical sung sections and keeps production descriptions in style', async () => {
+  const { response, calls } = await request(body({
+    lyricsPrompt: '[Verse]\nStale browser lyric',
+    lyricsSections: [
+      { type: 'verse', content: 'Bonjour le jour', description: 'gentle acoustic guitar, brushed drums' },
+      { type: 'chorus', content: 'Encore toujours', description: 'female vocal, warm bass' },
+    ],
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(calls.provider.length, 1);
+  assert.equal(calls.provider[0].prompt, '[Verse]\nBonjour le jour\n\n[Chorus]\nEncore toujours');
+  assert.match(calls.provider[0].style, /gentle acoustic guitar/);
+  assert.doesNotMatch(calls.provider[0].prompt, /Stale browser lyric|guitar|drums|warm bass/);
+  assert.equal(calls.provider[0].duration, undefined);
+});
+
+test('the actual studio route rejects production directions in sung sections before external work', async () => {
+  const { response, calls } = await request(body({
+    lyricsSections: [{ type: 'verse', content: '[male vocal, warm guitar]', description: '' }],
+  }));
+  assert.equal(response.status, 400);
+  assert.equal(response.data.code, 'lyrics_instruction_in_content');
+  assert.equal(calls.provider.length + calls.rows.length + calls.metadata, 0);
 });
 
 test('pending, missing audio, legacy TTS, official samples and absent personas return 503 before external work', async () => {

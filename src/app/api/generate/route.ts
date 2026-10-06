@@ -1,4 +1,4 @@
-import { resolveMusicDuration, buildInstrumentalArrangement } from '@/lib/music-duration'
+import { resolveMusicDuration, buildInstrumentalArrangement, removeClockDurationInstructions } from '@/lib/music-duration'
 import { resolveOfficialVoice } from '@/lib/voice/official-voice-selection'
 import { officialVoicePersona } from '@/lib/voice/official-voice-registry'
 import { assertExclusiveVoiceSelection, resolveDiscoveryVoice } from '@/lib/voice/discovery-voice-selection'
@@ -266,9 +266,14 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     }
   }
 
-  // Keep the duration instruction inside the provider's style limit.
-  const targetClock = `${Math.floor(durationPlan.seconds / 60)}:${String(Math.round(durationPlan.seconds % 60)).padStart(2, '0')}`
-  effectiveStylePrompt = `Target duration ${durationPlan.seconds} seconds (${targetClock}); ${durationPlan.mode === 'full-song' ? 'complete full-length song; perform all supplied lyric sections' : 'complete song; finish the final sung phrase'}; natural ending. ${effectiveStylePrompt}`
+  if (durationPlan.naturalFullSong) {
+    effectiveStylePrompt = removeClockDurationInstructions(effectiveStylePrompt)
+    if (payload.isInstrumental) finalLyricsPrompt = removeClockDurationInstructions(finalLyricsPrompt)
+    effectiveStylePrompt = `Complete full-length ${payload.isInstrumental ? 'instrumental composition; develop and return to the main theme' : 'song; perform all supplied lyric sections with a developed returning chorus'}; resolve the final musical phrase and allow a natural outro; no abrupt cutoff. ${effectiveStylePrompt}`
+  } else if (durationPlan.seconds !== undefined) {
+    const targetClock = `${Math.floor(durationPlan.seconds / 60)}:${String(Math.round(durationPlan.seconds % 60)).padStart(2, '0')}`
+    effectiveStylePrompt = `Target duration ${durationPlan.seconds} seconds (${targetClock}); complete song; finish the final sung phrase; natural ending. ${effectiveStylePrompt}`
+  }
 
   if (effectiveStylePrompt.length > 1000) {
     effectiveStylePrompt = effectiveStylePrompt.slice(0, 1000)
@@ -285,6 +290,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     personaId,
     personaModel,
     durationSeconds: durationPlan.seconds,
+    naturalFullSong: durationPlan.naturalFullSong,
   })
   console.log(`[API/generate] Kie Suno 제출 성공 (model: ${result.model})`)
   return { ...result, requestedDurationSeconds: durationPlan.seconds, durationMode: durationPlan.mode, durationSource: durationPlan.source }
@@ -335,7 +341,7 @@ function applyVoiceDesignRequest(body: Record<string, any>) {
   const design = compileVoiceDesign(body.voiceDesign)
   const duration = resolveMusicDuration(body)
   if ((body.metadata?.durationSeconds != null || body.metadata?.duration != null) && duration.source !== 'explicit-duration') throw new Error('가창 샘플 길이를 확인해 주세요.')
-  const seconds = duration.source === 'explicit-duration' ? duration.seconds : 45
+  const seconds = duration.source === 'explicit-duration' ? duration.seconds ?? 45 : 45
   if (![30, 40, 45].includes(seconds)) throw new Error('가창 샘플 길이는 30초, 40초 또는 45초로 요청해 주세요.')
   Object.assign(body, {
     title: design.title, stylePrompt: design.sampleStylePrompt, lyricsPrompt: design.lyricsPrompt, lyricsSections: [],
@@ -712,11 +718,12 @@ export async function POST(request: NextRequest) {
       customVoiceRegistrationId: registeredVoicePersonaId ? requestedCustomVoiceId : null,
       customVoiceName: registeredVoiceName || null,
       lyricsSections: lyricsSections || [],
-      duration: rawBody.metadata?.duration || '',
+      duration: durationSource === 'studio-natural' ? '' : rawBody.metadata?.duration || '',
       durationSeconds: requestedDurationSeconds,
       requestedDurationSeconds,
       requestedDurationMode: durationMode,
       requestedDurationSource: durationSource,
+      naturalFullSong: durationSource === 'studio-natural',
       coverArtUrl2: coverArtUrl2, // 두 번째 곡용 커버 이미지 보관
       description: generatedDescription,
       tags: generatedTags,

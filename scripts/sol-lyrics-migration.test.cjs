@@ -70,12 +70,13 @@ function verifyFixedSol(call) {
   for (const field of ['temperature', 'top_p', 'presence_penalty', 'frequency_penalty', 'max_tokens']) assert.equal(call.body[field], undefined);
 }
 
-test('single full-song success uses one fixed Sol request and preserves structured result and duration instructions', async () => {
+test('single full-song success uses one fixed Sol request and preserves structured result and natural development', async () => {
   const { generateLyrics, LYRICS_MODEL } = loadLyrics(); assert.equal(LYRICS_MODEL, MODEL);
   const fixture = responder();
   const result = await generateLyrics({ stylePrompt: 'acoustic pop', topic: '가을의 일상', language: 'ko', vocalGender: 'female', durationSeconds: 180 }, fixture.dependencies);
   assert.equal(fixture.calls.length, 1); verifyFixedSol(fixture.calls[0]);
-  assert.match(fixture.calls[0].body.messages[0].content, /TARGET: 180 SECONDS/);
+  assert.match(fixture.calls[0].body.messages[0].content, /COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT/);
+  assert.doesNotMatch(fixture.calls[0].body.messages[0].content, /TARGET: 180 SECONDS/);
   assert.match(fixture.calls[0].body.messages[1].content, /Language: Korean/);
   assert.equal(result.title, singlePayload().title); assert.equal(result.youtubeTags, '감성, 일상'); assert.equal(result.snsHashtags, '#감성');
   assert.equal(result.sections[0].content, '작성된 가사'); assert.equal(result.sections[0].description, 'intimate female vocal');
@@ -83,11 +84,36 @@ test('single full-song success uses one fixed Sol request and preserves structur
   assert.match(result.stylePrompt, /^acoustic pop,/);
   assert.deepEqual(JSON.parse(JSON.stringify(result.modelUsage)), { requestedModel: MODEL, actualModel: MODEL, reasoningEffort: 'high', inputTokens: 1200, outputTokens: 800, reasoningTokens: 500 });
 });
+
+test('ordinary songs keep complete musical development without a clock or fixed lyric size', async () => {
+  const { generateLyrics } = loadLyrics();
+  for (const durationSeconds of [undefined, 120, 180, 195, 210, 360]) {
+    const fixture = responder();
+    await generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds }, fixture.dependencies);
+    const prompt = fixture.calls[0].body.messages[0].content;
+    assert.match(prompt, /distinct second verse/);
+    assert.match(prompt, /bridge or another contrasting development/);
+    assert.match(prompt, /final chorus or equivalent closing refrain/);
+    assert.match(prompt, /natural outro/);
+    assert.match(prompt, /enough original lyrical material/);
+    assert.match(prompt, /Adapt this arc to the genre/);
+    assert.doesNotMatch(prompt, /CRITICAL DURATION|TARGET:.*SECONDS|\b\d+:\d{2}\b|Total lyrics:|\d+[-–]\d+ lines|Do NOT add (?:Bridge|Pre-chorus)/);
+    assert.match(prompt, /sections\[\]\.content contains only the words to be sung/);
+    assert.match(prompt, /Section description fields must always stay in unbracketed English/);
+    assert.equal(fixture.calls.length, 1);
+    verifyFixedSol(fixture.calls[0]);
+  }
+});
 test('playlist success preserves requested track count, titles, sections and playlist metadata', async () => {
   const { generateLyrics } = loadLyrics(); const fixture = responder(playlistPayload(3));
   const result = await generateLyrics({ stylePrompt: 'acoustic pop', topic: '세 가지 다른 일상', language: 'en', isPlaylistMode: true, trackCount: 3 }, fixture.dependencies);
   assert.equal(fixture.calls.length, 1); verifyFixedSol(fixture.calls[0]);
   assert.match(fixture.calls[0].body.messages[1].content, /full 3-track playlist/);
+  const prompt = fixture.calls[0].body.messages[0].content;
+  assert.match(prompt, /COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT/);
+  assert.match(prompt, /every track a complete, genre-appropriate structure/);
+  assert.match(prompt, /do not invent timestamps/);
+  assert.doesNotMatch(prompt, /\b\d+:\d{2}\b|Keep Outro short|\d+[-–]\d+ lines/);
   assert.equal(result.playlistTitle, '선택한 플레이리스트'); assert.equal(result.youtubeDescription, '작성한 목록 설명'); assert.equal(result.tracks.length, 3);
   assert.equal(result.tracks[2].trackNumber, 3); assert.equal(result.tracks[2].title, '작성한 곡 3'); assert.equal(result.tracks[2].sections[0].content, '서로 다른 가사 3');
   assert.equal(result.modelUsage.actualModel, MODEL); assert.equal(result.modelUsage.inputTokens, 1200);
@@ -97,6 +123,19 @@ test('short duration preserves its timing contract and compiles canonical sectio
   const fixture = responder(payload);
   const result = await generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds: 30 }, fixture.dependencies);
   assert.match(fixture.calls[0].body.messages[0].content, /TARGET: 26 TO 29.5 SECONDS/); assert.equal(result.lyricsPrompt, '[Verse]\n작성된 가사\n\n[Chorus]\n작성된 후렴'); verifyFixedSol(fixture.calls[0]);
+});
+
+test('dedicated ultra-short and mid-form lyric requests retain their explicit timing contracts', async () => {
+  const { generateLyrics } = loadLyrics();
+  for (const durationSeconds of [15, 45, 60]) {
+    const fixture = responder();
+    await generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds }, fixture.dependencies);
+    const prompt = fixture.calls[0].body.messages[0].content;
+    assert.match(prompt, new RegExp(`TARGET: ${durationSeconds} SECONDS`));
+    assert.doesNotMatch(prompt, /COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT/);
+    assert.equal(fixture.calls.length, 1);
+    verifyFixedSol(fixture.calls[0]);
+  }
 });
 test('missing injected key fails before DB, provider or mock generation for both modes', async () => {
   const { generateLyrics, offlineProbe } = loadLyrics(); let calls = 0;

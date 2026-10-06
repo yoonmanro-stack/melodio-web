@@ -27,7 +27,7 @@ function extractFunction(relativePath, name) {
   return declaration.getText(ast);
 }
 
-const { resolveMusicDuration, buildInstrumentalArrangement } = loadPureModule('src/lib/music-duration.ts');
+const { resolveMusicDuration, buildInstrumentalArrangement, removeClockDurationInstructions } = loadPureModule('src/lib/music-duration.ts');
 const scrubModule = { exports: {} };
 new Function('exports', ts.transpileModule(
   extractFunction('src/lib/voice-dna-scrubber.ts', 'scrubConflictingVocalTags'), { compilerOptions },
@@ -54,13 +54,13 @@ async function submit(overrides = {}) {
   };
   const calls = [];
   const module = { exports: {} };
-  new Function('exports', 'submitKieSunoJob', 'resolveMusicDuration', 'resolveDurationSeconds', 'scrubConflictingVocalTags', 'buildInstrumentalArrangement', 'console', submitCode)(
+  new Function('exports', 'submitKieSunoJob', 'resolveMusicDuration', 'resolveDurationSeconds', 'scrubConflictingVocalTags', 'buildInstrumentalArrangement', 'removeClockDurationInstructions', 'console', submitCode)(
     module.exports,
     async options => {
       calls.push(provider.buildKieSunoRequest(options).input);
       return { taskId: 'offline-duration-check', model: 'V6' };
     },
-    resolveMusicDuration, provider.resolveDurationSeconds, scrubModule.exports.scrubConflictingVocalTags, buildInstrumentalArrangement,
+    resolveMusicDuration, provider.resolveDurationSeconds, scrubModule.exports.scrubConflictingVocalTags, buildInstrumentalArrangement, removeClockDurationInstructions,
     { log() {}, error() {} },
   );
   // Supply a playbook so no knowledge-database import can run for short prompts.
@@ -80,24 +80,26 @@ test('all three studios preserve a full song for the incident voice and misleadi
   for (const sourceMenu of studioMenus) {
     for (const phrase of ['short call-and-response vocal hook, short sub-bass notes, short room ambience', 'viral dance appeal', 'parody character', 'comical delivery']) {
       const { input, result } = await submit({ sourceMenu, stylePrompt: `Brazilian funk, female vocals, ${phrase}` });
-      assert.equal(input.duration, 195, `${sourceMenu}: ${phrase}`);
+      assert.equal(Object.hasOwn(input, 'duration'), false, `${sourceMenu}: ${phrase}`);
       assert.equal(result.durationMode, 'full-song');
-      assert.equal(result.durationSource, 'studio-default');
+      assert.equal(result.durationSource, 'studio-natural');
       assert.doesNotMatch(input.style, /0:28|28-second|abrupt finish/i);
       assert.doesNotMatch(input.style, /minimal backing beat/i, 'Style adjectives must not trigger the viral mix header');
     }
   }
 });
 
-test('instrumental arrangement uses the submitted duration and keeps the chosen instruments', async () => {
+test('ordinary instrumental arrangements ignore old lengths and keep the chosen instruments', async () => {
   for (const seconds of [30, 195, 210]) {
     const { input } = await submit({
       isInstrumental: true, lyricsPrompt: '', vocalGender: undefined,
       metadata: { durationSeconds: seconds },
       stylePrompt: 'Instrumental ambient, 45 BPM, harp and analog pads, no drums',
     });
-    assert.equal(input.duration, seconds);
-    assert.equal(input.prompt, buildInstrumentalArrangement(seconds));
+    assert.equal(Object.hasOwn(input, 'duration'), false);
+    assert.equal(input.prompt, buildInstrumentalArrangement());
+    assert.match(input.prompt, /Theme Development/);
+    assert.match(input.prompt, /Final Resolution/);
     assert.doesNotMatch(input.prompt, /piano|bass|solo|full climax/i);
     assert.match(input.style, /45 BPM/);
     assert.match(input.style, /harp and analog pads/);
@@ -111,9 +113,9 @@ test('a selected short recipe does not acquire unrelated playbook tags', async (
   assert.doesNotMatch(input.style, /full-band production/);
 });
 
-test('the complete incident-style prompt sends 195 seconds with full lyrics and its persona', async () => {
+test('the incident-style prompt stays untimed with full lyrics and its persona', async () => {
   const { input } = await submit();
-  assert.equal(input.duration, 195);
+  assert.equal(Object.hasOwn(input, 'duration'), false);
   assert.doesNotMatch(input.style, /0:28|28-second|abrupt finish/i);
 });
 
@@ -126,15 +128,22 @@ test('explicit short-form flags and menus still send 28 seconds', async () => {
   }
 });
 
-test('explicit full-song and short durations survive the final provider payload', async () => {
-  for (const [metadata, seconds, mode] of [
-    [{ durationSeconds: 210 }, 210, 'full-song'],
-    [{ duration: '3:30' }, 210, 'full-song'],
-    [{ durationSeconds: 30 }, 30, 'short-form'],
-  ]) {
-    const { input, result } = await submit({ metadata });
+test('saved duration metadata cannot impose a cutoff or turn an ordinary studio song into a sample', async () => {
+  for (const sourceMenu of [...studioMenus, 'audio', 'audio-forge']) {
+    for (const metadata of [{ durationSeconds: 210 }, { duration: '3:30' }, { durationSeconds: 30 }]) {
+      const { input, result } = await submit({ sourceMenu, metadata });
+      assert.equal(Object.hasOwn(input, 'duration'), false);
+      assert.equal(result.durationMode, 'full-song');
+      assert.equal(result.durationSource, 'studio-natural');
+    }
+  }
+});
+
+test('dedicated voice previews preserve their timed contract', async () => {
+  for (const seconds of [30, 40, 45]) {
+    const { input, result } = await submit({ sourceMenu: 'voice-discovery-design', metadata: { durationSeconds: seconds } });
     assert.equal(input.duration, seconds);
-    assert.equal(result.durationMode, mode);
+    assert.equal(result.durationMode, 'short-form');
     assert.equal(result.durationSource, 'explicit-duration');
     assert.doesNotMatch(input.style, /0:28|28-second|abrupt finish/i);
   }
@@ -147,22 +156,30 @@ test('valid explicit duration takes precedence over an explicit short-form reque
   assert.equal(result.durationSource, 'explicit-duration');
 });
 
-test('long style prompts retain the requested duration and full-song instruction within the provider limit', async () => {
+test('long style prompts retain natural ending instructions inside the provider limit', async () => {
   const { input } = await submit({
     metadata: { durationSeconds: 210 },
     stylePrompt: `Female vocals, short syncopated guitar notes, ${'warm analog bass and detailed percussion, '.repeat(70)}`,
   });
-  assert.equal(input.duration, 210);
+  assert.equal(Object.hasOwn(input, 'duration'), false);
   assert.ok(input.style.length <= 1000);
-  assert.match(input.style, /^Target duration 210 seconds \(3:30\);/);
-  assert.match(input.style, /complete full-length song; perform all supplied lyric sections/);
+  assert.match(input.style, /^Complete full-length song;/);
+  assert.match(input.style, /complete full-length song; perform all supplied lyric sections/i);
   assert.doesNotMatch(input.style, /0:28|28-second|abrupt finish/i);
 });
 
 test('invalid durations and non-boolean short-form flags cannot shrink a normal studio song', async () => {
   for (const metadata of [{ durationSeconds: 0 }, { durationSeconds: -1 }, { durationSeconds: 361 }, { duration: 'invalid' }]) {
     const { input, result } = await submit({ metadata, isViral: 'true', isViralTrack: 'false' });
-    assert.equal(input.duration, 195);
-    assert.equal(result.durationSource, 'studio-default');
+    assert.equal(Object.hasOwn(input, 'duration'), false);
+    assert.equal(result.durationSource, 'studio-natural');
   }
+});
+
+test('old clock directions are removed without altering tempo or vintage era markers', async () => {
+  const { input } = await submit({ stylePrompt: '1950s soul, 195 BPM, target duration 195 seconds (3:15), fade out at 3:15, warm bass', metadata: { durationSeconds: 195 } });
+  assert.doesNotMatch(input.style, /195 seconds|3:15|target duration|fade out at/i);
+  assert.match(input.style, /1950s soul, 195 BPM/);
+  assert.match(input.style, /warm bass/);
+  assert.equal(removeClockDurationInstructions('[Target Duration: 3:30, Complete Instrumental] [Main Theme]'), '[Main Theme]');
 });

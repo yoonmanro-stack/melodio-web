@@ -96,6 +96,17 @@ test('model limits do not silently truncate vocal lyrics', () => {
   assert.equal(body.input.title.length, 80);
 });
 
+test('natural full songs omit duration despite old metadata and retain voice persona and complete lyrics', () => {
+  for (const instrumental of [false, true]) {
+    const input = buildKieSunoRequest({ style: 'Organic complete composition', lyrics: '[Verse]\nAn original complete lyric',
+      instrumental, naturalFullSong: true, durationSeconds: 195, personaId: 'offline_artist_123', vocalGender: 'm' }).input;
+    assert.equal(Object.hasOwn(input, 'duration'), false);
+    assert.equal(input.custom_mode, true);
+    assert.equal(input.prompt, '[Verse]\nAn original complete lyric');
+    assert.equal(input.persona_id, instrumental ? undefined : 'offline_artist_123');
+  }
+});
+
 test('durations respect the 10–360 second bounds and do not default to a 20 second sketch', () => {
   assert.equal(resolveDurationSeconds('3:30'), 210);
   assert.equal(resolveDurationSeconds(360), 360);
