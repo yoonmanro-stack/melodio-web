@@ -4,6 +4,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ArtistChecks, ArtistInput, ArtistPortrait, ArtistProfile } from './types'
 import { resolveArtistVoice } from './voice-reference'
 import { prepareArtistPortrait } from './portrait-preparation'
+import { MAX_ARTIST_PORTRAIT_BYTES, MAX_ARTIST_PORTRAIT_TRANSFER_BYTES } from './portrait-policy'
+export { MAX_ARTIST_PORTRAIT_BYTES } from './portrait-policy'
 
 export type ArtistStorageClient = Pick<SupabaseClient, 'storage'>
 type ArtistRecord = ArtistProfile & { signature: string }
@@ -18,7 +20,6 @@ const MAX_CHAIN_READ = 128
 const MAX_ACTIVE_ARTISTS = 30
 const MAX_LIST_RECORDS = 100
 const MAX_RECORD_BYTES = 32 * 1024
-export const MAX_ARTIST_PORTRAIT_BYTES = 4 * 1024 * 1024
 const EXTENSIONS = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' } as const
 const TEXT_LIMITS = { name: 80, tagline: 160, description: 1200, personality: 2000, backstory: 2000, speakingStyle: 800, visualDirection: 2000 } as const
 
@@ -311,7 +312,7 @@ export function artistPortraitMime(bytes: Uint8Array): ArtistPortrait['mimeType'
 
 export async function storeArtistPortrait(admin: ArtistStorageClient, userId: string, file: { size: number; type: string; name: string; arrayBuffer(): Promise<ArrayBuffer> }): Promise<ArtistPortrait> {
   const owner = uuid(userId)
-  if (!Number.isSafeInteger(file.size) || file.size <= 0 || file.size > MAX_ARTIST_PORTRAIT_BYTES) throw new Error('invalid_portrait_file')
+  if (!Number.isSafeInteger(file.size) || file.size <= 0 || file.size > MAX_ARTIST_PORTRAIT_TRANSFER_BYTES) throw new Error('invalid_portrait_file')
   const uploaded = Buffer.from(await file.arrayBuffer())
   if (uploaded.length !== file.size) throw new Error('invalid_portrait_file')
   if (file.type !== artistPortraitMime(uploaded)) throw new Error('invalid_portrait_file')

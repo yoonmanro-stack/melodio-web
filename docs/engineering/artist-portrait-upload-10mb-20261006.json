@@ -1,0 +1,11 @@
+{
+  "objective": "Accept up to 10 MiB JPEG, PNG, WebP source portraits in the incubator",
+  "sourceLimitBytes": 10485760,
+  "transferLimitBytes": 4194304,
+  "storedLimitBytes": 4194304,
+  "implementation": "For sources above 4 MiB, validate encoded dimensions and static format, apply EXIF orientation, centre-crop to 1024 square and encode JPEG at 96% before the existing authenticated multipart endpoint. Server still independently normalizes, checks artwork quality and signs private portraits. Small sources keep the previous path.",
+  "sourceChecks": "512..8192 px per side, up to 32 Mi pixels, no animated PNG or WebP",
+  "serverRequestLimitSource": "https://vercel.com/docs/functions/limitations",
+  "userDataMutations": 0,
+  "generationCalls": 0
+}

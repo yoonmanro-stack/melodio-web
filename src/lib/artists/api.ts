@@ -2,6 +2,7 @@ import 'server-only'
 import { NextResponse } from 'next/server'
 import { createClient as createSupabaseClient, type SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@/lib/supabase/server'
+import { ARTIST_PORTRAIT_FILE_ERROR, MAX_ARTIST_PORTRAIT_TRANSFER_BYTES } from './portrait-policy'
 
 const NO_STORE = { 'Cache-Control': 'private, no-store', Vary: 'Cookie' }
 const MAX_JSON_BYTES = 32 * 1024
@@ -71,7 +72,7 @@ export async function artistReadJson(request: Request): Promise<Record<string, u
 export async function artistReadPortraitForm(request: Request): Promise<FormData> {
   const contentType = request.headers.get('content-type') || ''
   if (!/^multipart\/form-data\s*;/i.test(contentType)) throw new Error('invalid_request')
-  const bytes = await boundedBody(request, 4 * 1024 * 1024 + 64 * 1024)
+  const bytes = await boundedBody(request, MAX_ARTIST_PORTRAIT_TRANSFER_BYTES + 64 * 1024)
   try { return await new Response(bytes as BodyInit, { headers: { 'Content-Type': contentType } }).formData() }
   catch { throw new Error('invalid_portrait_file') }
 }
@@ -86,7 +87,7 @@ export function artistJsonError(error: unknown) {
     authentication_required: { status: 401, error: '로그인이 필요합니다.' },
     invalid_request: { status: 400, error: '아티스트 입력 내용을 확인해 주세요.' },
     artist_request_too_large: { status: 413, error: '요청 크기가 저장 한도를 초과했습니다.' },
-    invalid_portrait_file: { status: 400, error: '4MB 이하의 JPEG, PNG, WebP 이미지 파일을 선택해 주세요.' },
+    invalid_portrait_file: { status: 400, error: ARTIST_PORTRAIT_FILE_ERROR },
     artist_portrait_dimensions: { status: 400, error: '가로·세로가 각각 512px 이상인 사진을 선택해 주세요. 1024px 이상의 선명한 사진을 권장합니다.' },
     artist_portrait_framing: { status: 400, error: '액자나 검은 띠가 없는 인물 사진을 선택해 주세요. 사진 자체가 곡 커버로 사용됩니다.' },
     artist_not_found: { status: 404, error: '아티스트를 찾을 수 없습니다.' },

@@ -38,7 +38,9 @@ const resolver = load('src/lib/artists/voice-reference.ts', {
   '@/lib/voice/custom-voice-integrity': integrity,
 });
 const preparedPortraitBytes = Buffer.from([255, 216, 255, 224, 0, 16, 74, 70, 73, 70, 0, 1, 1, 0, 255, 217]);
+const portraitPolicy = load('src/lib/artists/portrait-policy.ts');
 const repository = load('src/lib/artists/repository.ts', {
+  './portrait-policy': portraitPolicy,
   './voice-reference': resolver,
   './portrait-preparation': { async prepareArtistPortrait() { return Buffer.from(preparedPortraitBytes); } },
 });
@@ -364,6 +366,7 @@ test('storage errors never masquerade as missing profiles or successful saves', 
 });
 
 const api = load('src/lib/artists/api.ts', {
+  './portrait-policy': portraitPolicy,
   'next/server': { NextResponse: { json(value, options) { return Response.json(value, options); } } },
   '@supabase/supabase-js': { createClient() { throw new Error('Unexpected admin call'); } },
   '@/lib/supabase/server': { async createClient() { return { auth: { async getUser() { return { data: { user: null }, error: null }; } } }; } },

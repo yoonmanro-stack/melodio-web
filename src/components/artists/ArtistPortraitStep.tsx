@@ -29,7 +29,7 @@ export function ArtistPortraitStep({ form, onChange, onUpload, uploading }: {
           {uploading ? <Loader2 size={17} className="animate-spin" /> : <ImagePlus size={17} />}{uploading ? '사진을 업로드하는 중…' : form.portrait ? '참조 사진 바꾸기' : '참조 사진 업로드'}
           <input type="file" accept="image/jpeg,image/png,image/webp" disabled={uploading} className="sr-only" onChange={event => { const file = event.target.files?.[0]; event.target.value = ''; if (file) void onUpload(file) }} />
         </label>
-        <p className="mt-2 text-xs text-zinc-500">JPEG · PNG · WebP, 최대 4MB</p>
+        <p className="mt-2 text-xs text-zinc-500">JPEG · PNG · WebP, 최대 10MB</p>
         <p className="mt-3 text-xs leading-relaxed text-zinc-400">업로드 후 정사각형으로 중앙 크롭됩니다. 표시된 사진에서 얼굴이 잘리지 않았는지 확인한 뒤 승인하세요.</p>
         {form.portrait && <><p className="mt-3 break-words text-xs text-zinc-400">업로드한 사진 · {form.portrait.fileName}</p><button type="button" onClick={() => onChange({ portrait: null }, 'portrait')} className="mt-2 self-start text-xs text-zinc-500 hover:text-rose-300">프로필에서 사진 연결 해제</button></>}
         {imageFailed && <p role="alert" className="mt-3 text-xs text-rose-300">참조 사진을 불러오지 못했습니다. 저장된 내용을 다시 불러오거나 사진을 다시 업로드해 주세요.</p>}

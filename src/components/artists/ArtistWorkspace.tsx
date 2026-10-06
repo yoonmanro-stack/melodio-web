@@ -12,6 +12,7 @@ import type { ArtistInput, ArtistPortrait, ArtistProfile } from '@/lib/artists/t
 import { ArtistProfileFields } from './ArtistProfileFields'
 import { ArtistVoiceStep } from './ArtistVoiceStep'
 import { ArtistPortraitStep } from './ArtistPortraitStep'
+import { prepareArtistPortraitUpload } from '@/lib/artists/portrait-upload'
 import { artistInput, artistResponse, artistToDraft, artistVoiceChoice, newArtistDraft, readyRequirements, VOICE_KIND_LABELS, type ArtistDraft } from './artist-form'
 
 const STEPS = [
@@ -159,16 +160,17 @@ function ArtistIncubator({ initialArtistId, initialStep, user, authLoading }: { 
 
   async function uploadPortrait(file: File) {
     if (requestBusy.current || archived || !user) return
-    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size <= 0 || file.size > 4 * 1024 * 1024) { setError('JPEG, PNG, WebP 사진을 최대 4MB까지 업로드할 수 있습니다.'); return }
     requestBusy.current = true; setUploading(true); setError('')
     const uploadingUserId = user.id
     try {
-      const data = new FormData(); data.set('file', file)
+      const prepared = await prepareArtistPortraitUpload(file)
+      if (activeUser.current !== uploadingUserId) return
+      const data = new FormData(); data.set('file', prepared)
       const result = await artistResponse<{ portrait: ArtistPortrait }>(await fetch('/api/artists/portrait', { method: 'POST', body: data }))
       if (!result.portrait?.assetId) throw new Error('업로드한 사진을 확인하지 못했습니다.')
       if (activeUser.current !== uploadingUserId) return
       change({ portrait: result.portrait }, 'portrait'); setNotice('사진을 업로드했습니다. 프로필에 연결하려면 초안을 저장해 주세요.')
-    } catch (reason) { setError(reason instanceof Error ? reason.message : '사진을 업로드하지 못했습니다.') }
+    } catch (reason) { if (activeUser.current === uploadingUserId) setError(reason instanceof Error ? reason.message : '사진을 업로드하지 못했습니다.') }
     finally { requestBusy.current = false; setUploading(false) }
   }
 
