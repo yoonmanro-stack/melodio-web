@@ -1,0 +1,8 @@
+{
+  "objective": "Larger profile portraits and taller vertical singer cards in the incubator list",
+  "layout": "Desktop sidebar 300px; vertical cards with a full-width square portrait (~240px), name and two-line introduction below, status and version footer. Mobile uses one column, tablet two columns, desktop sidebar one column.",
+  "portraitFit": "object-contain preserves the complete approved square portrait",
+  "accessibility": "Singer name in button label, aria-pressed, selected check indicator and visible keyboard focus ring",
+  "scope": "Incubator list presentation only; no storage, portrait normalization, profile fields or persona behavior changes",
+  "newTests": "No new unit tests for cosmetic changes; isolated desktop and mobile browser visual QA"
+}
