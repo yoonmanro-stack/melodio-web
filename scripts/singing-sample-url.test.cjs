@@ -36,13 +36,14 @@ test('actual discovery, official and generated sample URLs are preserved', () =>
   assert.equal(sampleUrl(`  ${actual}  `), actual);
 });
 
-test('legacy defaults retain their authored settings and only Moe gains an approved singing preview', () => {
+test('legacy defaults retain authored settings with linked singing previews', () => {
   const official = JSON.parse(fs.readFileSync('src/data/officialVocalCatalog.json', 'utf8'));
-  const { INITIAL_SYSTEM_VOICES: voices } = load('src/data/vocalStyles.ts', { './officialVocalCatalog.json': { default: official } });
+  const { INITIAL_SYSTEM_VOICES: voices } = load('src/data/vocalStyles.ts', { './officialVocalCatalog.json': { default: official }, './legacyVocalSamples.json': { default: require('../src/data/legacyVocalSamples.json') } });
   for (const id of ['voice-anna-kim', 'voice-kaelen-soul', 'voice-moe-jpop', 'voice-yeontaek-rock', 'voice-aria-soprano']) {
     const voice = voices.find(item => item.id === id);
     assert.ok(voice?.stylePrompt && voice.tags.length && voice.sourceType === 'default');
-    if (id !== 'voice-moe-jpop') assert.equal(voice.audioUrl, undefined);
+    assert.ok(sampleUrl(voice.audioUrl));
+    assert.equal(voice.sampleDurationSeconds, 30);
   }
   const moe = voices.find(voice => voice.id === 'voice-moe-jpop');
   assert.equal(moe.audioUrl, '/assets/voices/approved-20261006/voice-moe-jpop-A.mp3');

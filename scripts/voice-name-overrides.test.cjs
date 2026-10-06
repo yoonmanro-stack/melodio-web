@@ -101,8 +101,8 @@ test('old stored Moe default reloads the new canonical singing preview while kee
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   new Function('require', 'exports', code)(name => {
-    assert.equal(name, './officialVocalCatalog.json');
-    return { default: JSON.parse(fs.readFileSync('src/data/officialVocalCatalog.json', 'utf8')) };
+    assert.ok(['./officialVocalCatalog.json', './legacyVocalSamples.json'].includes(name));
+    return { default: JSON.parse(fs.readFileSync('src/data/' + name.slice(2), 'utf8')) };
   }, exports);
   const moe = exports.INITIAL_SYSTEM_VOICES.find(voice => voice.id === 'voice-moe-jpop');
   const storage = new Map([

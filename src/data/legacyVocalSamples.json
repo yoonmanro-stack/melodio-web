@@ -1,0 +1,51 @@
+{
+  "voice-anna-kim": {
+    "audioUrl": "/assets/voices/missing-20261006/voice-anna-kim-A.mp3",
+    "language": "Korean",
+    "previewStartSeconds": 0,
+    "sampleDurationSeconds": 30,
+    "previewStatus": "ready"
+  },
+  "voice-kaelen-soul": {
+    "audioUrl": "/assets/voices/missing-20261006/voice-kaelen-soul-A.mp3",
+    "language": "English",
+    "previewStartSeconds": 0,
+    "sampleDurationSeconds": 30,
+    "previewStatus": "ready"
+  },
+  "voice-yeontaek-rock": {
+    "audioUrl": "/assets/voices/missing-20261006/voice-yeontaek-rock-A.mp3",
+    "language": "Korean",
+    "previewStartSeconds": 0,
+    "sampleDurationSeconds": 30,
+    "previewStatus": "ready"
+  },
+  "voice-aria-soprano": {
+    "audioUrl": "/assets/voices/missing-20261006/voice-aria-soprano-A.mp3",
+    "language": "English",
+    "previewStartSeconds": 0,
+    "sampleDurationSeconds": 30,
+    "previewStatus": "ready"
+  },
+  "voice-noa-indigo": {
+    "audioUrl": "/assets/voices/missing-20261006/voice-noa-indigo-A.mp3",
+    "language": "Korean",
+    "previewStartSeconds": 0,
+    "sampleDurationSeconds": 30,
+    "previewStatus": "ready"
+  },
+  "voice-leon-silk": {
+    "audioUrl": "/assets/voices/missing-20261006/voice-leon-silk-A.mp3",
+    "language": "Korean",
+    "previewStartSeconds": 0,
+    "sampleDurationSeconds": 30,
+    "previewStatus": "ready"
+  },
+  "voice-rin-edge": {
+    "audioUrl": "/assets/voices/missing-20261006/voice-rin-edge-A.mp3",
+    "language": "Korean",
+    "previewStartSeconds": 0,
+    "sampleDurationSeconds": 30,
+    "previewStatus": "ready"
+  }
+}

@@ -1,8 +1,9 @@
 import type { VoiceItem } from "@/contexts/VoiceContext"
 import officialCatalog from "./officialVocalCatalog.json"
+import legacySamples from "./legacyVocalSamples.json"
 
 // Authored style catalog v2. Samples are references, not identity guarantees.
-export const INITIAL_SYSTEM_VOICES: VoiceItem[] = [
+const AUTHORED_SYSTEM_VOICES: VoiceItem[] = [
   ...(officialCatalog as VoiceItem[]),
   {
     id: "voice-anna-kim",
@@ -84,3 +85,8 @@ export const INITIAL_SYSTEM_VOICES: VoiceItem[] = [
     { id: 'voice-rin-edge', name: 'Rin', gender: 'female' as const, desc: '선명한 앞쪽 공명과 짧은 어택, 귀에 남는 훅 중심 보컬', tags: ['선명한 공명', '탄력 있는 발음', '팝'], stylePrompt: 'female vocals, bright forward middle register, slight nasal edge balanced by an open vowel core, crisp short attacks, elastic rhythmic diction, memorable straight-tone hooks, energetic chorus without shrillness' },
   ].map(v => ({ ...v, sourceType: 'default' as const, createdAt: '2026-10-03T00:00:00Z', category: 'Singing/Music', isFavorite: false })),
 ];
+
+export const INITIAL_SYSTEM_VOICES: VoiceItem[] = AUTHORED_SYSTEM_VOICES.map(voice => {
+  const sample = (legacySamples as Record<string, Partial<VoiceItem>>)[voice.id]
+  return sample ? { ...voice, ...sample } : voice
+});

@@ -86,7 +86,7 @@ test('single full-song success uses one fixed Sol request and preserves structur
   assert.deepEqual(JSON.parse(JSON.stringify(result.modelUsage)), { requestedModel: MODEL, actualModel: MODEL, reasoningEffort: 'high', inputTokens: 1200, outputTokens: 800, reasoningTokens: 500 });
 });
 
-test('ordinary songs restore the established backend six-section form without clock controls or new density budgets', async () => {
+test('ordinary songs retain the established six-section form while developing both verses through six lines', async () => {
   const { generateLyrics } = loadLyrics();
   // The verified pre-regression backend reference; requests are still entirely mocked.
   const legacy = loadLyrics(execFileSync('git', ['show', 'a8b61c2:src/lib/engines/lyrics-generator.ts'], {
@@ -99,15 +99,18 @@ test('ordinary songs restore the established backend six-section form without cl
   const legacyTypes = types(legacyPrompt);
   assert.deepEqual(legacyTypes, ['intro', 'verse', 'chorus', 'verse', 'chorus', 'outro']);
   assert.match(legacyPrompt, /Do NOT add Bridge or 3rd Chorus/);
-  for (const durationSeconds of [undefined, 120, 180, 195, 210, 360]) {
+  for (const durationSeconds of [undefined, 61, 120, 180, 195, 210, 360]) {
     const fixture = responder();
     await generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds }, fixture.dependencies);
     const prompt = fixture.calls[0].body.messages[0].content;
     assert.deepEqual(types(prompt), legacyTypes);
-    assert.equal([...prompt.matchAll(/^[2-5]\. .* - 4 lines/gm)].length, 4);
+    assert.equal([...prompt.matchAll(/^[24]\. Verse [12] \(type: "verse"\) - 6 coherent sung lines/gm)].length, 2);
+    assert.equal([...prompt.matchAll(/^[35]\. Chorus \(type: "chorus"\) - 4 lines/gm)].length, 2);
     assert.match(prompt, /Use two distinct verses and two chorus appearances/);
     assert.match(prompt, /Do NOT add a Pre-chorus, Bridge, third Chorus/);
     assert.match(prompt, /Keep Intro and Outro short/);
+    assert.match(prompt, /Give each verse a beginning and development that advances the song's story/);
+    assert.match(prompt, /meaningful detail rather than repeating the chorus or padding phrases/);
     assert.match(prompt, /Finish the final sung phrase and resolve the music with a natural cadence/);
     assert.match(prompt, /not a reason to truncate requested lyric phrases or returned lyrics/);
     assert.doesNotMatch(prompt, /CRITICAL DURATION|TARGET:.*SECONDS|\b\d+:\d{2}\b|Total lyrics:|FLEXIBLE LYRIC DENSITY|6–8 sections|24–32|20–28|Hangul syllable blocks|written lyric characters|160–220 sung words/);
@@ -117,7 +120,7 @@ test('ordinary songs restore the established backend six-section form without cl
     verifyFixedSol(fixture.calls[0]);
   }
 });
-test('single songs and playlists use the same backend structure for Korean, English, Japanese and French', async () => {
+test('single songs and playlists develop both verses through six lines in Korean, English, Japanese and French', async () => {
   const { generateLyrics } = loadLyrics();
   const languages = [
     ['ko', 'Korean'], ['en', 'English'], ['ja', 'Japanese'], ['fr', 'French'],
@@ -132,6 +135,12 @@ test('single songs and playlists use the same backend structure for Korean, Engl
       assert.ok(core);
       if (sharedCore === undefined) sharedCore = core;
       assert.equal(core, sharedCore);
+      assert.deepEqual([...core.matchAll(/^[1-6]\. .*\(type: "([^"]+)"\)/gm)].map(match => match[1]),
+        ['intro', 'verse', 'chorus', 'verse', 'chorus', 'outro']);
+      assert.equal([...core.matchAll(/^[24]\. Verse [12] \(type: "verse"\) - 6 coherent sung lines/gm)].length, 2);
+      assert.equal([...core.matchAll(/^[35]\. Chorus \(type: "chorus"\) - 4 lines/gm)].length, 2);
+      assert.equal([...core.matchAll(/^[16]\. .* - brief instrumental (?:opening|resolution) or 1-2 short sung lines/gm)].length, 2);
+      assert.match(core, /not a reason to truncate requested lyric phrases or returned lyrics/);
       assert.match(prompt, new RegExp(`requested language style: "${label}"`));
       assert.doesNotMatch(prompt, /FLEXIBLE LYRIC DENSITY|24–32|20–28|6–8 sections|Total lyrics:|\b\d+:\d{2}\b/);
       if (isPlaylistMode) assert.match(prompt, /For each track, generate Intro, Verse 1, Chorus, Verse 2, Chorus, Outro sections/);
@@ -140,12 +149,12 @@ test('single songs and playlists use the same backend structure for Korean, Engl
     }
   }
 });
-test('restoring ordinary structure leaves every dedicated short-form directive identical to the original backend', async () => {
+test('developing ordinary verses leaves every dedicated short-form directive identical to the original backend', async () => {
   const { generateLyrics } = loadLyrics();
   const legacy = loadLyrics(execFileSync('git', ['show', 'a8b61c2:src/lib/engines/lyrics-generator.ts'], {
     cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024,
   }));
-  for (const durationSeconds of [15, 30, 45, 60]) {
+  for (const durationSeconds of [10, 15, 16, 30, 31, 45, 60]) {
     const old = responder(), current = responder();
     await legacy.generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds }, old.dependencies);
     await generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds }, current.dependencies);
