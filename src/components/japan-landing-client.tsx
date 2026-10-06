@@ -160,7 +160,7 @@ const JP_PRESET_IMAGES = [
   "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png"
 ];
 
-const JAPAN_PRESETS_PER_PAGE = 14;
+const JAPAN_PRESETS_PER_PAGE = 18;
 
 export const jpPresets = [
   {
@@ -1821,10 +1821,10 @@ export default function JapanLandingClient() {
         </header>
 
         {/* 메인 생성기 워크스페이스 그리드 */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start lg:items-stretch">
           
           {/* 좌측: 프리셋 리스트 셀렉터 (6 cols) */}
-          <div className="lg:col-span-6 space-y-4">
+          <div data-japan-preset-column className="lg:col-span-6 flex min-w-0 flex-col gap-4">
             <h2 className="text-xs font-bold text-melodio-muted uppercase tracking-widest pl-1">
               🌸 1단계: 프리셋 감성 테마 선택
             </h2>
@@ -1901,8 +1901,8 @@ export default function JapanLandingClient() {
               </div>
             </div>
 
-            {/* 데스크톱 2열 × 7행, 페이지당 14개 */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* 데스크톱 2열 × 9행, 페이지당 18개 */}
+            <div data-japan-preset-grid className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {visibleJpPresets.map((preset) => {
                 const isSelected = selectedPresetId === preset.id;
                 const cardImage = (preset.metadata as any)?.cardImage || (preset.metadata as any)?.thumbnail_url || (preset as any).cardImage || (preset as any).thumbnailUrl || (preset as any).thumbnail_url;
@@ -2035,7 +2035,7 @@ export default function JapanLandingClient() {
               })}
             </div>
 
-            {/* Pagination Controls - 페이지당 14개 */}
+            {/* Pagination Controls - 페이지당 18개 */}
             {filteredJpPresets.length > 0 && (
               <div className="flex items-center justify-center gap-1.5 pt-2">
                 <button
@@ -2072,7 +2072,7 @@ export default function JapanLandingClient() {
             )}
 
             {/* 일본 시장 가이드보드 */}
-            <div className="bg-zinc-900/30 border border-white/5 rounded-2xl p-5 space-y-3">
+            <div className="bg-zinc-900/30 border border-white/5 rounded-2xl p-5 space-y-3 lg:mt-auto">
               <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-wider flex items-center gap-2">
                 💡 일본 BGM 채널 특화 가이드
               </h3>
@@ -2084,7 +2084,7 @@ export default function JapanLandingClient() {
           </div>
 
           {/* 우측: 실제 음악 생성 컨트롤 패널 (6 cols) */}
-          <div className="lg:col-span-6 space-y-4">
+          <div data-japan-generation-column className="lg:col-span-6 flex min-w-0 flex-col gap-4">
             <h2 className="text-xs font-bold text-melodio-muted uppercase tracking-widest pl-1">
               🛠️ 2단계: AI 일본어 가사 및 음원 생성 제어
             </h2>
@@ -2175,6 +2175,7 @@ export default function JapanLandingClient() {
 
             <StudioArtistPicker state={artistState} />
 
+            <div data-japan-generation-output className="lg:flex lg:flex-1 lg:flex-col lg:[&>div]:static lg:[&>div]:flex-1">
             <PromptOutput
               payload={payload}
               stylePrompt={styleTags}
@@ -2200,6 +2201,7 @@ export default function JapanLandingClient() {
               onAsmrToggle={setIsAsmrEnabled}
               ambientFoley={ambientFoley}
               lyricsBuilderNode={
+                <div data-japan-lyrics-area className="lg:flex lg:flex-1 lg:flex-col lg:[&>div]:flex-1">
                 <LyricsBuilder
                   artistVoice={artistState.artistVoice}
                   artistSelectionError={artistState.getError(artistSettings)}
@@ -2240,8 +2242,10 @@ export default function JapanLandingClient() {
                   presetId={selectedPresetId}
                   isJapanCampaign={true}
                 />
+                </div>
               }
             />
+            </div>
           </div>
 
         </div>
