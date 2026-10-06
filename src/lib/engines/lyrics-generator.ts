@@ -64,14 +64,15 @@ const NATURAL_SONG_STRUCTURE = `
 ## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT
 Compose a complete song using the established six-section backend structure in this order:
 1. Intro (type: "intro") - brief instrumental opening or 1-2 short sung lines
-2. Verse 1 (type: "verse") - 6 coherent sung lines of distinctive scene-setting lyrics
+2. Verse 1 (type: "verse") - 5 coherent sung lines of distinctive scene-setting lyrics
 3. Chorus (type: "chorus") - 4 lines with the main singable hook
-4. Verse 2 (type: "verse") - 6 coherent sung lines that develop a distinct second scene or perspective
+4. Verse 2 (type: "verse") - 5 coherent sung lines that develop a distinct second scene or perspective
 5. Chorus (type: "chorus") - 4 lines returning to the main hook
 6. Outro (type: "outro") - brief instrumental resolution or 1-2 short sung lines
 
 - Use two distinct verses and two chorus appearances. Do NOT add a Pre-chorus, Bridge, third Chorus, or extra ending cycle.
-- Give each verse a beginning and development that advances the song's story; use the added verse lines for meaningful detail rather than repeating the chorus or padding phrases.
+- Give each verse a beginning and development that advances the song's story; use the verse lines for meaningful detail rather than repeating the chorus or padding phrases.
+- Preserve the emotional progression, concrete imagery, memorable hook, and comfortable vocal phrasing; use concise complete lyric thoughts rather than rushed delivery, generic filler, or omitted story development.
 - Keep Intro and Outro short. Finish the final sung phrase and resolve the music with a natural cadence; instrumental sections with no sung words have empty content.
 - The per-section line guidance shapes composition, not a reason to truncate requested lyric phrases or returned lyrics. Preserve complete thoughts and the requested musical and vocal expression.
 - Let the complete song finish naturally. Do not impose a clock duration, forced cutoff, or timed fade-out.
