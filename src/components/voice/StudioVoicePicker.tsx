@@ -94,7 +94,7 @@ export function StudioVoicePicker({ language }: { language?: string }) {
             </> : <p className="text-zinc-400">목록에서 보컬을 선택해 특징과 샘플을 확인하세요.</p>}
           </aside>
         </div>
-        <footer className="flex items-center justify-between gap-3 border-t border-white/10 p-4">
+        <footer className="flex items-center justify-end gap-3 border-t border-white/10 p-4">
           <button type="button" onClick={() => { setActiveVoice(null); close() }} className="rounded-xl bg-white/5 px-4 py-3 text-sm">기본 음색 사용</button>
           <button type="button" disabled={!candidate || (!!candidate.discoveryVoiceId && (candidate.previewStatus !== 'ready' || candidate.reuseStatus !== 'ready'))} onClick={() => { if (candidate) setActiveVoice(candidate); close() }} className="rounded-xl bg-cyan-500 px-5 py-3 text-sm font-bold text-black disabled:opacity-40">이 목소리 적용</button>
         </footer>
