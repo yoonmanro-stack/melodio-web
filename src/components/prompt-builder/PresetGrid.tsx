@@ -5,6 +5,7 @@ import type { Preset } from '@/types'
 import { presets } from '@/data/presets'
 import { useLanguage } from '@/contexts/LanguageContext'
 import { canonicalPresetId, getPresetCategory, getPresetGenreLabel, mergePublicPresetCatalog } from '@/lib/preset-catalog'
+import { localizePresetForDisplay } from '@/lib/preset-localization'
 import { getPresetThumbnail, getPresetUsageCount } from '@/lib/preset-thumbnail'
 import { PresetSampleButton, PresetSamplePlayer, usePresetSamples } from '@/components/presets/PresetSamples'
 import { Trash2, Pencil, ChevronLeft, ChevronRight, Search, Heart, Calendar, Headphones, Maximize2, X } from 'lucide-react'
@@ -65,15 +66,6 @@ function subscribeToLikedPresets(onChange: () => void) {
 
 const emptyLikedPresetsSnapshot = () => '[]'
 
-function translatePreset(preset: Preset, language: string): Preset {
-  const metadata = preset.metadata ?? {}
-  const localizedText = (field: 'name' | 'desc') => {
-    const candidates = [metadata[`${field}_${language}`], preset[`${field}_${language}`], metadata[`${field}_en`], preset[`${field}_en`], preset[field]]
-    return candidates.find((value): value is string => typeof value === 'string' && value.trim().length > 0) ?? preset[field]
-  }
-  return { ...preset, name: localizedText('name'), desc: localizedText('desc') }
-}
-
 function PresetArtwork({ preset, source }: { preset: Preset; source: string | null }) {
   const [failed, setFailed] = useState(false)
   if (source && !failed) {
@@ -130,21 +122,21 @@ export default function PresetGrid({
   }
 
   const safeDbPresets = (dbPresets || []).filter(p => p && p.id);
-  // Apply catalog repairs before translating; personal presets retain their own records.
-  const dbAndDefault = mergePublicPresetCatalog(safeDbPresets, presets).map(p => translatePreset(p, language))
-  const translatedCustomPresets = (customPresets || []).map(p => translatePreset(p, language))
+  // Keep source records for apply/edit; localization belongs only to presentation.
+  const dbAndDefault = mergePublicPresetCatalog(safeDbPresets, presets)
 
   // 통합 필터링 로직
   const filteredItems = [
-    ...translatedCustomPresets.map(p => ({ ...p, isCustom: true })),
+    ...(customPresets || []).map(p => ({ ...p, isCustom: true })),
     ...dbAndDefault.map(p => ({ ...p, isCustom: false }))
   ].filter(p => {
     // 1. 검색어 필터
     const query = searchQuery.trim().toLowerCase();
     if (query) {
+      const display = localizePresetForDisplay(p, language, { isCustom: p.isCustom })
       const matchSearch = 
-        (p.name || '').toLowerCase().includes(query) ||
-        (p.desc || '').toLowerCase().includes(query) ||
+        (display.name || '').toLowerCase().includes(query) ||
+        (display.desc || '').toLowerCase().includes(query) ||
         (p.customPrompt || '').toLowerCase().includes(query) ||
         getPresetGenreLabel(p).toLowerCase().includes(query);
       if (!matchSearch) return false;
@@ -286,6 +278,7 @@ export default function PresetGrid({
 
             const isCustom = item.type === 'custom'
             const preset = item.data!
+            const displayPreset = localizePresetForDisplay(preset, language, { isCustom })
             const updatedTime = Date.parse(preset.updated_at ?? '')
             const updateAge = referenceTime - updatedTime
             const recentlyUpdated = Number.isFinite(updatedTime) && updateAge >= 0 && updateAge < 24 * 60 * 60 * 1000
@@ -312,7 +305,7 @@ export default function PresetGrid({
                   onClick={() => onApply(preset)}
                   className="relative aspect-[16/9] w-full overflow-hidden bg-zinc-900 shrink-0 cursor-pointer border-b border-white/5"
                 >
-                  <PresetArtwork key={`${preset.id}:${thumbnailUrl ?? ''}`} preset={preset} source={thumbnailUrl} />
+                  <PresetArtwork key={`${preset.id}:${thumbnailUrl ?? ''}`} preset={displayPreset} source={thumbnailUrl} />
                   
                   {/* On Hover Info Overlay */}
                   <div className="absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-250 flex flex-col justify-between items-start p-4 z-10">
@@ -365,13 +358,13 @@ export default function PresetGrid({
                       <h4 
                         onClick={() => onEditPreset?.(preset)}
                         className="text-[12.5px] font-bold text-zinc-200 hover:text-fuchsia-400 truncate leading-tight cursor-pointer flex-1"
-                        title={preset.name}
+                        title={displayPreset.name}
                       >
-                        {preset.name}
+                        {displayPreset.name}
                       </h4>
                     </div>
                     <p className="text-[10px] text-zinc-500 leading-normal line-clamp-2 mt-1 font-sans">
-                      {preset.desc}
+                      {displayPreset.desc}
                     </p>
                   </div>
 

@@ -15,6 +15,8 @@ import { compileLyricsSections } from '@/lib/lyrics/compile-sections'
 import { useAuth } from '@/hooks/useAuth'
 import { useHistory } from '@/hooks/useHistory'
 import { useVoice } from '@/contexts/VoiceContext'
+import { useLanguage } from '@/contexts/LanguageContext'
+import { getPresetDisplayName } from '@/lib/preset-localization'
 import { studioVoiceFields as resolveStudioVoiceFields } from '@/lib/voice/studio-selection'
 import { StudioArtistPicker, useStudioArtist } from '@/components/artists/StudioArtistPicker'
 import { resolveArtistMusicStyle } from '@/lib/artists/studio-style'
@@ -112,6 +114,7 @@ export default function PromptBuilder({
   const [isVdDropdownOpen, setIsVdDropdownOpen] = useState(false)
 
   const { user } = useAuth()
+  const { language } = useLanguage()
   const { saveHistory } = useHistory()
   const { activeVoice, studioGender } = useVoice()
   const artistState = useStudioArtist({ userId: user?.id, initialArtistId: searchParams.get('artistId'), lyricsLanguage,
@@ -132,8 +135,11 @@ export default function PromptBuilder({
   const [editingPreset, setEditingPreset] = useState<Preset | null>(null)
   const [viralTrends, setViralTrends] = useState<{ spotify: any[], tiktok: any[] } | null>(null)
   const [selectedPresetId, setSelectedPresetId] = useState<string>('')
-  const [selectedPresetName, setSelectedPresetName] = useState<string>('')
+  const [selectedPresetAuthoredName, setSelectedPresetName] = useState<string>('')
   const selectedStudioPreset = findStudioPreset(selectedPresetId, customPresets, publicPresetCatalog)
+  const selectedPresetName = selectedStudioPreset
+    ? getPresetDisplayName(selectedStudioPreset, language, { isCustom: customPresets.some(preset => preset.id === selectedStudioPreset.id) })
+    : selectedPresetAuthoredName
   const [dynamicElements, setDynamicElements] = useState<any>(null)
   const [ambienceVolume, setAmbienceVolume] = useState<number>(20)
 
@@ -1108,6 +1114,7 @@ export default function PromptBuilder({
           onSave={handleSaveCustomPreset}
           currentStylePrompt={stylePrompt}
           editingPreset={editingPreset}
+          isCustomPreset={editingPreset ? customPresets.some(preset => preset.id === editingPreset.id) : undefined}
         />
         <ProPaywallModal
           isOpen={isProPaywallOpen}
@@ -1551,6 +1558,7 @@ export default function PromptBuilder({
       onSave={handleSaveCustomPreset}
       currentStylePrompt={stylePrompt}
       editingPreset={editingPreset}
+      isCustomPreset={editingPreset ? customPresets.some(preset => preset.id === editingPreset.id) : undefined}
     />
     <ProPaywallModal
       isOpen={isProPaywallOpen}

@@ -10,16 +10,19 @@ import { registerActiveAudio } from '@/lib/globalAudio'
 import { getAudioPlaybackError } from '@/lib/audio-playback'
 import styles from '@/components/voice/VoicePlaybackRange.module.css'
 import { voicePlaybackTrackStyle } from '@/components/voice/voice-playback-style'
+import { useLanguage } from '@/contexts/LanguageContext'
+import { getPresetDisplayName } from '@/lib/preset-localization'
 
 function clock(seconds: number) {
   const value = Number.isFinite(seconds) ? Math.max(0, Math.floor(seconds)) : 0
   return `${Math.floor(value / 60)}:${String(value % 60).padStart(2, '0')}`
 }
 
-type CurrentSample = { presetId: string; presetName: string; sample: PresetSample }
+type CurrentSample = { presetId: string; presetName: string; preset: Preset; sample: PresetSample }
 
 /** One lookup for the visible cards; one full-song player for the entire grid. */
 export function usePresetSamples(sourceMenu: 'japan' | 'preset-studio', presets: Preset[]) {
+  const { language } = useLanguage()
   const requestKey = JSON.stringify(presets.map(preset => ({ id: preset.id, isInstrumental: resolvePresetApplication(preset).isInstrumental })))
   const [lookup, setLookup] = useState<{ key: string; response: PresetSampleResponse | null; failed: boolean }>({ key: '', response: null, failed: false })
   const [current, setCurrent] = useState<CurrentSample | null>(null)
@@ -114,7 +117,7 @@ export function usePresetSamples(sourceMenu: 'japan' | 'preset-studio', presets:
     }
     attempt.current += 1
     element.pause()
-    const selected = { presetId: preset.id, presetName: preset.name, sample }
+    const selected = { presetId: preset.id, presetName: preset.name, preset, sample }
     active.current = selected
     setCurrent(selected); setPosition(0); setDuration(sample.duration || 0); setPlaying(false)
     element.src = sample.audioUrl
@@ -131,7 +134,9 @@ export function usePresetSamples(sourceMenu: 'japan' | 'preset-studio', presets:
     audio.current.currentTime = value
     setPosition(value)
   }
-  return { audio, current, playing, buffering, position, duration, volume, playbackError, sampleFor, statusFor, toggle, toggleCurrent, close, seek,
+  const displayCurrent = current && sourceMenu === 'preset-studio'
+    ? { ...current, presetName: getPresetDisplayName(current.preset, language) } : current
+  return { audio, current: displayCurrent, sourceMenu, language, playing, buffering, position, duration, volume, playbackError, sampleFor, statusFor, toggle, toggleCurrent, close, seek,
     setPlaying, setBuffering, setPosition, setDuration, setPlaybackError,
     changeVolume(value: number) { setVolume(value); if (audio.current) audio.current.volume = value },
   }
@@ -140,11 +145,12 @@ export function usePresetSamples(sourceMenu: 'japan' | 'preset-studio', presets:
 type Controller = ReturnType<typeof usePresetSamples>
 
 export function PresetSampleButton({ preset, controller }: { preset: Preset; controller: Controller }) {
+  const displayName = controller.sourceMenu === 'preset-studio' ? getPresetDisplayName(preset, controller.language) : preset.name
   const status = controller.statusFor(preset.id)
   const selected = controller.current?.presetId === preset.id && controller.current.sample.id === controller.sampleFor(preset.id)?.id
   const label = status === 'loading' ? '샘플 확인 중' : status === 'error' ? '샘플 연결 확인 필요' : status === 'missing' ? '샘플 준비 중' : selected && controller.playing ? '샘플 일시 정지' : '샘플 듣기'
   if (status !== 'ready') return <span className="pointer-events-none absolute bottom-2 left-2 z-20 rounded-md bg-black/70 px-2 py-1 text-[10px] text-zinc-300" aria-live="polite">{label}</span>
-  return <button type="button" aria-label={`${preset.name} ${label}`} aria-pressed={selected && controller.playing} title="이 프리셋으로 만든 최신 공개곡 전체 듣기" onClick={event => { event.stopPropagation(); controller.toggle(preset) }} className={`absolute left-1/2 top-1/2 z-20 flex min-h-11 -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-white/30 bg-zinc-950/80 px-4 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm transition-opacity focus-visible:outline-2 focus-visible:outline-white [@media(hover:none)]:opacity-100 ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}>
+  return <button type="button" aria-label={`${displayName} ${label}`} aria-pressed={selected && controller.playing} title="이 프리셋으로 만든 최신 공개곡 전체 듣기" onClick={event => { event.stopPropagation(); controller.toggle(preset) }} className={`absolute left-1/2 top-1/2 z-20 flex min-h-11 -translate-x-1/2 -translate-y-1/2 items-center gap-2 rounded-full border border-white/30 bg-zinc-950/80 px-4 py-2 text-xs font-semibold text-white shadow-lg backdrop-blur-sm transition-opacity focus-visible:outline-2 focus-visible:outline-white [@media(hover:none)]:opacity-100 ${selected ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'}`}>
     {selected && controller.buffering ? <Loader2 size={18} className="animate-spin" /> : selected && controller.playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
     {label}
   </button>

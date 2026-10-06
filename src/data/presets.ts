@@ -51,7 +51,7 @@ export const presets: Preset[] = [
     name: '1984 도쿄, 미드나잇 시티팝 드라이브',
     name_ko: '1984 도쿄, 미드나잇 시티팝 드라이브',
     name_en: 'Tokyo 1984: Midnight City Pop Drive',
-    name_ja: '1984년東京、ミッドナイト・シティポップ・ドライブ',
+    name_ja: '1984年東京、ミッドナイト・シティポップ・ドライブ',
     desc: '네온 빛 도로 위를 흘러가는 세련된 80년대 아날로그 시티팝의 펑키한 슬랩 베이스',
     desc_ko: '네온 빛 도로 위를 흘러가는 세련된 80년대 아날로그 시티팝의 펑키한 슬랩 베이스',
     desc_en: 'A groovy, nostalgic 80s city pop drive soundtrack featuring funky slap bass and analog synthesizer stabs.',

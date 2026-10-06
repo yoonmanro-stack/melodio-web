@@ -8,6 +8,7 @@ import { useLanguage } from '@/contexts/LanguageContext'
 import { MASTER_NICHE_SEEDS } from '@/data/nicheMasterSeeds'
 import { CHANNEL_CONCEPTS } from '@/data/channelConcepts'
 import { getPresetThumbnail } from '@/lib/preset-thumbnail'
+import { localizePresetForDisplay } from '@/lib/preset-localization'
 
 interface CreatePresetModalProps {
   isOpen: boolean
@@ -15,6 +16,7 @@ interface CreatePresetModalProps {
   onSave: (data: { id?: string; name: string; desc: string; emoji: string; gradient: string; customPrompt: string; metadata?: any }) => void
   currentStylePrompt: string
   editingPreset?: Preset | null
+  isCustomPreset?: boolean
   layoutType?: 'general' | 'japan'
 }
 
@@ -120,6 +122,7 @@ export default function CreatePresetModal({
   onSave, 
   currentStylePrompt, 
   editingPreset,
+  isCustomPreset,
   layoutType = 'general'
 }: CreatePresetModalProps) {
   const { language } = useLanguage()
@@ -154,7 +157,8 @@ export default function CreatePresetModal({
     }))
   }
 
-  const isReadOnly = !!(editingPreset && !editingPreset.id.startsWith('custom-'))
+  const isPersonalPreset = isCustomPreset ?? Boolean(editingPreset?.isCustom === true || editingPreset?.id.startsWith('custom-'))
+  const isReadOnly = Boolean(editingPreset && !isPersonalPreset)
 
   const handleCopyPrompt = () => {
     navigator.clipboard.writeText(customPrompt)
@@ -510,13 +514,16 @@ export default function CreatePresetModal({
         })
         setTranslations(initialTrans)
 
-        setName(meta[`name_${language}`] || editingPreset.name)
-        setDesc(meta[`desc_${language}`] || editingPreset.desc)
+        const display = layoutType === 'japan'
+          ? { name: meta[`name_${language}`] || editingPreset.name, desc: meta[`desc_${language}`] || editingPreset.desc }
+          : localizePresetForDisplay(editingPreset, language, { isCustom: isPersonalPreset })
+        setName(display.name)
+        setDesc(display.desc)
 
         setEmoji(editingPreset.emoji)
         setGradient(editingPreset.gradient || SAMPLE_COLORS[0])
         setCustomPrompt(editingPreset.customPrompt || '')
-        const existingThumbnail = getPresetThumbnail(editingPreset, editingPreset.id.startsWith('custom-'))
+        const existingThumbnail = getPresetThumbnail(editingPreset, isPersonalPreset)
         setRefImages(existingThumbnail ? [existingThumbnail] : [])
         setAiGeneratedThumbnailUrl(existingThumbnail || '')
         setAiGeneratedThumbnailUrls(editingPreset.metadata?.thumbnail_urls || [])
@@ -534,12 +541,12 @@ export default function CreatePresetModal({
         setAdditionalRequest('')
       }
     }
-  }, [isOpen, editingPreset, currentStylePrompt, language])
+  }, [isOpen, editingPreset, currentStylePrompt, language, layoutType, isPersonalPreset])
 
   if (!isOpen) return null
 
   const existingThumbnail = editingPreset
-    ? getPresetThumbnail(editingPreset, editingPreset.id.startsWith('custom-'))
+    ? getPresetThumbnail(editingPreset, isPersonalPreset)
     : null
   const thumbnailUrl = aiGeneratedThumbnailUrl || refImages[0] || existingThumbnail
 
@@ -1068,7 +1075,7 @@ export default function CreatePresetModal({
               </div>
             )}
 
-            {editingPreset?.id && !editingPreset.id.startsWith('custom-') && (
+            {editingPreset?.id && isReadOnly && (
               <div 
                 onClick={handleCopyKeyName}
                 className={`mt-2.5 flex items-center justify-between px-2.5 py-1.5 bg-zinc-900/40 hover:bg-zinc-900/60 border border-white/5 hover:border-white/10 rounded-lg text-[10px] font-mono text-zinc-500 transition-all cursor-pointer group/file select-none ${
