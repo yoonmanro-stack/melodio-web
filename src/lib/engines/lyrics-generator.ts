@@ -12,6 +12,45 @@ const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
 export const LYRICS_MODEL = 'gpt-5.6-sol' as const
 export const LYRICS_PROVIDER_TIMEOUT_MS = 180_000
 
+const LYRICS_SECTION_TYPES = ['intro', 'verse', 'pre-chorus', 'chorus', 'bridge', 'outro'] as const
+
+export class LyricsGenerationError extends Error {
+  constructor(public code: 'lyrics_response_structure' | 'lyrics_response_incomplete', message: string) {
+    super(message)
+    this.name = 'LyricsGenerationError'
+  }
+}
+
+/** Enforce the application shape at generation time instead of requesting JSON syntax alone. */
+export function lyricsResponseFormat(isPlaylist: boolean, trackCount: number) {
+  const section = { type: 'object', additionalProperties: false, required: ['type', 'content', 'description'],
+    properties: {
+      type: { type: 'string', enum: LYRICS_SECTION_TYPES },
+      content: { type: 'string', description: 'Only sung lyric words. Empty for instrumental sections; never production directions.' },
+      description: { type: 'string', description: 'Plain unbracketed English musical directions, separate from sung content.' },
+    } }
+  const songProperties = {
+    title: { type: 'string', minLength: 1 },
+    youtubeTags: { type: 'string' },
+    snsHashtags: { type: 'string' },
+    sections: { type: 'array', minItems: 1, items: section },
+  }
+  const schema = isPlaylist
+    ? { type: 'object', additionalProperties: false,
+      required: ['playlistTitle', 'youtubeDescription', 'youtubeTags', 'snsHashtags', 'tracks'],
+      properties: {
+        playlistTitle: { type: 'string', minLength: 1 }, youtubeDescription: { type: 'string' },
+        youtubeTags: { type: 'string' }, snsHashtags: { type: 'string' },
+        tracks: { type: 'array', minItems: trackCount, maxItems: trackCount,
+          items: { type: 'object', additionalProperties: false,
+            required: ['trackNumber', 'title', 'youtubeTags', 'snsHashtags', 'sections'],
+            properties: { trackNumber: { type: 'integer' }, ...songProperties } } },
+      } }
+    : { type: 'object', additionalProperties: false,
+      required: ['title', 'youtubeTags', 'snsHashtags', 'sections'], properties: songProperties }
+  return { type: 'json_schema', json_schema: { name: isPlaylist ? 'melodio_lyrics_playlist' : 'melodio_lyrics_single', strict: true, schema } }
+}
+
 const LYRICS_FIELD_CONTRACT = `
 ## LYRICS AND MUSIC DIRECTION FIELD CONTRACT
 - sections[].content contains only the words to be sung. Brief structural or performance tags are allowed only when required by the song's structure contract. Never put instrument, vocal-gender, microphone, arrangement, or mixing instructions in content.
@@ -63,7 +102,7 @@ export interface LyricsGeneratorResult {
 interface GPTLyricsSection {
   type: LyricsSectionType
   content: string
-  description?: string
+  description?: string | null
 }
 
 interface GPTLyricsPayload {
@@ -79,7 +118,8 @@ interface GPTLyricsPayload {
 
 function hasLyricsSections(value: unknown): value is GPTLyricsSection[] {
   return Array.isArray(value) && value.length > 0 && value.every(section => section
-    && typeof section.content === 'string' && (section.description === undefined || typeof section.description === 'string'))
+    && typeof section.content === 'string' && (section.type === undefined || typeof section.type === 'string')
+    && (section.description == null || typeof section.description === 'string'))
     && value.some(section => section.content.trim())
 }
 
@@ -260,7 +300,7 @@ export async function generateLyrics(
 ): Promise<(LyricsGeneratorResult | PlaylistGeneratorResult) & { stylePrompt?: string; modelUsage?: LyricsModelUsage }> {
   const apiKey = dependencies.apiKey ?? process.env.OPENAI_API_KEY ?? ''
   if (!apiKey) throw new Error('가사 생성에 필요한 OpenAI API 설정이 없습니다.')
-  const isPlaylist = !!params.isPlaylistMode
+  const isPlaylist = params.isPlaylistMode === true
   const trackCount = params.trackCount ?? 10
   
   // Detect genre thematic profile
@@ -383,7 +423,8 @@ Vocal Target: ${params.vocalGender || 'mixed'}
 Random seed token: ${seed}.
 ${narrativeDirective}`
 
-  // Preserve the Chat Completions endpoint and JSON contract; high effort needs
+  // Preserve the Chat Completions endpoint; strict schemas fix response-shape drift.
+  // High effort needs
   // a completion budget for reasoning as well as a complete playlist response.
   let response: Response
   try {
@@ -393,7 +434,7 @@ ${narrativeDirective}`
       body: JSON.stringify({
         model: LYRICS_MODEL,
         messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: userPrompt }],
-        response_format: { type: 'json_object' },
+        response_format: lyricsResponseFormat(isPlaylist, trackCount),
         reasoning_effort: 'high',
         max_completion_tokens: 32_000,
       }),
@@ -423,13 +464,13 @@ ${narrativeDirective}`
         || typeof content !== 'string' || !content.trim() || content.length > 200_000) throw new Error('Incomplete lyrics')
     parsed = JSON.parse(content) as GPTLyricsPayload
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Invalid lyrics')
-  } catch { throw new Error('GPT-5.6-sol 가사 생성 응답을 확인하지 못했습니다. 다시 시도해 주세요.') }
+  } catch { throw new LyricsGenerationError('lyrics_response_incomplete', 'GPT-5.6-sol 가사 생성 응답을 확인하지 못했습니다. 다시 시도해 주세요.') }
 
   if (isPlaylist) {
     if (typeof parsed.playlistTitle !== 'string' || !parsed.playlistTitle.trim()
         || !Array.isArray(parsed.tracks) || parsed.tracks.length !== trackCount
         || parsed.tracks.some(track => !track || !hasLyricsSections(track.sections))) {
-      throw new Error('Invalid playlist response structure from OpenAI')
+      throw new LyricsGenerationError('lyrics_response_structure', `요청한 ${trackCount}곡의 가사 형식을 완성하지 못했습니다. 다시 생성해 주세요.`)
     }
     
     const tracks: PlaylistTrack[] = parsed.tracks.map((t, tIdx: number) => {
@@ -468,7 +509,7 @@ ${narrativeDirective}`
     }
   } else {
     if (typeof parsed.title !== 'string' || !parsed.title.trim() || !hasLyricsSections(parsed.sections)) {
-      throw new Error('Invalid single track response structure from OpenAI')
+      throw new LyricsGenerationError('lyrics_response_structure', '가사 생성 응답에 곡 제목이나 가사 파트가 빠졌습니다. 다시 생성해 주세요.')
     }
 
     let counter = 0
@@ -643,7 +684,6 @@ Language: ${languageInstruction}
 {
   "title": "🔥 HIGH-CTR YOUTUBE SHORTS TITLE under 30 characters",
   "youtubeTags": "comma, separated, SEO, keywords",
-  "lyricsPrompt": "STRUCTURE CONTRACT lyrics with [Spoken] [Verse] [Chorus] [Outro]",
   "sections": [
     {
       "type": "intro or verse or chorus or outro",

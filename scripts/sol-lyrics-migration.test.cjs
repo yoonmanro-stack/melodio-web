@@ -63,7 +63,9 @@ function responder(payload = singlePayload(), options = {}) {
 function verifyFixedSol(call) {
   assert.equal(call.url, CHAT); assert.equal(call.request.method, 'POST'); assert.equal(call.request.headers.Authorization, `Bearer ${KEY}`);
   assert.equal(call.body.model, MODEL); assert.equal(call.body.reasoning_effort, 'high'); assert.equal(call.body.max_completion_tokens, 32000);
-  assert.equal(call.body.response_format.type, 'json_object'); assert.equal(call.body.messages.length, 2);
+  assert.equal(call.body.response_format.type, 'json_schema'); assert.equal(call.body.messages.length, 2);
+  assert.equal(call.body.response_format.json_schema.strict, true);
+  assert.equal(call.body.response_format.json_schema.schema.additionalProperties, false);
   assert.ok(call.request.signal instanceof AbortSignal);
   for (const field of ['temperature', 'top_p', 'presence_penalty', 'frequency_penalty', 'max_tokens']) assert.equal(call.body[field], undefined);
 }
@@ -119,9 +121,9 @@ for (const options of [{ content: '{invalid' }, { content: '' }, { finishReason:
 test('empty song sections and incomplete playlists fail their existing structured contracts', async () => {
   const { generateLyrics } = loadLyrics();
   const song = responder({ title: 'Empty', sections: [] });
-  await assert.rejects(generateLyrics({ stylePrompt: 'acoustic pop' }, song.dependencies), /Invalid single track/);
+  await assert.rejects(generateLyrics({ stylePrompt: 'acoustic pop' }, song.dependencies), error => error.code === 'lyrics_response_structure' && /가사 파트/.test(error.message));
   const playlist = responder(playlistPayload(1));
-  await assert.rejects(generateLyrics({ stylePrompt: 'acoustic pop', isPlaylistMode: true, trackCount: 2 }, playlist.dependencies), /Invalid playlist/);
+  await assert.rejects(generateLyrics({ stylePrompt: 'acoustic pop', isPlaylistMode: true, trackCount: 2 }, playlist.dependencies), error => error.code === 'lyrics_response_structure' && /2곡/.test(error.message));
   assert.equal(song.calls.length, 1); assert.equal(playlist.calls.length, 1);
 });
 test('lyrics route preserves result fields and returns verified Sol provenance within a longer route deadline', async () => {
@@ -138,11 +140,97 @@ test('lyrics route returns an error for provider failure without success/sample 
   const { generateLyrics } = loadLyrics(); const fixture = responder(singlePayload(), { status: 403 });
   const route = loadRoute(params => generateLyrics(params, fixture.dependencies));
   const response = await route.POST({ async json() { return { stylePrompt: 'acoustic pop' }; } });
-  assert.equal(response.status, 500); assert.match(response.body.error, /HTTP 403/); assert.equal(response.body.success, undefined); assert.equal(response.body.sections, undefined); assert.equal(fixture.calls.length, 1);
+  assert.equal(response.status, 500); assert.match(response.body.error, /HTTP 403/); assert.equal(response.body.success, false); assert.equal(response.body.sections, undefined); assert.equal(fixture.calls.length, 1);
 });
 test('lyrics route returns a missing-key error without reading actual keys or making provider requests', async () => {
   const { generateLyrics } = loadLyrics(); let calls = 0;
   const route = loadRoute(params => generateLyrics(params, { apiKey: '', fetch: async () => { calls++; throw new Error('Unwanted request'); } }));
   const response = await route.POST({ async json() { return { stylePrompt: 'acoustic pop', isPlaylistMode: true }; } });
   assert.equal(response.status, 500); assert.match(response.body.error, /API 설정/); assert.equal(response.body.tracks, undefined); assert.equal(calls, 0);
+});
+
+test('Japan two-candidate mode requests one strict song package in Japanese', async () => {
+  const { generateLyrics } = loadLyrics();
+  const payload = { title: '夜を渡る灯り', youtubeTags: '夜,シティポップ', snsHashtags: '#シティポップ',
+    sections: [{ type: 'verse', content: '窓の灯りが揺れている', description: 'Gentle city pop accompaniment' }] };
+  const fixture = responder(payload);
+  const route = loadRoute(params => generateLyrics(params, fixture.dependencies));
+  const response = await route.POST({ json: async () => ({ stylePrompt: '80s Japanese City Pop', language: 'ja', isPlaylistMode: false, trackCount: 2, vocalGender: 'female' }) });
+  assert.equal(response.status, 200);
+  assert.equal(response.body.sections[0].content, payload.sections[0].content);
+  const request = fixture.calls[0].body;
+  assert.equal(request.response_format.json_schema.name, 'melodio_lyrics_single');
+  assert.deepEqual(Object.keys(request.response_format.json_schema.schema.properties), ['title', 'youtubeTags', 'snsHashtags', 'sections']);
+  assert.match(request.messages[1].content, /Language: Japanese/);
+  assert.equal(fixture.calls.length, 1);
+});
+
+test('playlist strict schema constrains the requested count and every nested object', async () => {
+  const { generateLyrics } = loadLyrics(), fixture = responder(playlistPayload(10));
+  await generateLyrics({ stylePrompt: 'city pop', language: 'ja', isPlaylistMode: true, trackCount: 10 }, fixture.dependencies);
+  const schema = fixture.calls[0].body.response_format.json_schema.schema;
+  assert.equal(schema.properties.tracks.minItems, 10);
+  assert.equal(schema.properties.tracks.maxItems, 10);
+  const track = schema.properties.tracks.items, section = track.properties.sections.items;
+  assert.equal(track.additionalProperties, false);
+  assert.equal(section.additionalProperties, false);
+  assert.deepEqual(section.required, ['type', 'content', 'description']);
+  assert.deepEqual(section.properties.type.enum, ['intro', 'verse', 'pre-chorus', 'chorus', 'bridge', 'outro']);
+});
+
+test('nullable optional description keeps legitimate Japanese sung content intact', async () => {
+  const { generateLyrics } = loadLyrics(), payload = singlePayload();
+  payload.sections = [{ type: 'verse', content: '私のギターが思い出を歌う', description: null }];
+  const fixture = responder(payload);
+  const result = await generateLyrics({ stylePrompt: 'Japanese city pop', language: 'ja' }, fixture.dependencies);
+  assert.equal(result.sections[0].content, payload.sections[0].content);
+  assert.equal(result.sections[0].description, undefined);
+  assert.equal(result.lyricsPrompt, '[Verse]\n' + payload.sections[0].content);
+  assert.equal(fixture.calls.length, 1);
+});
+
+test('wrong response wrappers and malformed section types fail with a friendly contract error', async () => {
+  const { generateLyrics } = loadLyrics();
+  for (const payload of [{ song: singlePayload() }, { tracks: [singlePayload()] },
+    { ...singlePayload(), title: undefined, songTitle: 'Alias' },
+    { ...singlePayload(), sections: [{ type: 123, content: 'Authored lyric', description: '' }] }]) {
+    const fixture = responder(payload);
+    await assert.rejects(generateLyrics({ stylePrompt: 'city pop', language: 'ja' }, fixture.dependencies),
+      error => error.code === 'lyrics_response_structure' && /곡 제목이나 가사 파트/.test(error.message));
+    assert.equal(fixture.calls.length, 1);
+  }
+});
+
+test('lyrics route rejects ambiguous mode and invalid counts before a model request', async () => {
+  let calls = 0;
+  const route = loadRoute(async () => { calls++; throw Error('Unexpected model request'); });
+  for (const change of [{ stylePrompt: '   ' }, { isPlaylistMode: 'false' }, { trackCount: '2' }, { trackCount: 0 }, { trackCount: 41 }]) {
+    const response = await route.POST({ json: async () => ({ stylePrompt: 'city pop', ...change }) });
+    assert.equal(response.status, 400);
+  }
+  assert.equal(calls, 0);
+});
+
+test('lyrics route returns the friendly response-shape code without generated sections', async () => {
+  const { generateLyrics } = loadLyrics(), fixture = responder({ title: 'Missing sections' });
+  const route = loadRoute(params => generateLyrics(params, fixture.dependencies));
+  const response = await route.POST({ json: async () => ({ stylePrompt: 'Japanese city pop', language: 'ja', isPlaylistMode: false, trackCount: 2 }) });
+  assert.equal(response.status, 502);
+  assert.equal(response.body.code, 'lyrics_response_structure');
+  assert.equal(response.body.success, false);
+  assert.match(response.body.error, /가사 파트/);
+  assert.equal(response.body.sections, undefined);
+  assert.equal(fixture.calls.length, 1);
+});
+
+test('strict JSON format still rejects production instructions in sung content before returning lyrics', async () => {
+  const { generateLyrics } = loadLyrics(), payload = singlePayload();
+  payload.sections = [{ type: 'verse', content: '[male vocal, warm guitar]', description: 'Music direction' }];
+  const fixture = responder(payload);
+  const route = loadRoute(params => generateLyrics(params, fixture.dependencies));
+  const response = await route.POST({ json: async () => ({ stylePrompt: 'city pop', language: 'ja' }) });
+  assert.equal(response.status, 400);
+  assert.equal(response.body.code, 'lyrics_instruction_in_content');
+  assert.equal(response.body.sections, undefined);
+  assert.equal(fixture.calls.length, 1);
 });

@@ -95,6 +95,33 @@ test('actual default rename preserves both previews and survives reload and fres
   assert.equal(reloaded.state.active.audioUrl, baseline.audioUrl);
 });
 
+test('old stored Moe default reloads the new canonical singing preview while keeping favorites and aliases', () => {
+  const exports = {};
+  const code = ts.transpileModule(fs.readFileSync('src/data/vocalStyles.ts', 'utf8'), {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+  }).outputText;
+  new Function('require', 'exports', code)(name => {
+    assert.equal(name, './officialVocalCatalog.json');
+    return { default: JSON.parse(fs.readFileSync('src/data/officialVocalCatalog.json', 'utf8')) };
+  }, exports);
+  const moe = exports.INITIAL_SYSTEM_VOICES.find(voice => voice.id === 'voice-moe-jpop');
+  const storage = new Map([
+    ['melodio_user_voices', JSON.stringify([{ ...moe, audioUrl: '/assets/voices/vd-7705.mp3', stylePrompt: 'stale cached prompt' }])],
+    ['melodio_voice_favorites', JSON.stringify([moe.id])],
+    ['melodio_active_voice_id', moe.id],
+    [names.VOICE_NAME_OVERRIDES_KEY, JSON.stringify({ [moe.id]: '나의 모에' })],
+  ]);
+  const h = harness([moe], storage); h.g.INITIAL_SYSTEM_VOICES = [structuredClone(moe)];
+  h.run('restore')(); h.flush();
+  assert.equal(h.state.voices.length, 1); assert.equal(h.state.active.id, moe.id);
+  assert.equal(h.state.active.name, '나의 모에'); assert.equal(h.state.active.isFavorite, true);
+  assert.equal(h.state.active.audioUrl, '/assets/voices/approved-20261006/voice-moe-jpop-A.mp3');
+  assert.equal(h.state.active.sampleDurationSeconds, 30); assert.equal(h.state.active.previewStatus, 'ready');
+  assert.equal(h.state.active.stylePrompt, moe.stylePrompt); assert.equal(h.state.active.officialVoiceId, undefined);
+  h.g.setActiveVoice(h.state.voices[0]);
+  assert.equal(h.state.active.audioUrl, moe.audioUrl); assert.equal(h.state.active.sampleDurationSeconds, 30);
+});
+
 test('actual Discovery rename restores canonical identity and survives selection and saving again', () => {
   const h = harness([discovered]); h.run('updateVoice')(discovered.id, { name: 'My discovered singer' });
   const saved = JSON.parse(h.storage.get('melodio_user_voices'));

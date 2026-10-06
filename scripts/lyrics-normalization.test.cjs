@@ -150,7 +150,7 @@ test('Queue checks raw fallback only when no usable sections exist', () => {
 
 test('empty model sections remain invalid even when the model supplies raw lyrics', async () => {
   const { generateLyrics } = loadEngine();
-  await assert.rejects(generateLyrics({ stylePrompt: 'acoustic pop' }, fixture(song([])).dependencies), /Invalid single track response structure/);
+  await assert.rejects(generateLyrics({ stylePrompt: 'acoustic pop' }, fixture(song([])).dependencies), error => error.code === 'lyrics_response_structure');
 });
 
 function story() {

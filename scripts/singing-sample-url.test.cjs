@@ -36,14 +36,23 @@ test('actual discovery, official and generated sample URLs are preserved', () =>
   assert.equal(sampleUrl(`  ${actual}  `), actual);
 });
 
-test('five legacy defaults preserve authored tone settings while official catalog URLs remain unchanged', () => {
+test('legacy defaults retain their authored settings and only Moe gains an approved singing preview', () => {
   const official = JSON.parse(fs.readFileSync('src/data/officialVocalCatalog.json', 'utf8'));
   const { INITIAL_SYSTEM_VOICES: voices } = load('src/data/vocalStyles.ts', { './officialVocalCatalog.json': { default: official } });
   for (const id of ['voice-anna-kim', 'voice-kaelen-soul', 'voice-moe-jpop', 'voice-yeontaek-rock', 'voice-aria-soprano']) {
     const voice = voices.find(item => item.id === id);
     assert.ok(voice?.stylePrompt && voice.tags.length && voice.sourceType === 'default');
-    assert.equal(voice.audioUrl, undefined);
+    if (id !== 'voice-moe-jpop') assert.equal(voice.audioUrl, undefined);
   }
+  const moe = voices.find(voice => voice.id === 'voice-moe-jpop');
+  assert.equal(moe.audioUrl, '/assets/voices/approved-20261006/voice-moe-jpop-A.mp3');
+  assert.equal(sampleUrl(moe.audioUrl), moe.audioUrl);
+  assert.equal(moe.previewStartSeconds, 0); assert.equal(moe.sampleDurationSeconds, 30);
+  assert.equal(moe.previewStatus, 'ready'); assert.equal(moe.language, 'Japanese'); assert.equal(moe.gender, 'female');
+  for (const key of ['officialVoiceId', 'discoveryVoiceId', 'designedVoiceId', 'customVoiceId', 'voice_model_id', 'reviewStatus', 'reuseStatus']) assert.equal(moe[key], undefined);
+  assert.equal(voices.filter(voice => voice.id === moe.id).length, 1);
+  const bytes = fs.readFileSync(`public${moe.audioUrl}`);
+  assert.equal(require('node:crypto').createHash('sha256').update(bytes).digest('hex'), '2dc9ac0cea2efa05ee61a3a05421cb57a0052c83549bb668ede222976cc9e456');
   assert.equal(voices.find(voice => voice.id === 'voice-aria-soprano').isFavorite, true);
   assert.equal(voices.find(voice => voice.id === 'voice-kaelen-soul').isFavorite, false);
   for (const voice of official) assert.deepEqual(voices.find(item => item.id === voice.id), voice);
