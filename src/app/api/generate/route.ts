@@ -1,3 +1,5 @@
+import { ensureGenerationBatch } from '@/lib/generation-batches/server'
+import { parseGenerationBatchInput, GenerationBatchError } from '@/lib/generation-batches/model'
 import { resolveMusicDuration, buildInstrumentalArrangement, removeClockDurationInstructions } from '@/lib/music-duration'
 import { resolveOfficialVoice } from '@/lib/voice/official-voice-selection'
 import { officialVoicePersona } from '@/lib/voice/official-voice-registry'
@@ -361,6 +363,22 @@ export async function POST(request: NextRequest) {
   let sunoTaskAccepted = false
   try {
     const rawBody = await request.json()
+    const generationBatch = parseGenerationBatchInput(rawBody.generationBatch)
+    let generationBatchFields: Awaited<ReturnType<typeof ensureGenerationBatch>> | undefined
+    if (generationBatch) {
+      if (rawBody.queueItemId || rawBody.sourceMenu === 'channel-builder' || rawBody.isViral || rawBody.isViralTrack || rawBody.voiceDesign
+          || rawBody.metadata?.petEpisode || rawBody.metadata?.storyPlan) {
+        throw new GenerationBatchError('invalid_batch', '일반 음악 생성에서만 생성 묶음을 사용할 수 있습니다.', 400)
+      }
+      const batchClient = await createClient()
+      const { data: { user: batchOwner } } = await batchClient.auth.getUser()
+      if (!batchOwner) throw new GenerationBatchError('authentication_required', '다곡 생성에는 로그인이 필요합니다.', 401)
+      const batchUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+      const batchKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+      if (!batchUrl || !batchKey) throw new GenerationBatchError('batch_unavailable', '생성 묶음 저장소를 확인할 수 없습니다.', 503)
+      const batchAdmin = createSupabaseClient(batchUrl, batchKey, { auth: { persistSession: false, autoRefreshToken: false } })
+      generationBatchFields = await ensureGenerationBatch(batchAdmin, batchOwner.id, generationBatch, rawBody.sourceMenu)
+    }
     let voiceDesign: ReturnType<typeof compileVoiceDesign> | null
     try { voiceDesign = applyVoiceDesignRequest(rawBody) }
     catch (error) { return NextResponse.json({ error: error instanceof Error ? error.message : '음색 디자인 설정을 확인해 주세요.' }, { status: 400 }) }
@@ -600,7 +618,7 @@ export async function POST(request: NextRequest) {
       if (!user) return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 })
       const { data: queueItem, error: queueError } = await (supabase as any)
         .from('generation_queue_items')
-        .select('id,title,style_prompt,exclude_prompt,lyrics_prompt,lyrics_sections,is_instrumental,status')
+        .select('id,batch_id,track_number,title,style_prompt,exclude_prompt,lyrics_prompt,lyrics_sections,is_instrumental,status')
         .eq('id', queueItemId)
         .single()
       if (queueError || !queueItem) {
@@ -627,6 +645,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '다른 요청이 이 곡을 먼저 제출했습니다.' }, { status: 409 })
       }
       claimedQueueItemId = queueItemId
+      // Queue batches already have trusted server-side ordering. Reuse that
+      // identity for the dashboard without accepting a client-supplied group.
+      const { data: queueBatch, error: queueBatchError } = await (supabase as any)
+        .from('episode_generation_batches').select('id,total_blueprints')
+        .eq('id', queueItemData.batch_id).single()
+      if (queueBatchError || !queueBatch) throw new GenerationBatchError('batch_unavailable', '채널 생성 묶음을 확인하지 못했습니다.', 503)
+      if (queueBatch.total_blueprints <= 40) {
+        generationBatchFields = await ensureGenerationBatch(serviceSupabase, user.id, {
+          id: queueBatch.id, trackIndex: queueItemData.track_number - 1, inputCount: queueBatch.total_blueprints,
+        }, 'channel-builder')
+      }
     }
 
     // Restore approved Queue content before separating lyrics and production notes.
@@ -743,8 +772,6 @@ export async function POST(request: NextRequest) {
       presetName: rawBody.presetName || null,
       sourceMenu: rawBody.sourceMenu || null,
       isPublic,
-      youtubeMainTitle: rawBody.youtubeMainTitle || null,
-      tracklistText: rawBody.tracklistText || null,
       queueItemId,
       ...(petEpisode ? { petEpisode, formatVersion: 'pet-v3', targetVideoSeconds: 30 } : {}),
       ...(viralBrief ? { viralBrief, targetVideoSeconds: 30 } : {}),
@@ -755,6 +782,7 @@ export async function POST(request: NextRequest) {
     const { data: genData, error: genError } = await serviceSupabase
       .from('generations')
       .insert({
+        ...generationBatchFields,
         user_id: user?.id || null,
         title: trackTitle,
         status: 'generating',
@@ -810,6 +838,9 @@ export async function POST(request: NextRequest) {
       }
     })
   } catch (error) {
+    if (error instanceof GenerationBatchError && !claimedQueueItemId) {
+      return NextResponse.json({ error: error.message, code: error.code }, { status: error.status })
+    }
     const message = error instanceof Error ? error.message : '알 수 없는 오류'
     console.error('[API/generate] 에러:', message)
     if (claimedQueueItemId) {
@@ -824,6 +855,6 @@ export async function POST(request: NextRequest) {
       }
     }
     return NextResponse.json({ error: message, ...(error instanceof LyricsInstructionError ? { code: error.code } : {}) },
-      { status: error instanceof LyricsInstructionError ? 400 : 500 })
+      { status: error instanceof GenerationBatchError ? error.status : error instanceof LyricsInstructionError ? 400 : 500 })
   }
 }

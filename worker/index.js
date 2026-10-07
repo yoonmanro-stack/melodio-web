@@ -15,6 +15,7 @@ require('dotenv').config();
 const { createClient } = require('@supabase/supabase-js');
 const { exec, execFile } = require('child_process');
 const fs = require('fs');
+const { generationBatchSiblingFields } = require('./generation-batch');
 const path = require('path');
 const os = require('os');
 const { randomUUID } = require('crypto');
@@ -3325,6 +3326,19 @@ async function pollSunoGenerations() {
 
           const winner = scannedClips[0];
           const loser = scannedClips[1];
+          // Validate/read before completing A so a lookup failure stays retryable.
+          const siblingBatchFields = generationBatchSiblingFields(row);
+          let existingBatchSibling = null;
+          if (siblingBatchFields.generation_batch_id && loser?.clip.audio_url) {
+            const { data, error } = await supabase.from("generations")
+              .select("id")
+              .eq("generation_batch_id", siblingBatchFields.generation_batch_id)
+              .eq("generation_batch_index", siblingBatchFields.generation_batch_index)
+              .eq("generation_candidate_slot", "B")
+              .limit(1);
+            if (error || !Array.isArray(data)) throw new Error('generation_batch_sibling_lookup_failed');
+            existingBatchSibling = data;
+          }
 
           /*
            * 트림은 합격 상한(38초)을 넘었을 때만 한다.
@@ -3524,11 +3538,13 @@ async function pollSunoGenerations() {
               continue;
             }
             
-            const { data: existing } = await supabase.from("generations")
-              .select("id")
-              .eq("title", loserTitle)
-              .gte("created_at", new Date(Date.now() - 5 * 60 * 1000).toISOString())
-              .limit(1);
+            const { data: existing } = siblingBatchFields.generation_batch_id
+              ? { data: existingBatchSibling }
+              : await supabase.from("generations")
+                .select("id")
+                .eq("title", loserTitle)
+                .gte("created_at", new Date(Date.now() - 5 * 60 * 1000).toISOString())
+                .limit(1);
 
             if (!existing || existing.length === 0) {
               log("INFO", `[SUNO POLL] ✅ 서브 곡(2) 저장! (대시보드 전용 / 공개 피드 노출 방지)`, { title: loserTitle, grade: loser.quality.grade });
@@ -3547,6 +3563,7 @@ async function pollSunoGenerations() {
 
               const { data: loserRow, error: insErr } = await supabase.from("generations").insert({
                 user_id: row.user_id || null,
+                ...siblingBatchFields,
                 title: loserTitle,
                 audio_url: loser.clip.audio_url,
                 source_audio_url: loser.clip.audio_url,

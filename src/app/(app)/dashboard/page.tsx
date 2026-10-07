@@ -17,6 +17,7 @@ import { DashboardDanceAudio, DashboardDanceProductionList } from "@/components/
 import { getDashboardTrackCategory as getTrackCategory, getDashboardLibraryCategory, getDashboardMusicTitle, getDashboardDanceAudio } from "@/lib/dance/dashboard";
 import { petVideoStorageKey, readPetEpisode } from "@/components/viral/PetVideoStudio";
 import DashboardChannelDnaPanel from "@/components/dashboard/DashboardChannelDnaPanel";
+import GenerationBatchTracklist from "@/components/dashboard/GenerationBatchTracklist";
 import AddToPlaylistModal from "@/components/playlists/AddToPlaylistModal";
 import StemStudioSummary from "@/components/stem/StemStudioSummary";
 import MultiTrackPlayer from "@/components/MultiTrackPlayer";
@@ -63,6 +64,7 @@ type Generation = {
   status: string;
   created_at: string;
   user_id?: string;
+  generation_batch_id?: string | null;
   is_liked?: boolean;
   title?: string;
   audio_url?: string;
@@ -397,8 +399,6 @@ export default function Home() {
   const [isProPaywallOpen, setIsProPaywallOpen] = useState(false);
   const [copiedStyle, setCopiedStyle] = useState(false);
   const [copiedLyrics, setCopiedLyrics] = useState(false);
-  const [copiedYtTitle, setCopiedYtTitle] = useState(false);
-  const [copiedTracklist, setCopiedTracklist] = useState(false);
   const [allPresets, setAllPresets] = useState<any[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(() => history.length === 0);
   const [historyError, setHistoryError] = useState<string | null>(null);
@@ -2539,128 +2539,77 @@ export default function Home() {
                     );
                   })()}
 
-                  {/* 🎬 유튜브 영상 업로드 메인 타이틀 & 더보기란 Tracklist 카드 */}
+                  {detailItem.generation_batch_id ? (
+                    <GenerationBatchTracklist
+                      key={detailItem.generation_batch_id}
+                      batchId={detailItem.generation_batch_id}
+                    />
+                  ) : null}
+
+                  {/* 🎬 바이럴 숏폼 뮤비 카드 (상시 노출) */}
                   {(() => {
-                    const displayYtTitle = meta.youtubeMainTitle || `💻 ${detailItem.title || '새벽 몰입'} | ${meta.stylePrompt ? meta.stylePrompt.split(',')[0] : 'Melodio BGM'}`;
-                    const displayTracklist = meta.tracklistText || `🎧 [Tracklist / 수록곡 목록]\n01. 00:00 ${detailItem.title || 'Main Theme'}\n02. 03:15 ${detailItem.title || 'Track'} (Acoustic Version)\n03. 06:40 ${detailItem.title || 'Track'} (Midnight Lofi Ver)\n04. 09:55 ${detailItem.title || 'Track'} (Piano Solo Mix)\n05. 13:20 ${detailItem.title || 'Track'} (Ambient Reverb)`;
+                    const vUrl = meta.video_url || meta.grok_video_url || meta.videoUrl || (detailItem as any).video_url;
+                    const hasVideo = !!vUrl;
 
                     return (
-                      <div className="space-y-3">
-                        {/* 🎬 유튜브 업로드 메인 타이틀 카드 */}
-                        <div className="bg-gradient-to-r from-amber-500/10 via-amber-500/5 to-transparent rounded-xl p-3 border border-amber-500/20 relative">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="text-amber-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
-                              <span>🎬</span>
-                              <span>유튜브 영상 업로드 메인 타이틀 (2,370+ DB 모바일 15자 훅 적용)</span>
+                      <div className="bg-gradient-to-r from-fuchsia-500/10 via-purple-500/5 to-transparent rounded-xl p-3 border border-fuchsia-500/30 relative space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="text-fuchsia-300 text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+                            <Film className="w-3.5 h-3.5 text-fuchsia-400 animate-pulse" />
+                            <span>🎬 바이럴 숏폼 뮤비</span>
+                          </div>
+
+                          {hasVideo ? (
+                            <div className="flex flex-wrap items-center justify-end gap-2">
+                              <a
+                                href={`/api/download?url=${encodeURIComponent(vUrl)}&filename=${encodeURIComponent(`melodio_short_${detailItem.title || 'video'}.mp4`)}`}
+                                download={`melodio_short_${detailItem.title || 'video'}.mp4`}
+                                className="px-3 py-1.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(217,70,239,0.3)] active:scale-95 shrink-0"
+                              >
+                                <Download className="w-3.5 h-3.5" />
+                                <span>MP4 다운로드</span>
+                              </a>
+                              {getTrackCategory(detailItem) === 'viral-cf' ? <button
+                                type="button"
+                                onClick={() => void handleDeleteTrack(detailItem.id, 'viral-video')}
+                                disabled={deletingTrackId === detailItem.id}
+                                aria-label={`${detailItem.title || 'Viral Shorts'} 삭제`}
+                                className="px-3 py-1.5 bg-red-950/70 hover:bg-red-900 text-red-300 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 border border-red-500/30 active:scale-95 shrink-0 disabled:cursor-wait disabled:opacity-50"
+                              >
+                                {deletingTrackId === detailItem.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                                <span>삭제</span>
+                              </button> : null}
                             </div>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(displayYtTitle);
-                                setCopiedYtTitle(true);
-                                setTimeout(() => setCopiedYtTitle(false), 2000);
-                              }}
-                              className="px-2 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 border border-amber-500/30"
+                          ) : (
+                            <Link
+                              href={meta.workflow === 'dance-music-first-v1' ? `/viral?danceTrack=${encodeURIComponent(detailItem.id)}` : readPetEpisode(detailItem)
+                                ? `/viral?petTrack=${encodeURIComponent(detailItem.id)}`
+                                : `/viral?trackId=${encodeURIComponent(detailItem.id)}`}
+                              onClick={() => setDetailItem(null)}
+                              className="px-3 py-1.5 bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(217,70,239,0.3)] active:scale-95 shrink-0"
                             >
-                              {copiedYtTitle ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedYtTitle ? '복사됨!' : '제목 복사'}</span>
-                            </button>
-                          </div>
-                          <div className="text-amber-100 text-xs font-bold bg-black/40 p-2.5 rounded-lg border border-amber-500/20 select-all">
-                            {displayYtTitle}
-                          </div>
+                              <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-bounce" />
+                              <span>🚀 숏폼 영상 제작하기</span>
+                            </Link>
+                          )}
                         </div>
 
-                        {/* 🎧 더보기란 트랙리스트 타임스탬프 카드 */}
-                        <div className="bg-gradient-to-r from-cyan-500/10 via-cyan-500/5 to-transparent rounded-xl p-3 border border-cyan-500/20 relative">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="text-cyan-400 text-[10px] font-black uppercase tracking-wider flex items-center gap-1.5">
-                              <span>🎧</span>
-                              <span>유튜브 더보기란 Tracklist (타임코드 + 수록곡명)</span>
-                            </div>
-                            <button
-                              onClick={() => {
-                                navigator.clipboard.writeText(displayTracklist);
-                                setCopiedTracklist(true);
-                                setTimeout(() => setCopiedTracklist(false), 2000);
-                              }}
-                              className="px-2 py-1 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 border border-cyan-500/30"
-                            >
-                              {copiedTracklist ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                              <span>{copiedTracklist ? '복사됨!' : '트랙리스트 복사'}</span>
-                            </button>
+                        {hasVideo ? (
+                          <div className="aspect-[9/16] max-w-[200px] mx-auto rounded-xl overflow-hidden border border-white/10 bg-black shadow-lg">
+                            <video
+                              src={vUrl}
+                              controls
+                              playsInline
+                              preload="metadata"
+                              className="w-full h-full object-cover"
+                              onPlay={meta.workflow === 'dance-music-first-v1' ? event => registerActiveAudio(event.currentTarget) : undefined}
+                            />
                           </div>
-                          <pre className="text-cyan-100 text-[11px] font-mono bg-black/40 p-2.5 rounded-lg border border-cyan-500/20 whitespace-pre-wrap select-all max-h-36 overflow-y-auto">
-                            {displayTracklist}
-                          </pre>
-                        </div>
-
-                        {/* 🎬 바이럴 숏폼 뮤비 카드 (상시 노출) */}
-                        {(() => {
-                          const vUrl = meta.video_url || meta.grok_video_url || meta.videoUrl || (detailItem as any).video_url;
-                          const hasVideo = !!vUrl;
-
-                          return (
-                            <div className="bg-gradient-to-r from-fuchsia-500/10 via-purple-500/5 to-transparent rounded-xl p-3 border border-fuchsia-500/30 relative space-y-2.5">
-                              <div className="flex items-center justify-between">
-                                <div className="text-fuchsia-300 text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
-                                  <Film className="w-3.5 h-3.5 text-fuchsia-400 animate-pulse" />
-                                  <span>🎬 바이럴 숏폼 뮤비</span>
-                                </div>
-
-                                {hasVideo ? (
-                                  <div className="flex flex-wrap items-center justify-end gap-2">
-                                    <a
-                                      href={`/api/download?url=${encodeURIComponent(vUrl)}&filename=${encodeURIComponent(`melodio_short_${detailItem.title || 'video'}.mp4`)}`}
-                                      download={`melodio_short_${detailItem.title || 'video'}.mp4`}
-                                      className="px-3 py-1.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(217,70,239,0.3)] active:scale-95 shrink-0"
-                                    >
-                                      <Download className="w-3.5 h-3.5" />
-                                      <span>MP4 다운로드</span>
-                                    </a>
-                                    {getTrackCategory(detailItem) === 'viral-cf' ? <button
-                                      type="button"
-                                      onClick={() => void handleDeleteTrack(detailItem.id, 'viral-video')}
-                                      disabled={deletingTrackId === detailItem.id}
-                                      aria-label={`${detailItem.title || 'Viral Shorts'} 삭제`}
-                                      className="px-3 py-1.5 bg-red-950/70 hover:bg-red-900 text-red-300 rounded-lg text-xs font-black transition-all flex items-center gap-1.5 border border-red-500/30 active:scale-95 shrink-0 disabled:cursor-wait disabled:opacity-50"
-                                    >
-                                      {deletingTrackId === detailItem.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
-                                      <span>삭제</span>
-                                    </button> : null}
-                                  </div>
-                                ) : (
-                                  <Link
-                                    href={meta.workflow === 'dance-music-first-v1' ? `/viral?danceTrack=${encodeURIComponent(detailItem.id)}` : readPetEpisode(detailItem)
-                                      ? `/viral?petTrack=${encodeURIComponent(detailItem.id)}`
-                                      : `/viral?trackId=${encodeURIComponent(detailItem.id)}`}
-                                    onClick={() => setDetailItem(null)}
-                                    className="px-3 py-1.5 bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shadow-[0_0_12px_rgba(217,70,239,0.3)] active:scale-95 shrink-0"
-                                  >
-                                    <Sparkles className="w-3.5 h-3.5 text-yellow-300 animate-bounce" />
-                                    <span>🚀 숏폼 영상 제작하기</span>
-                                  </Link>
-                                )}
-                              </div>
-
-                              {hasVideo ? (
-                                <div className="aspect-[9/16] max-w-[200px] mx-auto rounded-xl overflow-hidden border border-white/10 bg-black shadow-lg">
-                                  <video
-                                    src={vUrl}
-                                    controls
-                                    playsInline
-                                    preload="metadata"
-                                    className="w-full h-full object-cover"
-                                    onPlay={meta.workflow === 'dance-music-first-v1' ? event => registerActiveAudio(event.currentTarget) : undefined}
-                                  />
-                                </div>
-                              ) : (
-                                <div className="p-3 bg-black/40 rounded-lg border border-white/5 text-center text-zinc-400 text-xs">
-                                  아직 생성된 AI 쇼츠 비디오가 없습니다. 상단 버튼을 눌러 1클릭 영상을 제작해 보세요!
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })()}
+                        ) : (
+                          <div className="p-3 bg-black/40 rounded-lg border border-white/5 text-center text-zinc-400 text-xs">
+                            아직 생성된 AI 쇼츠 비디오가 없습니다. 상단 버튼을 눌러 1클릭 영상을 제작해 보세요!
+                          </div>
+                        )}
                       </div>
                     );
                   })()}

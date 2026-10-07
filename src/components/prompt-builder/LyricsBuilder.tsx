@@ -338,25 +338,26 @@ export default function LyricsBuilder({
 
         <div className="flex flex-wrap items-center gap-4">
           {/* 생성 곡 수 선택 */}
-          <div className="flex items-center gap-1 bg-black/30 p-1 rounded-xl border border-melodio-border/50">
-            {(engine === 'lyria3' ? [1, 10, 20, 30, 40] : [2, 10, 20, 30, 40]).map((count) => {
+          <div className="flex flex-wrap items-center gap-1 bg-black/30 p-1 rounded-xl border border-melodio-border/50">
+            {(engine === 'lyria3' ? [1, 10, 15, 20, 30, 40] : [2, 10, 15, 20, 30, 40]).map((count) => {
               const isActive = trackCount === count
               let label = ''
               if (count === 1) label = '1곡 (싱글)'
               else if (count === 2) label = '2곡 (기본)'
-              else label = `${count}곡`
+              else label = `${count * (engine === 'lyria3' ? 1 : 2)}곡 생성`
 
               return (
                 <button
                   key={count}
                   onClick={() => onTrackCountChange(count)}
-                  className={`px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap ${
+                  className={`flex flex-col items-center px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all whitespace-nowrap ${
                     isActive
                       ? 'bg-melodio-accent text-white shadow-melodio-glow'
                       : 'text-melodio-muted hover:text-melodio-text'
                   }`}
                 >
                   {label}
+                  {count > 2 && <span className="text-[10px] font-normal opacity-80">기본 수록 {count}곡</span>}
                 </button>
               )
             })}
@@ -386,7 +387,7 @@ export default function LyricsBuilder({
           <div className="mb-6 p-4 rounded-xl bg-black/20 border border-melodio-border/30">
             <div className="flex items-center gap-2 mb-3">
               <span className="text-xs font-semibold text-fuchsia-300 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-fuchsia-300 shrink-0" /> {isPlaylistMode ? `${trackCount}곡 플레이리스트` : trackCount === 1 ? '단일 곡' : '2곡 (기본)'} AI 자동 작성 및 기획
+                <Sparkles className="w-3.5 h-3.5 text-fuchsia-300 shrink-0" /> {isPlaylistMode ? `플레이리스트 가사 ${trackCount}곡` : trackCount === 1 ? '단일 곡' : '2곡 (기본)'} AI 자동 작성 및 기획
               </span>
             </div>
             <div className="flex flex-col gap-3">

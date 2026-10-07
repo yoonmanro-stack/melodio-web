@@ -54,6 +54,7 @@ import { composeStylePrompt, resolveRotationPrompt } from "@/lib/prompt-composit
 import { fitJapanStyleBudget } from "@/lib/japan-style-budget";
 import { getJapanPresetProfile, resolveJapanPresetStyle, uniqueJapanPresets } from "@/lib/japan-preset-profile";
 import { compileLyricsSections } from "@/lib/lyrics/compile-sections";
+import { buildGenerationBatch } from "@/lib/generation-batch-client";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { jpPresetTranslations } from "@/data/jp-presets-translations";
 import { getAudioPlaybackError, getExpiredAudioPlaybackError, getStoredTrackDuration } from "@/lib/audio-playback";
@@ -1179,7 +1180,7 @@ export default function JapanLandingClient() {
       setIsGeneratingMusic(true);
       setGenModalState('submitting');
       setGenErrorMsg("");
-      setGenerationJob({ ids: [], status: 'submitting', title: `${tracks.length}곡 플레이리스트`, isPublic });
+      setGenerationJob({ ids: [], status: 'submitting', title: `생성 ${tracks.length * 2}곡 · 기본 수록 ${tracks.length}곡`, isPublic });
       try {
         const submittedIds: string[] = [];
         const resolvedEngine = engine === 'auto' ? 'suno_v5' : engine;
@@ -1227,6 +1228,7 @@ export default function JapanLandingClient() {
         };
         const presetImages = getPresetImages();
 
+        const generationBatch = buildGenerationBatch(crypto.randomUUID(), tracks.length);
         for (let i = 0; i < tracks.length; i++) {
           const track = tracks[i];
           const submittedSections = Array.isArray(track.sections)
@@ -1301,6 +1303,7 @@ export default function JapanLandingClient() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               ...trackPayload,
+              generationBatch: generationBatch[i],
               selections: {},
               lyricsSections: submittedSections,
               presetId: selectedPresetId,
@@ -1327,7 +1330,7 @@ export default function JapanLandingClient() {
         setGenerationJob({
           ids: submittedIds,
           status: submittedIds.length > 0 ? 'generating' : 'completed',
-          title: `${tracks.length}곡 플레이리스트`,
+          title: `생성 ${tracks.length * 2}곡 · 기본 수록 ${tracks.length}곡`,
           isPublic,
           message: submittedIds.length > 0 ? '워커에서 음원을 생성하고 있습니다.' : '음원 생성 요청이 완료됐습니다.',
         });
@@ -2202,7 +2205,7 @@ export default function JapanLandingClient() {
               onGenerate={handleGenerateMusic}
               isGenerating={isGeneratingMusic || generationJob?.status === 'submitting' || generationJob?.status === 'generating'}
               isPlaylistMode={isPlaylistMode}
-              trackCount={trackCount}
+              trackCount={isPlaylistMode ? tracks.length : trackCount}
               isPro={isPro}
               onOpenProPaywall={() => alert('AI 프롬프트 최적화 기능은 Pro 요금제 구독 시 사용 가능합니다.')}
               dynamicElements={dynamicElements}

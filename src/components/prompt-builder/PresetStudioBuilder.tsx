@@ -12,6 +12,7 @@ import { presets } from '@/data/presets'
 import { mergePublicPresetCatalog, findStudioPreset } from '@/lib/preset-catalog'
 import { resolvePresetApplication, parsePresetLyrics, resolveGeneratedPresetStyle } from '@/lib/preset-application'
 import { compileLyricsSections } from '@/lib/lyrics/compile-sections'
+import { buildGenerationBatch } from '@/lib/generation-batch-client'
 import { useAuth } from '@/hooks/useAuth'
 import { useHistory } from '@/hooks/useHistory'
 import { useVoice } from '@/contexts/VoiceContext'
@@ -715,6 +716,7 @@ export default function PromptBuilder({
           return
         }
 
+        const generationBatch = buildGenerationBatch(crypto.randomUUID(), tracks.length)
         for (let i = 0; i < tracks.length; i++) {
           const track = tracks[i]
           const lyricsPrompt = isInstrumental ? '' : buildLyricsPrompt(track.sections)
@@ -782,6 +784,7 @@ export default function PromptBuilder({
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               ...trackPayload,
+              generationBatch: generationBatch[i],
               selections,
               lyricsSections: track.sections,
               presetId: selectedPresetId,
@@ -966,7 +969,7 @@ export default function PromptBuilder({
           onGenerate={handleGenerate}
           isGenerating={isGenerating}
           isPlaylistMode={isPlaylistMode}
-          trackCount={trackCount}
+          trackCount={isPlaylistMode ? tracks.length : trackCount}
           dynamicElements={dynamicElements}
           ambienceVolume={ambienceVolume}
           onAmbienceVolumeChange={setAmbienceVolume}
@@ -1055,7 +1058,7 @@ export default function PromptBuilder({
                   <div className="space-y-2">
                     <h3 className="text-white text-lg font-bold">음원 작곡 요청 완료!</h3>
                     <p className="text-zinc-300 text-sm">
-                      {isPlaylistMode ? `${tracks.length}곡` : '2곡'}의 신곡 작곡이 시작되었습니다!
+                      {isPlaylistMode ? `생성 ${tracks.length * 2}곡 · 기본 수록 ${tracks.length}곡` : '2곡'}의 신곡 작곡이 시작되었습니다!
                     </p>
                     <p className="text-zinc-500 text-xs leading-relaxed">
                       AI가 백그라운드에서 편곡 및 믹싱을 진행 중이며 약 1~2분이 소요됩니다. 완성되면 대시보드의 <strong>Track Library</strong>에 실시간으로 등록됩니다.
@@ -1407,7 +1410,7 @@ export default function PromptBuilder({
             onGenerate={handleGenerate}
             isGenerating={isGenerating}
             isPlaylistMode={isPlaylistMode}
-            trackCount={trackCount}
+            trackCount={isPlaylistMode ? tracks.length : trackCount}
             dynamicElements={dynamicElements}
             ambienceVolume={ambienceVolume}
             onAmbienceVolumeChange={setAmbienceVolume}
@@ -1498,7 +1501,7 @@ export default function PromptBuilder({
                 <div className="space-y-2">
                   <h3 className="text-white text-lg font-bold">음원 작곡 요청 완료!</h3>
                   <p className="text-zinc-300 text-sm">
-                    {isPlaylistMode ? `${tracks.length}곡` : '2곡'}의 신곡 작곡이 시작되었습니다!
+                    {isPlaylistMode ? `생성 ${tracks.length * 2}곡 · 기본 수록 ${tracks.length}곡` : '2곡'}의 신곡 작곡이 시작되었습니다!
                   </p>
                   <p className="text-zinc-500 text-xs leading-relaxed">
                     AI가 백그라운드에서 편곡 및 믹싱을 진행 중이며 약 1~2분이 소요됩니다. 완성되면 대시보드의 <strong>Track Library</strong>에 실시간으로 등록됩니다.

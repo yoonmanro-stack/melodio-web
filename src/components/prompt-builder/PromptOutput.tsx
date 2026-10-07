@@ -503,10 +503,10 @@ export default function PromptOutput({
         {isGenerating ? (
           <>
             <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            {isPlaylistMode ? `${trackCount || 10}곡 전체 음악 생성 중...` : '전체 음악 생성 중...'}
+            {isPlaylistMode ? `${(trackCount ?? 0) * (payload?.engine === 'lyria3' ? 1 : 2)}곡 생성 중 · 기본 수록 ${trackCount ?? 0}곡` : '전체 음악 생성 중...'}
           </>
         ) : (
-          <>{isPlaylistMode ? `💿 ${trackCount || 10}곡 전체 음악 생성` : '🎵 전체 음악 생성'}</>
+          <>{isPlaylistMode ? `💿 ${(trackCount ?? 0) * (payload?.engine === 'lyria3' ? 1 : 2)}곡 생성 · 기본 수록 ${trackCount ?? 0}곡` : '🎵 전체 음악 생성'}</>
         )}
       </button>
     </div>
