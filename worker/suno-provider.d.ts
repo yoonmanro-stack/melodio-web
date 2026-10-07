@@ -11,6 +11,9 @@ export interface SunoJobOptions {
   durationSeconds?: number | string;
   /** Complete studio songs end naturally; do not send an imposed duration. */
   naturalFullSong?: boolean;
+  /** Known production context used locally; never sent as vendor input fields. */
+  sourceMenu?: unknown;
+  presetId?: unknown;
   vocalGender?: string;
   /** Server-resolved Kie/Suno Voice ID. */
   personaId?: string;

@@ -96,7 +96,7 @@ async function submit(overrides = {}) {
   if (!payload.isInstrumental) assert.equal(input.prompt, lyrics, 'All six sections must reach the provider without truncation');
   assert.equal(input.persona_id, payload.isInstrumental ? undefined : personaId);
   assert.equal(input.persona_model, payload.isInstrumental ? undefined : 'style_persona');
-  if (!payload.isInstrumental) assert.equal(input.vocal_gender, 'f');
+  if (!payload.isInstrumental) assert.equal(input.vocal_gender, payload.vocalGender === 'male' ? 'm' : 'f');
   assert.equal(input.custom_mode, true);
   assert.equal(result.requestedDurationSeconds, input.duration, 'Receipt must record actual submitted duration');
   return { input, result };
@@ -115,6 +115,30 @@ test('performance preference reaches the API result while provider lyrics, tempo
   const timed = await submit({ presetId: performancePresetId, sourceMenu: 'voice-discovery-sample', metadata: { durationSeconds: 30 } });
   assert.equal(timed.result.requestedPreferredSeconds, undefined);
   assert.equal(timed.input.duration, 30);
+});
+
+test('Japan study vocals reserve lead protection while leaving backing hiss, persona and lyrics intact', async () => {
+  const { input, result } = await submit({ sourceMenu: 'japan', presetId: 'lofi-study', vocalGender: 'male',
+    stylePrompt: 'J-lofi hip-hop, male low baritone with natural husky and airy character, 72 BPM, tape hiss, gentle rain, warm piano',
+    excludePrompt: 'harsh drums' });
+  assert.match(input.style, /chosen vocal timbre.*first sung phrase/);
+  assert.match(input.style, /hiss belong only to instruments and background ambience/);
+  assert.match(input.style, /low baritone.*husky and airy character/);
+  assert.match(input.style, /72 BPM.*tape hiss.*gentle rain/);
+  assert.match(input.negative_tags, /^harsh drums, telephone-filtered lead vocal/);
+  assert.match(input.negative_tags, /electrical static on lead vocal/);
+  assert.equal(input.prompt, lyrics);
+  assert.equal(input.persona_id, personaId);
+  assert.equal(input.vocal_gender, 'm');
+  assert.equal(Object.hasOwn(input, 'duration'), false);
+  assert.equal(Object.hasOwn(input, 'sourceMenu'), false);
+  assert.equal(Object.hasOwn(input, 'presetId'), false);
+  assert.deepEqual(result.requestedPreferredSeconds, { minimum: 160, maximum: 240 });
+  for (const overrides of [{ presetId: 'rainy-day-enka' }, { sourceMenu: 'preset-studio' }, { isInstrumental: true }, { sourceMenu: 'voice-discovery-sample', metadata: { durationSeconds: 30 } }]) {
+    const other = await submit({ sourceMenu: 'japan', presetId: 'lofi-study', ...overrides });
+    assert.doesNotMatch(other.input.style, /chosen vocal timbre/);
+    assert.equal(other.input.negative_tags, undefined);
+  }
 });
 
 test('all three studios preserve a full song for the incident voice and misleading style words', async () => {

@@ -1,5 +1,6 @@
 /** Shared by the Next.js submission route and the Mac mini music worker. */
 const { prepareLyricsSubmission, assertSafeVocalLyrics } = require('./lyrics-policy');
+const { protectLofiLeadVocal } = require('./lofi-vocal-policy');
 const KIE_MODEL = 'ai-music-api/generate';
 const KIE_API_ORIGIN = 'https://api.kie.ai';
 const SUNO_TIMEOUT_MS = 15 * 60 * 1000;
@@ -76,6 +77,9 @@ function buildKieSunoRequest(options) {
   if (!style) throw new Error('음악 스타일 프롬프트를 입력해 주세요.');
   if (lyrics.length > 5000) throw new Error('Suno V6 가사는 5,000자 이내로 입력해 주세요.');
   const customMode = instrumental || lyrics.length > 0;
+  const protectedVocal = customMode
+    ? protectLofiLeadVocal(options, style, options.exclude, fitSunoStylePrompt)
+    : { style, exclude: options.exclude };
   const requestedPersona = String(options.personaId || '').trim();
   if (!instrumental && requestedPersona && !customMode) throw new Error('목소리 참조를 사용하려면 가사가 필요합니다.');
   if (options.personaModel && !['style_persona', 'voice_persona'].includes(options.personaModel)) throw new Error('목소리 참조 유형이 올바르지 않습니다.');
@@ -86,10 +90,10 @@ function buildKieSunoRequest(options) {
     prompt: customMode ? lyrics : `${style}${options.exclude ? `, avoid: ${options.exclude}` : ''}`.slice(0, 3000),
   };
   if (customMode) {
-    input.style = style.slice(0, 1000);
+    input.style = protectedVocal.style.slice(0, 1000);
     input.title = (String(options.title || '').trim() || 'Untitled').slice(0, 80);
     if (options.naturalFullSong !== true) input.duration = resolveDurationSeconds(options.durationSeconds);
-    if (options.exclude?.trim()) input.negative_tags = options.exclude.trim();
+    if (protectedVocal.exclude?.trim()) input.negative_tags = protectedVocal.exclude.trim();
     if (!instrumental && ['m', 'f'].includes(options.vocalGender)) input.vocal_gender = options.vocalGender;
     const personaId = String(options.personaId || '').trim();
     if (!instrumental && personaId) {

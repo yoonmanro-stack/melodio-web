@@ -291,6 +291,8 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     personaModel,
     durationSeconds: durationPlan.seconds,
     naturalFullSong: durationPlan.naturalFullSong,
+    sourceMenu: (payload as PromptPayload & { sourceMenu?: unknown }).sourceMenu,
+    presetId: selectedPresetId,
   })
   console.log(`[API/generate] Kie Suno 제출 성공 (model: ${result.model})`)
   return { ...result, requestedDurationSeconds: durationPlan.seconds, durationMode: durationPlan.mode, durationSource: durationPlan.source, requestedPreferredSeconds: durationPlan.preferredSeconds }
