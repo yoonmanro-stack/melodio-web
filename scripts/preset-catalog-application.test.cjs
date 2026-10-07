@@ -10,11 +10,13 @@ function load(relativePath) {
   const filename = path.join(root, relativePath);
   if (cache.has(filename)) return cache.get(filename);
   const source = fs.readFileSync(filename, 'utf8');
+  if (filename.endsWith('.json')) return JSON.parse(source);
   const module = { exports: {} };
   cache.set(filename, module.exports);
-  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const compiled = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   new Function('module', 'exports', 'require', compiled)(module, module.exports, specifier => {
     if (specifier.startsWith('@/')) return load(`src/${specifier.slice(2)}.ts`);
+    if (specifier.endsWith('.json') && specifier.startsWith('.')) return load(path.relative(root, path.resolve(path.dirname(filename), specifier)));
     throw new Error(`Unexpected runtime dependency: ${specifier}`);
   });
   return module.exports;
@@ -36,7 +38,7 @@ for (const builderName of ['PresetStudioBuilder', 'PromptBuilder']) test(`${buil
   };
   visit(ast);
   assert.ok(handler);
-  const code = ts.transpileModule(`exports.apply = ${handler}`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const code = ts.transpileModule(`exports.apply = ${handler}`, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
   for (const isPro of [false, true]) {
     const state = {};
     const module = { exports: {} };
@@ -71,6 +73,18 @@ test('public database beats stale bundled recipes and old URLs resolve the repre
   assert.equal(findStudioPreset('grime', [], merged).id, 'uk_grime');
   assert.equal(findStudioPreset('joseon-hip-hop', [], merged).id, 'joseon-hiphop');
   assert.equal(canonicalPresetId('custom-123'), 'custom-123');
+});
+
+test('future database edits survive the complete historical-correction and reviewed-profile path', () => {
+  const profiles = JSON.parse(fs.readFileSync(path.join(root, 'worker/preset-studio-profiles.json'), 'utf8'));
+  const corrected = Object.entries(profiles).filter(([, profile]) => profile.catalogSourceRecipe);
+  assert.equal(corrected.length, 12);
+  for (const [id] of corrected) {
+    const edited = makePreset(id, { isDb: true, customPrompt: 'future revised genre, 112 BPM, my chosen raspy voice', instrumentalOnly: false });
+    const selected = mergePublicPresetCatalog([edited], []).find(p => p.id === id);
+    assert.equal(selected.customPrompt, edited.customPrompt, id);
+    assert.equal(selected.instrumentalOnly, false, id);
+  }
 });
 
 test('a held database entry cannot resurrect from the bundled fallback', () => {
@@ -112,6 +126,68 @@ test('vocal instrumental palette descriptions stay vocal while explicit instrume
   assert.equal(resolvePresetApplication(makePreset('quiet', { customPrompt: 'Instrumental only, no vocals, grand piano' })).isInstrumental, true);
   assert.equal(resolvePresetApplication(makePreset('saved', { metadata: { isInstrumental: true }, customPrompt: 'my long musical recipe' })).isInstrumental, true);
   assert.equal(resolvePresetApplication(makePreset('tags', { metadata: { exclude_tags: ['choir', 'autotune'] } })).excludePrompt, 'choir, autotune');
+});
+
+test('the 21 reviewed vocal recipes remain vocal when their descriptions discuss performance', () => {
+  const cases = [
+    ['uk_jazz_modern', '재즈의 즉흥 연주와 과감하게 하이브리드했습니다.'],
+    ['symphonic_power_metal', '헤비메탈의 폭발적인 연주 속도에 클래식을 더합니다.'],
+    ['shoegaze', '연주자들이 무대 위에서 이펙터 페달을 바라봅니다.'],
+    ['screamo_skramz', '변칙적으로 폭발하는 드럼 연주 위에 가창합니다.'],
+    ['psychedelic_rock', '연주음을 퍼즈와 와와로 왜곡합니다.'],
+    ['progressive_rock', '재즈의 즉흥 연주와 우주적 세계관을 수용합니다.'],
+    ['mathcore', '예측 불가능한 박자로 몰아치는 드럼 연주가 핵심입니다.'],
+    ['math_rock_midwest_emo', '기타 줄을 양손으로 눌러 건반처럼 연주합니다.'],
+    ['math_rock', '변박자와 폴리리듬을 정교한 연주력으로 풀어냅니다.'],
+    ['korean_ballad', '아쿠스틱 그랜드 피아노 연주로 서정적인 시작을 알립니다.'],
+    ['hardcore_punk', '정교한 연주 테크닉을 배제한 채 거친 에너지를 냅니다.'],
+    ['glam_metal', '초고난도 전자기타 속주 솔로 연주가 등장합니다.'],
+    ['future_bass', '사람 목소리를 잘라 악기처럼 연주하는 보컬 찹을 더합니다.'],
+    ['folktronica', '자연주의적인 포크의 아날로그 악기와 전자음을 결합합니다.'],
+    ['flamenco', '관객과 연주자가 정교하게 쪼개는 손뼉 소리가 결합합니다.'],
+    ['dance_punk', '펑키한 베이스 기타 연주와 냉소적 가창을 앞세웁니다.'],
+    ['bossa_nova', '드럼 브러시 연주와 나직이 속삭이는 가창이 조화를 이룹니다.'],
+    ['bluegrass', '통기타의 초고속 속주 연주가 축제의 에너지를 만듭니다.'],
+    ['blackgaze', '아름답고 슬픈 멜로디를 연주하며 비명과 목소리가 교차합니다.'],
+    ['atmospheric_black_metal', '블래스트 비트 드럼 연주 뒤로 스산한 선율이 흐릅니다.'],
+    ['afro_cuban_jazz', '재즈의 복잡한 화성학과 즉흥 연주 기술을 결합합니다.'],
+  ];
+  for (const [id, desc] of cases) {
+    const recipe = 'Selected genre with expressive vocals, distinctive instruments and rhythm';
+    const application = resolvePresetApplication(makePreset(id, { desc, customPrompt: recipe }));
+    assert.equal(application.isInstrumental, false, id);
+    assert.equal(application.stylePrompt, recipe, id);
+  }
+});
+
+test('explicit modes and no-vocal constraints win while bare performance words never set mode', () => {
+  assert.equal(resolvePresetApplication(makePreset('selected-vocal', {
+    instrumentalOnly: false, name: '기타 연주곡', customPrompt: 'Instrumental only, no vocals',
+  })).isInstrumental, false);
+  assert.equal(resolvePresetApplication(makePreset('selected-instrumental', {
+    metadata: { instrumentalOnly: true }, customPrompt: 'expressive vocals',
+  })).isInstrumental, true);
+  assert.equal(resolvePresetApplication(makePreset('wordless', {
+    customPrompt: 'no lead vocals, ambient vocal textures',
+  })).isInstrumental, true);
+  assert.equal(resolvePresetApplication(makePreset('performance', {
+    desc: '기타 연주와 연주자의 자연주의적 해석', customPrompt: 'Warm acoustic guitar',
+  })).isInstrumental, false);
+  assert.equal(resolvePresetApplication(makePreset('clear-instrumental', {
+    name: '숲속 기타 연주곡', customPrompt: 'Warm acoustic guitar',
+  })).isInstrumental, true);
+});
+
+test('all reviewed explicit modes and the six genuine instrumental defaults survive', () => {
+  const corrections = load('src/data/presetCatalogCorrections.ts').presetCatalogCorrections;
+  for (const [id, correction] of Object.entries(corrections)) {
+    const preset = makePreset(id, { ...correction, customPrompt: correction.customPrompt || 'expressive vocals' });
+    assert.equal(resolvePresetApplication(preset).isInstrumental, correction.instrumentalOnly, id);
+  }
+  const merged = mergePublicPresetCatalog([makePreset('post_rock'), makePreset('quiet-forest-acoustic-guitar')], presets);
+  const instrumental = merged.filter(preset => resolvePresetApplication(preset).isInstrumental).map(preset => preset.id).sort();
+  assert.deepEqual(instrumental, ['post_rock', 'quiet-forest-acoustic-guitar', 'developer-debugging',
+    'iced-oolong-tea', 'matcha-kyoto-jazz', 'deep-sleep-drift'].sort());
 });
 
 test('reviewed category map covers the complete public catalog and six actual purposes', () => {

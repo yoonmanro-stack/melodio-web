@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useVoice } from '@/contexts/VoiceContext'
 import { matchesStudioVoice } from '@/lib/voice/studio-selection'
+import { getPresetStudioProfile, isPresetStudioSource } from '@/lib/preset-studio-profile'
 import type { LyricsSection, LyricsSectionType } from '@/types'
 import type { PlaylistTrack } from '@/types/playlist'
 
@@ -46,6 +47,7 @@ interface LyricsBuilderProps {
   activeTrackIdx: number
   onActiveTrackIdxChange: (idx: number) => void
   presetId?: string
+  sourceMenu?: string
   isJapanCampaign?: boolean
   lyricLanguage?: string
   onLyricLanguageChange?: (language: string) => void
@@ -103,6 +105,7 @@ export default function LyricsBuilder({
   activeTrackIdx,
   onActiveTrackIdxChange,
   presetId,
+  sourceMenu,
   isJapanCampaign = false,
   lyricLanguage,
   onLyricLanguageChange,
@@ -274,6 +277,8 @@ export default function LyricsBuilder({
           vocalGender: resolvedVocalGender,
           presetId,
           ...(isJapanCampaign ? { sourceMenu: 'japan', vocalProfileSpecified: Boolean(artistVoice || selectedVoice) } : {}),
+          ...(!isJapanCampaign && isPresetStudioSource(sourceMenu) && getPresetStudioProfile(presetId || '')
+            ? { sourceMenu, vocalProfileSpecified: Boolean(artistVoice || selectedVoice) } : {}),
         }),
       })
       const data = await response.json()

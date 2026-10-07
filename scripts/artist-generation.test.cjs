@@ -113,7 +113,21 @@ process.env.OPENAI_API_KEY = 'unit-test-only';
 const originalFetch = global.fetch;
 global.fetch = async () => { paidCalls++; throw Error('network forbidden in test'); };
 const studioSelection = loadTS('src/lib/voice/studio-selection.ts');
+const studioProfile = loadTS('src/lib/preset-studio-profile.ts', name => {
+  if (name === '../../worker/preset-studio-profiles.json') return require('../worker/preset-studio-profiles.json');
+  throw Error(`unexpected profile import: ${name}`);
+});
+const batchModel = loadTS('src/lib/generation-batches/model.ts');
+const batchServer = loadTS('src/lib/generation-batches/server.ts', name => {
+  if (name === './model') return batchModel;
+  if (name === 'server-only' || name === '@/lib/supabase/server') return {};
+  throw Error(`unexpected batch import: ${name}`);
+});
 const routeImports = {
+  '@/lib/generation-batches/model': batchModel,
+  '@/lib/generation-batches/server': batchServer,
+  '@/lib/preset-studio-profile': studioProfile,
+  '../../../../worker/suno-retry-identity': require('../worker/suno-retry-identity'),
   '@/lib/lyrics/compile-sections': require('../worker/lyrics-policy'),
   '@/lib/music-duration': {}, '@/lib/voice/official-voice-selection': { resolveOfficialVoice: () => null },
   '@/lib/voice/official-voice-registry': {}, '@/lib/voice/discovery-voice-selection': { assertExclusiveVoiceSelection: () => {}, resolveDiscoveryVoice: () => null },

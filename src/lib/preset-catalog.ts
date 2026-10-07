@@ -1,6 +1,7 @@
 import type { Preset } from '@/types'
 import { presetCatalogCategories, type PresetPurpose } from '@/data/presetCatalogCategories'
 import { presetCatalogCorrections } from '@/data/presetCatalogCorrections'
+import { getPresetStudioProfile, resolvePresetStudioStyle } from '@/lib/preset-studio-profile'
 
 /** Historical public keys continue to resolve, while one representative is listed. */
 export const PUBLIC_PRESET_ALIASES: Readonly<Record<string, string>> = {
@@ -44,9 +45,20 @@ export function getPresetGenreLabel(preset: Preset): string {
 }
 
 export function applyPublicPresetCorrections(preset: Preset): Preset {
-  const correction = (presetCatalogCorrections as Record<string, Partial<Preset>>)[preset.id]
+  const declaredCorrection = (presetCatalogCorrections as Record<string, Partial<Preset>>)[preset.id]
+  const profile = getPresetStudioProfile(preset.id)
+  const currentRecipe = preset.customPrompt || preset.metadata?.studio_grade_prompt || preset.metadata?.suno_tags
+  const recipeIsReviewed = profile && [profile.catalogSourceRecipe, profile.bundledSourceRecipe, profile.sourceRecipe, profile.recipe,
+    profile.selectedVoiceRecipe, profile.instrumentalRecipe].filter(Boolean).includes(currentRecipe)
+  // An editor's later DB recipe takes precedence over this historical patch.
+  let correction = declaredCorrection
+  if (correction?.customPrompt && profile && !recipeIsReviewed) {
+    const { customPrompt: _oldRecipe, instrumentalOnly: _oldMode, metadata: oldMetadata, ...rest } = correction
+    const { studio_grade_prompt: _oldStudioRecipe, instrumentalOnly: _oldMetadataMode, ...restMetadata } = oldMetadata || {}
+    correction = { ...rest, metadata: restMetadata }
+  }
   const category = getPresetCategory(preset)
-  if (!correction) return { ...preset, category, metadata: { ...preset.metadata, category } }
+  if (!correction) return applyReviewedStudioRecipe({ ...preset, category, metadata: { ...preset.metadata, category } })
   const metadata: NonNullable<Preset['metadata']> = { ...preset.metadata, ...correction.metadata, category: correction.category || category }
   if (correction.customPrompt) metadata.studio_grade_prompt = correction.customPrompt
   if (typeof correction.instrumentalOnly === 'boolean') metadata.instrumentalOnly = correction.instrumentalOnly
@@ -54,7 +66,17 @@ export function applyPublicPresetCorrections(preset: Preset): Preset {
     if (correction[`name_${language}`]) metadata[`name_${language}`] = correction[`name_${language}`]
     if (correction[`desc_${language}`]) metadata[`desc_${language}`] = correction[`desc_${language}`]
   }
-  return { ...preset, ...correction, metadata }
+  return applyReviewedStudioRecipe({ ...preset, ...correction, metadata })
+}
+
+function applyReviewedStudioRecipe(preset: Preset): Preset {
+  const profile = getPresetStudioProfile(preset.id)
+  const current = preset.customPrompt || preset.metadata?.studio_grade_prompt || preset.metadata?.suno_tags
+  if (!profile || typeof current !== 'string') return preset
+  const recipe = resolvePresetStudioStyle(current, preset.id, profile.isInstrumental)
+  if (recipe === current && current !== profile.recipe && current !== profile.instrumentalRecipe) return preset
+  return { ...preset, customPrompt: recipe, instrumentalOnly: profile.isInstrumental,
+    metadata: { ...preset.metadata, studio_grade_prompt: recipe, instrumentalOnly: profile.isInstrumental } }
 }
 
 export function isPublicPresetVisible(preset: Preset): boolean {

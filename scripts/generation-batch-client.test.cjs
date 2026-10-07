@@ -75,7 +75,7 @@ for (const [file, name, menu] of studios) {
         isPlaylistMode: true, isInstrumental: false, engine: 'suno_v5', sunoVersion: 'v6',
         user: { id: 'offline-owner' }, sourceMenu: menu, searchParams: new URLSearchParams(),
         artistState: { getError: () => null, requestFields: {} }, artistSettings: {},
-        selections: {}, selectedStudioPreset: null, selectedPresetId: null, selectedPresetName: '',
+        selections: {}, customPresets: [], selectedStudioPreset: null, selectedPresetId: null, selectedPresetName: '',
         stylePrompt: 'Jazz', styleTags: 'Jazz', studioVoiceFields: { lyricsLanguage: 'ko', vocalGender: 'female' },
         isAsmrEnabled: false, ambientFoley: '', dynamicElements: null, ambienceVolume: 0, isPublic: false,
         generationJob: null, allJpPresets: [],

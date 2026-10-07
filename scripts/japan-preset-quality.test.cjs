@@ -86,6 +86,9 @@ function evaluateTs(relative, source, modules = {}) {
 const helper = evaluateTs('src/lib/japan-preset-profile.ts', undefined, {
   '../../worker/japan-preset-profiles.json': profiles,
 });
+const studioProfileModule = { getPresetStudioProfile: () => undefined,
+  isPresetStudioSource: source => ['preset-studio', 'audio-forge', 'audio-forge-pro', 'audio'].includes(source) };
+const formModule = evaluateTs('src/lib/lyrics/validate-song-form.ts');
 
 function loadWorker(relative, revision) {
   const cache = new Map();
@@ -124,6 +127,8 @@ function loadLyrics(source) {
   };
   const exports = evaluateTs('src/lib/engines/lyrics-generator.ts', source, {
     '@/lib/japan-preset-profile': helper,
+    '@/lib/preset-studio-profile': studioProfileModule,
+    '@/lib/lyrics/validate-song-form': formModule,
     '@/lib/lyrics/compile-sections': policy,
     '@/lib/db/knowledge': knowledge,
     '@/lib/engines/infinite-story-matrix': { generateBoundlessCreativeVector: () => ({
@@ -352,19 +357,20 @@ test('executed UI selection initializes nine instrumental defaults, honors chose
   assert.match(source, /lyricTopic=\{topic\}/);
 });
 
-test('lyrics route forwards only exact Japan scope and a strict chosen-voice boolean', async () => {
+test('lyrics route forwards Japan and reviewed studio sources with a strict chosen-voice boolean', async () => {
   const calls = [];
   const route = evaluateTs('src/app/api/lyrics/generate/route.ts', undefined, {
+    '@/lib/preset-studio-profile': studioProfileModule,
     '@/lib/engines/lyrics-generator': { generateLyrics: async params => { calls.push(params); return { title: 'Offline route fixture' }; } },
     'next/server': { NextResponse: { json(body, options = {}) { return { body, status: options.status || 200 }; } } },
   });
-  for (const sourceMenu of ['japan', 'preset-studio', undefined, 'japan-copy']) for (const selected of [true, false, 'true', undefined]) {
+  for (const sourceMenu of ['japan', 'preset-studio', 'audio-forge', 'audio-forge-pro', 'audio', undefined, 'japan-copy']) for (const selected of [true, false, 'true', undefined]) {
     const body = { stylePrompt: profiles['romance-pop'].recipe, presetId: 'romance-pop', sourceMenu, vocalProfileSpecified: selected };
     const result = await route.POST({ json: async () => body });
     assert.equal(result.status, 200);
     const params = calls.at(-1);
-    if (sourceMenu === 'japan') {
-      assert.equal(params.sourceMenu, 'japan');
+    if (sourceMenu === 'japan' || studioProfileModule.isPresetStudioSource(sourceMenu)) {
+      assert.equal(params.sourceMenu, sourceMenu);
       assert.equal(params.vocalProfileSpecified, selected === true);
     } else {
       assert.equal(Object.hasOwn(params, 'sourceMenu'), false);
@@ -467,7 +473,13 @@ test('unknown IDs, non-Japan menus, explicit short forms and viral modes retain 
   for (const params of cases) for (const playlist of [false, true]) {
     const input = { stylePrompt: 'Original city pop, chosen husky register, 147 BPM', language: 'ja-en', vocalGender: 'male',
       vocalProfileSpecified: true, isPlaylistMode: playlist, trackCount: 2, ...params };
-    const authored = payload('ja-en', playlist), oldFixture = responder(authored), nextFixture = responder(authored);
+    const authored = payload('ja-en', playlist);
+    if (params.presetId === 'brazilian-funk-kpop-performance' && !params.viralMode && !(params.durationSeconds <= 60)) {
+      for (const song of authored.tracks || [authored]) song.sections = ['intro', 'verse', 'pre-chorus', 'chorus', 'verse', 'pre-chorus', 'chorus', 'outro'].map(type => ({
+        type, content: ['intro', 'outro'].includes(type) ? '' : '君と歩いた道で I remember your smile', description: 'Warm melody',
+      }));
+    }
+    const oldFixture = responder(authored), nextFixture = responder(authored);
     const oldResult = await baseline.generateLyrics(input, oldFixture.dependencies);
     const nextResult = await current.generateLyrics(input, nextFixture.dependencies);
     assert.equal(digest(nextFixture.calls[0].body), digest(oldFixture.calls[0].body), `${params.presetId}/${params.sourceMenu}/${params.durationSeconds}/${playlist}`);

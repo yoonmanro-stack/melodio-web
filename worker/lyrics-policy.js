@@ -1,4 +1,5 @@
 /** Shared by browser editors, server submissions and worker retries. */
+const { preserveReviewedMusicWhileScrubbing } = require('./preset-studio-music-policy');
 const SECTION_LABELS = Object.freeze({
   intro: 'Intro', introduction: 'Intro',
   verse: 'Verse', prechorus: 'Pre-Chorus', chorus: 'Chorus', postchorus: 'Post-Chorus',
@@ -81,6 +82,9 @@ function mergeLyricsDescriptions(stylePrompt, descriptions, maxChars = 1000) {
 
 /** Match the server's existing scrubConflictingVocalTags solo rules. */
 function scrubSoloVocalStyle(stylePrompt, vocalGender) {
+  return preserveReviewedMusicWhileScrubbing(stylePrompt, vocalGender, scrubSoloVocalTerms);
+}
+function scrubSoloVocalTerms(stylePrompt, vocalGender) {
   const gender = typeof vocalGender === 'string' ? vocalGender.trim().toLowerCase() : '';
   let cleaned = stylePrompt;
   if (gender === 'female' || gender === 'f') {

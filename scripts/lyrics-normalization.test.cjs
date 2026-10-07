@@ -29,6 +29,9 @@ function loadTs(relative, modules) {
 function loadEngine() {
   return loadTs('src/lib/engines/lyrics-generator.ts', {
     '@/lib/japan-preset-profile': { getJapanPresetProfile: id => require('../worker/japan-preset-profiles.json')[id] },
+    '@/lib/preset-studio-profile': { getPresetStudioProfile: () => undefined,
+      isPresetStudioSource: source => ['preset-studio', 'audio-forge', 'audio-forge-pro', 'audio'].includes(source) },
+    '@/lib/lyrics/validate-song-form': loadTs('src/lib/lyrics/validate-song-form.ts', {}),
     '@/lib/lyrics/compile-sections': policy,
     '@/lib/db/knowledge': { getPlaybookByKey: async () => null, matchPlaybooksByPrompt: async () => [], matchEpisodesByCategoryAndTopic: async () => [] },
     '@/lib/engines/infinite-story-matrix': { generateBoundlessCreativeVector: () => ({ uniqueEntropySeed: 'offline', perspectiveType: 'authored', thematicDimension: 'theme', sensoryFocus: 'senses' }) },
@@ -49,10 +52,14 @@ function fixture(payload) {
 }
 
 const safeSections = [
+  { type: 'intro', content: '', description: 'male vocal, [warm guitar] [brushed drums]' },
   { type: 'verse', content: '  오늘 [기억]을 노래해  ', description: 'male vocal, [warm guitar] [brushed drums]' },
   { type: 'chorus', content: '내 기타 소리에 춤을 추네', description: 'intimate male vocal' },
+  { type: 'verse', content: '밤의 길을 따라 다시 집으로 돌아가', description: 'Warm guitar' },
+  { type: 'chorus', content: '내 기타 소리에 춤을 추네', description: 'intimate male vocal' },
+  { type: 'outro', content: '', description: 'Natural instrumental ending' },
 ];
-const canonical = '[Verse]\n오늘 [기억]을 노래해\n\n[Chorus]\n내 기타 소리에 춤을 추네';
+const canonical = policy.compileLyricsSections(safeSections.map(section => ({ ...section, content: section.content.trim() }))).lyricsPrompt;
 const song = (sections = safeSections) => ({
   title: 'Offline authored title', youtubeTags: 'offline,tags', snsHashtags: '#offline', sections,
   lyricsPrompt: '[male vocal, [warm guitar] [brushed drums], close microphone production]',
@@ -113,7 +120,7 @@ test('generated normalized sections, Queue approval/hash and provider input are 
 
 for (const [name, content] of unsafe) test('generator and Queue reject ' + name + ' without a safe-looking raw fallback', async () => {
   const { generateLyrics } = loadEngine();
-  const payload = song([{ type: 'verse', content, description: 'production context' }]);
+  const payload = song(safeSections.map((section, index) => index === 1 ? { type: 'verse', content, description: 'production context' } : section));
   payload.lyricsPrompt = '[Verse]\nSafe-looking raw fallback';
   const mock = fixture(payload);
   await assert.rejects(generateLyrics({ stylePrompt: 'acoustic pop', language: 'ko' }, mock.dependencies), error => error.code === 'lyrics_instruction_in_content');
@@ -124,7 +131,7 @@ for (const [name, content] of unsafe) test('generator and Queue reject ' + name 
 test('playlist validation rejects unsafe track content before returning any playlist', async () => {
   const { generateLyrics } = loadEngine();
   const payload = { playlistTitle: 'Offline playlist', youtubeDescription: 'Preserved description', youtubeTags: 'playlist', snsHashtags: '#playlist',
-    tracks: [{ trackNumber: 1, title: 'Good', sections: safeSections }, { trackNumber: 2, title: 'Bad', sections: [{ type: 'verse', content: unsafe[2][1] }] }] };
+    tracks: [{ trackNumber: 1, title: 'Good', sections: safeSections }, { trackNumber: 2, title: 'Bad', sections: safeSections.map((section, index) => index === 1 ? { type: 'verse', content: unsafe[2][1] } : section) }] };
   const mock = fixture(payload);
   await assert.rejects(generateLyrics({ stylePrompt: 'acoustic pop', language: 'ko', isPlaylistMode: true, trackCount: 2 }, mock.dependencies), error => error.code === 'lyrics_instruction_in_content');
   assert.equal(mock.calls.length, 1);
@@ -134,14 +141,14 @@ test('safe playlist keeps track and playlist metadata and permits authored instr
   const { generateLyrics } = loadEngine();
   const payload = { playlistTitle: 'Offline playlist', youtubeDescription: 'Preserved description', youtubeTags: 'playlist', snsHashtags: '#playlist',
     tracks: [{ trackNumber: 1, title: 'One', youtubeTags: 'one', snsHashtags: '#one', sections: safeSections },
-      { trackNumber: 2, title: 'Two', youtubeTags: 'two', snsHashtags: '#two', sections: [{ type: 'verse', content: 'I remember your piano, my guitar carries love, our drums sing memories' }] }] };
+      { trackNumber: 2, title: 'Two', youtubeTags: 'two', snsHashtags: '#two', sections: safeSections.map((section, index) => index === 1 ? { type: 'verse', content: 'I remember your piano, my guitar carries love, our drums sing memories' } : section) }] };
   const result = await generateLyrics({ stylePrompt: 'acoustic pop', language: 'ko', isPlaylistMode: true, trackCount: 2 }, fixture(payload).dependencies);
   assert.equal(result.playlistTitle, payload.playlistTitle);
   assert.equal(result.youtubeDescription, payload.youtubeDescription);
   assert.equal(result.tracks[1].title, 'Two');
   assert.equal(result.tracks[1].youtubeTags, 'two');
   assert.equal(result.tracks[1].snsHashtags, '#two');
-  assert.equal(result.tracks[1].sections[0].content, payload.tracks[1].sections[0].content);
+  assert.equal(result.tracks[1].sections[1].content, payload.tracks[1].sections[1].content);
 });
 
 test('Queue checks raw fallback only when no usable sections exist', () => {

@@ -20,6 +20,10 @@ function load(relativePath, dependencies = {}, globals = {}) {
   return module.exports;
 }
 const model = load('src/lib/generation-batches/model.ts');
+const studioProfile = load('src/lib/preset-studio-profile.ts', {
+  '../../worker/preset-studio-profiles.json': { default: require('../worker/preset-studio-profiles.json') },
+});
+const { sealSunoRetryIdentity } = require('../worker/suno-retry-identity');
 const server = load('src/lib/generation-batches/server.ts', {
   'server-only': {}, '@/lib/supabase/server': {}, './model': model,
 });
@@ -91,6 +95,8 @@ function harness(options = {}) {
     parseGenerationBatchInput: model.parseGenerationBatchInput,
     GenerationBatchError: model.GenerationBatchError,
     ensureGenerationBatch: server.ensureGenerationBatch,
+    ...studioProfile,
+    sealSunoRetryIdentity,
     createClient: async () => client,
     createSupabaseClient: () => client,
     applyVoiceDesignRequest: () => null,

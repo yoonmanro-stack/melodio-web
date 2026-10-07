@@ -138,6 +138,8 @@ interface LyricsGeneratorDependencies {
 
 import { loadVLEMasterPrompt } from '@/lib/vle/vleEngine';
 import { getJapanPresetProfile } from '@/lib/japan-preset-profile';
+import { getPresetStudioProfile, isPresetStudioSource } from '@/lib/preset-studio-profile';
+import { validateGeneratedSongForm } from '@/lib/lyrics/validate-song-form';
 import { buildStructureDirective } from '@/lib/vle/viralSongSpec';
 
 export interface GenerateLyricsParams {
@@ -218,6 +220,20 @@ export function detectGenreThematicProfile(stylePrompt: string, topic?: string, 
       personaTitleFormula: 'Write an original title in the requested language based on a concrete scene or emotional turn; avoid generic genre labels.',
       bannedCliches: 'Preserve the selected genre, instruments and user tempo. Develop coherent lyric thoughts and a memorable melodic hook without slogans, filler or generic healing labels.',
       descriptionInstructions: `\n## REVIEWED JAPAN PRESET ARRANGEMENT AND VOCAL DIRECTIONS\n- Preserve the requested genre and instruments: ${japan.genreLabel}. The supplied style and any explicit user tempo remain authoritative; do not substitute random instruments, BPM or a different genre.\n- Keep each section description in plain, unbracketed English, at most two short clauses and 60 characters total. Describe only the section change; all production directions stay out of sung content.\n- Preserve the requested singer or singers, gender, language and chosen voice character. Lead phrases remain coherent and intelligible from the first line; background noise, pitch chops, sidechain and electronic textures belong to backing instruments, never incidental lead-vocal filtering.\n${options?.vocalProfileSpecified ? '- A chosen voice is active: preserve its register, texture and expression; do not apply a different default vocal color.' : `- When no voice is selected, the default vocal direction is: ${japan.defaultVocal}.`}\n- Maintain the existing complete six-section song form and a natural ending. Prioritize melodic, lyrical and expressive quality over clock timing.\n`,
+      preserveStyle: true,
+    }
+  }
+  const studio = options?.ordinarySong && isPresetStudioSource(options.sourceMenu)
+    ? getPresetStudioProfile(presetId) : undefined
+  if (studio) {
+    return {
+      genre: 'general',
+      nameKo: studio.genreLabel,
+      thematicPillars: [{ title: studio.genreLabel, subThemes: [studio.lyricTheme], sampleTitles: [],
+        lyricsGuidance: 'Honor the user theme first; develop two distinct scenes and a meaningful, singable hook without singing production directions.' }],
+      personaTitleFormula: 'Write an original song title in the requested language based on the user theme, concrete imagery or an emotional turn; avoid genre labels and promotional wording.',
+      bannedCliches: 'Preserve the supplied musical identity and explicit user edits. Develop coherent lyric thoughts, concrete imagery and a memorable hook without unrelated genre imagery, generic healing labels, slogans or filler.',
+      descriptionInstructions: `\n## REVIEWED PRESET STUDIO ARRANGEMENT AND VOCAL DIRECTIONS\n- Preserve the selected genre: ${studio.genreLabel}. The supplied style, instruments, rhythm and any explicit user tempo remain authoritative; do not substitute random BPM, keys, instruments or a different genre. Explicit user edits take precedence over catalog defaults.\n- The user theme and any requested lyric phrase come first; catalog imagery is optional inspiration when no theme is supplied. Do not import unrelated comic episodes, antagonists, slogans or narrative roles.\n- Keep section descriptions in plain, unbracketed English, at most two short clauses and 60 characters total. Describe only the section change; production instructions remain separate from sung words.\n- Preserve the requested singer or singers, gender, language and chosen voice character. Keep complete, intelligible lead phrases; incidental texture, chops, pitch processing and sidechain belong to backing instruments unless explicitly requested for the lead.\n${options?.vocalProfileSpecified ? '- A chosen artist or voice is active: preserve its register, texture, phrasing and expression; do not impose the catalog default vocal color.' : studio.defaultVocal ? `- When no voice is selected and the user has not supplied a vocal direction, the default lead direction is: ${studio.defaultVocal}.` : ''}\n- Maintain the existing complete ${studio.performanceSectionCount === 8 ? 'eight' : 'six'}-section form and resolve the final phrase naturally. Prioritize lyric, melodic and expressive quality over clock timing.\n`,
       preserveStyle: true,
     }
   }
@@ -439,6 +455,9 @@ export async function generateLyrics(
   const usePerformanceStructure = params.presetId === BRAZILIAN_FUNK_PERFORMANCE_PRESET && isOrdinarySong
   const songStructure = usePerformanceStructure ? BRAZILIAN_FUNK_PERFORMANCE_INSTRUCTIONS : NATURAL_SONG_INSTRUCTIONS
   const reviewedJapanProfile = params.sourceMenu === 'japan' && isOrdinarySong ? getJapanPresetProfile(params.presetId) : undefined
+  const reviewedStudioProfile = isOrdinarySong && isPresetStudioSource(params.sourceMenu)
+    ? getPresetStudioProfile(params.presetId) : undefined
+  const reviewedPresetProfile = reviewedJapanProfile || reviewedStudioProfile
   const genreProfile = detectGenreThematicProfile(params.stylePrompt, params.topic, params.presetId,
     { ordinarySong: isOrdinarySong, sourceMenu: params.sourceMenu, vocalProfileSpecified: params.vocalProfileSpecified })
 
@@ -478,7 +497,7 @@ export async function generateLyrics(
 
   // Match playbooks from DB (Obsidian synced)
   let playbookInstructions = ''
-  if (!reviewedJapanProfile) {
+  if (!reviewedPresetProfile) {
   try {
     let matchedPlaybook: CurationPlaybook | null = null
     if (params.presetId) {
@@ -532,6 +551,8 @@ export async function generateLyrics(
 
   const narrativeDirective = reviewedJapanProfile
     ? `\n\n## GENRE-FAITHFUL ORIGINALITY\nRespect the user topic first. Explore fresh, concrete scenes within ${reviewedJapanProfile.lyricTheme}. Each track must have its own emotional turn, imagery and hook while retaining the selected musical identity; do not import an unrelated comic episode, antagonist, shout or genre.\n`
+    : reviewedStudioProfile
+    ? `\n\n## GENRE-FAITHFUL ORIGINALITY\nRespect the user topic and explicit requests first. When no topic is supplied, explore fresh, concrete scenes within ${reviewedStudioProfile.lyricTheme}. Each track must have its own emotional turn, imagery and hook while retaining the supplied musical identity; do not import an unrelated comic episode, antagonist, shout or genre.\n`
     : isPlaylist
     ? `\n\n## 🌌 1,000-SONG ABSOLUTE DIVERSITY DIRECTIVE (EVERY TRACK MUST BE A COMPLETELY UNIQUE UNIVERSE):\n` +
       playlistVectors.map((v, idx) => 
@@ -610,7 +631,8 @@ ${narrativeDirective}`
   if (isPlaylist) {
     if (typeof parsed.playlistTitle !== 'string' || !parsed.playlistTitle.trim()
         || !Array.isArray(parsed.tracks) || parsed.tracks.length !== trackCount
-        || parsed.tracks.some(track => !track || !hasLyricsSections(track.sections))) {
+        || parsed.tracks.some(track => !track || !hasLyricsSections(track.sections)
+          || !validateGeneratedSongForm(track.sections, { ordinarySong: isOrdinarySong, presetId: params.presetId }))) {
       throw new LyricsGenerationError('lyrics_response_structure', `요청한 ${trackCount}곡의 가사 형식을 완성하지 못했습니다. 다시 생성해 주세요.`)
     }
     
@@ -649,7 +671,8 @@ ${narrativeDirective}`
       modelUsage,
     }
   } else {
-    if (typeof parsed.title !== 'string' || !parsed.title.trim() || !hasLyricsSections(parsed.sections)) {
+    if (typeof parsed.title !== 'string' || !parsed.title.trim() || !hasLyricsSections(parsed.sections)
+        || !validateGeneratedSongForm(parsed.sections, { ordinarySong: isOrdinarySong, presetId: params.presetId })) {
       throw new LyricsGenerationError('lyrics_response_structure', '가사 생성 응답에 곡 제목이나 가사 파트가 빠졌습니다. 다시 생성해 주세요.')
     }
 

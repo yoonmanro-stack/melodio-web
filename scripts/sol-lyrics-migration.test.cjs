@@ -13,6 +13,12 @@ const MODEL = 'gpt-5.6-sol';
 const KEY = 'offline-fixture-key';
 const japanProfiles = require('../worker/japan-preset-profiles.json');
 const profileModule = { getJapanPresetProfile: id => Object.hasOwn(japanProfiles, id || '') ? japanProfiles[id] : undefined };
+const studioProfileModule = { getPresetStudioProfile: () => undefined,
+  isPresetStudioSource: source => ['preset-studio', 'audio-forge', 'audio-forge-pro', 'audio'].includes(source) };
+const formModule = { exports: {} };
+new Function('module', 'exports', ts.transpileModule(fs.readFileSync(path.join(root, 'src/lib/lyrics/validate-song-form.ts'), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText)(formModule, formModule.exports);
 function loadLyrics(sourceOverride, { random = Math.random } = {}) {
   const filename = path.join(root, 'src/lib/engines/lyrics-generator.ts');
   const module = { exports: {} };
@@ -20,6 +26,8 @@ function loadLyrics(sourceOverride, { random = Math.random } = {}) {
   const knowledge = { getPlaybookByKey: async () => { offlineProbe.knowledgeCalls++; return null; }, matchPlaybooksByPrompt: async () => { offlineProbe.knowledgeCalls++; return []; }, matchEpisodesByCategoryAndTopic: async () => { offlineProbe.knowledgeCalls++; return []; } };
   const modules = {
     '@/lib/japan-preset-profile': profileModule,
+    '@/lib/preset-studio-profile': studioProfileModule,
+    '@/lib/lyrics/validate-song-form': formModule.exports,
     '@/lib/lyrics/compile-sections': require(path.join(root, 'worker/lyrics-policy.js')),
     '@/lib/db/knowledge': knowledge,
     '@/lib/engines/infinite-story-matrix': { generateBoundlessCreativeVector: () => ({ uniqueEntropySeed: 'offline', perspectiveType: 'authored perspective', thematicDimension: 'authored theme', sensoryFocus: 'authored sensory focus' }) },
@@ -46,6 +54,7 @@ function loadRoute(engine) {
     module, exports: module.exports,
     require(name) {
       if (name === '@/lib/engines/lyrics-generator') return { generateLyrics: engine };
+      if (name === '@/lib/preset-studio-profile') return studioProfileModule;
       if (name === 'next/server') return { NextResponse: { json(body, options = {}) { return { body, status: options.status || 200 }; } } };
       throw new Error(`Unmocked route module: ${name}`);
     }, Error,
@@ -53,8 +62,8 @@ function loadRoute(engine) {
   return module.exports;
 }
 const section = (type = 'verse', content = '  작성된 가사  ') => ({ type, content, description: '  intimate female vocal  ' });
-const singlePayload = () => ({ title: '사용자가 정한 감성의 곡', youtubeTags: '감성, 일상', snsHashtags: '#감성', sections: [section(), section('chorus', '  작성된 후렴  ')] });
-const playlistPayload = count => ({ playlistTitle: '선택한 플레이리스트', youtubeDescription: '작성한 목록 설명', youtubeTags: 'playlist', snsHashtags: '#playlist', tracks: Array.from({ length: count }, (_, i) => ({ trackNumber: i + 1, title: `작성한 곡 ${i + 1}`, youtubeTags: `track${i + 1}`, snsHashtags: `#track${i + 1}`, sections: [section('verse', `  서로 다른 가사 ${i + 1}  `)] })) });
+const singlePayload = () => ({ title: '사용자가 정한 감성의 곡', youtubeTags: '감성, 일상', snsHashtags: '#감성', sections: ['intro', 'verse', 'chorus', 'verse', 'chorus', 'outro'].map(type => section(type, type === 'chorus' ? '  작성된 후렴  ' : '  작성된 가사  ')) });
+const playlistPayload = count => ({ playlistTitle: '선택한 플레이리스트', youtubeDescription: '작성한 목록 설명', youtubeTags: 'playlist', snsHashtags: '#playlist', tracks: Array.from({ length: count }, (_, i) => ({ trackNumber: i + 1, title: `작성한 곡 ${i + 1}`, youtubeTags: `track${i + 1}`, snsHashtags: `#track${i + 1}`, sections: singlePayload().sections.map(s => ({ ...s, content: `  서로 다른 가사 ${i + 1}  ` })) })) });
 function responder(payload = singlePayload(), options = {}) {
   const calls = [];
   const dependencies = { apiKey: KEY, fetch: async (url, request) => {
@@ -87,7 +96,7 @@ test('single full-song success uses one fixed Sol request and preserves structur
   assert.match(fixture.calls[0].body.messages[1].content, /Language: Korean/);
   assert.equal(result.title, singlePayload().title); assert.equal(result.youtubeTags, '감성, 일상'); assert.equal(result.snsHashtags, '#감성');
   assert.equal(result.sections[0].content, '작성된 가사'); assert.equal(result.sections[0].description, 'intimate female vocal');
-  assert.match(result.sections[0].id, /^gpt-/); assert.equal(result.lyricsPrompt, '[Verse]\n작성된 가사\n\n[Chorus]\n작성된 후렴');
+  assert.match(result.sections[0].id, /^gpt-/); assert.equal(result.lyricsPrompt, require('../worker/lyrics-policy.js').compileLyricsSections(singlePayload().sections.map(s => ({ ...s, content: s.content.trim() }))).lyricsPrompt);
   assert.match(result.stylePrompt, /^acoustic pop,/);
   assert.deepEqual(JSON.parse(JSON.stringify(result.modelUsage)), { requestedModel: MODEL, actualModel: MODEL, reasoningEffort: 'high', inputTokens: 1200, outputTokens: 800, reasoningTokens: 500 });
 });
@@ -168,13 +177,17 @@ test('single songs and playlists share five-line verses across studio languages 
 const PERFORMANCE_PRESET = 'brazilian-funk-kpop-performance';
 const PERFORMANCE_STYLE = 'Brazilian Funk, K-pop performance, 130 BPM, syncopated tamborzao drums, punchy electronic bass, assertive sung vocals';
 const performanceTypes = ['intro', 'verse', 'pre-chorus', 'chorus', 'verse', 'pre-chorus', 'chorus', 'outro'];
+function usePerformanceFixture(payload) {
+  for (const song of payload.tracks || [payload]) song.sections = performanceTypes.map(type => section(type));
+  return payload;
+}
 test('only the selected ordinary performance preset gets the same developed eight-section form in single songs and playlists', async () => {
   const { generateLyrics } = loadLyrics(undefined, { random: () => 0.25 });
   let sharedCore;
   for (const language of ['ko', 'en', 'pt', 'ko-en']) {
     for (const isPlaylistMode of [false, true]) {
       for (const durationSeconds of [undefined, 61, 195]) {
-        const fixture = responder(isPlaylistMode ? playlistPayload(2) : singlePayload());
+        const fixture = responder(usePerformanceFixture(isPlaylistMode ? playlistPayload(2) : singlePayload()));
         const result = await generateLyrics({ stylePrompt: PERFORMANCE_STYLE, presetId: PERFORMANCE_PRESET,
           language, isPlaylistMode, trackCount: 2, vocalGender: 'female', durationSeconds }, fixture.dependencies);
         const [system, user] = fixture.calls[0].body.messages.map(message => message.content);
@@ -203,7 +216,7 @@ test('only the selected ordinary performance preset gets the same developed eigh
       }
     }
   }
-  const noTempo = responder();
+  const noTempo = responder(usePerformanceFixture(singlePayload()));
   const result = await generateLyrics({ stylePrompt: 'Brazilian Funk performance, original bass and drums', presetId: PERFORMANCE_PRESET }, noTempo.dependencies);
   assert.equal(result.stylePrompt, 'Brazilian Funk performance, original bass and drums');
   assert.doesNotMatch(result.stylePrompt, /BPM|key of|featuring/);
@@ -245,7 +258,7 @@ test('performance composition preserves returned phrases and pre-choruses while 
   const verse = Array.from({ length: 10 }, (_, index) => `무대 위의 서로 다른 이야기 ${index + 1}`).join('\n');
   const authoredPhrase = '우리가 고른 다음 걸음';
   for (const isPlaylistMode of [false, true]) {
-    const payload = isPlaylistMode ? playlistPayload(2) : singlePayload();
+    const payload = usePerformanceFixture(isPlaylistMode ? playlistPayload(2) : singlePayload());
     const songs = isPlaylistMode ? payload.tracks : [payload];
     for (const song of songs) song.sections = performanceTypes.map((type, index) => ({ type,
       content: type === 'intro' || type === 'outro' ? '' : type === 'verse' ? `${verse}\n${authoredPhrase}` : `서로의 눈빛에 답하는 순간 ${index}`,
@@ -274,7 +287,7 @@ test('performance composition preserves returned phrases and pre-choruses while 
 test('the performance preset still rejects production instructions returned as sung words without retrying', async () => {
   const { generateLyrics } = loadLyrics();
   for (const isPlaylistMode of [false, true]) {
-    const payload = isPlaylistMode ? playlistPayload(2) : singlePayload();
+    const payload = usePerformanceFixture(isPlaylistMode ? playlistPayload(2) : singlePayload());
     const songs = isPlaylistMode ? payload.tracks : [payload];
     songs[0].sections[0].content = '[female vocal, synth bass, tamborzao drums]';
     const fixture = responder(payload);
@@ -395,15 +408,15 @@ test('Harajuku respects chosen male, female and duet singing and does not trunca
   for (const vocalGender of ['male', 'female', 'duet']) {
     for (const isPlaylistMode of [false, true]) {
       const payload = isPlaylistMode ? playlistPayload(2) : singlePayload();
-      for (const song of isPlaylistMode ? payload.tracks : [payload]) song.sections[0] = { type: 'verse', content: verse, description: direction };
+      for (const song of isPlaylistMode ? payload.tracks : [payload]) song.sections[1] = { type: 'verse', content: verse, description: direction };
       const fixture = responder(payload);
       const style = `${harajukuRecipe()}, chosen ${vocalGender} vocals with a naturally high husky register`;
       const result = await generateLyrics({ stylePrompt: style, presetId: HARAJUKU_PRESET,
         language: 'ja', vocalGender, isPlaylistMode, trackCount: 2 }, fixture.dependencies);
       assert.equal(result.stylePrompt, style);
       for (const song of isPlaylistMode ? result.tracks : [result]) {
-        assert.equal(song.sections[0].content, verse);
-        assert.equal(song.sections[0].description, direction, 'The description budget is composition guidance, not a post-generation crop');
+        assert.equal(song.sections[1].content, verse);
+        assert.equal(song.sections[1].description, direction, 'The description budget is composition guidance, not a post-generation crop');
       }
       const system = fixture.calls[0].body.messages[0].content;
       assert.match(system, /Preserve the requested singer or singers, gender, language, register and individual vocal color/);
@@ -434,6 +447,7 @@ test('all off-scope Harajuku aliases, other ordinary presets, short forms and vi
   for (const params of cases) {
     for (const isPlaylistMode of [false, true]) {
       const payload = isPlaylistMode ? playlistPayload(2) : singlePayload();
+      if (params.presetId === PERFORMANCE_PRESET && !params.viralMode && !(params.durationSeconds <= 60)) usePerformanceFixture(payload);
       const before = responder(payload), after = responder(payload);
       const input = { ...params, isPlaylistMode, trackCount: 2, vocalGender: 'female' };
       const oldResult = await old.generateLyrics(input, before.dependencies);
@@ -487,6 +501,7 @@ test('playlist success preserves requested track count, titles, sections and pla
 });
 test('short duration preserves its timing contract and compiles canonical sections over the supplied raw prompt', async () => {
   const { generateLyrics } = loadLyrics(); const payload = singlePayload(); payload.lyricsPrompt = '[VERSE]\n작성자가 반환한 가사';
+  payload.sections = [section(), section('chorus', '  작성된 후렴  ')];
   const fixture = responder(payload);
   const result = await generateLyrics({ stylePrompt: 'acoustic pop', durationSeconds: 30 }, fixture.dependencies);
   assert.match(fixture.calls[0].body.messages[0].content, /TARGET: 26 TO 29.5 SECONDS/); assert.equal(result.lyricsPrompt, '[Verse]\n작성된 가사\n\n[Chorus]\n작성된 후렴'); verifyFixedSol(fixture.calls[0]);
@@ -590,7 +605,7 @@ test('lyrics route returns a missing-key error without reading actual keys or ma
 test('Japan two-candidate mode requests one strict song package in Japanese', async () => {
   const { generateLyrics } = loadLyrics();
   const payload = { title: '夜を渡る灯り', youtubeTags: '夜,シティポップ', snsHashtags: '#シティポップ',
-    sections: [{ type: 'verse', content: '窓の灯りが揺れている', description: 'Gentle city pop accompaniment' }] };
+    sections: singlePayload().sections.map(s => ({ ...s, content: '窓の灯りが揺れている', description: 'Gentle city pop accompaniment' })) };
   const fixture = responder(payload);
   const route = loadRoute(params => generateLyrics(params, fixture.dependencies));
   const response = await route.POST({ json: async () => ({ stylePrompt: '80s Japanese City Pop', language: 'ja', isPlaylistMode: false, trackCount: 2, vocalGender: 'female' }) });
@@ -618,12 +633,12 @@ test('playlist strict schema constrains the requested count and every nested obj
 
 test('nullable optional description keeps legitimate Japanese sung content intact', async () => {
   const { generateLyrics } = loadLyrics(), payload = singlePayload();
-  payload.sections = [{ type: 'verse', content: '私のギターが思い出を歌う', description: null }];
+  payload.sections = payload.sections.map(s => ({ ...s, content: '私のギターが思い出を歌う', description: null }));
   const fixture = responder(payload);
   const result = await generateLyrics({ stylePrompt: 'Japanese city pop', language: 'ja' }, fixture.dependencies);
   assert.equal(result.sections[0].content, payload.sections[0].content);
   assert.equal(result.sections[0].description, undefined);
-  assert.equal(result.lyricsPrompt, '[Verse]\n' + payload.sections[0].content);
+  assert.equal(result.lyricsPrompt, require('../worker/lyrics-policy.js').compileLyricsSections(payload.sections).lyricsPrompt);
   assert.equal(fixture.calls.length, 1);
 });
 
@@ -663,7 +678,7 @@ test('lyrics route returns the friendly response-shape code without generated se
 
 test('strict JSON format still rejects production instructions in sung content before returning lyrics', async () => {
   const { generateLyrics } = loadLyrics(), payload = singlePayload();
-  payload.sections = [{ type: 'verse', content: '[male vocal, warm guitar]', description: 'Music direction' }];
+  payload.sections[1] = { type: 'verse', content: '[male vocal, warm guitar]', description: 'Music direction' };
   const fixture = responder(payload);
   const route = loadRoute(params => generateLyrics(params, fixture.dependencies));
   const response = await route.POST({ json: async () => ({ stylePrompt: 'city pop', language: 'ja' }) });

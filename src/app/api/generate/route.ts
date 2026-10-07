@@ -1,3 +1,5 @@
+import { isPresetStudioSource, resolvePresetStudioStyle, fitPresetStudioStyleBudget, preservePresetStudioMusicWhileScrubbing } from '@/lib/preset-studio-profile'
+import { sealSunoRetryIdentity } from '../../../../worker/suno-retry-identity'
 import { ensureGenerationBatch } from '@/lib/generation-batches/server'
 import { parseGenerationBatchInput, GenerationBatchError } from '@/lib/generation-batches/model'
 import { resolveMusicDuration, buildInstrumentalArrangement, removeClockDurationInstructions } from '@/lib/music-duration'
@@ -256,15 +258,22 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     vocalGender = resolvedGender === 'male' ? 'm' : resolvedGender === 'female' ? 'f' : undefined
 
     if (resolvedGender === 'male') {
-      effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'male')
+      effectiveStylePrompt = isPresetStudioSource((payload as any).sourceMenu)
+        ? preservePresetStudioMusicWhileScrubbing(effectiveStylePrompt, selectedPresetId, 'male', scrubConflictingVocalTags)
+        : scrubConflictingVocalTags(effectiveStylePrompt, 'male')
       if (!effectiveStylePrompt.toLowerCase().includes('male vocal') && !effectiveStylePrompt.toLowerCase().includes('baritone') && !effectiveStylePrompt.toLowerCase().includes('tenor')) {
         effectiveStylePrompt = `male vocals, ${effectiveStylePrompt}`
       }
     } else if (resolvedGender === 'female') {
-      effectiveStylePrompt = scrubConflictingVocalTags(effectiveStylePrompt, 'female')
+      effectiveStylePrompt = isPresetStudioSource((payload as any).sourceMenu)
+        ? preservePresetStudioMusicWhileScrubbing(effectiveStylePrompt, selectedPresetId, 'female', scrubConflictingVocalTags)
+        : scrubConflictingVocalTags(effectiveStylePrompt, 'female')
       if (!effectiveStylePrompt.toLowerCase().includes('female vocal') && !effectiveStylePrompt.toLowerCase().includes('soprano') && !effectiveStylePrompt.toLowerCase().includes('alto')) {
         effectiveStylePrompt = `female vocals, ${effectiveStylePrompt}`
       }
+    } else if (resolvedGender === 'duet' && isPresetStudioSource((payload as any).sourceMenu)
+        && !/\bduet\b|male and female/i.test(effectiveStylePrompt)) {
+      effectiveStylePrompt = `male and female duet vocals, ${effectiveStylePrompt}`
     }
   }
 
@@ -518,6 +527,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: unavailable ? '선택한 보컬의 연결을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.' : error instanceof Error ? error.message : '보컬 선택을 확인해 주세요.' }, { status: unavailable ? 503 : 400 })
     }
 
+    // Reviewed music recipe is independent of a user-selected singer's timbre.
+    if (isPresetStudioSource(rawBody.sourceMenu)) {
+      payload.stylePrompt = resolvePresetStudioStyle(payload.stylePrompt, rawBody.presetId, payload.isInstrumental,
+        Boolean(rawBody.voicePrompt || rawBody.activeVoice || vdCode || requestedCustomVoiceId || designedVoice || artistIdentity))
+    }
+
     // Apply Voice Prompt / Voice DNA
     const rawVoicePrompt = rawBody.voicePrompt || (rawBody.activeVoice?.stylePrompt)
     const rawVocalGender = rawBody.vocalGender || rawBody.activeVoice?.gender
@@ -536,7 +551,9 @@ export async function POST(request: NextRequest) {
     if (rawVoicePrompt && typeof rawVoicePrompt === 'string' && rawVoicePrompt.trim()) {
       let cleanedStyle = payload.stylePrompt
       if (detectedTargetGender && detectedTargetGender !== 'duet') {
-        cleanedStyle = scrubConflictingVocalTags(cleanedStyle, detectedTargetGender)
+        cleanedStyle = isPresetStudioSource(rawBody.sourceMenu)
+          ? preservePresetStudioMusicWhileScrubbing(cleanedStyle, rawBody.presetId, detectedTargetGender, scrubConflictingVocalTags)
+          : scrubConflictingVocalTags(cleanedStyle, detectedTargetGender)
       }
       const parts = cleanedStyle.split(',')
       const genre = parts[0]?.trim() || ''
@@ -546,7 +563,8 @@ export async function POST(request: NextRequest) {
       } else {
         payload.stylePrompt = `${rawVoicePrompt.trim()}, ${cleanedStyle}`
       }
-      console.log(`[API/generate] Direct Voice Prompt applied: "${rawVoicePrompt.trim()}", Final stylePrompt: "${payload.stylePrompt}"`)
+      if (isPresetStudioSource(rawBody.sourceMenu)) payload.stylePrompt = fitPresetStudioStyleBudget(payload.stylePrompt)
+      console.log('[API/generate] Chosen voice applied')
     } else if (vdCode) {
       const { scrubAndComposeVoiceDna } = await import('@/lib/voice-dna-scrubber')
       const scrubbed = await scrubAndComposeVoiceDna(payload.stylePrompt, vdCode, noiseRatio)
@@ -699,7 +717,19 @@ export async function POST(request: NextRequest) {
 
     // ─── Suno: 비동기 제출 ────────────────────────────────────────────────────
     const samplePersonaId = officialPersonaId || discoveryPersonaId || designedPersonaId
-    const { taskId, model, requestedDurationSeconds, durationMode, durationSource, requestedPreferredSeconds } = await submitSunoJob(payload, matchedPlaybook, samplePersonaId || registeredVoicePersonaId, samplePersonaId ? 'style_persona' : 'voice_persona')
+    const retryVoiceBinding = {
+      sourceMenu: rawBody.sourceMenu || null, presetId: rawBody.presetId || null,
+      vocalGender: rawBody.vocalGender || rawBody.activeVoice?.gender,
+      officialVoiceId: officialVoice?.id || null, discoveryVoiceId: discoveryVoice?.id || null,
+      designedVoiceId: designedVoice?.id || null,
+      customVoiceRegistrationId: registeredVoicePersonaId ? requestedCustomVoiceId : null,
+      artistId: artistIdentity?.id, artistRevision: artistIdentity?.revision, artistIdentitySignature,
+    }
+    const resolvedPersonaId = samplePersonaId || registeredVoicePersonaId
+    const resolvedPersonaModel = samplePersonaId ? 'style_persona' : 'voice_persona'
+    const sunoVoiceRetry = sealSunoRetryIdentity({ personaId: resolvedPersonaId, personaModel: resolvedPersonaModel },
+      retryVoiceBinding, user?.id, process.env.SUPABASE_SERVICE_ROLE_KEY)
+    const { taskId, model, requestedDurationSeconds, durationMode, durationSource, requestedPreferredSeconds } = await submitSunoJob(payload, matchedPlaybook, resolvedPersonaId, resolvedPersonaModel)
     sunoTaskAccepted = true
 
     // DB에 'generating' 상태로 저장 (워커가 폴링하여 완료 처리)
@@ -745,7 +775,9 @@ export async function POST(request: NextRequest) {
       voiceDesign: voiceDesign ? { gender: voiceDesign.gender, age: voiceDesign.age, language: voiceDesign.language, traits: voiceDesign.traits, designCode: voiceDesign.designCode } : undefined,
       voiceDesignCode: voiceDesign?.designCode,
       voiceFeatureMode: samplePersonaId ? 'suno_style_persona' : registeredVoicePersonaId ? 'suno_voice_persona' : 'prompt_style_only',
-      ...(rawBody.sourceMenu === 'japan' ? { vocalProfileSpecified: !payload.isInstrumental && Boolean(rawVoicePrompt || vdCode || samplePersonaId || registeredVoicePersonaId) } : {}),
+      sunoVoiceRetry,
+      lyricsLanguage: rawBody.lyricsLanguage || rawBody.language || null,
+      ...((rawBody.sourceMenu === 'japan' || isPresetStudioSource(rawBody.sourceMenu)) ? { vocalProfileSpecified: !payload.isInstrumental && Boolean(rawVoicePrompt || vdCode || samplePersonaId || registeredVoicePersonaId) } : {}),
       auto_voice_convert: false,
       voice_model_id: null,
       customVoiceRegistrationId: registeredVoicePersonaId ? requestedCustomVoiceId : null,

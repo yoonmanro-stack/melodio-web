@@ -27,6 +27,9 @@ function load(file, probe, extra = {}) {
     '../supabase/server': { createClient: async () => probe.client },
     '@supabase/supabase-js': { createClient: () => probe.client },
     '@/lib/db/knowledge': { getPlaybookByKey: async () => null, matchPlaybooksByPrompt: async () => [], matchEpisodesByCategoryAndTopic: async () => [] },
+    '@/lib/japan-preset-profile': { getJapanPresetProfile: () => undefined },
+    '@/lib/preset-studio-profile': { getPresetStudioProfile: () => undefined,
+      isPresetStudioSource: source => ['preset-studio', 'audio-forge', 'audio-forge-pro', 'audio'].includes(source) },
     '@/lib/engines/infinite-story-matrix': { generateBoundlessCreativeVector: () => ({ uniqueEntropySeed: 'fixture', perspectiveType: 'fixture', thematicDimension: 'fixture', sensoryFocus: 'fixture' }) },
     '@/lib/vle/vleEngine': { loadVLEMasterPrompt: () => '' },
     '@/lib/vle/viralSongSpec': { buildStructureDirective: () => '', VIRAL_SONG_SPEC: {} },
@@ -45,7 +48,7 @@ function load(file, probe, extra = {}) {
   const source = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { fileName: filename, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText
   vm.runInNewContext(source, {
     module, exports: module.exports,
-    require(name) { if (Object.hasOwn(modules, name)) return modules[name]; if (name === '@/lib/preset-concept-analysis') return load('src/lib/preset-concept-analysis.ts', probe); if (name.startsWith('node:')) return require(name); throw new Error(`Unmocked module: ${name}`) },
+    require(name) { if (Object.hasOwn(modules, name)) return modules[name]; if (name === '@/lib/preset-concept-analysis') return load('src/lib/preset-concept-analysis.ts', probe); if (name === '@/lib/lyrics/validate-song-form') return load('src/lib/lyrics/validate-song-form.ts', probe); if (name === '@/lib/lyrics/compile-sections') return require('../worker/lyrics-policy.js'); if (name.startsWith('node:')) return require(name); throw new Error(`Unmocked module: ${name}`) },
     process: { env: probe.env }, fetch: probe.fetch, console: { log() {}, warn(...args) { probe.logs.push(args.join(' ')) }, error(...args) { probe.logs.push(args.join(' ')) } },
     Buffer, URL, Date, Error, SyntaxError, TypeError, AbortSignal, AbortController, setTimeout: fn => { fn(); return 0 }, clearTimeout() {},
   }, { filename })
@@ -88,7 +91,7 @@ const contracts = [
   { name: 'branding', file: 'src/app/api/autopilot/branding/route.ts', body: { presetId: 'fixture', customName: 'Fixture' }, content: { names: [{ candidates: [{ name: 'Fixture Brand' }] }] }, firstModel: 'gpt-5.6-sol', check: r => assert.equal(r.body.names[0].candidates[0].name, 'Fixture Brand') },
   { name: 'image generation', file: 'src/app/api/autopilot/generate-image/route.ts', body: { prompt: 'One calm landscape', count: 1, imageType: 'thumbnail', size: '16:9' }, image: true, firstModel: 'gpt-image-2', check: r => { assert.equal(r.body.success, true); assert.match(r.body.imageUrl, /^https:\/\/fixture\.invalid\//) } },
   { name: 'style analysis', file: 'src/app/api/style-library/analyze-image/route.ts', body: { conceptName: 'Fixture', locale: 'en' }, content: { name: 'Fixture Preset', prompt: 'Calm piano' }, firstModel: 'gpt-5.6-sol', check: r => assert.equal(r.body.preset.name, 'Fixture Preset') },
-  { name: 'lyrics', file: 'src/lib/engines/lyrics-generator.ts', body: { stylePrompt: 'Fixture pop', topic: 'Fixture topic' }, content: { title: 'Fixture Song', sections: [{ type: 'verse', content: 'A simple fixture lyric' }] }, firstModel: 'gpt-5.6-sol', check: r => assert.equal(r.body.title, 'Fixture Song') },
+  { name: 'lyrics', file: 'src/lib/engines/lyrics-generator.ts', body: { stylePrompt: 'Fixture pop', topic: 'Fixture topic' }, content: { title: 'Fixture Song', sections: ['intro', 'verse', 'chorus', 'verse', 'chorus', 'outro'].map(type => ({ type, content: 'A simple fixture lyric' })) }, firstModel: 'gpt-5.6-sol', check: r => assert.equal(r.body.title, 'Fixture Song') },
   { name: 'prompt optimization', file: 'src/app/api/prompt-optimize/route.ts', body: { prompt: 'Fixture pop', viralMode: true }, content: 'One concise optimized prompt', firstModel: 'gpt-5.6-sol', check: r => assert.equal(r.body.optimized, 'One concise optimized prompt') },
   { name: 'Grok prompt', file: 'src/app/api/viral-cf/grok-video/prompt/route.ts', body: { title: 'Fixture', lyrics: 'One fixture lyric', category: 'fixture' }, content: 'One natural scene prompt', firstModel: 'gpt-5.6-sol', check: r => assert.equal(r.body.prompt, 'One natural scene prompt') },
   { name: 'YouTube trends', file: 'src/app/api/youtube/route.ts', action: 'analyze_trends', body: { keyword: 'Fixture', videos: [] }, content: { musicStyle: 'Fixture grounded style' }, firstModel: 'gpt-5.6-sol', check: r => assert.equal(r.body.musicStyle, 'Fixture grounded style') },

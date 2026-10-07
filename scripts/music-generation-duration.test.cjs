@@ -8,13 +8,14 @@ const ts = require('typescript');
 const root = process.cwd();
 const provider = require(path.join(root, 'worker/suno-provider.js'));
 const catalog = require(path.join(root, 'src/data/officialVocalCatalog.json'));
-const compilerOptions = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 };
+const compilerOptions = { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true };
 
 function loadPureModule(relativePath) {
   const source = fs.readFileSync(path.join(root, relativePath), 'utf8');
   const module = { exports: {} };
   new Function('module', 'exports', 'require', ts.transpileModule(source, { compilerOptions }).outputText)(
     module, module.exports, name => {
+      if (name === '../../worker/preset-studio-profiles.json') return require(path.join(root, 'worker/preset-studio-profiles.json'));
       if (name === '../../worker/natural-song-preferences') return require(path.join(root, 'worker/natural-song-preferences.js'));
       throw new Error('Unexpected dependency in duration policy');
     },
@@ -31,6 +32,7 @@ function extractFunction(relativePath, name) {
 }
 
 const { resolveMusicDuration, buildInstrumentalArrangement, removeClockDurationInstructions } = loadPureModule('src/lib/music-duration.ts');
+const presetProfile = loadPureModule('src/lib/preset-studio-profile.ts');
 const performancePresetId = 'brazilian-funk-kpop-performance';
 
 test('only the known Brazilian performance vocal preset gets a soft 200-second center and 160–260 range', () => {
@@ -80,13 +82,13 @@ async function submit(overrides = {}, requestedPersona = personaId) {
   };
   const calls = [];
   const module = { exports: {} };
-  new Function('exports', 'submitKieSunoJob', 'resolveMusicDuration', 'resolveDurationSeconds', 'scrubConflictingVocalTags', 'buildInstrumentalArrangement', 'removeClockDurationInstructions', 'fitSunoStylePrompt', 'console', submitCode)(
+  new Function('exports', 'submitKieSunoJob', 'resolveMusicDuration', 'resolveDurationSeconds', 'scrubConflictingVocalTags', 'buildInstrumentalArrangement', 'removeClockDurationInstructions', 'fitSunoStylePrompt', 'isPresetStudioSource', 'preservePresetStudioMusicWhileScrubbing', 'console', submitCode)(
     module.exports,
     async options => {
       calls.push(provider.buildKieSunoRequest(options).input);
       return { taskId: 'offline-duration-check', model: 'V6' };
     },
-    resolveMusicDuration, provider.resolveDurationSeconds, scrubModule.exports.scrubConflictingVocalTags, buildInstrumentalArrangement, removeClockDurationInstructions, provider.fitSunoStylePrompt,
+    resolveMusicDuration, provider.resolveDurationSeconds, scrubModule.exports.scrubConflictingVocalTags, buildInstrumentalArrangement, removeClockDurationInstructions, provider.fitSunoStylePrompt, presetProfile.isPresetStudioSource, presetProfile.preservePresetStudioMusicWhileScrubbing,
     { log() {}, error() {} },
   );
   // Supply a playbook so no knowledge-database import can run for short prompts.

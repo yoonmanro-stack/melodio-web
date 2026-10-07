@@ -11,6 +11,7 @@ import { categories, SINGLE_SELECT_CATEGORIES } from '@/data/categories'
 import { presets } from '@/data/presets'
 import { mergePublicPresetCatalog, findStudioPreset } from '@/lib/preset-catalog'
 import { resolvePresetApplication, parsePresetLyrics, resolveGeneratedPresetStyle } from '@/lib/preset-application'
+import { getPresetStudioProfile, fitPresetStudioStyleBudget } from '@/lib/preset-studio-profile'
 import { compileLyricsSections } from '@/lib/lyrics/compile-sections'
 import { buildGenerationBatch } from '@/lib/generation-batch-client'
 import { useAuth } from '@/hooks/useAuth'
@@ -669,8 +670,13 @@ export default function PromptBuilder({
       if (artistError) throw new Error(artistError)
       const resolvedEngine = engine === 'auto' ? autoSelectEngine(selections, isInstrumental) : engine
 
-      // 1000자 병합 및 젠더 정합성 클렌징 헬퍼 함수
+      const reviewedPublicPreset = Boolean(selectedPresetId
+        && !customPresets.some(preset => preset.id === selectedPresetId)
+        && getPresetStudioProfile(selectedPresetId))
+
+      // Reviewed recipes and user vocal choices stay authoritative over AI descriptions.
       const mergeAndClampStyle = (common: string, desc?: string): string => {
+        if (reviewedPublicPreset) return fitPresetStudioStyleBudget(common)
         if (!desc || !desc.trim()) return common;
         const baseStyle = common.trim().replace(/[.,;]$/, '');
         const trackDesc = desc.trim();
@@ -754,7 +760,9 @@ export default function PromptBuilder({
             }
           }
 
-          if (finalStylePrompt.length > 1000) {
+          if (reviewedPublicPreset) {
+            finalStylePrompt = fitPresetStudioStyleBudget(finalStylePrompt)
+          } else if (finalStylePrompt.length > 1000) {
             finalStylePrompt = finalStylePrompt.slice(0, 1000);
           }
 
@@ -789,7 +797,8 @@ export default function PromptBuilder({
               lyricsSections: track.sections,
               presetId: selectedPresetId,
               presetName: selectedPresetName,
-              sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
+              sourceMenu: customPresets.some(preset => preset.id === selectedPresetId)
+                ? undefined : sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
             ...studioVoiceFields,
             ...artistState.requestFields,
               isPublic: isPublic,
@@ -841,6 +850,8 @@ export default function PromptBuilder({
               language: lyricsLanguage,
               vocalGender: studioVoiceFields.vocalGender,
               presetId: selectedPresetId,
+              sourceMenu: sourceMenu || searchParams.get('sourceMenu') || 'audio-forge',
+              vocalProfileSpecified: Boolean(artistState.artistVoice || studioVoiceFields.activeVoice),
             })
           })
           const lyricData = await lyricRes.json()
@@ -890,6 +901,10 @@ export default function PromptBuilder({
           if (!finalSingleStyleWithAsmr.includes(ambientFoley)) {
             finalSingleStyleWithAsmr = `${finalSingleStyleWithAsmr.trim()} ${ambientFoley}`.trim();
           }
+        }
+
+        if (reviewedPublicPreset) {
+          finalSingleStyleWithAsmr = fitPresetStudioStyleBudget(finalSingleStyleWithAsmr)
         }
 
         const resolvedPayload: PromptPayload = {
@@ -1020,6 +1035,8 @@ export default function PromptBuilder({
               activeTrackIdx={activeTrackIdx}
               onActiveTrackIdxChange={setActiveTrackIdx}
               presetId={selectedPresetId}
+              sourceMenu={customPresets.some(preset => preset.id === selectedPresetId)
+                ? undefined : sourceMenu || searchParams.get('sourceMenu') || 'audio-forge'}
               selectedVdCode={selectedVdCode}
               onSelectedVdCodeChange={setSelectedVdCode}
               vdOptions={vdOptions}
@@ -1461,6 +1478,8 @@ export default function PromptBuilder({
                 activeTrackIdx={activeTrackIdx}
                 onActiveTrackIdxChange={setActiveTrackIdx}
                 presetId={selectedPresetId}
+                sourceMenu={customPresets.some(preset => preset.id === selectedPresetId)
+                  ? undefined : sourceMenu || searchParams.get('sourceMenu') || 'audio-forge'}
                 selectedVdCode={selectedVdCode}
                 onSelectedVdCodeChange={setSelectedVdCode}
                 vdOptions={vdOptions}

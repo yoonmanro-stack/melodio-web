@@ -5,11 +5,12 @@ export function resolvePresetInstrumental(preset: Preset, recipe: string): boole
   const explicit = preset.instrumentalOnly ?? preset.metadata?.instrumentalOnly ?? preset.metadata?.isInstrumental
   if (typeof explicit === 'boolean') return explicit
   if (preset.lyricsTemplate?.trim()) return false
-  if (/\b(instrumental\s+only|no\s+(?:lead\s+)?vocals|without\s+vocals)\b/i.test(recipe)
-    || /연주곡|연주/.test(`${preset.name} ${preset.desc}`)) return true
+  if (/\b(instrumental\s+only|no\s+(?:lead\s+)?vocals|without\s+vocals)\b/i.test(recipe)) return true
   // "Rich instrumental palette" does not make a vocal song an instrumental.
   if (/\b(vocals?|singing|sung|rapping|rap|spoken.word)\b/i.test(recipe)) return false
-  return /\binstrumental\b/i.test(recipe)
+  // Descriptions discuss instrumental performance (연주), performers (연주자)
+  // and even naturalism (자연주의) without declaring an instrumental song.
+  return /\binstrumental\b/i.test(recipe) || /연주곡/.test(`${preset.name} ${preset.desc}`)
 }
 
 /** Membership never silently changes a selected preset's musical identity. */
