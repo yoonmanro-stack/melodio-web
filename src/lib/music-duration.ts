@@ -1,7 +1,11 @@
+import { resolveNaturalSongPreference } from '../../worker/natural-song-preferences'
+
 type DurationRequest = {
   isViral?: unknown
   isViralTrack?: unknown
   sourceMenu?: unknown
+  presetId?: unknown
+  isInstrumental?: unknown
   metadata?: unknown
 }
 
@@ -28,7 +32,14 @@ export function resolveMusicDuration(request: DurationRequest) {
   return {
     seconds,
     naturalFullSong: !timedRequest,
-    preferredSeconds: !timedRequest ? { minimum: 160, maximum: 240 } : undefined,
+    preferredSeconds: !timedRequest ? resolveNaturalSongPreference({
+      ...metadata,
+      sourceMenu: request.sourceMenu,
+      presetId: request.presetId,
+      isInstrumental: request.isInstrumental,
+      isViral: request.isViral,
+      isViralTrack: request.isViralTrack,
+    }) : undefined,
     mode: shortRequest || (seconds !== undefined && seconds <= 60) ? 'short-form' as const : 'full-song' as const,
     source: !timedRequest ? 'studio-natural' as const : explicit !== null ? 'explicit-duration' as const
       : shortRequest ? 'short-form-request' as const : 'timed-request' as const,

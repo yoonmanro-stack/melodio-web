@@ -14,7 +14,10 @@ function loadPureModule(relativePath) {
   const source = fs.readFileSync(path.join(root, relativePath), 'utf8');
   const module = { exports: {} };
   new Function('module', 'exports', 'require', ts.transpileModule(source, { compilerOptions }).outputText)(
-    module, module.exports, () => { throw new Error('Unexpected dependency in duration policy'); },
+    module, module.exports, name => {
+      if (name === '../../worker/natural-song-preferences') return require(path.join(root, 'worker/natural-song-preferences.js'));
+      throw new Error('Unexpected dependency in duration policy');
+    },
   );
   return module.exports;
 }
@@ -28,6 +31,29 @@ function extractFunction(relativePath, name) {
 }
 
 const { resolveMusicDuration, buildInstrumentalArrangement, removeClockDurationInstructions } = loadPureModule('src/lib/music-duration.ts');
+const performancePresetId = 'brazilian-funk-kpop-performance';
+
+test('only the known Brazilian performance vocal preset gets a soft 200-second center and 160–260 range', () => {
+  for (const sourceMenu of ['preset-studio', 'audio-forge', 'audio-forge-pro']) {
+    const plan = resolveMusicDuration({ sourceMenu, presetId: performancePresetId, isInstrumental: false });
+    assert.equal(plan.seconds, undefined);
+    assert.equal(plan.naturalFullSong, true);
+    assert.deepEqual(plan.preferredSeconds, { minimum: 160, maximum: 260, target: 200 });
+  }
+  const nested = resolveMusicDuration({ sourceMenu: 'preset-studio', metadata: { presetId: performancePresetId, isInstrumental: false, durationSeconds: 30, preferredSeconds: { minimum: 1, maximum: 9999 } } });
+  assert.deepEqual(nested.preferredSeconds, { minimum: 160, maximum: 240 }, 'Only canonical top-level identity used by persisted worker metadata selects a preset preference');
+  assert.equal(nested.seconds, undefined, 'Old clip metadata must not become a native duration');
+  for (const request of [
+    { sourceMenu: 'preset-studio', presetId: 'brazilian_funk', isInstrumental: false },
+    { sourceMenu: 'preset-studio', presetId: performancePresetId, isInstrumental: true },
+    { sourceMenu: 'preset-studio', presetId: performancePresetId },
+    { sourceMenu: 'japan', presetId: performancePresetId, isInstrumental: false },
+    { sourceMenu: 'preset-studio', metadata: { naturalPreferredRange: { minimumSeconds: 1, maximumSeconds: 9999 } } },
+  ]) assert.deepEqual(resolveMusicDuration(request).preferredSeconds, { minimum: 160, maximum: 240 });
+  for (const sourceMenu of ['viral', 'voice-discovery-sample', 'mugsound-supply']) {
+    assert.equal(resolveMusicDuration({ sourceMenu, presetId: performancePresetId, isInstrumental: false }).preferredSeconds, undefined);
+  }
+});
 const scrubModule = { exports: {} };
 new Function('exports', ts.transpileModule(
   extractFunction('src/lib/voice-dna-scrubber.ts', 'scrubConflictingVocalTags'), { compilerOptions },
@@ -75,6 +101,21 @@ async function submit(overrides = {}) {
   assert.equal(result.requestedDurationSeconds, input.duration, 'Receipt must record actual submitted duration');
   return { input, result };
 }
+
+test('performance preference reaches the API result while provider lyrics, tempo, persona and duration contract stay intact', async () => {
+  const { input, result } = await submit({ presetId: performancePresetId, stylePrompt: 'Brazilian funk, 130 BPM, warm 808 bass, crisp percussion, K-pop performance vocal', metadata: { preferredSeconds: { minimum: 1, maximum: 9999 }, durationSeconds: 200 } });
+  assert.deepEqual(result.requestedPreferredSeconds, { minimum: 160, maximum: 260, target: 200 });
+  assert.equal(Object.hasOwn(input, 'duration'), false);
+  assert.equal(input.prompt, lyrics);
+  assert.equal(input.persona_id, personaId);
+  assert.match(input.style, /130 BPM/);
+  assert.doesNotMatch(input.style, /200 seconds|3:20|160 seconds|260 seconds/);
+  const ordinary = await submit({ presetId: 'ambient_pop' });
+  assert.deepEqual(ordinary.result.requestedPreferredSeconds, { minimum: 160, maximum: 240 });
+  const timed = await submit({ presetId: performancePresetId, sourceMenu: 'voice-discovery-sample', metadata: { durationSeconds: 30 } });
+  assert.equal(timed.result.requestedPreferredSeconds, undefined);
+  assert.equal(timed.input.duration, 30);
+});
 
 test('all three studios preserve a full song for the incident voice and misleading style words', async () => {
   for (const sourceMenu of studioMenus) {

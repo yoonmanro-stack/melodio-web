@@ -293,7 +293,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     naturalFullSong: durationPlan.naturalFullSong,
   })
   console.log(`[API/generate] Kie Suno 제출 성공 (model: ${result.model})`)
-  return { ...result, requestedDurationSeconds: durationPlan.seconds, durationMode: durationPlan.mode, durationSource: durationPlan.source }
+  return { ...result, requestedDurationSeconds: durationPlan.seconds, durationMode: durationPlan.mode, durationSource: durationPlan.source, requestedPreferredSeconds: durationPlan.preferredSeconds }
 }
 
 // ─── 앨범 커버 생성은 melodio-worker 로 이관됨 ────────────────────────────────
@@ -667,7 +667,7 @@ export async function POST(request: NextRequest) {
 
     // ─── Suno: 비동기 제출 ────────────────────────────────────────────────────
     const samplePersonaId = officialPersonaId || discoveryPersonaId || designedPersonaId
-    const { taskId, model, requestedDurationSeconds, durationMode, durationSource } = await submitSunoJob(payload, matchedPlaybook, samplePersonaId || registeredVoicePersonaId, samplePersonaId ? 'style_persona' : 'voice_persona')
+    const { taskId, model, requestedDurationSeconds, durationMode, durationSource, requestedPreferredSeconds } = await submitSunoJob(payload, matchedPlaybook, samplePersonaId || registeredVoicePersonaId, samplePersonaId ? 'style_persona' : 'voice_persona')
     sunoTaskAccepted = true
 
     // DB에 'generating' 상태로 저장 (워커가 폴링하여 완료 처리)
@@ -724,7 +724,12 @@ export async function POST(request: NextRequest) {
       requestedDurationMode: durationMode,
       requestedDurationSource: durationSource,
       naturalFullSong: durationSource === 'studio-natural',
-      naturalPreferredRange: durationSource === 'studio-natural' ? { minimumSeconds: 160, maximumSeconds: 240, enforcement: 'preference' } : undefined,
+      naturalPreferredRange: requestedPreferredSeconds ? {
+        minimumSeconds: requestedPreferredSeconds.minimum,
+        maximumSeconds: requestedPreferredSeconds.maximum,
+        ...(requestedPreferredSeconds.target !== undefined ? { targetSeconds: requestedPreferredSeconds.target } : {}),
+        enforcement: 'preference',
+      } : undefined,
       coverArtUrl2: coverArtUrl2, // 두 번째 곡용 커버 이미지 보관
       description: generatedDescription,
       tags: generatedTags,

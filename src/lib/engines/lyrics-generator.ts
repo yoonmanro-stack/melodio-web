@@ -78,6 +78,42 @@ Compose a complete song using the established six-section backend structure in t
 - Let the complete song finish naturally. Do not impose a clock duration, forced cutoff, or timed fade-out.
 `
 
+const BRAZILIAN_FUNK_PERFORMANCE_PRESET = 'brazilian-funk-kpop-performance'
+const BRAZILIAN_FUNK_PERFORMANCE_STRUCTURE = `
+## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT
+Compose a complete Brazilian Funk and K-pop performance song in this eight-section order:
+1. Intro (type: "intro") - brief instrumental opening or 1-2 short sung lines
+2. Verse 1 (type: "verse") - 8 coherent sung lines establishing a vivid scene and developing rhythmic flow
+3. Pre-Chorus 1 (type: "pre-chorus") - 4 sung lines with melodic lift and growing emotional tension
+4. Chorus 1 (type: "chorus") - 4 lines with the main memorable, singable hook
+5. Verse 2 (type: "verse") - 8 coherent sung lines developing a distinct second scene and perspective
+6. Pre-Chorus 2 (type: "pre-chorus") - 4 sung lines building toward the final hook with meaningful variation
+7. Chorus 2 (type: "chorus") - 4 lines returning to the main hook with a resolved final expression
+8. Outro (type: "outro") - brief instrumental resolution or 1-2 short sung lines
+
+- Use two distinct verses, two pre-choruses and two chorus appearances. Do NOT add a Bridge, third Chorus, extended dance break, or extra ending cycle.
+- Develop complete thoughts, concrete imagery and emotional progression across both verses. Contrast rhythmic verses with melodic pre-choruses and a strong hook; do not replace development with repeated slogans, filler, or rushed delivery.
+- Preserve the selected style recipe, tempo, instruments and requested vocal identity. Keep any dance transition brief and inside the existing section arrangement rather than adding an empty section or technical words to sing.
+- Each section description must be plain, unbracketed English, at most two short clauses and 60 characters total. Reuse concise vocal identity cues and state only the section-specific change; do not repeat the full style recipe. All production directions belong in description, never content.
+- Keep Intro and Outro short; instrumental sections with no sung words have empty content. Finish the final sung phrase and resolve the music with a natural cadence.
+- The per-section line guidance shapes composition, not a reason to truncate requested lyric phrases or returned lyrics. Preserve complete thoughts and comfortable vocal phrasing.
+- Let the complete song finish naturally. Do not impose a clock duration, forced cutoff, or timed fade-out.
+`
+
+interface SongStructureInstructions {
+  composition: string
+  playlistOrder: string
+}
+
+const NATURAL_SONG_INSTRUCTIONS: SongStructureInstructions = {
+  composition: NATURAL_SONG_STRUCTURE,
+  playlistOrder: 'Intro, Verse 1, Chorus, Verse 2, Chorus, Outro',
+}
+const BRAZILIAN_FUNK_PERFORMANCE_INSTRUCTIONS: SongStructureInstructions = {
+  composition: BRAZILIAN_FUNK_PERFORMANCE_STRUCTURE,
+  playlistOrder: 'Intro, Verse 1, Pre-Chorus 1, Chorus 1, Verse 2, Pre-Chorus 2, Chorus 2, Outro',
+}
+
 export interface LyricsModelUsage {
   requestedModel: typeof LYRICS_MODEL
   actualModel: string
@@ -158,9 +194,35 @@ interface GenreThematicProfile {
   bannedCliches: string
   randomBpm: () => number
   instruments: string[]
+  preserveStyle?: boolean
 }
 
-export function detectGenreThematicProfile(stylePrompt: string, topic?: string, presetId?: string): GenreThematicProfile {
+export function detectGenreThematicProfile(stylePrompt: string, topic?: string, presetId?: string, options?: { ordinarySong?: boolean }): GenreThematicProfile {
+  if (presetId === BRAZILIAN_FUNK_PERFORMANCE_PRESET && options?.ordinarySong) {
+    return {
+      genre: 'kpop',
+      nameKo: 'Brazilian Funk & K-pop 퍼포먼스',
+      thematicPillars: [
+        {
+          title: '자신감과 무대 위의 변화',
+          subThemes: ['망설임을 넘어서는 첫걸음', '서로의 움직임에 응답하는 순간', '함께 만드는 무대의 에너지'],
+          sampleTitles: ['우리의 박자', '선을 넘어', '발끝의 신호'],
+          lyricsGuidance: '구체적인 장면과 선택으로 자신감의 변화를 전개한다. 리듬감 있는 Verse, 감정이 상승하는 melodic Pre-Chorus, 기억에 남는 Chorus를 대비시키되 구호만 반복하지 않는다.'
+        },
+        {
+          title: '긴장과 연결의 리듬',
+          subThemes: ['시선과 발걸음으로 주고받는 대화', '각자의 리듬이 만나는 순간', '두 번째 장면에서 달라지는 관계'],
+          sampleTitles: ['같은 바닥 위에서', '눈빛의 대답', '다음 걸음'],
+          lyricsGuidance: '첫 Verse와 다른 사건이나 시점으로 두 번째 Verse를 발전시킨다. 자연스럽게 노래할 수 있는 완성된 문장과 명확한 훅을 사용하고 가창을 서두르거나 이야기를 생략하지 않는다.'
+        }
+      ],
+      personaTitleFormula: 'Use a concise, original title rooted in the song\'s concrete performance scene, emotional change or memorable hook.',
+      bannedCliches: 'Avoid generic empowerment slogans, repeated filler and unrelated acoustic-pop scenery; honor the requested theme and the selected Brazilian Funk and K-pop performance recipe.',
+      randomBpm: () => 130,
+      instruments: ['syncopated tamborzao percussion', 'punchy electronic bass', 'rhythmic synth accents'],
+      preserveStyle: true,
+    }
+  }
   const combined = `${stylePrompt} ${topic || ''} ${presetId || ''}`.toLowerCase()
 
   if (combined.includes('trot') || combined.includes('트로트') || combined.includes('트롯') || combined.includes('뽕짝') || combined.includes('7080') || combined.includes('성인가요')) {
@@ -290,6 +352,7 @@ export function detectGenreThematicProfile(stylePrompt: string, topic?: string, 
 
 function randomizeStylePrompt(baseStyle: string, genreProfile?: GenreThematicProfile): string {
   const profile = genreProfile || detectGenreThematicProfile(baseStyle)
+  if (profile.preserveStyle) return baseStyle
   const keys = ['A minor', 'C major', 'E minor', 'G major', 'D minor', 'F major', 'B minor', 'A major', 'E major', 'D major', 'G# minor', 'F# minor']
   const randomKey = keys[Math.floor(Math.random() * keys.length)]
 
@@ -321,8 +384,14 @@ export async function generateLyrics(
   const isPlaylist = params.isPlaylistMode === true
   const trackCount = params.trackCount ?? 10
   
-  // Detect genre thematic profile
-  const genreProfile = detectGenreThematicProfile(params.stylePrompt, params.topic, params.presetId)
+  // Only this selected preset's ordinary vocal lyrics use the performance form.
+  // Instrumental callers bypass this engine; dedicated short-form behavior stays intact.
+  const isExplicitShortForm = typeof params.durationSeconds === 'number' && Number.isFinite(params.durationSeconds)
+    && params.durationSeconds > 0 && params.durationSeconds <= 60
+  const usePerformanceStructure = params.presetId === BRAZILIAN_FUNK_PERFORMANCE_PRESET
+    && !params.viralMode && !isExplicitShortForm
+  const songStructure = usePerformanceStructure ? BRAZILIAN_FUNK_PERFORMANCE_INSTRUCTIONS : NATURAL_SONG_INSTRUCTIONS
+  const genreProfile = detectGenreThematicProfile(params.stylePrompt, params.topic, params.presetId, { ordinarySong: usePerformanceStructure })
 
   // Randomize style tags to ensure different production results
   const randomizedStylePrompt = randomizeStylePrompt(params.stylePrompt, genreProfile)
@@ -400,8 +469,8 @@ export async function generateLyrics(
   }
 
   const systemPrompt = isPlaylist
-    ? getPlaylistSystemPrompt(randomizedStylePrompt, params.topic, trackCount, languageInstruction, params.vocalGender, playbookInstructions, genreProfile)
-    : getSingleSystemPrompt(randomizedStylePrompt, params.topic, languageInstruction, params.vocalGender, playbookInstructions, params.durationSeconds, params.viralMode, genreProfile)
+    ? getPlaylistSystemPrompt(randomizedStylePrompt, params.topic, trackCount, languageInstruction, params.vocalGender, playbookInstructions, genreProfile, songStructure)
+    : getSingleSystemPrompt(randomizedStylePrompt, params.topic, languageInstruction, params.vocalGender, playbookInstructions, params.durationSeconds, params.viralMode, genreProfile, songStructure)
 
   // 🎲 무한 발산 창작 벡터 생성 (고정된 틀과 클리셰를 완전히 초월하는 자유 발산 지침)
   const singleVector = generateBoundlessCreativeVector(genreProfile.genre, 0, seed)
@@ -569,7 +638,8 @@ function getSingleSystemPrompt(
   playbookInstructions?: string,
   durationSeconds?: number,
   viralMode?: boolean,
-  genreProfile?: GenreThematicProfile
+  genreProfile?: GenreThematicProfile,
+  songStructure: SongStructureInstructions = NATURAL_SONG_INSTRUCTIONS
 ): string {
   const profile = genreProfile || detectGenreThematicProfile(stylePrompt, topic)
   const targetDuration = typeof durationSeconds === 'number' && Number.isFinite(durationSeconds)
@@ -587,7 +657,7 @@ function getSingleSystemPrompt(
   // 명시적인 숏폼만 길이를 제한하고, 일반 곡은 완결된 음악적 전개를 사용한다.
   let durationStructureInstruction = ''
   if (targetDuration === undefined) {
-    durationStructureInstruction = NATURAL_SONG_STRUCTURE
+    durationStructureInstruction = songStructure.composition
   } else if (targetDuration <= 15) {
     durationStructureInstruction = `
 ## 🚨 CRITICAL DURATION RULE — TARGET: ${targetDuration} SECONDS (Ultra Short-form)
@@ -713,7 +783,8 @@ function getPlaylistSystemPrompt(
   languageInstruction: string = 'Korean',
   vocalGender: string = 'mixed',
   playbookInstructions?: string,
-  genreProfile?: GenreThematicProfile
+  genreProfile?: GenreThematicProfile,
+  songStructure: SongStructureInstructions = NATURAL_SONG_INSTRUCTIONS
 ): string {
   const profile = genreProfile || detectGenreThematicProfile(stylePrompt, topic)
 
@@ -731,7 +802,7 @@ function getPlaylistSystemPrompt(
   return `You are a 1-million subscriber YouTuber who runs a high-engagement music playlist channel specializing in ${profile.nameKo}.
 
 ${genderMixRules}
-${NATURAL_SONG_STRUCTURE}
+${songStructure.composition}
 
 ## 🌟 PLAYLIST DIVERSITY MANDATE (${profile.nameKo}):
 To run a successful 20~40 track playlist channel, each track MUST explore a distinct thematic angle across the genre's universe:
@@ -769,7 +840,7 @@ You MUST return a JSON object matching this schema:
 
 Rules:
 1. Generate exactly ${trackCount} tracks inside the "tracks" array. Each track MUST have a completely UNIQUE theme, title, and lyrics from the ${profile.nameKo} pillars.
-2. For each track, generate Intro, Verse 1, Chorus, Verse 2, Chorus, Outro sections.
+2. For each track, generate ${songStructure.playlistOrder} sections.
 3. Outro Control: Keep Outro short (1-2 lines) with a natural resolved ending or Instrumental Outro in the description. Keep arrangement directions separate from sung words.
 4. Strictly return valid JSON.
 ${playbookInstructions || ''}

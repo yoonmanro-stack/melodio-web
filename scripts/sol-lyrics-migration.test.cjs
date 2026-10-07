@@ -10,7 +10,7 @@ const root = path.resolve(__dirname, '..');
 const CHAT = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-5.6-sol';
 const KEY = 'offline-fixture-key';
-function loadLyrics(sourceOverride) {
+function loadLyrics(sourceOverride, { random = Math.random } = {}) {
   const filename = path.join(root, 'src/lib/engines/lyrics-generator.ts');
   const module = { exports: {} };
   const offlineProbe = { knowledgeCalls: 0 };
@@ -23,12 +23,14 @@ function loadLyrics(sourceOverride) {
     '@/lib/vle/viralSongSpec': { buildStructureDirective: () => '' },
   };
   const source = ts.transpileModule(sourceOverride ?? fs.readFileSync(filename, 'utf8'), { fileName: filename, compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+  const fixtureMath = Object.create(Math);
+  fixtureMath.random = random;
   vm.runInNewContext(source, {
     module, exports: module.exports,
     require(name) { if (Object.hasOwn(modules, name)) return modules[name]; throw new Error(`Unmocked module: ${name}`); },
     process: { env: new Proxy({}, { get() { throw new Error('Offline tests must never read environment keys'); } }) },
     fetch: async () => { throw new Error('Uninjected external fetch is forbidden'); },
-    console: { log() {}, warn() {}, error() {} }, Date, Math, Error, AbortSignal,
+    console: { log() {}, warn() {}, error() {} }, Date, Math: fixtureMath, Error, AbortSignal,
   }, { filename });
   return { ...module.exports, offlineProbe };
 }
@@ -157,6 +159,124 @@ test('single songs and playlists share five-line verses across studio languages 
       assert.equal(fixture.calls.length, 1);
       verifyFixedSol(fixture.calls[0]);
     }
+  }
+});
+const PERFORMANCE_PRESET = 'brazilian-funk-kpop-performance';
+const PERFORMANCE_STYLE = 'Brazilian Funk, K-pop performance, 130 BPM, syncopated tamborzao drums, punchy electronic bass, assertive sung vocals';
+const performanceTypes = ['intro', 'verse', 'pre-chorus', 'chorus', 'verse', 'pre-chorus', 'chorus', 'outro'];
+test('only the selected ordinary performance preset gets the same developed eight-section form in single songs and playlists', async () => {
+  const { generateLyrics } = loadLyrics(undefined, { random: () => 0.25 });
+  let sharedCore;
+  for (const language of ['ko', 'en', 'pt', 'ko-en']) {
+    for (const isPlaylistMode of [false, true]) {
+      for (const durationSeconds of [undefined, 61, 195]) {
+        const fixture = responder(isPlaylistMode ? playlistPayload(2) : singlePayload());
+        const result = await generateLyrics({ stylePrompt: PERFORMANCE_STYLE, presetId: PERFORMANCE_PRESET,
+          language, isPlaylistMode, trackCount: 2, vocalGender: 'female', durationSeconds }, fixture.dependencies);
+        const [system, user] = fixture.calls[0].body.messages.map(message => message.content);
+        const core = system.match(/## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT\n([\s\S]*?)(?=\n## |$)/)?.[1].trim();
+        assert.ok(core);
+        if (sharedCore === undefined) sharedCore = core;
+        assert.equal(core, sharedCore);
+        assert.deepEqual([...core.matchAll(/^[1-8]\. .*\(type: "([^"]+)"\)/gm)].map(match => match[1]), performanceTypes);
+        assert.equal([...core.matchAll(/^[25]\. Verse [12] \(type: "verse"\) - 8 coherent sung lines/gm)].length, 2);
+        assert.equal([...core.matchAll(/^[36]\. Pre-Chorus [12] \(type: "pre-chorus"\) - 4 sung lines/gm)].length, 2);
+        assert.equal([...core.matchAll(/^[47]\. Chorus [12] \(type: "chorus"\) - 4 lines/gm)].length, 2);
+        assert.equal([...core.matchAll(/^[18]\. .* - brief instrumental (?:opening|resolution) or 1-2 short sung lines/gm)].length, 2);
+        assert.match(core, /at most two short clauses and 60 characters total/);
+        assert.match(core, /production directions belong in description, never content/);
+        assert.match(core, /not a reason to truncate requested lyric phrases or returned lyrics/);
+        assert.match(core, /Do NOT add a Bridge, third Chorus, extended dance break/);
+        assert.match(core, /resolve the music with a natural cadence/);
+        assert.doesNotMatch(system, /established six-section|Do NOT add a Pre-chorus|generate Intro, Verse 1, Chorus, Verse 2, Chorus, Outro sections|CRITICAL DURATION|TARGET:|\b\d+:\d{2}\b/);
+        if (isPlaylistMode) assert.match(system, /For each track, generate Intro, Verse 1, Pre-Chorus 1, Chorus 1, Verse 2, Pre-Chorus 2, Chorus 2, Outro sections/);
+        assert.match(user, /Brazilian Funk & K-pop 퍼포먼스/);
+        assert.doesNotMatch(user, /프리미엄 팝 & 인디 감성|key of|featuring/);
+        assert.ok(user.includes(PERFORMANCE_STYLE));
+        assert.equal(result.stylePrompt, PERFORMANCE_STYLE, 'The selected recipe and its existing tempo must remain exact');
+        assert.equal(result.stylePrompt.match(/\b\d+ BPM\b/g).length, 1);
+        assert.equal(fixture.calls.length, 1); verifyFixedSol(fixture.calls[0]);
+      }
+    }
+  }
+  const noTempo = responder();
+  const result = await generateLyrics({ stylePrompt: 'Brazilian Funk performance, original bass and drums', presetId: PERFORMANCE_PRESET }, noTempo.dependencies);
+  assert.equal(result.stylePrompt, 'Brazilian Funk performance, original bass and drums');
+  assert.doesNotMatch(result.stylePrompt, /BPM|key of|featuring/);
+});
+test('nonmatching presets, explicit short forms and viral requests keep the complete production request snapshot unchanged', async () => {
+  const baselineSource = execFileSync('git', ['show', '5341fa46:src/lib/engines/lyrics-generator.ts'], {
+    cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024,
+  });
+  const baseline = loadLyrics(baselineSource, { random: () => 0.25 });
+  const current = loadLyrics(undefined, { random: () => 0.25 });
+  const cases = [
+    { stylePrompt: PERFORMANCE_STYLE },
+    { stylePrompt: PERFORMANCE_STYLE, presetId: `${PERFORMANCE_PRESET}-custom` },
+    { stylePrompt: PERFORMANCE_STYLE, presetId: PERFORMANCE_PRESET.toUpperCase() },
+    { stylePrompt: PERFORMANCE_STYLE, presetId: 'baile_funk' },
+    { stylePrompt: 'warm acoustic pop', presetId: 'quiet-forest-acoustic-guitar', language: 'en' },
+    { stylePrompt: 'Japanese city pop', presetId: 'city_pop', language: 'ja' },
+    { stylePrompt: 'French chanson', presetId: 'french-vintage-chanson', language: 'fr' },
+    { stylePrompt: 'Korean trot', presetId: 'trot', language: 'ko' },
+    { stylePrompt: 'lofi chill', presetId: 'lofi', language: 'pt' },
+    ...[10, 15, 16, 30, 31, 45, 60].map(durationSeconds => ({ stylePrompt: PERFORMANCE_STYLE, presetId: PERFORMANCE_PRESET, durationSeconds })),
+    ...[undefined, 30].map(durationSeconds => ({ stylePrompt: PERFORMANCE_STYLE, presetId: PERFORMANCE_PRESET, viralMode: true, durationSeconds })),
+  ];
+  for (const params of cases) {
+    for (const isPlaylistMode of [false, true]) {
+      const payload = isPlaylistMode ? playlistPayload(2) : singlePayload();
+      const old = responder(payload), next = responder(payload);
+      const input = { ...params, isPlaylistMode, trackCount: 2, vocalGender: 'female' };
+      const oldResult = await baseline.generateLyrics(input, old.dependencies);
+      const nextResult = await current.generateLyrics(input, next.dependencies);
+      assert.deepEqual(next.calls[0].body, old.calls[0].body, JSON.stringify(input));
+      assert.equal(nextResult.stylePrompt, oldResult.stylePrompt);
+      assert.equal(next.calls.length, 1); verifyFixedSol(next.calls[0]);
+    }
+  }
+});
+test('performance composition preserves returned phrases and pre-choruses while keeping all musical directions separate', async () => {
+  const { generateLyrics } = loadLyrics();
+  const verse = Array.from({ length: 10 }, (_, index) => `무대 위의 서로 다른 이야기 ${index + 1}`).join('\n');
+  const authoredPhrase = '우리가 고른 다음 걸음';
+  for (const isPlaylistMode of [false, true]) {
+    const payload = isPlaylistMode ? playlistPayload(2) : singlePayload();
+    const songs = isPlaylistMode ? payload.tracks : [payload];
+    for (const song of songs) song.sections = performanceTypes.map((type, index) => ({ type,
+      content: type === 'intro' || type === 'outro' ? '' : type === 'verse' ? `${verse}\n${authoredPhrase}` : `서로의 눈빛에 답하는 순간 ${index}`,
+      description: index === 2 || index === 5 ? 'female vocal, melodic lift' : 'female vocal, rhythmic flow' }));
+    const fixture = responder(payload);
+    const result = await generateLyrics({ stylePrompt: PERFORMANCE_STYLE, presetId: PERFORMANCE_PRESET,
+      topic: `반드시 "${authoredPhrase}"를 노래해 주세요`, isPlaylistMode, trackCount: 2 }, fixture.dependencies);
+    const returned = isPlaylistMode ? result.tracks : [result];
+    for (const song of returned) {
+      assert.deepEqual(Array.from(song.sections, section => section.type), performanceTypes);
+      song.sections.forEach((section, index) => {
+        assert.equal(section.content, songs[0].sections[index].content);
+        assert.equal(section.description, songs[0].sections[index].description);
+        assert.doesNotMatch(section.content, /female vocal|rhythmic flow|melodic lift/);
+      });
+    }
+    const canonical = require(path.join(root, 'worker/lyrics-policy.js')).compileLyricsSections(returned[0].sections).lyricsPrompt;
+    assert.equal(canonical.match(/\[Pre-Chorus\]/g).length, 2);
+    assert.ok(canonical.includes(`${verse}\n${authoredPhrase}`));
+    assert.doesNotMatch(canonical, /female vocal|rhythmic flow|melodic lift/);
+    if (!isPlaylistMode) assert.equal(result.lyricsPrompt, canonical);
+    assert.ok(fixture.calls[0].body.messages[0].content.includes(authoredPhrase));
+    assert.equal(fixture.calls.length, 1); verifyFixedSol(fixture.calls[0]);
+  }
+});
+test('the performance preset still rejects production instructions returned as sung words without retrying', async () => {
+  const { generateLyrics } = loadLyrics();
+  for (const isPlaylistMode of [false, true]) {
+    const payload = isPlaylistMode ? playlistPayload(2) : singlePayload();
+    const songs = isPlaylistMode ? payload.tracks : [payload];
+    songs[0].sections[0].content = '[female vocal, synth bass, tamborzao drums]';
+    const fixture = responder(payload);
+    await assert.rejects(generateLyrics({ stylePrompt: PERFORMANCE_STYLE, presetId: PERFORMANCE_PRESET,
+      isPlaylistMode, trackCount: 2 }, fixture.dependencies), error => error.code === 'lyrics_instruction_in_content');
+    assert.equal(fixture.calls.length, 1); verifyFixedSol(fixture.calls[0]);
   }
 });
 test('shortening ordinary verses leaves every dedicated short-form directive identical to the original backend', async () => {
