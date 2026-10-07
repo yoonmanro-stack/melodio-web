@@ -2,6 +2,7 @@
 const { prepareLyricsSubmission, assertSafeVocalLyrics } = require('./lyrics-policy');
 const { protectLofiLeadVocal } = require('./lofi-vocal-policy');
 const { protectKawaiiLeadVocal } = require('./kawaii-vocal-policy');
+const { protectJapanLeadVocal } = require('./japan-vocal-policy');
 const KIE_MODEL = 'ai-music-api/generate';
 const KIE_API_ORIGIN = 'https://api.kie.ai';
 const SUNO_TIMEOUT_MS = 15 * 60 * 1000;
@@ -81,9 +82,12 @@ function buildKieSunoRequest(options) {
   const protectedLofiVocal = customMode
     ? protectLofiLeadVocal(options, style, options.exclude, fitSunoStylePrompt)
     : { style, exclude: options.exclude };
-  const protectedVocal = customMode
+  const protectedKawaiiVocal = customMode
     ? protectKawaiiLeadVocal(options, protectedLofiVocal.style, protectedLofiVocal.exclude, fitSunoStylePrompt)
     : protectedLofiVocal;
+  const protectedVocal = customMode
+    ? protectJapanLeadVocal(options, protectedKawaiiVocal.style, protectedKawaiiVocal.exclude, fitSunoStylePrompt)
+    : protectedKawaiiVocal;
   const requestedPersona = String(options.personaId || '').trim();
   if (!instrumental && requestedPersona && !customMode) throw new Error('목소리 참조를 사용하려면 가사가 필요합니다.');
   if (options.personaModel && !['style_persona', 'voice_persona'].includes(options.personaModel)) throw new Error('목소리 참조 유형이 올바르지 않습니다.');

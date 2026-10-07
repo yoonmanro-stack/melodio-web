@@ -52,6 +52,7 @@ import { Wand2, Tag, PenTool, ListMusic, Music2, Copy } from "lucide-react";
 import type { MusicEngine, PromptPayload, LyricsSection, Preset } from "@/types";
 import { composeStylePrompt, resolveRotationPrompt } from "@/lib/prompt-compositor";
 import { fitJapanStyleBudget } from "@/lib/japan-style-budget";
+import { getJapanPresetProfile, resolveJapanPresetStyle, uniqueJapanPresets } from "@/lib/japan-preset-profile";
 import { compileLyricsSections } from "@/lib/lyrics/compile-sections";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { jpPresetTranslations } from "@/data/jp-presets-translations";
@@ -167,369 +168,366 @@ export const jpPresets = [
   {
     id: "romance-pop",
     name: "80s City Pop (80s 시티팝)",
-    desc: "80년대 레트로 감성의 도쿄 밤거리 분위기. 아날로그 신디사이저와 그루비한 베이스, 여성 보컬.",
-    tags: "80s Japanese City Pop, nostalgic, upbeat, synth brass, clean electric guitar, female vocal",
+    desc: getJapanPresetProfile("romance-pop")!.descriptionKo,
+    tags: getJapanPresetProfile("romance-pop")!.recipe,
     emoji: "💗",
     gradient: "from-[#ff9a9e] to-[#fecfef]",
     category: "retro",
     cardImage: JP_PRESET_IMAGES[0],
     defaultTitle: "Tokyo Neon Romance",
     defaultTopic: "비 내리는 도쿄의 밤거리, 흘러간 사랑",
-    lyricsTemplate: `[Verse 1]\n夜の街、流れるネオンライト\n君の影を探している\n\n[Chorus]\nシティポップ가 響く街角で\nもう一度だけ 微笑んで`
+    lyricsTemplate: ''
   },
   {
     id: "lofi-study",
     name: "J-Lofi Focus (독서/공부용 J-로파이)",
-    desc: "도쿄 거리에 내리는 빗소리 폴리 사운드와 테이프 히스 잡음이 믹싱된 고요한 새벽 로파이 비트.",
-    tags: "J-Lofi hip-hop, calm, rain on window, tape hiss, study bgm, female vocal",
+    desc: getJapanPresetProfile("lofi-study")!.descriptionKo,
+    tags: getJapanPresetProfile("lofi-study")!.recipe,
     emoji: "📚",
     gradient: "from-[#667eea] to-[#764ba2]",
     category: "focus",
     cardImage: JP_PRESET_IMAGES[1],
     defaultTitle: "Midnight Rain Study",
     defaultTopic: "조용히 창문을 두드리는 빗소리, 새벽의 다이어리",
-    lyricsTemplate: `[Verse 1]\n静かな雨、窓を叩く音\n教科書を閉じて、目を閉じる\n\n[Chorus]\nLofi 비트에 내 몸을 맡기고\n잠들지 않는 이 밤을 보내자`
+    lyricsTemplate: ''
   },
   {
     id: "cozy-jazz-cafe",
     name: "Tokyo Midnight Jazz (도쿄 밤거리 재즈 카페)",
-    desc: "시부야 단골 카페에서 흘러나오는 듯한 피아노와 색소폰 선율이 어우러진 감미롭고 차분한 재즈 BGM.",
-    tags: "Tokyo cafe smooth jazz, cozy, saxophone, warm piano, coffee shop chatter",
+    desc: getJapanPresetProfile("cozy-jazz-cafe")!.descriptionKo,
+    tags: getJapanPresetProfile("cozy-jazz-cafe")!.recipe,
     emoji: "🍷",
     gradient: "from-[#a18cd1] to-[#fbc2eb]",
     category: "healing",
     cardImage: JP_PRESET_IMAGES[2],
     defaultTitle: "Shibuya Jazz Espresso",
     defaultTopic: "은은한 에스프레소 향기, 어두운 조명, 밤하늘의 색소폰",
-    lyricsTemplate: `[Verse 1]\nコーヒーの香り、薄暗い照明\nサックスの音が胸に染みる\n\n[Chorus]\n深夜のカフェ、ふたりの時間\n静かにジャズを聴こう`
+    lyricsTemplate: ''
   },
   {
     id: "acoustic-healing",
     name: "Shibuya Acoustic Journey (시부야 어쿠스틱 여행)",
-    desc: "지친 일상에 자연의 소리로 힐링을 선사하는 상큼하고 청량한 어쿠스틱 기타와 새소리 조합.",
-    tags: "Acoustic folk, peaceful, acoustic guitar, nature sounds, birds chirping",
+    desc: getJapanPresetProfile("acoustic-healing")!.descriptionKo,
+    tags: getJapanPresetProfile("acoustic-healing")!.recipe,
     emoji: "🌿",
     gradient: "from-[#56ab2f] to-[#a8e063]",
     category: "healing",
     cardImage: JP_PRESET_IMAGES[3],
     defaultTitle: "Shibuya Morning Breeze",
     defaultTopic: "상쾌한 아침 이슬, 언덕 위에 부는 바람, 새들의 지저귐",
-    lyricsTemplate: `[Verse 1]\n風が通り抜ける渋谷の朝\nアコースティックギターの音色、爽やかに\n\n[Chorus]\n자연의 멜로디, 힐링의 시간\n한 걸음 멈춰 서서 깊은 호흡을 해`
+    lyricsTemplate: ''
   },
   {
     id: "kawaii-future",
     name: "Harajuku Kawaii (하라주쿠 카와이 베이스)",
-    desc: "하라주쿠의 통통 튀는 네온 감성. 풍성한 퓨처 베이스 신스와 기본 성인 보컬, 선택한 음색의 개성을 살리는 자연스러운 가창.",
-    tags: "Harajuku kawaii future bass, lush modulated synth chords, bell and pluck melodies, syncopated half-time groove, elastic controlled sub-bass, sidechain on synths only, melodic verses flowing into synth-led choruses and drops, playful neon color, expressive natural lead vocals in the requested language, preserve chosen voice register and character, synth-only chops and candy textures",
+    desc: getJapanPresetProfile("kawaii-future")!.descriptionKo,
+    tags: getJapanPresetProfile("kawaii-future")!.recipe,
     emoji: "🦄",
     gradient: "from-[#fbc2eb] to-[#a6c1ee]",
     category: "focus",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     defaultTitle: "Harajuku Pink Heart",
     defaultTopic: "핑크빛 하라주쿠 네온, 젤리 팝 스위트 하트",
-    lyricsTemplate: `[Verse 1]\nカラフルなクレープ、猫通りの午後\n君と手を繋いで、飛び跳ねるよ\n\n[Chorus]\nカワイイ未来へ、ふたりでジャンプ！\nキラキラの星空、追いかけていこう`
+    lyricsTemplate: ''
   },
   {
     id: "okinawa-sanshin",
     name: "Okinawa Ocean Breeze (오키나와 삼신 치유)",
-    desc: "오키나와 전통 현악기 삼신(Sanshin)과 맑고 청명한 바다 파도 소리 조합.",
-    tags: "okinawa traditional music, sanshin, ocean waves, relaxation, healing, peace",
+    desc: getJapanPresetProfile("okinawa-sanshin")!.descriptionKo,
+    tags: getJapanPresetProfile("okinawa-sanshin")!.recipe,
     emoji: "🌺",
     gradient: "from-[#84fab0] to-[#8fd3f4]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     defaultTitle: "Okinawa Emerald Wave",
     defaultTopic: "오키나와의 에메랄드 해변, 산들바람에 들리는 삼신",
-    lyricsTemplate: `[Verse 1]\n赤い夕日、波の音が響く\n三線の音色に、思いをのせて\n\n[Chorus]\n琉球の風よ、遥か彼方へ\nあの人に届けて、私の唄を`
+    lyricsTemplate: ''
   },
   {
     id: "kyoto-ambient",
     name: "Kyoto Bamboo Rest (교토 대나무 숲 명상)",
-    desc: "교토 아라시야마 대나무 숲의 스치는 바람 소리와 잔잔한 물소리가 믹싱된 일본 전통 미니멀 앰비언트.",
-    tags: "Kyoto traditional ambient, Arashiyama bamboo wind, water flow, meditation, deep sleep",
+    desc: getJapanPresetProfile("kyoto-ambient")!.descriptionKo,
+    tags: getJapanPresetProfile("kyoto-ambient")!.recipe,
     emoji: "🎋",
     gradient: "from-[#a8ff78] to-[#78ffd6]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     defaultTitle: "Kyoto Bamboo Silence",
     defaultTopic: "고요한 아라시야마, 마음을 정화하는 빗방울",
-    lyricsTemplate: `[Verse 1]\n竹林を抜ける風、静寂의 朝\n苔むした庭で、心を研ぎ澄ます\n\n[Chorus]\n風鈴の音が、遠くで響き\n古都의 고요함 속에 깊이 스며드네`
+    lyricsTemplate: ''
   },
   {
     id: "anime-rock",
     name: "Tokyo J-Rock Energy (청춘 애니메이션 OST 락)",
-    desc: "일본 스포츠 애니메이션 오프닝을 연상시키는 파워풀하고 경쾌한 청춘 밴드 락.",
-    tags: "J-Rock, anime opening style, high energy, distorted guitar, driving drums, male vocal",
+    desc: getJapanPresetProfile("anime-rock")!.descriptionKo,
+    tags: getJapanPresetProfile("anime-rock")!.recipe,
     emoji: "⚡",
     gradient: "from-[#ff9966] to-[#ff5e62]",
     category: "focus",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     defaultTitle: "Tokyo Youth Runway",
     defaultTopic: "방과 후 노을 지는 운동장, 한계 없는 질주",
-    lyricsTemplate: `[Verse 1]\n放課後のチャイム、自転車を漕ぎ出して\n夕日に向かって、がむしゃらに走った\n\n[Chorus]\n僕らの約束、あの空の向こうへ\n絶対叶えてみせる、限界を超えて`
+    lyricsTemplate: ''
   },
   {
     id: "tokyo-future-funk",
     name: "Tokyo Future Funk (도쿄 퓨처 펑크)",
-    desc: "시티팝 소스를 샘플링하여 펑키한 하우스 비트로 재해석한 신나고 레트로한 댄스 음악.",
-    tags: "Future funk, disco house, retro city pop sample, sidechain compression, upbeat brass, energy",
+    desc: getJapanPresetProfile("tokyo-future-funk")!.descriptionKo,
+    tags: getJapanPresetProfile("tokyo-future-funk")!.recipe,
     emoji: "🕺",
     gradient: "from-[#f093fb] to-[#f5576c]",
     category: "retro",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     defaultTitle: "Neon Night Disco",
     defaultTopic: "화려한 네온사인 댄스 플로어, 레트로 비트의 유혹",
-    lyricsTemplate: `[Verse 1]\nミラーボールが回る深夜のフロア\nステップを踏んで、朝まで踊ろう\n\n[Chorus]\nフューチャーファンкのビートに乗って\n僕たちの夜は、これから始まる`
+    lyricsTemplate: ''
   },
   {
     id: "sapporo-snow",
     name: "Sapporo Snow Lofi (삿포로 겨울 로파이)",
-    desc: "눈 내리는 삿포로 거리의 벽난로 타는 소리와 잔잔한 건반 선율이 믹스된 겨울 감성 로파이.",
-    tags: "Winter lofi, fireplace crackle, soft piano chords, sapporo snow, cozy warm vibe",
+    desc: getJapanPresetProfile("sapporo-snow")!.descriptionKo,
+    tags: getJapanPresetProfile("sapporo-snow")!.recipe,
     emoji: "❄️",
     gradient: "from-[#e6e9f0] to-[#eef1f5]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     defaultTitle: "Sapporo Snow Cabin",
     defaultTopic: "창밖에 내리는 흰 눈, 따뜻한 핫초코 한 잔",
-    lyricsTemplate: `[Verse 1]\n静かに降る雪、窓の外は白く\n暖炉の火を見つめて、お茶을 마신다\n\n[Chorus]\n冬のLofi가 心を温める\n白い息を吐きながら、夢を見よう`
+    lyricsTemplate: ''
   },
   {
     id: "shibuya-neon-rock",
     name: "Shibuya Indie Alternative (시부야 인디 록)",
-    desc: "도쿄 지하 라이브하우스의 거칠고 매력적인 인디 얼터너티브 밴드 사운드.",
-    tags: "Shibuya indie rock, raw guitar tone, emotional drive, basement live sound, energetic, youth",
+    desc: getJapanPresetProfile("shibuya-neon-rock")!.descriptionKo,
+    tags: getJapanPresetProfile("shibuya-neon-rock")!.recipe,
     emoji: "🎸",
     gradient: "from-[#434343] to-[#000000]",
     category: "focus",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     defaultTitle: "Shibuya Underground Live",
     defaultTopic: "땀방울 맺힌 무대, 기타 피드백 노이즈",
-    lyricsTemplate: `[Verse 1]\n地下のライブハウス、歪むギター의 音\n狭いステージで、僕らは叫んだ\n\n[Chorus]\n渋谷のネオンに負けないくらい\n僕らのメロディ、夜空へ響かせよう`
+    lyricsTemplate: ''
   },
   {
     id: "kamakura-surf",
     name: "Kamakura Surf Folk (가마쿠라 해변 서프 포크)",
-    desc: "가마쿠라 바다 건너 에노시마를 바라보며 연주하는 싱그럽고 청량한 어쿠스틱 서프 팝.",
-    tags: "Kamakura beach folk, acoustic guitar arpeggio, ocean breeze, optimistic, positive, warm vocal",
+    desc: getJapanPresetProfile("kamakura-surf")!.descriptionKo,
+    tags: getJapanPresetProfile("kamakura-surf")!.recipe,
     emoji: "🌊",
     gradient: "from-[#4facfe] to-[#00f2fe]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     defaultTitle: "Kamakura Train Sunset",
     defaultTopic: "노을빛 건널목, 저멀리 밀려오는 에메랄드 파도",
-    lyricsTemplate: `[Verse 1]\n踏切의 向こう、広がる青い海\n波의 소리に合わせて、ギターを弾く\n\n[Chorus]\n鎌倉의 夕日、오렌지색으로 染まる\n이 바람을 타고、너를 만나러 갈게`
+    lyricsTemplate: ''
   },
   {
     id: "osaka-street-food",
     name: "Osaka Festive Beats (오사카 타코야끼 펑크)",
-    desc: "축제날 도톤보리의 활기찬 상인 목소리와 타악기 리듬이 합쳐진 유쾌하고 경쾌한 펑키 브라스 BGM.",
-    tags: "Osaka street festival, upbeat funk, brass horn section, happy clapping, dotonbori chatter",
+    desc: getJapanPresetProfile("osaka-street-food")!.descriptionKo,
+    tags: getJapanPresetProfile("osaka-street-food")!.recipe,
     emoji: "🐙",
     gradient: "from-[#ff0844] to-[#ffb199]",
     category: "retro",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     defaultTitle: "Dotonbori Street Carnival",
     defaultTopic: "갓 구운 타코야끼 향기, 유쾌한 웃음 가득한 오사카의 밤",
-    lyricsTemplate: `[Verse 1]\n賑やかな道頓堀の夜\n美味しい香りに誘われて\n\n[Chorus]\nお祭りのリズムに乗って\nみんなで一緒に踊り明かそう`
+    lyricsTemplate: ''
   },
   {
     id: "fuji-meditation",
     name: "Fuji Dawn Meditation (후지산 새벽 명상)",
-    desc: "후지산 호숫가에 피어오르는 새벽안개. 거문고와 가야금 스타일의 고토 현 선율과 깊은 명상 패드 사운드.",
-    tags: "Mount Fuji ambient, traditional koto, deep meditation pad, sunrise birds, zen focus",
+    desc: getJapanPresetProfile("fuji-meditation")!.descriptionKo,
+    tags: getJapanPresetProfile("fuji-meditation")!.recipe,
     emoji: "🗻",
     gradient: "from-[#30cfd0] to-[#330867]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     defaultTitle: "Dawn Over Mount Fuji",
     defaultTopic: "호수 위에 어리는 아침 안개, 산새들의 깊은 기도",
-    lyricsTemplate: `[Verse 1]\n朝霧の中、そびえ立つ富士山\n静かに奏でる琴の音色\n\n[Chorus]\n夜明けの光が世界を照らし\n静かな祈리가 하늘에 닿기를`
+    lyricsTemplate: ''
   },
   {
     id: "ghibli-fantasy",
     name: "Ghibli Forest Waltz (지브리 감성 오케스트라)",
-    desc: "동화 속 미지의 숲을 거니는 듯 서정적이고 아련한 피아노와 스트링스 오케스트라 왈츠 BGM.",
-    tags: "Ghibli style orchestral waltz, emotional piano, beautiful woodwinds, magic forest wibe",
+    desc: getJapanPresetProfile("ghibli-fantasy")!.descriptionKo,
+    tags: getJapanPresetProfile("ghibli-fantasy")!.recipe,
     emoji: "✨",
     gradient: "from-[#e2d1c3] to-[#fdfcfb]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     defaultTitle: "Fantasy Forest Path",
     defaultTopic: "햇살 비치는 나뭇잎 터널, 마음 깊이 남겨진 소망",
-    lyricsTemplate: `[Verse 1]\n木漏れ日の森、妖精の足音\nピアノ의 메로디、우아하게 響く\n\n[Chorus]\n不思議な旅へ出かけよう\n懐かしい夢が待っているから`
+    lyricsTemplate: ''
   },
   {
     id: "akiba-chiptune",
     name: "Akiba Retro Arcade (아키하바라 8비트)",
-    desc: "레트로 전자 게임기 감성의 통통 튀는 신디사이저 사운드. 밝고 귀여운 칩튠 댄스 BGM.",
-    tags: "8bit chiptune, retro arcade sound, playful synth melody, cute gaming vibe, akihabara",
+    desc: getJapanPresetProfile("akiba-chiptune")!.descriptionKo,
+    tags: getJapanPresetProfile("akiba-chiptune")!.recipe,
     emoji: "👾",
     gradient: "from-[#f5d130] to-[#f472b6]",
     category: "retro",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     defaultTitle: "8Bit Akiba Quest",
     defaultTopic: "고전 아케이드 모험, 레트로 픽셀 아트",
-    lyricsTemplate: `[Verse 1]\nピコピコ動く画面の向こう\nレトロゲームの世界へようこそ\n\n[Chorus]\n8ビットの冒険が始まるよ\nハイスコアを目指して走り抜けよう`
+    lyricsTemplate: ''
   },
   {
     id: "okinawa-sunset",
     name: "Okinawa Sunset Ballad (오키나와 해변 발라드)",
-    desc: "저물어가는 에메랄드 해변을 보며 노래하는 가슴 시린 오키나와 감성 발라드.",
-    tags: "okinawa slow ballad, warm guitar, wave sound, emotional male vocal",
+    desc: getJapanPresetProfile("okinawa-sunset")!.descriptionKo,
+    tags: getJapanPresetProfile("okinawa-sunset")!.recipe,
     emoji: "🌅",
     gradient: "from-[#ff7e5f] to-[#feb47b]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     defaultTitle: "Sunset Okinawa Beach",
     defaultTopic: "해변의 마지막 햇살, 파도에 쓰는 편지",
-    lyricsTemplate: `[Verse 1]\n夕暮れの浜辺、波が引き裂く\n君との思い出が胸をかすめる\n\n[Chorus]\nオリオンビール片手に歌う\nサヨナラは言わずに、またねと笑おう`
+    lyricsTemplate: ''
   },
   {
     id: "citypop-midnight",
     name: "Midnight Tokyo Drive (도쿄 심야 드라이브)",
-    desc: "신디사이저 리듬과 청량한 기타 연주가 흐르는 도시적이고 세련된 드라이브용 시티팝.",
-    tags: "Late night city pop, driving bassline, retro electric guitar, shibuya night skyline",
+    desc: getJapanPresetProfile("citypop-midnight")!.descriptionKo,
+    tags: getJapanPresetProfile("citypop-midnight")!.recipe,
     emoji: "🚗",
     gradient: "from-[#2b5876] to-[#4e4376]",
     category: "retro",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     defaultTitle: "Shibuya Expressway Neon",
     defaultTopic: "도쿄 야간 고속도로, 네온사인의 잔상, 음악의 리듬",
-    lyricsTemplate: `[Verse 1]\n首都高速、流れるヘッドライト\nカーステレオから流れるメロディ\n\n[Chorus]\n真夜中のドライブ、君の横顔\nシティポップに乗せて駆け抜けよう`
+    lyricsTemplate: ''
   },
   {
     id: "cozy-rainy-cafe",
     name: "Rainy Day Piano Cafe (비 오는 날 피아노 카페)",
-    desc: "차분히 떨어지는 빗소리를 배경으로 흐르는 감미롭고 평온한 피아노 솔로 연주 BGM.",
-    tags: "Rainy day cafe piano, cozy interior, emotional solo keys, soft rain background, warmth",
+    desc: getJapanPresetProfile("cozy-rainy-cafe")!.descriptionKo,
+    tags: getJapanPresetProfile("cozy-rainy-cafe")!.recipe,
     emoji: "🌧️",
     gradient: "from-[#37ecba] to-[#72afd3]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     defaultTitle: "Raindrops On The window",
     defaultTopic: "창가에 스미는 빗소리, 차분히 정리되는 생각",
-    lyricsTemplate: `[Verse 1]\n窓に当たる雨、静かな午後\n温かいカフェラテを一口飲む\n\n[Chorus]\nピアノの旋律が静かに流れ\n雨の日の憂鬱を溶かしていく`
+    lyricsTemplate: ''
   },
   {
     id: "lofi-dreamy-moon",
     name: "Lofi Dreamy Moonlight (달빛 아래 꿈결 로파이)",
-    desc: "레트로 턴테이블 바이닐 잡음과 몽환적인 코러스 패드가 합쳐진 힐링 수면 로파이 비트.",
-    tags: "Dreamy sleep lofi, vinyl crackle, cozy moonlight, warm rhodes, sleeping bgm, lofi beat",
+    desc: getJapanPresetProfile("lofi-dreamy-moon")!.descriptionKo,
+    tags: getJapanPresetProfile("lofi-dreamy-moon")!.recipe,
     emoji: "🌙",
     gradient: "from-[#09203f] to-[#537895]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     defaultTitle: "Midnight Pillow Lofi",
     defaultTopic: "은은한 달빛 아래 방 안 가득 찬 평온함, 잠드는 새벽",
-    lyricsTemplate: `[Verse 1]\n静かな部屋、月光が差し込む\n眠りに落ちる、その瞬間まで\n\n[Chorus]\n穏やかなLofi가 night을 包む\n夢の中で、また会えるように`
+    lyricsTemplate: ''
   },
   {
     id: "spring-sakura",
     name: "Sakura Spring Breeze (벚꽃 흩날리는 아침)",
-    desc: "싱그러운 어쿠스틱 기타와 아침 이슬 속 지저귀는 새소리가 전하는 따뜻한 봄날의 힐링 사운드.",
-    tags: "Acoustic folk, sakura spring breeze, birds singing, warm morning acoustic guitar, peaceful",
+    desc: getJapanPresetProfile("spring-sakura")!.descriptionKo,
+    tags: getJapanPresetProfile("spring-sakura")!.recipe,
     emoji: "🌸",
     gradient: "from-[#fbc2eb] to-[#a6c1ee]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/tokyo-midnight-1984.png",
     defaultTitle: "Kyoto Sakura Morning",
     defaultTopic: "벚꽃 터널을 지나는 노면전차, 설레는 아침 햇살",
-    lyricsTemplate: `[Verse 1]\n桜舞う季節、風に吹かれて\n君との帰り道、少し照れるね\n\n[Chorus]\nアコースティックギターの音色に合わせて\n僕たちの春を始めよう`
+    lyricsTemplate: ''
   },
   {
     id: "akihabara-cyber",
     name: "Cyber Shibuya Grid (사이버 시부야 그리드)",
-    desc: "신비롭고 웅장한 사이버 펑크 스타일 신스웨이브 테마와 네온 감성의 하우스 리듬.",
-    tags: "synthwave, cyberpunk synth lead, robotic vocal chops, neon fast tempo, electronic beats",
+    desc: getJapanPresetProfile("akihabara-cyber")!.descriptionKo,
+    tags: getJapanPresetProfile("akihabara-cyber")!.recipe,
     emoji: "🤖",
     gradient: "from-[#29323c] to-[#485563]",
     category: "focus",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/iced-oolong-tea.png",
     defaultTitle: "Cyber Shibuya Grid",
     defaultTopic: "네온사인 골목, 가상현실 댄스",
-    lyricsTemplate: `[Verse 1]\nホログラムの街、電脳の世界\nサイバーパンクのビートに踊る\n\n[Chorus]\nネオンライトの下でジャンプして\nバーチャルの世界を駆け巡ろう`
+    lyricsTemplate: ''
   },
   {
     id: "harajuku-pop-rock",
     name: "Harajuku Pop Rock (하라주쿠 청춘 팝 락)",
-    desc: "하라주쿠 소년 소녀들의 활기차고 경쾌한 얼터너티브 청춘 파워 팝 락.",
-    tags: "harajuku pop rock, high energy driving synth, emotional youth guitar, upbeat drums",
+    desc: getJapanPresetProfile("harajuku-pop-rock")!.descriptionKo,
+    tags: getJapanPresetProfile("harajuku-pop-rock")!.recipe,
     emoji: "🎸",
     gradient: "from-[#f857a6] to-[#ff5858]",
     category: "focus",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/matcha-kyoto-jazz.png",
     defaultTitle: "Harajuku Youth Runway",
     defaultTopic: "방과 후 크레페 가게, 밝은 웃음소리",
-    lyricsTemplate: `[Verse 1]\n竹下通り、カラフルなファッション\n君의 笑顔が一番眩しい\n\n[Chorus]\nポップロックのビート을 울리게 해서\n청춘의 한 페이지를 불러보자`
+    lyricsTemplate: ''
   },
   {
     id: "enoshima-surf",
     name: "Enoshima Summer Surf (에노시마 여름 서핑)",
-    desc: "여름 태양 아래 시원한 파도를 타며 듣는 리드미컬하고 밝은 캘리포니아 서프 록.",
-    tags: "summer surf rock, rhythmic drum beat, bright guitar melody, ocean breeze",
+    desc: getJapanPresetProfile("enoshima-surf")!.descriptionKo,
+    tags: getJapanPresetProfile("enoshima-surf")!.recipe,
     emoji: "🏄",
     gradient: "from-[#4facfe] to-[#00f2fe]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/french-vintage-chanson.png",
     defaultTitle: "Enoshima Wave Rider",
     defaultTopic: "에노시마 노면전차, 여름 해변 드라이브",
-    lyricsTemplate: `[Verse 1]\n夏の太陽、青い海原\nサーフボードを小脇に抱えて\n
-[Chorus]
-江ノ島の波を乗りこなして
-最高の夏를 함께 달려봐`
+    lyricsTemplate: ''
   },
   {
     id: "asakusa-traditional",
-    name: "Asakusa Traditional (아사쿠사 전통 가악)",
-    desc: "아사쿠사 신사의 고요한 분위기. 샤쿠하치와 고토 연음이 조화를 이루는 차분한 전통 국악 힐링 BGM.",
-    tags: "Traditional Japanese Gagaku, shakuhachi flute, koto harp, ambient, temple bells, peaceful",
+    name: "Asakusa Traditional (아사쿠사 전통 앰비언트)",
+    desc: getJapanPresetProfile("asakusa-traditional")!.descriptionKo,
+    tags: getJapanPresetProfile("asakusa-traditional")!.recipe,
     emoji: "⛩️",
     gradient: "from-[#d35400] to-[#e67e22]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/developer-debugging.png",
     defaultTitle: "Asakusa Temple Peace",
     defaultTopic: "고요한 아사쿠사의 저녁 노을, 바람에 날리는 벚꽃",
-    lyricsTemplate: `[Verse 1]\n古き寺の鐘が響く夕暮れ\n静かに祈りを捧げる\n\n[Chorus]\n浅草の風に乗せて\n伝統의 메로디가 널리 퍼지네`
+    lyricsTemplate: ''
   },
   {
     id: "ginza-neon-jazz",
     name: "Ginza Neon Jazz (긴자 네온 재즈)",
-    desc: "긴자의 화려한 네온사인 아래 흘러나오는 업비트하고 세련된 시티 재즈 BGM. 트럼펫과 피아노 반주.",
-    tags: "Ginza night city jazz, upbeat, trumpet lead, electric piano, fast jazz drum swing",
+    desc: getJapanPresetProfile("ginza-neon-jazz")!.descriptionKo,
+    tags: getJapanPresetProfile("ginza-neon-jazz")!.recipe,
     emoji: "🎺",
     gradient: "from-[#2c3e50] to-[#3498db]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png",
     defaultTitle: "Ginza Midnight Swing",
     defaultTopic: "화려한 불빛 아래 바쁜 발걸음, 나만의 재즈 선율",
-    lyricsTemplate: `[Verse 1]\n銀座の街、きらめく光の中\nトランペット의 소리가 울려\n\n[Chorus]\n네온 아래서 춤추듯\n긴자의 밤을 스윙하자`
+    lyricsTemplate: ''
   },
   {
     id: "yokohama-port-acoustic",
     name: "Yokohama Port Acoustic (요코하마 항구 어쿠스틱)",
-    desc: "요코하마 항구에서 부는 바닷바람과 잔잔한 파도 소리를 닮은 어쿠스틱 포크 기타 선율.",
-    tags: "Yokohama bay acoustic guitar, sea breeze, soft ocean waves, gentle folk, warm chords",
+    desc: getJapanPresetProfile("yokohama-port-acoustic")!.descriptionKo,
+    tags: getJapanPresetProfile("yokohama-port-acoustic")!.recipe,
     emoji: "⚓",
     gradient: "from-[#1abc9c] to-[#2ecc71]",
     category: "healing",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/dead-mall-nostalgia.png",
     defaultTitle: "Yokohama Bay Breeze",
     defaultTopic: "멀리 보이는 대관람차, 잔잔한 파도 소리",
-    lyricsTemplate: `[Verse 1]\n요코하마 항구, 푸른 바다를 보며\n어쿠스틱 기타를 튕겨본다\n\n[Chorus]\n바람에 실려간 멜로디\n잔잔한 파도 소리와 함께`
+    lyricsTemplate: ''
   },
   {
     id: "tokyo-subway-commute",
     name: "Tokyo Subway Commute (도쿄 지하철 퇴근길)",
-    desc: "하루를 마치는 도쿄 지하철역의 소음과 피로를 달래주는 차분하고 세련된 시티 팝/R&B BGM.",
-    tags: "90s Japanese City Pop, chill R&B groove, warm electric piano, smooth mellow bass, sax solo, late night vibe, male vocal",
+    desc: getJapanPresetProfile("tokyo-subway-commute")!.descriptionKo,
+    tags: getJapanPresetProfile("tokyo-subway-commute")!.recipe,
     emoji: "🚇",
     gradient: "from-[#2b5876] to-[#4e4376]",
     category: "retro",
     cardImage: "https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/deep-sleep-drift.png",
     defaultTitle: "Tokyo Subway Ride",
     defaultTopic: "퇴근길 붐비는 지하철 창문 너머 노을빛 야경",
-    lyricsTemplate: `[Verse 1]\n満員電車の窓に映る 疲れた顔\nヘッドフォンから流れる シティポップのメロディ\n\n[Chorus]\n帰路を急ぐ波の中で\n懐かしい愛を思い出しながら ゆらゆらと揺れる`
+    lyricsTemplate: ''
   }
 ];
 
@@ -575,7 +573,7 @@ export default function JapanLandingClient() {
   const [selectedPresetId, setSelectedPresetId] = useState<string>("romance-pop");
   const [title, setTitle] = useState("Tokyo Neon Romance");
   const [topic, setTopic] = useState("비 내리는 도쿄의 밤거리, 흘러간 사랑");
-  const [manualStyleTags, setStyleTags] = useState("80s Japanese City Pop, nostalgic, upbeat, synth brass, clean electric guitar, female vocal");
+  const [manualStyleTags, setStyleTags] = useState(jpPresets[0].tags);
   const [lyrics, setLyrics] = useState("");
   const [isInstrumental, setIsInstrumental] = useState(false);
   const [isGeneratingLyrics, setIsGeneratingLyrics] = useState(false);
@@ -615,7 +613,7 @@ export default function JapanLandingClient() {
   const artistState = useStudioArtist({ userId: user?.id, initialArtistId: searchParams.get('artistId'), lyricsLanguage: lyricLanguage,
     hasLyrics: Boolean(lyrics.trim()) || lyricsSections.some(section => Boolean(section.content?.trim())) || tracks.some(track => Array.isArray(track.sections) && track.sections.some((section: LyricsSection) => Boolean(section.content?.trim()))),
     onLyricsLanguageChange: setLyricLanguage, allowedLanguages: ['en', 'ja'] });
-  const styleTags = resolveArtistMusicStyle(manualStyleTags, artistState.defaultMusicStyle);
+  const styleTags = resolveJapanPresetStyle(resolveArtistMusicStyle(manualStyleTags, artistState.defaultMusicStyle), selectedPresetId, isInstrumental);
   const artistSettings = { isInstrumental, sunoVersion, sourceMenu: 'japan', stylePrompt: styleTags };
   const studioVoiceFields = artistState.artistVoice
     ? { vocalGender: artistState.artistVoice.gender, activeVoice: null, voicePrompt: undefined, vdCode: undefined, lyricsLanguage: lyricLanguage }
@@ -749,6 +747,7 @@ export default function JapanLandingClient() {
         desc: resolvedDesc,
         gradient: p.gradient || "#3e3668",
         customPrompt: p.tags,
+        instrumentalOnly: false,
         lyricsTemplate: p.lyricsTemplate,
         selections: {},
         metadata: {
@@ -763,8 +762,10 @@ export default function JapanLandingClient() {
 
     const mappedDb = dbPresets.map(p => {
       const trans = p.metadata || {};
+      const profile = getJapanPresetProfile(p.id);
+      const profileDesc = profile ? ({ ko: profile.descriptionKo, en: profile.descriptionEn, ja: profile.descriptionJa } as Record<string, string>)[language] : undefined;
       const resolvedName = trans[`name_${language}`] || (p as any)[`name_${language}`] || trans.name_en || p.name || p.title || "";
-      const resolvedDesc = trans[`desc_${language}`] || (p as any)[`desc_${language}`] || trans.desc_en || p.desc || "";
+      const resolvedDesc = profileDesc || trans[`desc_${language}`] || (p as any)[`desc_${language}`] || trans.desc_en || p.desc || "";
 
       return {
         id: p.id,
@@ -772,7 +773,7 @@ export default function JapanLandingClient() {
         name: resolvedName,
         desc: resolvedDesc,
         gradient: p.gradient || "from-[#fcb045] to-[#fd1d1d]",
-        customPrompt: p.customPrompt,
+        customPrompt: profile?.recipe || p.customPrompt,
         lyricsTemplate: p.lyricsTemplate,
         instrumentalOnly: p.instrumentalOnly ?? trans.instrumentalOnly ?? trans.isInstrumental,
         selections: {},
@@ -794,6 +795,7 @@ export default function JapanLandingClient() {
 
       return {
         ...p,
+        instrumentalOnly: (p as Preset & { instrumentalOnly?: boolean }).instrumentalOnly === true || meta.instrumentalOnly === true || meta.isInstrumental === true,
         name: resolvedName,
         desc: resolvedDesc,
         gradient: p.gradient || "#584072",
@@ -807,7 +809,7 @@ export default function JapanLandingClient() {
       };
     });
 
-    return [...mappedCustoms, ...mappedDb, ...mappedDefaults];
+    return uniqueJapanPresets([...mappedCustoms, ...mappedDb, ...mappedDefaults]);
   }, [customPresets, dbPresets, language]);
 
   const filteredJpPresets = useMemo(() => {
@@ -832,7 +834,8 @@ export default function JapanLandingClient() {
     });
   }, [allJpPresets, presetTab, presetSearchQuery]);
   const visibleJpPresets = filteredJpPresets.slice((jpPage - 1) * JAPAN_PRESETS_PER_PAGE, jpPage * JAPAN_PRESETS_PER_PAGE);
-  const samplePlayer = usePresetSamples('japan', visibleJpPresets);
+  const samplePresets = visibleJpPresets.map(p => ({ ...p, instrumentalOnly: p.instrumentalOnly === true || getJapanPresetProfile(p.id)?.defaultMode === 'instrumental' }));
+  const samplePlayer = usePresetSamples('japan', samplePresets);
 
   const handleSaveCustomPreset = (data: { id?: string; name: string; desc: string; emoji: string; gradient: string; customPrompt: string; metadata?: any }) => {
     if (data.id) {
@@ -877,7 +880,7 @@ export default function JapanLandingClient() {
     setCustomPresets(updated);
     localStorage.setItem('melodio_japan_custom_presets', JSON.stringify(updated));
     if (selectedPresetId === id) {
-      setSelectedPresetId(jpPresets[0].id);
+      handleSelectPreset(allJpPresets.find(p => p.id === jpPresets[0].id) || allJpPresets.find(p => p.id !== id));
     }
   };
 
@@ -1098,7 +1101,11 @@ export default function JapanLandingClient() {
   };
 
   const handleSelectPreset = (preset: any) => {
+    if (!preset) return;
     setSelectedPresetId(preset.id);
+    const defaultMode = getJapanPresetProfile(preset.id)?.defaultMode;
+    if (preset.instrumentalOnly === true) setIsInstrumental(true);
+    else if (defaultMode) setIsInstrumental(!artistState.artistVoice && defaultMode === 'instrumental');
     setTitle(""); // Clear for AI Auto-title placeholder
     setTopic(preset.metadata?.defaultTopic || preset.desc || "일본 감성 BGM");
     setStyleTags(preset.customPrompt || preset.tags || "");
@@ -1984,6 +1991,9 @@ export default function JapanLandingClient() {
                         </div>
 
                         <div className="flex items-center gap-2">
+                          {getJapanPresetProfile(preset.id)?.defaultMode === 'instrumental' && (
+                            <span className="text-[9px] text-zinc-400">연주 기본</span>
+                          )}
                           {/* Always visible action buttons */}
                           <div className="flex items-center gap-1.5">
                             {preset.id.startsWith("custom-") ? (
@@ -2187,7 +2197,7 @@ export default function JapanLandingClient() {
               onPublicToggle={setIsPublic}
               sourceMenu="japan"
               isInstrumental={isInstrumental}
-              onInstrumentalToggle={setIsInstrumental}
+              onInstrumentalToggle={(next) => { if (next || !activePreset?.instrumentalOnly) setIsInstrumental(next); }}
               compositorResult={{ prompt: styleTags, charCount: styleTags.length, truncatedCount: 0, maxChars: 1000 }}
               onGenerate={handleGenerateMusic}
               isGenerating={isGeneratingMusic || generationJob?.status === 'submitting' || generationJob?.status === 'generating'}
@@ -2205,10 +2215,13 @@ export default function JapanLandingClient() {
                 <div data-japan-lyrics-area className="lg:flex lg:flex-1 lg:flex-col lg:[&>div]:flex-1">
                 <LyricsBuilder
                   artistVoice={artistState.artistVoice}
+                  artistContextKey={JSON.stringify(artistState.requestFields)}
+                  lyricTopic={topic}
+                  onLyricTopicChange={setTopic}
                   artistSelectionError={artistState.getError(artistSettings)}
                   isInstrumental={isInstrumental}
                   stylePrompt={styleTags}
-                  onInstrumentalToggle={setIsInstrumental}
+                  onInstrumentalToggle={(next) => { if (next || !activePreset?.instrumentalOnly) setIsInstrumental(next); }}
                   isPlaylistMode={isPlaylistMode}
                   onPlaylistModeToggle={setIsPlaylistMode}
                   trackCount={trackCount}

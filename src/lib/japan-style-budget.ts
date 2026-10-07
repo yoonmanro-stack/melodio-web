@@ -1,10 +1,12 @@
-/** Retain the existing behavior outside the reviewed Harajuku preset. */
+import { getJapanPresetProfile } from './japan-preset-profile'
+
+/** Keep whole clauses for reviewed Japan recipes; unrelated/custom IDs stay unchanged. */
 export function fitJapanStyleBudget(style: string, presetId?: string, limit = 1000): string {
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1000) {
     throw new RangeError('Style budget must be between 1 and 1000 characters.')
   }
   if (style.length <= limit) return style
-  if (presetId !== 'kawaii-future') return style.slice(0, limit)
+  if (!getJapanPresetProfile(presetId)) return style.slice(0, limit)
 
   const prefix = style.slice(0, limit + 1)
   const clauseEnd = Math.max(...[',', ';', '\n', '、', '。'].map(mark => prefix.lastIndexOf(mark)))

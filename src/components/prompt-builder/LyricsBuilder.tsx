@@ -1,7 +1,7 @@
 'use client'
 import { StudioVoicePicker } from "@/components/voice/StudioVoicePicker";
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { 
   FileText, Music, Sparkles, Wand2, Globe, Mic, Shuffle, AlertCircle, 
   Play, Zap, Flame, GitMerge, Moon, Copy, Check, Info, ListMusic, Tag, PlayCircle,
@@ -49,8 +49,11 @@ interface LyricsBuilderProps {
   isJapanCampaign?: boolean
   lyricLanguage?: string
   onLyricLanguageChange?: (language: string) => void
+  lyricTopic?: string
+  onLyricTopicChange?: (topic: string) => void
   artistVoice?: { name: string; gender: 'female' | 'male'; language: string }
   artistSelectionError?: string
+  artistContextKey?: string
 
   // Voice DNA
   selectedVdCode?: string
@@ -103,13 +106,21 @@ export default function LyricsBuilder({
   isJapanCampaign = false,
   lyricLanguage,
   onLyricLanguageChange,
+  lyricTopic,
+  onLyricTopicChange,
   artistVoice,
   artistSelectionError,
+  artistContextKey,
   selectedVdCode = 'auto',
   onSelectedVdCodeChange,
   vdOptions = [],
 }: LyricsBuilderProps) {
-  const [topic, setTopic] = useState('')
+  const [localTopic, setLocalTopic] = useState('')
+  const topic = lyricTopic ?? localTopic
+  const setTopic = (value: string) => {
+    if (lyricTopic === undefined) setLocalTopic(value)
+    onLyricTopicChange?.(value)
+  }
   const [localLanguage, setLocalLanguage] = useState(isJapanCampaign ? 'ja' : 'ko')
   const language = lyricLanguage ?? localLanguage
   const setLanguage = (value: string) => {
@@ -123,6 +134,30 @@ export default function LyricsBuilder({
   const [isGenerating, setIsGenerating] = useState(false)
   const [autoTitle, setAutoTitle] = useState(true) // 제목 자동생성 토글 (기본: ON)
   const [autoTopic, setAutoTopic] = useState(true) // 주제 자동생성 토글 (기본: ON)
+
+  const selectedVoice = !hasArtistVoice && matchesStudioVoice(vocalGender, activeVoice, language) ? activeVoice : null
+  const japanContextKey = isJapanCampaign ? JSON.stringify([
+    presetId, stylePrompt, topic, language, vocalGender, isInstrumental, isPlaylistMode, trackCount, autoTitle,
+    artistContextKey, artistVoice?.name, artistVoice?.gender, artistVoice?.language, artistError,
+    selectedVoice?.id, selectedVoice?.stylePrompt,
+  ]) : null
+  const committedJapanContext = useRef<string | null>(null)
+  const japanRequest = useRef<{ key: string; controller: AbortController } | null>(null)
+
+  useLayoutEffect(() => {
+    committedJapanContext.current = japanContextKey
+    if (japanRequest.current && japanRequest.current.key !== japanContextKey) {
+      japanRequest.current.controller.abort()
+      japanRequest.current = null
+      setIsGenerating(false)
+    }
+  }, [japanContextKey])
+
+  useLayoutEffect(() => () => {
+    committedJapanContext.current = null
+    japanRequest.current?.controller.abort()
+    japanRequest.current = null
+  }, [])
 
   // 가사 언어와 가창 성별에 맞는 보이스만 선택 코드에 반영한다.
   useEffect(() => {
@@ -215,6 +250,13 @@ export default function LyricsBuilder({
         : '프리셋을 선택하거나 STYLE PROMPT에 장르·분위기를 입력해 주세요.')
       return
     }
+    const attempt = japanContextKey === null ? null : { key: japanContextKey, controller: new AbortController() }
+    if (attempt) {
+      japanRequest.current?.controller.abort()
+      japanRequest.current = attempt
+    }
+    const isCurrentAttempt = () => !attempt || (japanRequest.current === attempt
+      && committedJapanContext.current === attempt.key && !attempt.controller.signal.aborted)
     setIsGenerating(true)
     try {
       const resolvedVocalGender = vocalGender
@@ -222,6 +264,7 @@ export default function LyricsBuilder({
       const response = await fetch('/api/lyrics/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        ...(attempt ? { signal: attempt.controller.signal } : {}),
         body: JSON.stringify({
           stylePrompt,
           topic,
@@ -230,9 +273,11 @@ export default function LyricsBuilder({
           trackCount,
           vocalGender: resolvedVocalGender,
           presetId,
+          ...(isJapanCampaign ? { sourceMenu: 'japan', vocalProfileSpecified: Boolean(artistVoice || selectedVoice) } : {}),
         }),
       })
       const data = await response.json()
+      if (!isCurrentAttempt()) return
       if (data.success) {
         if (isPlaylistMode) {
           onPlaylistTitleChange(data.playlistTitle || '')
@@ -251,10 +296,15 @@ export default function LyricsBuilder({
         alert(data.error || '생성 중 에러가 발생했습니다.')
       }
     } catch (error) {
+      if (!isCurrentAttempt()) return
       console.error(error)
       alert('네트워크 오류가 발생했습니다.')
     } finally {
-      setIsGenerating(false)
+      if (!attempt) setIsGenerating(false)
+      else if (japanRequest.current === attempt) {
+        japanRequest.current = null
+        setIsGenerating(false)
+      }
     }
   }
 

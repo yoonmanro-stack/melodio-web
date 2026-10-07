@@ -11,12 +11,15 @@ const root = path.resolve(__dirname, '..');
 const CHAT = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-5.6-sol';
 const KEY = 'offline-fixture-key';
+const japanProfiles = require('../worker/japan-preset-profiles.json');
+const profileModule = { getJapanPresetProfile: id => Object.hasOwn(japanProfiles, id || '') ? japanProfiles[id] : undefined };
 function loadLyrics(sourceOverride, { random = Math.random } = {}) {
   const filename = path.join(root, 'src/lib/engines/lyrics-generator.ts');
   const module = { exports: {} };
   const offlineProbe = { knowledgeCalls: 0 };
   const knowledge = { getPlaybookByKey: async () => { offlineProbe.knowledgeCalls++; return null; }, matchPlaybooksByPrompt: async () => { offlineProbe.knowledgeCalls++; return []; }, matchEpisodesByCategoryAndTopic: async () => { offlineProbe.knowledgeCalls++; return []; } };
   const modules = {
+    '@/lib/japan-preset-profile': profileModule,
     '@/lib/lyrics/compile-sections': require(path.join(root, 'worker/lyrics-policy.js')),
     '@/lib/db/knowledge': knowledge,
     '@/lib/engines/infinite-story-matrix': { generateBoundlessCreativeVector: () => ({ uniqueEntropySeed: 'offline', perspectiveType: 'authored perspective', thematicDimension: 'authored theme', sensoryFocus: 'authored sensory focus' }) },
@@ -302,55 +305,45 @@ function japanPresetNodes(source) {
   }
   return result;
 }
-const harajukuRecipe = () => japanPresetNodes(fs.readFileSync(path.join(root, 'src/components/japan-landing-client.tsx'), 'utf8'))
-  .get(HARAJUKU_PRESET).properties.get('tags').text;
-test('Harajuku alone gets a concise Future Bass recipe and natural adult vocal descriptions without changing its group or other presets', () => {
+const harajukuRecipe = () => japanProfiles[HARAJUKU_PRESET].recipe;
+test('all reviewed Japan recipes use shared profiles while durable presentation and existing Harajuku identity survive', () => {
   const filename = 'src/components/japan-landing-client.tsx';
   const source = fs.readFileSync(path.join(root, filename), 'utf8');
   const next = japanPresetNodes(source), old = japanPresetNodes(baselineFile(filename));
   assert.deepEqual(Array.from(next.keys()), Array.from(old.keys()));
+  assert.equal(next.size, 28);
   for (const [id, preset] of next) {
-    if (id !== HARAJUKU_PRESET) assert.equal(digest(preset.node.getText(preset.ast)), digest(old.get(id).node.getText(old.get(id).ast)), `Unexpected recipe change: ${id}`);
-  }
-  const preset = next.get(HARAJUKU_PRESET), previous = old.get(HARAJUKU_PRESET);
-  for (const [name, value] of preset.properties) {
-    if (!['tags', 'desc'].includes(name)) assert.equal(value.getText(preset.ast), previous.properties.get(name).getText(previous.ast), `Unexpected Harajuku field change: ${name}`);
+    const previous = old.get(id);
+    for (const name of ['id','category','gradient','emoji','cardImage','defaultTitle','defaultTopic']) {
+      assert.equal(preset.properties.get(name).getText(preset.ast), previous.properties.get(name).getText(previous.ast), `${id}:${name}`);
+    }
+    assert.equal(preset.properties.get('lyricsTemplate').text, '');
+    assert.equal(preset.properties.get('tags').getText(preset.ast), `getJapanPresetProfile("${id}")!.recipe`);
+    assert.ok(japanProfiles[id]);
   }
   const recipe = harajukuRecipe();
   assert.ok(recipe.length >= 300 && recipe.length <= 450);
-  for (const clause of ['lush modulated synth chords', 'bell and pluck melodies', 'syncopated half-time groove',
-    'elastic controlled sub-bass', 'sidechain on synths only', 'melodic verses flowing into synth-led choruses and drops',
-    'expressive natural lead vocals', 'preserve chosen voice register and character', 'synth-only chops and candy textures']) assert.ok(recipe.includes(clause), clause);
+  for (const clause of ['lush modulated synth chords','bell and pluck melodies','syncopated half-time groove','sidechain on synths only','preserve chosen voice register and character','synth-only chops and candy textures']) assert.ok(recipe.includes(clause));
   assert.doesNotMatch(recipe, /cute pitched|high.pitched|childish|chipmunk|\b(?:adult|female|male|Suno|GPT)\b|\b\d+ BPM\b/i);
-  assert.equal(preset.properties.get('category').text, 'focus');
   const localeFile = 'src/data/jp-presets-translations.ts';
   function translations(text) {
     const module = { exports: {} };
-    vm.runInNewContext(ts.transpileModule(text, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { module, exports: module.exports });
+    vm.runInNewContext(ts.transpileModule(text, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText,
+      { module, exports: module.exports, require: name => { assert.equal(name, '@/lib/japan-preset-profile'); return profileModule; } });
     return module.exports.jpPresetTranslations;
   }
   const locales = translations(fs.readFileSync(path.join(root, localeFile), 'utf8'));
-  const oldLocales = translations(baselineFile(localeFile));
-  assert.deepEqual(Object.keys(locales), Object.keys(oldLocales));
-  for (const id of Object.keys(locales)) {
-    if (id !== HARAJUKU_PRESET) assert.equal(digest(locales[id]), digest(oldLocales[id]), `Unexpected translation change: ${id}`);
+  assert.deepEqual(Object.keys(locales), Object.keys(translations(baselineFile(localeFile))));
+  for (const [id, locale] of Object.entries(locales)) {
+    for (const [lang, field] of [['ko','descriptionKo'],['en','descriptionEn'],['ja','descriptionJa']]) assert.equal(locale[`desc_${lang}`], japanProfiles[id][field]);
+    assert.doesNotMatch(locale.desc_ja, /[가-힣]/);
   }
-  for (const [field, value] of Object.entries(locales[HARAJUKU_PRESET])) {
-    if (!field.startsWith('desc_')) assert.equal(value, oldLocales[HARAJUKU_PRESET][field]);
-  }
-  assert.match(locales[HARAJUKU_PRESET].desc_en, /future bass.*adult vocals/);
-  assert.match(locales[HARAJUKU_PRESET].desc_en, /by default.*chosen voice/);
-  assert.match(locales[HARAJUKU_PRESET].desc_ko, /퓨처 베이스.*성인 보컬/);
-  assert.match(locales[HARAJUKU_PRESET].desc_ja, /フューチャーベース.*大人の歌声/);
-  assert.doesNotMatch(JSON.stringify(locales[HARAJUKU_PRESET]), /high.pitched|피치|ピッチド/i);
   const calls = [];
-  function visit(node) {
-    if (ts.isCallExpression(node) && node.expression.getText(preset.ast) === 'fitJapanStyleBudget') calls.push(node);
-    ts.forEachChild(node, visit);
-  }
-  visit(preset.ast);
-  assert.equal(calls.length, 4, 'Both merge and final-budget paths must pass the selected preset to the shared fitter');
-  for (const call of calls) assert.equal(call.arguments[1].getText(preset.ast), 'activePreset?.id');
+  const ast = ts.createSourceFile(filename, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  function visit(node) { if (ts.isCallExpression(node) && node.expression.getText(ast) === 'fitJapanStyleBudget') calls.push(node); ts.forEachChild(node, visit); }
+  visit(ast);
+  assert.equal(calls.length, 4);
+  for (const call of calls) assert.equal(call.arguments[1].getText(ast), 'activePreset?.id');
   assert.doesNotMatch(source, /\.slice\(0,\s*1000\)/);
 });
 test('Harajuku ordinary singles and playlists keep the six-section core and exact recipe in all14 studio languages', async () => {

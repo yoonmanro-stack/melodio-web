@@ -12,7 +12,7 @@ export const maxDuration = 240
 
 export async function POST(request: NextRequest) {
   try {
-    const { stylePrompt, topic, language, isPlaylistMode, trackCount, vocalGender, presetId, durationSeconds, viralMode } = await request.json()
+    const { stylePrompt, topic, language, isPlaylistMode, trackCount, vocalGender, presetId, durationSeconds, viralMode, sourceMenu, vocalProfileSpecified } = await request.json()
 
     if (typeof stylePrompt !== 'string' || !stylePrompt.trim()) {
       return NextResponse.json({ error: '음악 스타일을 입력하거나 프리셋을 선택해 주세요.' }, { status: 400 })
@@ -34,6 +34,7 @@ export async function POST(request: NextRequest) {
       presetId,
       durationSeconds,
       viralMode,
+      ...(sourceMenu === 'japan' ? { sourceMenu, vocalProfileSpecified: vocalProfileSpecified === true } : {}),
     })
 
     return NextResponse.json({ success: true, ...result })

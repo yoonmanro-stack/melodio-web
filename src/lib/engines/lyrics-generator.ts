@@ -137,10 +137,13 @@ interface LyricsGeneratorDependencies {
 }
 
 import { loadVLEMasterPrompt } from '@/lib/vle/vleEngine';
+import { getJapanPresetProfile } from '@/lib/japan-preset-profile';
 import { buildStructureDirective } from '@/lib/vle/viralSongSpec';
 
 export interface GenerateLyricsParams {
   stylePrompt: string
+  sourceMenu?: string
+  vocalProfileSpecified?: boolean
   topic?: string
   language?: 'ko' | 'en' | 'ja' | 'ko-en' | 'ja-en' | 'fr' | 'zh' | 'es' | 'pt' | 'de' | 'it' | 'hi' | 'ru' | 'ar'
   isPlaylistMode?: boolean
@@ -204,7 +207,20 @@ type GenreThematicProfile = {
 } & ({ preserveStyle: true; randomBpm?: () => number; instruments?: string[] }
   | { preserveStyle?: false; randomBpm: () => number; instruments: string[] })
 
-export function detectGenreThematicProfile(stylePrompt: string, topic?: string, presetId?: string, options?: { ordinarySong?: boolean }): GenreThematicProfile {
+export function detectGenreThematicProfile(stylePrompt: string, topic?: string, presetId?: string, options?: { ordinarySong?: boolean; sourceMenu?: string; vocalProfileSpecified?: boolean }): GenreThematicProfile {
+  const japan = options?.sourceMenu === 'japan' && options.ordinarySong ? getJapanPresetProfile(presetId) : undefined
+  if (japan) {
+    return {
+      genre: japan.genreKey as GenreThematicProfile['genre'],
+      nameKo: japan.genreLabel,
+      thematicPillars: [{ title: japan.genreLabel, subThemes: [japan.lyricTheme], sampleTitles: [],
+        lyricsGuidance: 'Honor the user theme, create two distinct scenes and an emotionally meaningful, singable hook; never sing instrument or production instructions.' }],
+      personaTitleFormula: 'Write an original title in the requested language based on a concrete scene or emotional turn; avoid generic genre labels.',
+      bannedCliches: 'Preserve the selected genre, instruments and user tempo. Develop coherent lyric thoughts and a memorable melodic hook without slogans, filler or generic healing labels.',
+      descriptionInstructions: `\n## REVIEWED JAPAN PRESET ARRANGEMENT AND VOCAL DIRECTIONS\n- Preserve the requested genre and instruments: ${japan.genreLabel}. The supplied style and any explicit user tempo remain authoritative; do not substitute random instruments, BPM or a different genre.\n- Keep each section description in plain, unbracketed English, at most two short clauses and 60 characters total. Describe only the section change; all production directions stay out of sung content.\n- Preserve the requested singer or singers, gender, language and chosen voice character. Lead phrases remain coherent and intelligible from the first line; background noise, pitch chops, sidechain and electronic textures belong to backing instruments, never incidental lead-vocal filtering.\n${options?.vocalProfileSpecified ? '- A chosen voice is active: preserve its register, texture and expression; do not apply a different default vocal color.' : `- When no voice is selected, the default vocal direction is: ${japan.defaultVocal}.`}\n- Maintain the existing complete six-section song form and a natural ending. Prioritize melodic, lyrical and expressive quality over clock timing.\n`,
+      preserveStyle: true,
+    }
+  }
   if (presetId === HARAJUKU_FUTURE_BASS_PRESET && options?.ordinarySong) {
     return {
       genre: 'futurebass',
@@ -422,7 +438,9 @@ export async function generateLyrics(
   const isOrdinarySong = !params.viralMode && !isExplicitShortForm
   const usePerformanceStructure = params.presetId === BRAZILIAN_FUNK_PERFORMANCE_PRESET && isOrdinarySong
   const songStructure = usePerformanceStructure ? BRAZILIAN_FUNK_PERFORMANCE_INSTRUCTIONS : NATURAL_SONG_INSTRUCTIONS
-  const genreProfile = detectGenreThematicProfile(params.stylePrompt, params.topic, params.presetId, { ordinarySong: isOrdinarySong })
+  const reviewedJapanProfile = params.sourceMenu === 'japan' && isOrdinarySong ? getJapanPresetProfile(params.presetId) : undefined
+  const genreProfile = detectGenreThematicProfile(params.stylePrompt, params.topic, params.presetId,
+    { ordinarySong: isOrdinarySong, sourceMenu: params.sourceMenu, vocalProfileSpecified: params.vocalProfileSpecified })
 
   // Randomize style tags to ensure different production results
   const randomizedStylePrompt = randomizeStylePrompt(params.stylePrompt, genreProfile)
@@ -460,6 +478,7 @@ export async function generateLyrics(
 
   // Match playbooks from DB (Obsidian synced)
   let playbookInstructions = ''
+  if (!reviewedJapanProfile) {
   try {
     let matchedPlaybook: CurationPlaybook | null = null
     if (params.presetId) {
@@ -499,6 +518,8 @@ export async function generateLyrics(
     console.error('[Lyrics Generator] Error retrieving playbooks or story episodes:', err)
   }
 
+  }
+
   const systemPrompt = isPlaylist
     ? getPlaylistSystemPrompt(randomizedStylePrompt, params.topic, trackCount, languageInstruction, params.vocalGender, playbookInstructions, genreProfile, songStructure)
     : getSingleSystemPrompt(randomizedStylePrompt, params.topic, languageInstruction, params.vocalGender, playbookInstructions, params.durationSeconds, params.viralMode, genreProfile, songStructure)
@@ -509,7 +530,9 @@ export async function generateLyrics(
     generateBoundlessCreativeVector(genreProfile.genre, idx, seed)
   )
 
-  const narrativeDirective = isPlaylist
+  const narrativeDirective = reviewedJapanProfile
+    ? `\n\n## GENRE-FAITHFUL ORIGINALITY\nRespect the user topic first. Explore fresh, concrete scenes within ${reviewedJapanProfile.lyricTheme}. Each track must have its own emotional turn, imagery and hook while retaining the selected musical identity; do not import an unrelated comic episode, antagonist, shout or genre.\n`
+    : isPlaylist
     ? `\n\n## 🌌 1,000-SONG ABSOLUTE DIVERSITY DIRECTIVE (EVERY TRACK MUST BE A COMPLETELY UNIQUE UNIVERSE):\n` +
       playlistVectors.map((v, idx) => 
         `### Track ${idx + 1} Creative Vector (Entropy: ${v.uniqueEntropySeed}):\n` +

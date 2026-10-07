@@ -716,6 +716,7 @@ export async function POST(request: NextRequest) {
       voiceDesign: voiceDesign ? { gender: voiceDesign.gender, age: voiceDesign.age, language: voiceDesign.language, traits: voiceDesign.traits, designCode: voiceDesign.designCode } : undefined,
       voiceDesignCode: voiceDesign?.designCode,
       voiceFeatureMode: samplePersonaId ? 'suno_style_persona' : registeredVoicePersonaId ? 'suno_voice_persona' : 'prompt_style_only',
+      ...(rawBody.sourceMenu === 'japan' ? { vocalProfileSpecified: !payload.isInstrumental && Boolean(rawVoicePrompt || vdCode || samplePersonaId || registeredVoicePersonaId) } : {}),
       auto_voice_convert: false,
       voice_model_id: null,
       customVoiceRegistrationId: registeredVoicePersonaId ? requestedCustomVoiceId : null,

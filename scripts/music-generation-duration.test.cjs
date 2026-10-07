@@ -136,7 +136,7 @@ test('Japan study vocals reserve lead protection while leaving backing hiss, per
   assert.deepEqual(result.requestedPreferredSeconds, { minimum: 160, maximum: 240 });
   for (const overrides of [{ presetId: 'rainy-day-enka' }, { sourceMenu: 'preset-studio' }, { isInstrumental: true }, { sourceMenu: 'voice-discovery-sample', metadata: { durationSeconds: 30 } }]) {
     const other = await submit({ sourceMenu: 'japan', presetId: 'lofi-study', ...overrides });
-    assert.doesNotMatch(other.input.style, /chosen vocal timbre/);
+    assert.doesNotMatch(other.input.style, /lo-fi tape warmth and hiss belong only/);
     assert.equal(other.input.negative_tags, undefined);
   }
 });

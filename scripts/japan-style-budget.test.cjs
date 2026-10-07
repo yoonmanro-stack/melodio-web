@@ -5,13 +5,13 @@ const path = require('node:path');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const moduleValue = { exports: {} };
-new Function('module', 'exports', ts.transpileModule(fs.readFileSync(path.join(root, 'src/lib/japan-style-budget.ts'), 'utf8'), {
+new Function('module', 'exports', 'require', ts.transpileModule(fs.readFileSync(path.join(root, 'src/lib/japan-style-budget.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
-}).outputText)(moduleValue, moduleValue.exports);
+}).outputText)(moduleValue, moduleValue.exports, name => { assert.equal(name, './japan-preset-profile'); const profiles = require('../worker/japan-preset-profiles.json'); return { getJapanPresetProfile: id => profiles[id] }; });
 const { fitJapanStyleBudget } = moduleValue.exports;
 
 test('other Japan presets and unselected/custom presets keep their exact existing slice behavior', () => {
-  for (const id of [undefined, 'lofi-study', 'romance-pop', 'kawaii_future_bass', 'kawaii-future-copy', 'custom-harajuku']) {
+  for (const id of [undefined, 'custom-japan', 'unreviewed-copy', 'kawaii_future_bass', 'kawaii-future-copy', 'custom-harajuku']) {
     for (const text of ['', '  airy male, 72 BPM  ', 'x'.repeat(1001), '🦄'.repeat(501)]) {
       assert.equal(fitJapanStyleBudget(text, id), text.length <= 1000 ? text : text.slice(0, 1000));
     }

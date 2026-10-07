@@ -28,6 +28,7 @@ function loadTs(relative, modules) {
 
 function loadEngine() {
   return loadTs('src/lib/engines/lyrics-generator.ts', {
+    '@/lib/japan-preset-profile': { getJapanPresetProfile: id => require('../worker/japan-preset-profiles.json')[id] },
     '@/lib/lyrics/compile-sections': policy,
     '@/lib/db/knowledge': { getPlaybookByKey: async () => null, matchPlaybooksByPrompt: async () => [], matchEpisodesByCategoryAndTopic: async () => [] },
     '@/lib/engines/infinite-story-matrix': { generateBoundlessCreativeVector: () => ({ uniqueEntropySeed: 'offline', perspectiveType: 'authored', thematicDimension: 'theme', sensoryFocus: 'senses' }) },
