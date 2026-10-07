@@ -88,7 +88,7 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
       id="app-navigation"
       aria-label="Primary navigation"
       className={clsx(
-        "h-screen border-r border-[rgba(255,255,255,0.05)] bg-[rgba(10,10,14,0.8)] backdrop-blur-xl flex flex-col pt-6 pb-24 fixed top-0 z-[80] md:z-40 transition-all duration-300",
+        "h-screen border-r border-[rgba(255,255,255,0.05)] bg-[rgba(10,10,14,0.8)] backdrop-blur-xl flex flex-col pt-6 fixed top-0 z-[80] md:z-40 transition-all duration-300",
         // Desktop positioning
         "md:left-0",
         isCollapsed ? "md:w-20 md:px-2" : "md:w-64 md:px-4",
@@ -99,7 +99,7 @@ export function Sidebar({ isCollapsed, onToggle, isMobileOpen = false, onMobileC
           : "-left-64 invisible md:visible"
       )}
     >
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent pr-2">
+      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent pr-2 pb-24">
         {/* Mobile Header Logo and Close button */}
         <div className="md:hidden flex items-center justify-between px-2 mb-6 border-b border-white/5 pb-4">
           <Link href="/dashboard" className="cursor-pointer" onClick={onMobileClose}>
