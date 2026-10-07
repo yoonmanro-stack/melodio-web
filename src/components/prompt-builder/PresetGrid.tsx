@@ -8,7 +8,7 @@ import { canonicalPresetId, getPresetCategory, getPresetGenreLabel, mergePublicP
 import { localizePresetForDisplay } from '@/lib/preset-localization'
 import { getPresetThumbnail, getPresetUsageCount } from '@/lib/preset-thumbnail'
 import { PresetSampleButton, PresetSamplePlayer, usePresetSamples } from '@/components/presets/PresetSamples'
-import { Trash2, Pencil, ChevronLeft, ChevronRight, Search, Heart, Calendar, Headphones, Maximize2, X } from 'lucide-react'
+import { Trash2, Pencil, ChevronLeft, ChevronRight, Search, Heart, Headphones, Maximize2, X } from 'lucide-react'
 
 interface PresetGridProps {
   onApply: (preset: Preset) => void
@@ -286,10 +286,6 @@ export default function PresetGrid({
             const usageCount = getPresetUsageCount(preset)
             const genreLabel = getPresetGenreLabel(preset)
             const isLiked = likedPresets.some(id => isCustom ? id === preset.id : canonicalPresetId(id) === preset.id)
-            const dateStr = Number.isFinite(updatedTime)
-              ? new Date(updatedTime).toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\s/g, '')
-              : null
-
             const isSelected = preset.id === selectedPresetId
             return (
               <div
@@ -310,14 +306,8 @@ export default function PresetGrid({
                   {/* On Hover Info Overlay */}
                   <div className="absolute inset-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-250 flex flex-col justify-between items-start p-4 z-10">
                     {/* Top: Metadata items (Left-aligned, larger & brighter) */}
-                    {dateStr !== null || usageCount !== null ? (
+                    {usageCount !== null ? (
                       <div className="flex flex-col gap-1.5 items-start rounded-xl bg-white/50 px-2.5 py-2 text-left text-zinc-900 shadow-lg backdrop-blur-sm">
-                        {dateStr !== null ? (
-                          <div className="text-xs font-mono flex items-center gap-2">
-                            <Calendar className="w-3.5 h-3.5 text-fuchsia-600 shrink-0" />
-                            <span>수정일: {dateStr}</span>
-                          </div>
-                        ) : null}
                         {usageCount !== null ? (
                           <div className="text-xs font-mono flex items-center gap-2">
                             <Headphones className="w-3.5 h-3.5 text-fuchsia-600 shrink-0" />
