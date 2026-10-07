@@ -59,9 +59,9 @@ export const jpPresetTranslations: Record<string, PresetTranslation> = {
     name_ko: "하라주쿠 카와이 베이스",
     name_en: "Harajuku Kawaii Future Bass",
     name_ja: "原宿カワイイ・フューチャーベース",
-    desc_ko: "하라주쿠의 통통 튀는 네온 감성. 귀여운 피치 보컬과 에너제틱한 퓨처 베이스.",
-    desc_en: "Bright, bouncy Harajuku vibes featuring sweet high-pitched vocals and energetic synths.",
-    desc_ja: "原宿のポップなネオン感。キュートなピッチドボーカルと弾むフューチャーベース。"
+    desc_ko: "하라주쿠의 통통 튀는 네온 감성. 풍성한 퓨처 베이스 신스와 기본 성인 보컬, 선택한 음색의 개성을 살리는 자연스러운 가창.",
+    desc_en: "Bright, bouncy Harajuku future bass with lush synths; natural adult vocals by default, or the character of your chosen voice.",
+    desc_ja: "原宿の弾むネオン感。豊かなフューチャーベースのシンセと、標準では自然な大人の歌声。選んだ声の個性を優先します。"
   },
   "okinawa-sanshin": {
     name_ko: "오키나와 에메랄드 파도 치유",

@@ -51,6 +51,7 @@ import LyricsBuilder from "./prompt-builder/LyricsBuilder";
 import { Wand2, Tag, PenTool, ListMusic, Music2, Copy } from "lucide-react";
 import type { MusicEngine, PromptPayload, LyricsSection, Preset } from "@/types";
 import { composeStylePrompt, resolveRotationPrompt } from "@/lib/prompt-compositor";
+import { fitJapanStyleBudget } from "@/lib/japan-style-budget";
 import { compileLyricsSections } from "@/lib/lyrics/compile-sections";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { jpPresetTranslations } from "@/data/jp-presets-translations";
@@ -218,8 +219,8 @@ export const jpPresets = [
   {
     id: "kawaii-future",
     name: "Harajuku Kawaii (하라주쿠 카와이 베이스)",
-    desc: "하라주쿠의 통통 튀는 네온 감성. 퓨처 베이스 신스 테마와 귀여운 보컬 피치.",
-    tags: "kawaii future bass, bright synth, cute pitched vocals, bouncy sub-bass, harajuku vibe",
+    desc: "하라주쿠의 통통 튀는 네온 감성. 풍성한 퓨처 베이스 신스와 기본 성인 보컬, 선택한 음색의 개성을 살리는 자연스러운 가창.",
+    tags: "Harajuku kawaii future bass, lush modulated synth chords, bell and pluck melodies, syncopated half-time groove, elastic controlled sub-bass, sidechain on synths only, melodic verses flowing into synth-led choruses and drops, playful neon color, expressive natural lead vocals in the requested language, preserve chosen voice register and character, synth-only chops and candy textures",
     emoji: "🦄",
     gradient: "from-[#fbc2eb] to-[#a6c1ee]",
     category: "focus",
@@ -1207,7 +1208,7 @@ export default function JapanLandingClient() {
           }
 
           const joined = `${sanitizedBase.trim()}, ${trackDesc}`;
-          return joined.length <= 1000 ? joined : joined.slice(0, 1000);
+          return fitJapanStyleBudget(joined, activePreset?.id);
         };
 
          const getPresetImages = () => {
@@ -1257,7 +1258,7 @@ export default function JapanLandingClient() {
           }
 
           if (finalStylePrompt.length > 1000) {
-            finalStylePrompt = finalStylePrompt.slice(0, 1000);
+            finalStylePrompt = fitJapanStyleBudget(finalStylePrompt, activePreset?.id);
           }
 
           const trackPayload: PromptPayload = {
@@ -1390,7 +1391,7 @@ export default function JapanLandingClient() {
           }
 
           const joined = `${sanitizedBase.trim()}, ${trackDesc}`;
-          return joined.length <= 1000 ? joined : joined.slice(0, 1000);
+          return fitJapanStyleBudget(joined, activePreset?.id);
         };
 
         const targetSection = lyricsSections.find((s: any) => s.type === 'chorus' && s.description?.trim())
@@ -1424,7 +1425,7 @@ export default function JapanLandingClient() {
         }
 
         if (finalSingleStylePrompt.length > 1000) {
-          finalSingleStylePrompt = finalSingleStylePrompt.slice(0, 1000);
+          finalSingleStylePrompt = fitJapanStyleBudget(finalSingleStylePrompt, activePreset?.id);
         }
 
         const resolvedPayload: PromptPayload = {

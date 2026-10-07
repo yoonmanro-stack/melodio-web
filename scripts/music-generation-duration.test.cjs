@@ -69,7 +69,7 @@ const lyrics = ['Verse', 'Pre-chorus', 'Chorus', 'Verse', 'Bridge', 'Chorus'].ma
 const personaId = 'offline_style_persona_123';
 const studioMenus = ['style-library', 'preset-studio', 'japan'];
 
-async function submit(overrides = {}) {
+async function submit(overrides = {}, requestedPersona = personaId) {
   const voice = catalog.find(item => item.id === 'melodio-mv3-bronze-rhythm-female');
   assert.ok(voice, 'The incident voice must remain represented in the regression fixture');
   const payload = {
@@ -90,12 +90,12 @@ async function submit(overrides = {}) {
     { log() {}, error() {} },
   );
   // Supply a playbook so no knowledge-database import can run for short prompts.
-  const result = await module.exports.submit(payload, { metadata: { suno_tags: 'full-band production' } }, personaId, 'style_persona');
+  const result = await module.exports.submit(payload, { metadata: { suno_tags: 'full-band production' } }, requestedPersona || undefined, 'style_persona');
   assert.equal(calls.length, 1);
   const input = calls[0];
   if (!payload.isInstrumental) assert.equal(input.prompt, lyrics, 'All six sections must reach the provider without truncation');
-  assert.equal(input.persona_id, payload.isInstrumental ? undefined : personaId);
-  assert.equal(input.persona_model, payload.isInstrumental ? undefined : 'style_persona');
+  assert.equal(input.persona_id, payload.isInstrumental || !requestedPersona ? undefined : requestedPersona);
+  assert.equal(input.persona_model, payload.isInstrumental || !requestedPersona ? undefined : 'style_persona');
   if (!payload.isInstrumental) assert.equal(input.vocal_gender, payload.vocalGender === 'male' ? 'm' : 'f');
   assert.equal(input.custom_mode, true);
   assert.equal(result.requestedDurationSeconds, input.duration, 'Receipt must record actual submitted duration');
@@ -139,6 +139,22 @@ test('Japan study vocals reserve lead protection while leaving backing hiss, per
     assert.doesNotMatch(other.input.style, /chosen vocal timbre/);
     assert.equal(other.input.negative_tags, undefined);
   }
+});
+
+test('Harajuku API distinguishes a basic default voice from a caller-resolved chosen vocal style', async () => {
+  const style = 'Kawaii future bass, natural female singing, 140 BPM, wide synth chords and elastic sub-bass';
+  const base = { sourceMenu: 'japan', presetId: 'kawaii-future', stylePrompt: style };
+  const basic = await submit({ ...base, vocalProfileSpecified: true }, null);
+  assert.match(basic.input.style, /natural adult lead.*forward resonance.*solid midrange body/);
+  assert.match(basic.input.style, /requested lyrics/);
+  assert.match(basic.input.negative_tags, /chipmunk lead vocal/);
+  assert.equal(basic.input.prompt, lyrics);
+  const chosen = await submit({ ...base, voicePrompt: 'chosen husky airy alto', stylePrompt: style + ', chosen husky airy alto' }, null);
+  assert.match(chosen.input.style, /Preserve the chosen lead-vocal timbre/);
+  assert.match(chosen.input.style, /chosen husky airy alto/);
+  assert.doesNotMatch(chosen.input.style, /solid midrange body|distinctive dry texture/);
+  assert.equal(Object.hasOwn(chosen.input, 'vocalProfileSpecified'), false);
+  assert.equal(Object.hasOwn(chosen.input, 'duration'), false);
 });
 
 test('all three studios preserve a full song for the incident voice and misleading style words', async () => {

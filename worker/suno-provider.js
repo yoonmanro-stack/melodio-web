@@ -1,6 +1,7 @@
 /** Shared by the Next.js submission route and the Mac mini music worker. */
 const { prepareLyricsSubmission, assertSafeVocalLyrics } = require('./lyrics-policy');
 const { protectLofiLeadVocal } = require('./lofi-vocal-policy');
+const { protectKawaiiLeadVocal } = require('./kawaii-vocal-policy');
 const KIE_MODEL = 'ai-music-api/generate';
 const KIE_API_ORIGIN = 'https://api.kie.ai';
 const SUNO_TIMEOUT_MS = 15 * 60 * 1000;
@@ -77,9 +78,12 @@ function buildKieSunoRequest(options) {
   if (!style) throw new Error('음악 스타일 프롬프트를 입력해 주세요.');
   if (lyrics.length > 5000) throw new Error('Suno V6 가사는 5,000자 이내로 입력해 주세요.');
   const customMode = instrumental || lyrics.length > 0;
-  const protectedVocal = customMode
+  const protectedLofiVocal = customMode
     ? protectLofiLeadVocal(options, style, options.exclude, fitSunoStylePrompt)
     : { style, exclude: options.exclude };
+  const protectedVocal = customMode
+    ? protectKawaiiLeadVocal(options, protectedLofiVocal.style, protectedLofiVocal.exclude, fitSunoStylePrompt)
+    : protectedLofiVocal;
   const requestedPersona = String(options.personaId || '').trim();
   if (!instrumental && requestedPersona && !customMode) throw new Error('목소리 참조를 사용하려면 가사가 필요합니다.');
   if (options.personaModel && !['style_persona', 'voice_persona'].includes(options.personaModel)) throw new Error('목소리 참조 유형이 올바르지 않습니다.');

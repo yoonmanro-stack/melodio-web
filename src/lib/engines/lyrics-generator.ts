@@ -79,6 +79,14 @@ Compose a complete song using the established six-section backend structure in t
 `
 
 const BRAZILIAN_FUNK_PERFORMANCE_PRESET = 'brazilian-funk-kpop-performance'
+const HARAJUKU_FUTURE_BASS_PRESET = 'kawaii-future'
+const HARAJUKU_DESCRIPTION_INSTRUCTIONS = `
+## HARAJUKU FUTURE BASS VOCAL AND ARRANGEMENT DIRECTIONS
+- Keep section descriptions in plain, unbracketed English, at most two short clauses and 60 characters total. Name only a key instrument and the section-specific change; do not repeat the full recipe.
+- Preserve the requested singer or singers, gender, language, register and individual vocal color. Use expressive lead singing with natural, unshifted phonation; do not default to childish, chipmunk or artificially pitch-shifted lead vocals. A naturally high register is welcome when chosen.
+- Keep chops, candy textures, pitch modulation and sidechain on synths only. Lead phrases stay coherent and intelligible; use melodic verses leading into synth-led choruses and drops without rushing or flattening the song into quiet study music.
+- All instrument and vocal-production directions belong in description, never sung content. The existing complete six-section song form and natural ending remain in place.
+`
 const BRAZILIAN_FUNK_PERFORMANCE_STRUCTURE = `
 ## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT
 Compose a complete Brazilian Funk and K-pop performance song in this eight-section order:
@@ -181,8 +189,8 @@ function hasLyricsSections(value: unknown): value is GPTLyricsSection[] {
  * GPT를 활용하여 단일 곡 또는 플레이리스트를 일괄 생성
  * 단일 GPT-5.6-sol 요청. 모델 오류를 샘플 가사나 다른 모델로 대체하지 않는다.
  */
-interface GenreThematicProfile {
-  genre: 'trot' | 'citypop' | 'joseon' | 'lofi' | 'acoustic' | 'kpop' | 'rock' | 'chanson' | 'general'
+type GenreThematicProfile = {
+  genre: 'trot' | 'citypop' | 'joseon' | 'lofi' | 'acoustic' | 'kpop' | 'rock' | 'chanson' | 'general' | 'futurebass'
   nameKo: string
   thematicPillars: {
     title: string
@@ -192,12 +200,35 @@ interface GenreThematicProfile {
   }[]
   personaTitleFormula: string
   bannedCliches: string
-  randomBpm: () => number
-  instruments: string[]
-  preserveStyle?: boolean
-}
+  descriptionInstructions?: string
+} & ({ preserveStyle: true; randomBpm?: () => number; instruments?: string[] }
+  | { preserveStyle?: false; randomBpm: () => number; instruments: string[] })
 
 export function detectGenreThematicProfile(stylePrompt: string, topic?: string, presetId?: string, options?: { ordinarySong?: boolean }): GenreThematicProfile {
+  if (presetId === HARAJUKU_FUTURE_BASS_PRESET && options?.ordinarySong) {
+    return {
+      genre: 'futurebass',
+      nameKo: '하라주쿠 카와이 Future Bass',
+      thematicPillars: [
+        {
+          title: '네온 거리의 발견과 자기표현',
+          subThemes: ['색과 움직임으로 발견하는 나만의 취향', '친구와 주고받는 장난스러운 신호', '익숙한 거리를 새롭게 바라보는 순간'],
+          sampleTitles: ['네온의 다음 색', '우리만의 신호', '골목 끝의 반짝임'],
+          lyricsGuidance: '구체적인 장면과 재치 있는 감정 변화로 성숙한 화자의 개성을 드러낸다. 선율이 이어지는 Verse와 기억에 남는 Chorus를 대비시키며 귀여운 색감을 유아적 말투나 단순한 구호로 대신하지 않는다.'
+        },
+        {
+          title: '설렘과 새로운 움직임',
+          subThemes: ['머뭇거림을 넘어 내딛는 발걸음', '두 번째 장면에서 달라지는 시선과 관계', '반짝이는 밤에 남기는 작은 약속'],
+          sampleTitles: ['한 걸음의 리듬', '반짝임의 이유', '다음 모퉁이'],
+          lyricsGuidance: '첫 장면을 의미 있게 발전시키고 자연스럽게 부를 수 있는 완성된 문장과 선명한 훅을 사용한다. 퓨처 베이스의 리듬과 생동감을 살리며 조용한 공부용 로파이, 어쿠스틱 힐링곡이나 억지로 높은 피치의 캐릭터송으로 바꾸지 않는다.'
+        }
+      ],
+      personaTitleFormula: 'Use an original title rooted in a vivid Harajuku scene, playful discovery or emotional turn; keep the requested language and avoid generic study or healing labels.',
+      bannedCliches: 'Avoid childish slogans, repetitive filler and unrelated acoustic-study imagery. Preserve energetic Future Bass identity, meaningful melodic lyrics and the user\'s chosen vocal character.',
+      descriptionInstructions: HARAJUKU_DESCRIPTION_INSTRUCTIONS,
+      preserveStyle: true,
+    }
+  }
   if (presetId === BRAZILIAN_FUNK_PERFORMANCE_PRESET && options?.ordinarySong) {
     return {
       genre: 'kpop',
@@ -388,10 +419,10 @@ export async function generateLyrics(
   // Instrumental callers bypass this engine; dedicated short-form behavior stays intact.
   const isExplicitShortForm = typeof params.durationSeconds === 'number' && Number.isFinite(params.durationSeconds)
     && params.durationSeconds > 0 && params.durationSeconds <= 60
-  const usePerformanceStructure = params.presetId === BRAZILIAN_FUNK_PERFORMANCE_PRESET
-    && !params.viralMode && !isExplicitShortForm
+  const isOrdinarySong = !params.viralMode && !isExplicitShortForm
+  const usePerformanceStructure = params.presetId === BRAZILIAN_FUNK_PERFORMANCE_PRESET && isOrdinarySong
   const songStructure = usePerformanceStructure ? BRAZILIAN_FUNK_PERFORMANCE_INSTRUCTIONS : NATURAL_SONG_INSTRUCTIONS
-  const genreProfile = detectGenreThematicProfile(params.stylePrompt, params.topic, params.presetId, { ordinarySong: usePerformanceStructure })
+  const genreProfile = detectGenreThematicProfile(params.stylePrompt, params.topic, params.presetId, { ordinarySong: isOrdinarySong })
 
   // Randomize style tags to ensure different production results
   const randomizedStylePrompt = randomizeStylePrompt(params.stylePrompt, genreProfile)
@@ -750,7 +781,7 @@ ${LYRICS_FIELD_CONTRACT}`
   return `You are a world-class, chart-topping songwriter and music producer specializing in ${profile.nameKo} and global playlist curation. You have deep expertise in Suno AI music generation.
 ${genderInstruction}
 ${durationStructureInstruction}
-${lyricsQualityRules}
+${lyricsQualityRules}${profile.descriptionInstructions || ''}
 ${customUserDirectives}
 
 Your task: Generate a professional-grade song package (title, SEO tags, hashtags, and structured lyrics) for the style: "${stylePrompt}".
@@ -808,7 +839,7 @@ ${songStructure.composition}
 To run a successful 20~40 track playlist channel, each track MUST explore a distinct thematic angle across the genre's universe:
 ${profile.thematicPillars.map((p, idx) => `Pillar ${idx + 1}. **${p.title}** (Sub-themes: ${p.subThemes.join(', ')})`).join('\n')}
 
-${profile.bannedCliches}
+${profile.bannedCliches}${profile.descriptionInstructions || ''}
 
 Your task is to generate a comprehensive ${trackCount}-track playlist package based on the requested style: "${stylePrompt}".
 ${topic ? `The entire playlist theme/topic is: "${topic}".` : ''}

@@ -293,6 +293,7 @@ async function submitSunoJob(payload: PromptPayload, matchedPlaybook?: any, pers
     naturalFullSong: durationPlan.naturalFullSong,
     sourceMenu: (payload as PromptPayload & { sourceMenu?: unknown }).sourceMenu,
     presetId: selectedPresetId,
+    vocalProfileSpecified: Boolean(personaId || (payload as any).voicePrompt || (payload as any).vdCode || (payload as any).activeVoice?.stylePrompt),
   })
   console.log(`[API/generate] Kie Suno 제출 성공 (model: ${result.model})`)
   return { ...result, requestedDurationSeconds: durationPlan.seconds, durationMode: durationPlan.mode, durationSource: durationPlan.source, requestedPreferredSeconds: durationPlan.preferredSeconds }

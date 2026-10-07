@@ -6,6 +6,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const ts = require('typescript');
 const { execFileSync } = require('node:child_process');
+const { createHash } = require('node:crypto');
 const root = path.resolve(__dirname, '..');
 const CHAT = 'https://api.openai.com/v1/chat/completions';
 const MODEL = 'gpt-5.6-sol';
@@ -275,6 +276,188 @@ test('the performance preset still rejects production instructions returned as s
     songs[0].sections[0].content = '[female vocal, synth bass, tamborzao drums]';
     const fixture = responder(payload);
     await assert.rejects(generateLyrics({ stylePrompt: PERFORMANCE_STYLE, presetId: PERFORMANCE_PRESET,
+      isPlaylistMode, trackCount: 2 }, fixture.dependencies), error => error.code === 'lyrics_instruction_in_content');
+    assert.equal(fixture.calls.length, 1); verifyFixedSol(fixture.calls[0]);
+  }
+});
+const HARAJUKU_PRESET = 'kawaii-future';
+const HARAJUKU_BASELINE = 'b9b8785';
+const digest = value => createHash('sha256').update(typeof value === 'string' ? value : JSON.stringify(value)).digest('hex');
+const baselineFile = filename => execFileSync('git', ['show', `${HARAJUKU_BASELINE}:${filename}`], {
+  cwd: root, encoding: 'utf8', maxBuffer: 512 * 1024,
+});
+function japanPresetNodes(source) {
+  const ast = ts.createSourceFile('japan-landing-client.tsx', source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  let definitions;
+  function visit(node) {
+    if (ts.isVariableDeclaration(node) && node.name.getText(ast) === 'jpPresets') definitions = node.initializer;
+    ts.forEachChild(node, visit);
+  }
+  visit(ast);
+  assert.ok(definitions && ts.isArrayLiteralExpression(definitions));
+  const result = new Map();
+  for (const node of definitions.elements) {
+    const properties = new Map(node.properties.filter(ts.isPropertyAssignment).map(property => [property.name.getText(ast), property.initializer]));
+    result.set(properties.get('id').text, { node, properties, ast });
+  }
+  return result;
+}
+const harajukuRecipe = () => japanPresetNodes(fs.readFileSync(path.join(root, 'src/components/japan-landing-client.tsx'), 'utf8'))
+  .get(HARAJUKU_PRESET).properties.get('tags').text;
+test('Harajuku alone gets a concise Future Bass recipe and natural adult vocal descriptions without changing its group or other presets', () => {
+  const filename = 'src/components/japan-landing-client.tsx';
+  const source = fs.readFileSync(path.join(root, filename), 'utf8');
+  const next = japanPresetNodes(source), old = japanPresetNodes(baselineFile(filename));
+  assert.deepEqual(Array.from(next.keys()), Array.from(old.keys()));
+  for (const [id, preset] of next) {
+    if (id !== HARAJUKU_PRESET) assert.equal(digest(preset.node.getText(preset.ast)), digest(old.get(id).node.getText(old.get(id).ast)), `Unexpected recipe change: ${id}`);
+  }
+  const preset = next.get(HARAJUKU_PRESET), previous = old.get(HARAJUKU_PRESET);
+  for (const [name, value] of preset.properties) {
+    if (!['tags', 'desc'].includes(name)) assert.equal(value.getText(preset.ast), previous.properties.get(name).getText(previous.ast), `Unexpected Harajuku field change: ${name}`);
+  }
+  const recipe = harajukuRecipe();
+  assert.ok(recipe.length >= 300 && recipe.length <= 450);
+  for (const clause of ['lush modulated synth chords', 'bell and pluck melodies', 'syncopated half-time groove',
+    'elastic controlled sub-bass', 'sidechain on synths only', 'melodic verses flowing into synth-led choruses and drops',
+    'expressive natural lead vocals', 'preserve chosen voice register and character', 'synth-only chops and candy textures']) assert.ok(recipe.includes(clause), clause);
+  assert.doesNotMatch(recipe, /cute pitched|high.pitched|childish|chipmunk|\b(?:adult|female|male|Suno|GPT)\b|\b\d+ BPM\b/i);
+  assert.equal(preset.properties.get('category').text, 'focus');
+  const localeFile = 'src/data/jp-presets-translations.ts';
+  function translations(text) {
+    const module = { exports: {} };
+    vm.runInNewContext(ts.transpileModule(text, { compilerOptions: { module: ts.ModuleKind.CommonJS } }).outputText, { module, exports: module.exports });
+    return module.exports.jpPresetTranslations;
+  }
+  const locales = translations(fs.readFileSync(path.join(root, localeFile), 'utf8'));
+  const oldLocales = translations(baselineFile(localeFile));
+  assert.deepEqual(Object.keys(locales), Object.keys(oldLocales));
+  for (const id of Object.keys(locales)) {
+    if (id !== HARAJUKU_PRESET) assert.equal(digest(locales[id]), digest(oldLocales[id]), `Unexpected translation change: ${id}`);
+  }
+  for (const [field, value] of Object.entries(locales[HARAJUKU_PRESET])) {
+    if (!field.startsWith('desc_')) assert.equal(value, oldLocales[HARAJUKU_PRESET][field]);
+  }
+  assert.match(locales[HARAJUKU_PRESET].desc_en, /future bass.*adult vocals/);
+  assert.match(locales[HARAJUKU_PRESET].desc_en, /by default.*chosen voice/);
+  assert.match(locales[HARAJUKU_PRESET].desc_ko, /퓨처 베이스.*성인 보컬/);
+  assert.match(locales[HARAJUKU_PRESET].desc_ja, /フューチャーベース.*大人の歌声/);
+  assert.doesNotMatch(JSON.stringify(locales[HARAJUKU_PRESET]), /high.pitched|피치|ピッチド/i);
+  const calls = [];
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(preset.ast) === 'fitJapanStyleBudget') calls.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(preset.ast);
+  assert.equal(calls.length, 4, 'Both merge and final-budget paths must pass the selected preset to the shared fitter');
+  for (const call of calls) assert.equal(call.arguments[1].getText(preset.ast), 'activePreset?.id');
+  assert.doesNotMatch(source, /\.slice\(0,\s*1000\)/);
+});
+test('Harajuku ordinary singles and playlists keep the six-section core and exact recipe in all14 studio languages', async () => {
+  const { generateLyrics } = loadLyrics(undefined, { random: () => 0.25 });
+  const recipe = harajukuRecipe();
+  const languages = [['ko', 'Korean'], ['en', 'English'], ['ja', 'Japanese'], ['fr', 'French'],
+    ['zh', 'Chinese'], ['es', 'Spanish'], ['pt', 'Portuguese'], ['de', 'German'], ['it', 'Italian'],
+    ['hi', 'Hindi'], ['ru', 'Russian'], ['ar', 'Arabic'], ['ko-en', 'a mix of Korean and English'], ['ja-en', 'a mix of Japanese and English']];
+  let ordinaryCore;
+  for (const [language, label] of languages) {
+    for (const isPlaylistMode of [false, true]) {
+      const fixture = responder(isPlaylistMode ? playlistPayload(2) : singlePayload());
+      const result = await generateLyrics({ stylePrompt: recipe, presetId: HARAJUKU_PRESET,
+        language, isPlaylistMode, trackCount: 2, durationSeconds: 195 }, fixture.dependencies);
+      const [system, user] = fixture.calls[0].body.messages.map(message => message.content);
+      const core = system.match(/## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT\n([\s\S]*?)(?=\n## |$)/)?.[1].trim();
+      assert.ok(core);
+      if (ordinaryCore === undefined) ordinaryCore = core;
+      assert.equal(core, ordinaryCore);
+      assert.deepEqual([...core.matchAll(/^[1-6]\. .*\(type: "([^"]+)"\)/gm)].map(match => match[1]), ['intro', 'verse', 'chorus', 'verse', 'chorus', 'outro']);
+      assert.equal([...core.matchAll(/^[24]\. Verse [12] \(type: "verse"\) - 5 coherent sung lines/gm)].length, 2);
+      assert.equal([...core.matchAll(/^[35]\. Chorus \(type: "chorus"\) - 4 lines/gm)].length, 2);
+      assert.match(system, new RegExp(`requested language style: "${label}"`));
+      assert.match(system, /HARAJUKU FUTURE BASS VOCAL AND ARRANGEMENT DIRECTIONS/);
+      assert.match(system, /at most two short clauses and 60 characters total/);
+      assert.match(system, /natural, unshifted phonation/);
+      assert.doesNotMatch(system, /expressive adult lead singing|adult character is only a default/);
+      assert.match(system, /A naturally high register is welcome when chosen/);
+      assert.match(system, /sidechain on synths only/);
+      assert.match(system, /directions belong in description, never sung content/);
+      assert.doesNotMatch(user, /프리미엄 팝 & 인디 감성|로파이 칠 & 딥 포커스 & 힐링|key of|featuring|\b\d+ BPM\b/);
+      assert.match(user, /하라주쿠 카와이 Future Bass/);
+      assert.doesNotMatch(system, /CRITICAL DURATION|TARGET:|\b\d+:\d{2}\b|eight-section/);
+      if (isPlaylistMode) assert.match(system, /For each track, generate Intro, Verse 1, Chorus, Verse 2, Chorus, Outro sections/);
+      assert.equal(result.stylePrompt, recipe);
+      assert.equal(fixture.calls.length, 1); verifyFixedSol(fixture.calls[0]);
+    }
+  }
+  const explicitTempo = `${recipe}, 147 BPM`;
+  const fixture = responder();
+  const result = await generateLyrics({ stylePrompt: explicitTempo, presetId: HARAJUKU_PRESET }, fixture.dependencies);
+  assert.equal(result.stylePrompt, explicitTempo);
+  assert.equal(result.stylePrompt.match(/\b\d+ BPM\b/g).length, 1);
+});
+test('Harajuku respects chosen male, female and duet singing and does not truncate returned words or directions', async () => {
+  const { generateLyrics } = loadLyrics();
+  const verse = Array.from({ length: 9 }, (_, index) => `街角で見つけた次の色 ${index + 1}`).join('\n');
+  const direction = 'preserve the chosen naturally high husky register, bell melody and coherent melodic phrasing';
+  for (const vocalGender of ['male', 'female', 'duet']) {
+    for (const isPlaylistMode of [false, true]) {
+      const payload = isPlaylistMode ? playlistPayload(2) : singlePayload();
+      for (const song of isPlaylistMode ? payload.tracks : [payload]) song.sections[0] = { type: 'verse', content: verse, description: direction };
+      const fixture = responder(payload);
+      const style = `${harajukuRecipe()}, chosen ${vocalGender} vocals with a naturally high husky register`;
+      const result = await generateLyrics({ stylePrompt: style, presetId: HARAJUKU_PRESET,
+        language: 'ja', vocalGender, isPlaylistMode, trackCount: 2 }, fixture.dependencies);
+      assert.equal(result.stylePrompt, style);
+      for (const song of isPlaylistMode ? result.tracks : [result]) {
+        assert.equal(song.sections[0].content, verse);
+        assert.equal(song.sections[0].description, direction, 'The description budget is composition guidance, not a post-generation crop');
+      }
+      const system = fixture.calls[0].body.messages[0].content;
+      assert.match(system, /Preserve the requested singer or singers, gender, language, register and individual vocal color/);
+      if (vocalGender === 'male') assert.match(system, /male vocalist/);
+      if (vocalGender === 'female') assert.match(system, /female vocalist/);
+      if (vocalGender === 'duet') assert.match(system, /male and female duet/);
+      const canonical = require(path.join(root, 'worker/lyrics-policy.js')).compileLyricsSections((isPlaylistMode ? result.tracks[0] : result).sections).lyricsPrompt;
+      assert.ok(canonical.includes(verse));
+      assert.doesNotMatch(canonical, /husky register|bell melody|sidechain|chipmunk/);
+      assert.equal(fixture.calls.length, 1); verifyFixedSol(fixture.calls[0]);
+    }
+  }
+});
+test('all off-scope Harajuku aliases, other ordinary presets, short forms and viral prompts stay byte-identical to the pre-change release', async () => {
+  const old = loadLyrics(baselineFile('src/lib/engines/lyrics-generator.ts'), { random: () => 0.25 });
+  const next = loadLyrics(undefined, { random: () => 0.25 });
+  const recipe = harajukuRecipe();
+  const cases = [
+    { stylePrompt: recipe }, { stylePrompt: recipe, presetId: 'kawaii_future_bass' },
+    { stylePrompt: recipe, presetId: 'kawaii-future-custom' }, { stylePrompt: recipe, presetId: 'KAWAII-FUTURE' },
+    { stylePrompt: 'calm focus study', presetId: 'lofi-study', language: 'ja' },
+    { stylePrompt: 'Japanese city pop', presetId: 'romance-pop', language: 'ja' },
+    { stylePrompt: 'warm folk', presetId: 'acoustic-healing' }, { stylePrompt: 'Korean trot', presetId: 'trot' },
+    { stylePrompt: PERFORMANCE_STYLE, presetId: PERFORMANCE_PRESET },
+    ...[10, 15, 16, 30, 31, 45, 60].map(durationSeconds => ({ stylePrompt: recipe, presetId: HARAJUKU_PRESET, durationSeconds })),
+    ...[undefined, 30].map(durationSeconds => ({ stylePrompt: recipe, presetId: HARAJUKU_PRESET, durationSeconds, viralMode: true })),
+  ];
+  for (const params of cases) {
+    for (const isPlaylistMode of [false, true]) {
+      const payload = isPlaylistMode ? playlistPayload(2) : singlePayload();
+      const before = responder(payload), after = responder(payload);
+      const input = { ...params, isPlaylistMode, trackCount: 2, vocalGender: 'female' };
+      const oldResult = await old.generateLyrics(input, before.dependencies);
+      const nextResult = await next.generateLyrics(input, after.dependencies);
+      assert.equal(digest(after.calls[0].body), digest(before.calls[0].body), `Changed off-scope request: ${params.presetId || 'manual'} / ${params.durationSeconds || 'ordinary'} / playlist=${isPlaylistMode}`);
+      assert.equal(nextResult.stylePrompt, oldResult.stylePrompt);
+      assert.equal(after.calls.length, 1); verifyFixedSol(after.calls[0]);
+    }
+  }
+});
+test('Harajuku still rejects musical directions returned as sung content without retrying', async () => {
+  const { generateLyrics } = loadLyrics();
+  for (const isPlaylistMode of [false, true]) {
+    const payload = isPlaylistMode ? playlistPayload(2) : singlePayload();
+    (isPlaylistMode ? payload.tracks[0] : payload).sections[0].content = '[female vocal, synth bass, electronic drums]';
+    const fixture = responder(payload);
+    await assert.rejects(generateLyrics({ stylePrompt: harajukuRecipe(), presetId: HARAJUKU_PRESET,
       isPlaylistMode, trackCount: 2 }, fixture.dependencies), error => error.code === 'lyrics_instruction_in_content');
     assert.equal(fixture.calls.length, 1); verifyFixedSol(fixture.calls[0]);
   }

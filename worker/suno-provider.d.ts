@@ -14,6 +14,8 @@ export interface SunoJobOptions {
   /** Known production context used locally; never sent as vendor input fields. */
   sourceMenu?: unknown;
   presetId?: unknown;
+  /** True when the caller resolved a chosen vocal style or registered voice. */
+  vocalProfileSpecified?: boolean;
   vocalGender?: string;
   /** Server-resolved Kie/Suno Voice ID. */
   personaId?: string;
