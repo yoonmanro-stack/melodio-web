@@ -145,7 +145,8 @@
       "recipeHash": "019034118af7446932ee3340eabd4358137ad78eb2f6f247035570ea4752e10d",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "rapid-rap-six"
   },
   "uk_garage": {
     "genreLabel": "UK Garage",
@@ -178,7 +179,8 @@
       "recipeHash": "a7d01f653b61364491f97994d5a2870f8839c7e333a5b3a60f721ab8b8fbafb9",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "uk_drill": {
     "genreLabel": "UK Drill",
@@ -194,7 +196,8 @@
       "recipeHash": "9d693abc6ecc2eb69b18f2b62454b82b16097814f2bf4960f0ab79800f1d47cf",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "rapid-rap-six"
   },
   "uk_bassline": {
     "genreLabel": "UK Bassline",
@@ -210,7 +213,8 @@
       "recipeHash": "9d4e6d47fba561b6871e4e9a9835cdeb6c7ecb1b789a256a53eb046903b0dd6d",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "twee_pop": {
     "genreLabel": "Twee Pop",
@@ -226,7 +230,8 @@
       "recipeHash": "95f7cb0b622641a9ebf7161863548d1fbe8ad0bb4673b7b0d14a6040b4452a03",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "trot": {
     "genreLabel": "Trot",
@@ -275,7 +280,8 @@
       "recipeHash": "fe398f798dbb0a7d21aba8db850ae94613169aaec86d3c6d5c80b639cf61ffa9",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "traditional_trot": {
     "genreLabel": "Techno Ppongjjak / Korean Trot",
@@ -535,7 +541,8 @@
       "recipeHash": "2ac65e8a5777d9698d3eb754c23583d47b85024f88ce788073302601ed3d1eab",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "ska_traditional": {
     "genreLabel": "Traditional Jamaican Ska",
@@ -551,7 +558,8 @@
       "recipeHash": "b49870bc16999f9d93c01df76be9eab5b5ddd5ce6814dd643aed5fbcf912c40e",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "ska_rocksteady": {
     "genreLabel": "Ska / Rocksteady",
@@ -583,7 +591,8 @@
       "recipeHash": "660171c98b287e5f4d4c9cc3f28b841e7aab9182504ba9cf97a45dc06e5c42b7",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "shoegaze": {
     "genreLabel": "Shoegaze",
@@ -649,7 +658,8 @@
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
     "recommendedSampleGender": "female",
-    "backgroundEffectsOnly": true
+    "backgroundEffectsOnly": true,
+    "lyricsDevelopment": "rapid-rap-six"
   },
   "salsa_dance": {
     "genreLabel": "Salsa/Afro-Cuban Dance",
@@ -672,9 +682,9 @@
     "family": "reggae",
     "isInstrumental": false,
     "defaultVocal": "Earthy chest-centered resonance with gentle rough grain; passionate sustained lines, easy conversational offbeat timing and direct declarative phrasing",
-    "recipe": "Roots Reggae, 70-85 BPM. Retain one-drop rhythmic feel. Let off-beat guitar skank, one-drop drum beat, heavy bubbling bassline carry the rhythmic pocket. Use off-beat guitar skank, heavy bubbling bassline, one-drop drum beat, vintage hammond organ bubbles, clean brass section, rasta percussion. Character: warm, passionate, nostalgic.",
-    "selectedVoiceRecipe": "Roots Reggae, 70-85 BPM. Retain one-drop rhythmic feel. Let off-beat guitar skank, one-drop drum beat, heavy bubbling bassline carry the rhythmic pocket. Use off-beat guitar skank, heavy bubbling bassline, one-drop drum beat, vintage hammond organ bubbles, clean brass section, rasta percussion. Character: warm, passionate, nostalgic.",
-    "instrumentalRecipe": "Instrumental only, no lead vocals or sung lyrics. Roots Reggae, 70-85 BPM. Retain one-drop rhythmic feel. Let off-beat guitar skank, one-drop drum beat, heavy bubbling bassline carry the rhythmic pocket. Use off-beat guitar skank, heavy bubbling bassline, one-drop drum beat, vintage hammond organ bubbles, clean brass section, rasta percussion. Character: warm, passionate, nostalgic.",
+    "recipe": "Roots Reggae, 70-85 BPM. Retain one-drop rhythmic feel. Let offbeat guitar upstrokes, one-drop drum beat, heavy bubbling bassline carry the rhythmic pocket. Use offbeat guitar upstrokes, heavy bubbling bassline, one-drop drum beat, vintage hammond organ bubbles, clean brass section, rasta percussion. Character: warm, passionate, nostalgic.",
+    "selectedVoiceRecipe": "Roots Reggae, 70-85 BPM. Retain one-drop rhythmic feel. Let offbeat guitar upstrokes, one-drop drum beat, heavy bubbling bassline carry the rhythmic pocket. Use offbeat guitar upstrokes, heavy bubbling bassline, one-drop drum beat, vintage hammond organ bubbles, clean brass section, rasta percussion. Character: warm, passionate, nostalgic.",
+    "instrumentalRecipe": "Instrumental only, no lead vocals or sung lyrics. Roots Reggae, 70-85 BPM. Retain one-drop rhythmic feel. Let offbeat guitar upstrokes, one-drop drum beat, heavy bubbling bassline carry the rhythmic pocket. Use offbeat guitar upstrokes, heavy bubbling bassline, one-drop drum beat, vintage hammond organ bubbles, clean brass section, rasta percussion. Character: warm, passionate, nostalgic.",
     "lyricTheme": "Follow the user's topic and selected language. Reflect the warm, passionate, nostalgic shading and Roots Reggae rhythmic and melodic character in clear lyric diction. Develop coherent thoughts and memorable phrases without imposing a stock setting or story.",
     "sourceRecipe": "Traditional Roots Reggae exudes a warm, relaxing, and spiritual vibe, characterized by passionate and expressive vocals delivered in rasta patois. The instrumentation features off-beat guitar skank, a heavy bubbling bassline, a one-drop drum beat, vintage Hammond organ bubbles, and a clean brass section, complemented by authentic rasta percussion. This combination creates a nostalgic and groovy atmosphere that evokes feelings of peace and rebellion. For mastering, employ analog warmth with dynamic range optimization and a smooth, coherent mix texture. Apply high-pass filtering to eliminate muddiness and low-end rumble. [High-fidelity studio mastering, professional grade audio]",
     "provenance": {
@@ -713,16 +723,17 @@
       "recipeHash": "86459709dfe061a262c30d3b948c4337193aa1e0f691a762ad50e490f95cdaab",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "reggae_fusion": {
     "genreLabel": "Reggae Fusion",
     "family": "reggae",
     "isInstrumental": false,
     "defaultVocal": "Adult vocal character with melodic chanting, smooth soulful r&b vocals, rhythmic singjay delivery",
-    "recipe": "Reggae Fusion, 85-100 BPM. Let rhythmic skank electric guitar, dancehall digital drums, heavy rolling reggae bass carry the rhythmic pocket. Use rhythmic skank electric guitar, heavy rolling reggae bass, dancehall digital drums, steel drum accents, warm synthesizer brass. Character: soulful, warm, festive.",
-    "selectedVoiceRecipe": "Reggae Fusion, 85-100 BPM. Let rhythmic skank electric guitar, dancehall digital drums, heavy rolling reggae bass carry the rhythmic pocket. Use rhythmic skank electric guitar, heavy rolling reggae bass, dancehall digital drums, steel drum accents, warm synthesizer brass. Character: soulful, warm, festive.",
-    "instrumentalRecipe": "Instrumental only, no lead vocals or sung lyrics. Reggae Fusion, 85-100 BPM. Let rhythmic skank electric guitar, dancehall digital drums, heavy rolling reggae bass carry the rhythmic pocket. Use rhythmic skank electric guitar, heavy rolling reggae bass, dancehall digital drums, steel drum accents, warm synthesizer brass. Character: soulful, warm, festive.",
+    "recipe": "Reggae Fusion, 85-100 BPM. Let rhythmic offbeat electric guitar upstrokes, dancehall digital drums, heavy rolling reggae bass carry the rhythmic pocket. Use rhythmic offbeat electric guitar upstrokes, heavy rolling reggae bass, dancehall digital drums, steel drum accents, warm synthesizer brass. Character: soulful, warm, festive.",
+    "selectedVoiceRecipe": "Reggae Fusion, 85-100 BPM. Let rhythmic offbeat electric guitar upstrokes, dancehall digital drums, heavy rolling reggae bass carry the rhythmic pocket. Use rhythmic offbeat electric guitar upstrokes, heavy rolling reggae bass, dancehall digital drums, steel drum accents, warm synthesizer brass. Character: soulful, warm, festive.",
+    "instrumentalRecipe": "Instrumental only, no lead vocals or sung lyrics. Reggae Fusion, 85-100 BPM. Let rhythmic offbeat electric guitar upstrokes, dancehall digital drums, heavy rolling reggae bass carry the rhythmic pocket. Use rhythmic offbeat electric guitar upstrokes, heavy rolling reggae bass, dancehall digital drums, steel drum accents, warm synthesizer brass. Character: soulful, warm, festive.",
     "lyricTheme": "Follow the user's topic and selected language. Reflect the soulful, warm, festive shading and Reggae Fusion rhythmic and melodic character in clear lyric diction. Develop coherent thoughts and memorable phrases without imposing a stock setting or story.",
     "sourceRecipe": "Reggae Fusion with a sunny, breezy mood enhances modern reggae pop vibes. The expressive vocalist delivers melodic Jamaican patois chanting alongside smooth soulful R&B vocals, creating a warm and inviting atmosphere. Instrumentation features rhythmic skank electric guitar, heavy rolling reggae bass, dancehall digital drums, steel drum accents, and warm synthesizer brass, all blending seamlessly to evoke a festive and confident energy. The mix requires high-quality mastering with a rich, punchy sound that retains clarity while enhancing the dance-inducing elements. Apply negative filters to minimize harsh frequencies and ensure a balanced soundscape. [High-fidelity studio mastering, professional grade audio]",
     "provenance": {
@@ -745,7 +756,8 @@
       "recipeHash": "130f69787657a97389bbcc75d66a8baa93dedd0f06d65d8cc7bf38900742cf36",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "rapid-rap-six"
   },
   "psytrance": {
     "genreLabel": "Psytrance",
@@ -873,7 +885,8 @@
       "recipeHash": "47637c35398b4ff55dec597ead1bee026247b766b05820c218018ed696d21066",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "pluggnb": {
     "genreLabel": "Pluggnb / R&B Trap",
@@ -922,7 +935,8 @@
       "recipeHash": "749eb4d096acc13533a3e64cf79aa01a5371dff5e0ec973d0575525e5d7e3289",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "rapid-rap-six"
   },
   "original_afrobeat": {
     "genreLabel": "Classic Afrobeat",
@@ -939,7 +953,8 @@
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
     "recommendedSampleGender": "male",
-    "backgroundEffectsOnly": true
+    "backgroundEffectsOnly": true,
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "nu_metal": {
     "genreLabel": "Nu-Metal / Rap Metal",
@@ -987,7 +1002,8 @@
       "recipeHash": "4d27c6723745b051dc4cef7814660c5cc1e9e35492528e226dfc7533a55322b8",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "no_bounce": {
     "genreLabel": "New Orleans Bounce",
@@ -1003,7 +1019,8 @@
       "recipeHash": "a308004c6312b3725aa5b0a5f61ff010ebb3898849589407612c080581c16627",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "new_jack_swing": {
     "genreLabel": "New Jack Swing / Hip-Hop Soul",
@@ -1115,7 +1132,8 @@
       "recipeHash": "61180673b4638df5213be467faf297d56b8a086ab62a013521db6c589fe9dd72",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "melodic_techno": {
     "genreLabel": "Melodic Techno",
@@ -1212,7 +1230,8 @@
       "recipeHash": "7f01b928c77eb2bf3a1b900b24e08c32ad3b48a7af27f84f432865be1c9886bf",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "math_rock": {
     "genreLabel": "Math Rock",
@@ -1228,7 +1247,8 @@
       "recipeHash": "62636c95e1a24a79bef4a8b403ffb8d91fe676e235d9e766eab95ba6a05dfab9",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "mallsoft": {
     "genreLabel": "Mallsoft",
@@ -1326,7 +1346,8 @@
       "recipeHash": "eb7a69889fafe914b6ba094f9a93147442dd3375b39fb4c1ac9f3e524b6d80f0",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "kpop-melodic-six"
   },
   "kpop_dance": {
     "genreLabel": "Modern K-Pop Dance",
@@ -1342,7 +1363,8 @@
       "recipeHash": "ea84cc6114f59c1c8f7a928bdd116fd9508530ff31e35954daf07a4a1ddeb1b8",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "kpop_bubblegum": {
     "genreLabel": "retro K-Pop bubblegum pop",
@@ -1358,7 +1380,8 @@
       "recipeHash": "488379dd7661c4243d3d9bad7f293e9cfbdd6658b5e6ea367fbd8458d9277bca",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "korean_rnb": {
     "genreLabel": "Modern Korean R&B",
@@ -1374,7 +1397,8 @@
       "recipeHash": "5ff7822344ebdf071b1fbd686bbb777e42eb1b5217c04599437dc5c6f84f7fb6",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "korean_ballad": {
     "genreLabel": "Korean Pop Ballad",
@@ -1406,7 +1430,8 @@
       "recipeHash": "8c2886a2c3bc61ed37b77d9ecdf89a68c7877d680480f8e89d84757c4a1f358e",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "k_indie": {
     "genreLabel": "K-Indie Folk / Pop",
@@ -1470,7 +1495,8 @@
       "recipeHash": "df2ba0847ab20f59342c59e23760ef2aa0f05582d5ee20e0e6f591fcf7901559",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "joseon-hiphop": {
     "genreLabel": "Joseon Gugak / Boom Bap",
@@ -1504,7 +1530,8 @@
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
     "recommendedSampleGender": "male",
-    "backgroundEffectsOnly": true
+    "backgroundEffectsOnly": true,
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "jamaican_dancehall": {
     "genreLabel": "Authentic Jamaican Dancehall",
@@ -1520,7 +1547,8 @@
       "recipeHash": "6273c0d3202aa11634cf22d894964a7ee5bf2cc02c23e6a60d9195e25234021b",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "j_rock_visual_kei": {
     "genreLabel": "J-Rock / Visual Kei",
@@ -1553,7 +1581,8 @@
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
     "recommendedSampleGender": "male",
-    "backgroundEffectsOnly": true
+    "backgroundEffectsOnly": true,
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "industrial_techno": {
     "genreLabel": "Industrial Techno",
@@ -1683,7 +1712,8 @@
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
     "recommendedSampleGender": "female",
-    "backgroundEffectsOnly": true
+    "backgroundEffectsOnly": true,
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "house_phonk": {
     "genreLabel": "House Phonk",
@@ -1700,7 +1730,8 @@
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
     "recommendedSampleGender": "male",
-    "catalogSourceRecipe": "House Phonk, driven by high-energy and aggressive vibes, features powerful, expressive vocals with repetitive loops and chopped rap samples for a hypnotic effect. Instrumentation includes a heavy house 4/4 kick, distorted 808 bass, dark minimalist synths, and crisp claps, creating a compelling rhythmic foundation. The atmosphere evokes an adrenaline-fueled club experience, drawing listeners into a euphoric state. Mastering incorporates dynamic range optimization and punchy bass, while mixing achieves clarity with layered elements. Employ negative filters to eliminate harsh frequencies and unwanted resonance for a polished finish. [High-fidelity studio mastering, professional grade audio]"
+    "catalogSourceRecipe": "House Phonk, driven by high-energy and aggressive vibes, features powerful, expressive vocals with repetitive loops and chopped rap samples for a hypnotic effect. Instrumentation includes a heavy house 4/4 kick, distorted 808 bass, dark minimalist synths, and crisp claps, creating a compelling rhythmic foundation. The atmosphere evokes an adrenaline-fueled club experience, drawing listeners into a euphoric state. Mastering incorporates dynamic range optimization and punchy bass, while mixing achieves clarity with layered elements. Employ negative filters to eliminate harsh frequencies and unwanted resonance for a polished finish. [High-fidelity studio mastering, professional grade audio]",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "hardwave": {
     "genreLabel": "Wave / Hardwave",
@@ -1749,7 +1780,8 @@
       "recipeHash": "afa24ceee94793c9370ac92df191eec783b8cfc7b356b0f6dbe37b5ed8323753",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "hard_techno_schranz": {
     "genreLabel": "Hard Techno / Schranz",
@@ -1800,7 +1832,8 @@
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
     "recommendedSampleGender": "female",
-    "catalogSourceRecipe": "Gypsy Jazz with a lively and nostalgic mood features expressive vocals complemented by smooth vintage crooning and playful scatting. The instrumentation showcases an acoustic Selmer guitar, fast la pompe rhythm guitar, virtuosic acoustic violin, upright acoustic bass, and clarinet accents, creating a rustic and romantic atmosphere. The mix should evoke sophistication and bohemian spirit, with clarity in each instrument's articulation. Mastering should include warmth, depth, and a polished sheen, while ensuring dynamic range. Apply negative filters to remove harshness and muddiness in the low-end frequencies. [High-fidelity studio mastering, professional grade audio]"
+    "catalogSourceRecipe": "Gypsy Jazz with a lively and nostalgic mood features expressive vocals complemented by smooth vintage crooning and playful scatting. The instrumentation showcases an acoustic Selmer guitar, fast la pompe rhythm guitar, virtuosic acoustic violin, upright acoustic bass, and clarinet accents, creating a rustic and romantic atmosphere. The mix should evoke sophistication and bohemian spirit, with clarity in each instrument's articulation. Mastering should include warmth, depth, and a polished sheen, while ensuring dynamic range. Apply negative filters to remove harshness and muddiness in the low-end frequencies. [High-fidelity studio mastering, professional grade audio]",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "gugak_crossover": {
     "genreLabel": "Gugak Crossover",
@@ -1946,7 +1979,8 @@
       "recipeHash": "365223cbe3353dd9228aa9b380dc180a8aba1467cfd43f59472f03ef8929b07d",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "garage_rock": {
     "genreLabel": "Garage Rock / Indie Rock Revival",
@@ -1962,7 +1996,8 @@
       "recipeHash": "7421f71d1f0e9b7d2af5f42a71e6f77c7bc7f86656cf3339fc26ee4497cf2334",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "gabber_techno": {
     "genreLabel": "Gabber / Hardcore Techno",
@@ -2124,7 +2159,8 @@
       "recipeHash": "77eb2458369ae8f46ad2b7b0ccfe72010997b322099924431c1f44e1221893c2",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "duet"
+    "recommendedSampleGender": "duet",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "euro_disco": {
     "genreLabel": "Euro Disco",
@@ -2156,7 +2192,8 @@
       "recipeHash": "954a751dfeb2fc4f7ee758b5c3a0f63693010201d12cbe2f674bae689132fbb5",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "emo_rap": {
     "genreLabel": "Emo Rap / Sad Trap",
@@ -2172,7 +2209,8 @@
       "recipeHash": "74035c728ac22ac08e472ee16c12eec8921d8d9b74b0f8a3a843d206d841aacb",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "electroclash": {
     "genreLabel": "Electroclash",
@@ -2189,7 +2227,8 @@
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
     "recommendedSampleGender": "male",
-    "backgroundEffectsOnly": true
+    "backgroundEffectsOnly": true,
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "electro_swing": {
     "genreLabel": "Electro Swing",
@@ -2205,7 +2244,8 @@
       "recipeHash": "0ccc61fc3b6b568b683753be7b9d1cf1207ec9642d6b00b4b5172a92dc5c15c8",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "east_coast_boom_bap": {
     "genreLabel": "East Coast Boom Bap",
@@ -2221,7 +2261,8 @@
       "recipeHash": "d2c042e910934fb970c37bffc17d02655388b17c4cdf5ab7b36ade087a2b9d0d",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "rapid-rap-six"
   },
   "dubstep_og": {
     "genreLabel": "original UK Dubstep",
@@ -2285,7 +2326,8 @@
       "recipeHash": "962a3962a85e2f742552c524dc110007ff54414521b3c5059ba7b37de99b53c8",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "dream_pop": {
     "genreLabel": "Dream Pop",
@@ -2381,7 +2423,8 @@
       "recipeHash": "4a99387662f7d4547fb8090cfead05aad08c174b68a33873c8b1216902ec1f07",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "detroit_techno": {
     "genreLabel": "Detroit Techno",
@@ -2598,7 +2641,8 @@
       "recipeHash": "5900ef7e43c4196bc2c6b9c6207ac1555994e0ac9c5663e6a677d8794c685956",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "country_pop": {
     "genreLabel": "Country Pop",
@@ -2630,7 +2674,8 @@
       "recipeHash": "82faea6f984346fb26f6ff7651b01329743e1c1e475621e26aa9af7eb07ff813",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "cloud_rap": {
     "genreLabel": "Cloud Rap",
@@ -2662,7 +2707,8 @@
       "recipeHash": "83e364f32aed78f51a15263845eec69d0863ef4de08b589e6ab88c868b36b403",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "classic_motown": {
     "genreLabel": "Classic Motown and 1960s Soul",
@@ -2711,7 +2757,8 @@
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
     "recommendedSampleGender": "female",
-    "backgroundEffectsOnly": true
+    "backgroundEffectsOnly": true,
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "chillwave": {
     "genreLabel": "Chillwave / Glo-Fi Bedroom Pop",
@@ -2793,7 +2840,8 @@
       "recipeHash": "7422bfaa52fd03f358d75ba350e0aaaa189f23f7a55e7243a82f095312c54b36",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "celtic_folk": {
     "genreLabel": "Traditional Celtic Folk",
@@ -2809,7 +2857,8 @@
       "recipeHash": "15d467c89194d860e685714a4f5a9a61537af36ddbf32978a9170347c4478f15",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "bubblegum_pop_kpop": {
     "genreLabel": "Bubblegum Pop",
@@ -2825,7 +2874,8 @@
       "recipeHash": "3dc269351ec252e83ea802a52c87c1def43766be6bb504c3d0b6cc1f865da4e2",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "brostep": {
     "genreLabel": "Brostep",
@@ -2873,7 +2923,8 @@
       "recipeHash": "30f9a5afddbcc10f81d49c3c5b712e17d54a7e17f58511d4142e4ee7a0d09cdd",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "bossa_nova": {
     "genreLabel": "Bossa Nova",
@@ -2905,7 +2956,8 @@
       "recipeHash": "832656f2bda806bc9e3118a26e2e3c676561bbbcb009bc1381a456803dc70b23",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "bluegrass": {
     "genreLabel": "Traditional American Bluegrass",
@@ -2921,7 +2973,8 @@
       "recipeHash": "b01b2c0486605bcbd5969f322f0195c674a3e0f3e4104c96b1aea7d01e3ace46",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "blackgaze": {
     "genreLabel": "Blackgaze / Post-Black Metal",
@@ -3002,7 +3055,8 @@
       "recipeHash": "17856fc458e2ff0f52218bb335e777683eb1a8f33cd68a864625c09171fcd7ea",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "authentic_samba": {
     "genreLabel": "Authentic Brazilian Samba",
@@ -3018,7 +3072,8 @@
       "recipeHash": "2bd07944988cd9d38f2f81b779084a895b6bd7b06a4f2a756ed2db94a872a2b1",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "female"
+    "recommendedSampleGender": "female",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "atmospheric_black_metal": {
     "genreLabel": "Atmospheric Black Metal",
@@ -3050,7 +3105,8 @@
       "recipeHash": "6833581cebe3cef751a94d97e4c298cf96ac1a09dbe55f4ebaa7f27cc135a4e0",
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
-    "recommendedSampleGender": "male"
+    "recommendedSampleGender": "male",
+    "lyricsDevelopment": "melodic-developed-six"
   },
   "art_pop": {
     "genreLabel": "Art Pop",
@@ -3149,7 +3205,8 @@
       "sourceCommit": "fbb158f92c52f023f31b83f6f437d042161504dd"
     },
     "recommendedSampleGender": "female",
-    "backgroundEffectsOnly": true
+    "backgroundEffectsOnly": true,
+    "lyricsDevelopment": "moderate-developed-six"
   },
   "afrobeats_70s": {
     "genreLabel": "1970s Afrobeat / Afro-Funk",

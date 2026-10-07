@@ -15,7 +15,7 @@ export const LYRICS_PROVIDER_TIMEOUT_MS = 180_000
 const LYRICS_SECTION_TYPES = ['intro', 'verse', 'pre-chorus', 'chorus', 'bridge', 'outro'] as const
 
 export class LyricsGenerationError extends Error {
-  constructor(public code: 'lyrics_response_structure' | 'lyrics_response_incomplete', message: string) {
+  constructor(public code: 'lyrics_response_structure' | 'lyrics_response_incomplete' | 'lyrics_instruction_in_content', message: string) {
     super(message)
     this.name = 'LyricsGenerationError'
   }
@@ -77,6 +77,63 @@ Compose a complete song using the established six-section backend structure in t
 - The per-section line guidance shapes composition, not a reason to truncate requested lyric phrases or returned lyrics. Preserve complete thoughts and the requested musical and vocal expression.
 - Let the complete song finish naturally. Do not impose a clock duration, forced cutoff, or timed fade-out.
 `
+
+const RAP_DEVELOPMENT_STRUCTURE = `
+## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT
+Preserve the supplied rap genre, original tempo, requested language and selected/default voice. Compose this six-section form:
+1. Intro (type: "intro") - brief opening or 1-2 concise sung/rap lines establishing the scene
+2. Verse 1 (type: "verse") - 16 coherent rap lines in two substantive eight-line stanzas; establish concrete stakes, actions and dialogue, then develop the first scene
+3. Chorus 1 (type: "chorus") - 8 meaningful hook/response lines; retain a memorable core hook and develop its answer without repeating a slogan as filler
+4. Verse 2 (type: "verse") - 16 coherent rap lines in two substantive eight-line stanzas; advance a distinct second scene or perspective, show a consequential choice and its result
+5. Chorus 2 (type: "chorus") - 8 meaningful hook/response lines returning to the core hook; vary its answer to reflect the second scene and resolve the emotional argument
+6. Outro (type: "outro") - brief resolution or 1-2 concise sung/rap lines; complete the final thought and let the music resolve naturally
+
+- These line counts guide meaningful composition. Never crop complete returned or requested words, pad with filler, or rush a phrase to satisfy a count.
+- Keep two distinct verses and two chorus appearances inside six sections. Do not add a Pre-Chorus, Bridge, third Chorus, extra ending cycle or loop padding.
+- Keep production directions in concise plain English descriptions, separate from sung content.
+- Preserve the existing default vocal recipe or selected voice; richer development must not impose a different timbre or singer.
+- Do not request a clock duration, timed fade, forced cutoff or target length. Finish the full song naturally.
+`
+
+const KPOP_DEVELOPMENT_STRUCTURE = `
+## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT
+Preserve the supplied K-pop Girl Crush identity, original tempo, requested language and selected/default voice. Compose this six-section form:
+1. Intro (type: "intro") - brief opening or 1-2 concise sung lines establishing the requested scene
+2. Verse 1 (type: "verse") - 10 coherent sung lines developing concrete imagery, action and emotional stakes; let the final couplet lift melodically toward the hook inside this Verse
+3. Chorus 1 (type: "chorus") - 6 meaningful hook/response lines with a memorable melodic core and a connected answer; use complete thoughts instead of an empty slogan sequence
+4. Verse 2 (type: "verse") - 10 coherent sung lines developing a distinct second scene or consequential choice; vary the final couplet's melodic lift to reflect the emotional change
+5. Chorus 2 (type: "chorus") - 6 meaningful hook/response lines returning to the melodic core and resolving its answer after the second scene
+6. Outro (type: "outro") - brief resolution or 1-2 concise sung lines, finishing the final thought before a natural musical ending
+
+- Keep two distinct verses and two chorus appearances inside six sections. The melodic lift belongs inside each Verse; do not add a Pre-Chorus, Bridge, third Chorus, extra ending cycle or loop padding.
+- Line counts guide meaningful composition. Do not crop complete returned/requested words, add filler or force hurried delivery to meet a count.
+- Preserve the existing vocal timbre and singer; develop melody and phrasing rather than impose a different register, gender or voice.
+- Keep production directions in concise plain English descriptions, separate from sung content.
+- Do not request a clock duration, timed fade, forced cutoff or target length. Let the complete song resolve naturally.
+`
+
+/** Optional per-profile guidance; reviewed metadata alone selects a tier. */
+function developedSixSectionStructure(verseLines: 8 | 10, chorusLines: 5 | 6): string {
+  return `
+## COMPLETE SONG STRUCTURE AND NATURAL DEVELOPMENT
+Preserve the supplied genre, original tempo, requested language and selected/default voice. Compose this six-section form:
+1. Intro (type: "intro") - brief instrumental opening or 1-2 concise sung lines establishing the scene
+2. Verse 1 (type: "verse") - ${verseLines} coherent genre-appropriate vocal lines, sung, rapped or chanted according to the supplied style; develop concrete imagery, action and emotional stakes through complete connected thoughts
+3. Chorus 1 (type: "chorus") - ${chorusLines} meaningful genre-appropriate hook/response lines; connect the memorable core hook with an answer that develops the emotional idea, keeping its requested sung, chanted or shouted character
+4. Verse 2 (type: "verse") - ${verseLines} coherent genre-appropriate vocal lines developing a distinct second scene or consequential choice; preserve the supplied sung, rapped or chanted character and advance the story instead of repeating the first verse
+5. Chorus 2 (type: "chorus") - ${chorusLines} meaningful genre-appropriate hook/response lines returning to the core hook and resolving its answer after the second scene without imposing a different vocal delivery
+6. Outro (type: "outro") - brief instrumental resolution or 1-2 concise sung lines; finish the final thought and let the music resolve naturally
+
+- Keep two distinct verses and two chorus appearances inside six sections. Do not add a Pre-Chorus, Bridge, third Chorus, extra ending cycle or loop padding.
+- Line counts guide meaningful composition; never crop complete returned/requested words, pad with filler or force hurried delivery to meet a count.
+- Preserve the supplied instruments and vocal character. Richer musical and lyrical development must not impose a different tempo, timbre or singer.
+- Keep production directions in concise plain English descriptions, separate from sung content.
+- Do not request a clock duration, timed fade, forced cutoff or target length. Let the complete song resolve naturally.
+`
+}
+
+const MELODIC_DEVELOPMENT_STRUCTURE = developedSixSectionStructure(10, 6)
+const MODERATE_DEVELOPMENT_STRUCTURE = developedSixSectionStructure(8, 5)
 
 const BRAZILIAN_FUNK_PERFORMANCE_PRESET = 'brazilian-funk-kpop-performance'
 const HARAJUKU_FUTURE_BASS_PRESET = 'kawaii-future'
@@ -188,6 +245,21 @@ function hasLyricsSections(value: unknown): value is GPTLyricsSection[] {
     && typeof section.content === 'string' && (section.type === undefined || typeof section.type === 'string')
     && (section.description == null || typeof section.description === 'string'))
     && value.some(section => section.content.trim())
+}
+
+const DUET_ROLE_NAMES = '(?:female(?:\\s+vocals?)?|male(?:\\s+vocals?)?|woman|man|both|together|duet|all|singer\\s*[12]|voice\\s*[12]|donna|uomo|insieme|femme|homme|ensemble|mulher|homem|ambos|juntos|mujer|hombre|mann|frau|beide|zusammen|남성|여성|남자|여자|함께|혼성|둘|남녀|男性|女性|男|女|二人|一緒|全員|男声|女声|合唱|双方|一起|पुरुष|महिला|दोनों|साथ|мужчина|женщина|вместе|رجل|امرأة|معًا)'
+const DUET_ROLE_PREFIX = new RegExp(`(?:^\\s*${DUET_ROLE_NAMES}\\s*[:：]|^\\s*[\\[(]\\s*${DUET_ROLE_NAMES}\\s*[\\])]\\s*[:：]?)`, 'im')
+
+/** Generated duet role assignments are metadata; authored words are never stripped. */
+export function validateGeneratedDuetLyrics(sections: unknown, vocalGender: unknown): boolean {
+  if (vocalGender !== 'duet' || !Array.isArray(sections)) return true
+  return !sections.some(section => section && typeof section.content === 'string' && DUET_ROLE_PREFIX.test(section.content))
+}
+
+function assertGeneratedDuetLyrics(sections: unknown, vocalGender: unknown) {
+  if (!validateGeneratedDuetLyrics(sections, vocalGender)) {
+    throw new LyricsGenerationError('lyrics_instruction_in_content', '듀엣 배역 표기가 실제 가사에 섞였습니다. 배역 지시는 설명에만 넣고 가사에는 노래할 말만 작성해 주세요.')
+  }
 }
 
 /**
@@ -453,10 +525,19 @@ export async function generateLyrics(
     && params.durationSeconds > 0 && params.durationSeconds <= 60
   const isOrdinarySong = !params.viralMode && !isExplicitShortForm
   const usePerformanceStructure = params.presetId === BRAZILIAN_FUNK_PERFORMANCE_PRESET && isOrdinarySong
-  const songStructure = usePerformanceStructure ? BRAZILIAN_FUNK_PERFORMANCE_INSTRUCTIONS : NATURAL_SONG_INSTRUCTIONS
   const reviewedJapanProfile = params.sourceMenu === 'japan' && isOrdinarySong ? getJapanPresetProfile(params.presetId) : undefined
   const reviewedStudioProfile = isOrdinarySong && isPresetStudioSource(params.sourceMenu)
     ? getPresetStudioProfile(params.presetId) : undefined
+  const songStructure = usePerformanceStructure ? BRAZILIAN_FUNK_PERFORMANCE_INSTRUCTIONS
+    : reviewedStudioProfile?.lyricsDevelopment === 'rapid-rap-six'
+      ? { composition: RAP_DEVELOPMENT_STRUCTURE, playlistOrder: NATURAL_SONG_INSTRUCTIONS.playlistOrder }
+      : reviewedStudioProfile?.lyricsDevelopment === 'kpop-melodic-six'
+        ? { composition: KPOP_DEVELOPMENT_STRUCTURE, playlistOrder: NATURAL_SONG_INSTRUCTIONS.playlistOrder }
+        : reviewedStudioProfile?.lyricsDevelopment === 'melodic-developed-six'
+          ? { composition: MELODIC_DEVELOPMENT_STRUCTURE, playlistOrder: NATURAL_SONG_INSTRUCTIONS.playlistOrder }
+          : reviewedStudioProfile?.lyricsDevelopment === 'moderate-developed-six'
+            ? { composition: MODERATE_DEVELOPMENT_STRUCTURE, playlistOrder: NATURAL_SONG_INSTRUCTIONS.playlistOrder }
+            : NATURAL_SONG_INSTRUCTIONS
   const reviewedPresetProfile = reviewedJapanProfile || reviewedStudioProfile
   const genreProfile = detectGenreThematicProfile(params.stylePrompt, params.topic, params.presetId,
     { ordinarySong: isOrdinarySong, sourceMenu: params.sourceMenu, vocalProfileSpecified: params.vocalProfileSpecified })
@@ -635,6 +716,7 @@ ${narrativeDirective}`
           || !validateGeneratedSongForm(track.sections, { ordinarySong: isOrdinarySong, presetId: params.presetId }))) {
       throw new LyricsGenerationError('lyrics_response_structure', `요청한 ${trackCount}곡의 가사 형식을 완성하지 못했습니다. 다시 생성해 주세요.`)
     }
+    for (const track of parsed.tracks) assertGeneratedDuetLyrics(track.sections, params.vocalGender)
     
     const tracks: PlaylistTrack[] = parsed.tracks.map((t, tIdx: number) => {
       let sCounter = 0
@@ -675,6 +757,7 @@ ${narrativeDirective}`
         || !validateGeneratedSongForm(parsed.sections, { ordinarySong: isOrdinarySong, presetId: params.presetId })) {
       throw new LyricsGenerationError('lyrics_response_structure', '가사 생성 응답에 곡 제목이나 가사 파트가 빠졌습니다. 다시 생성해 주세요.')
     }
+    assertGeneratedDuetLyrics(parsed.sections, params.vocalGender)
 
     let counter = 0
     const sections = parsed.sections.map(s => {
@@ -728,7 +811,7 @@ function getSingleSystemPrompt(
   } else if (vocalGender === 'male') {
     genderInstruction = '\n- VOCAL GENDER RULE: You MUST write the song for a male vocalist. In the section "description" fields, strictly write "male vocal" or "dry male vocal close-up" and avoid any female descriptors.'
   } else if (vocalGender === 'duet') {
-    genderInstruction = '\n- VOCAL GENDER RULE: You MUST write the song as a male and female duet. Assign duet parts in the lyrics and specify "beautiful male and female duet harmonies" or "interplay of male and female vocals" in the section "description" fields.'
+    genderInstruction = '\n- VOCAL GENDER RULE: You MUST write the song as a male and female duet. Assign the male, female or shared part exclusively in each section "description" field, with concise male and female duet/interplay directions. Section content contains only words to sing: never prepend speaker names or role prefixes in any language (such as Female:, Male:, Both:, Donna:, Uomo: or Insieme:), or bracketed performer labels. Keep all sung words intact.'
   }
 
   // 명시적인 숏폼만 길이를 제한하고, 일반 곡은 완결된 음악적 전개를 사용한다.
@@ -871,7 +954,7 @@ function getPlaylistSystemPrompt(
   } else if (vocalGender === 'male') {
     genderMixRules = '\n- VOCAL GENDER RULE: ALL tracks must be for a male vocalist.'
   } else if (vocalGender === 'duet') {
-    genderMixRules = '\n- VOCAL GENDER RULE: ALL tracks must be male and female duets.'
+    genderMixRules = '\n- VOCAL GENDER RULE: ALL tracks must be male and female duets. Assign the male, female or shared part exclusively in section "description" fields. Section content contains only words to sing, with no speaker names, role prefixes in any language or bracketed performer labels. Keep all sung words intact.'
   } else {
     genderMixRules = '\n- VOCAL GENDER RULE: Alternate vocal genders (e.g. 60% female, 30% male, 10% duet) for a dynamic playlist listening experience.'
   }

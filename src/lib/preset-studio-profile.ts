@@ -15,6 +15,8 @@ export interface PresetStudioProfile {
   lyricTheme: string
   recommendedSampleGender?: 'male' | 'female' | 'duet'
   performanceSectionCount?: 8
+  /** Development guidance inside the existing six sections, for confirmed short originals only. */
+  lyricsDevelopment?: 'rapid-rap-six' | 'kpop-melodic-six' | 'melodic-developed-six' | 'moderate-developed-six'
   provenance: { recipeHash: string; sourceCommit: string }
 }
 
