@@ -13,11 +13,13 @@ export type DanceIdea = {
   seriesPotential: string;
   productionRisk: string;
   conceptFamily: 'interaction' | 'contrast' | 'rhythm_reveal';
+  /** Computed review guidance; provider-supplied notes are ignored. */
+  reviewNote?: string;
 };
 
 const FAMILIES = ['interaction', 'contrast', 'rhythm_reveal'] as const;
 const FIELD_LIMITS = { title: 70, firstTwoSeconds: 220, signatureMove: 250, musicConnection: 220, visualPayoff: 220, seriesPotential: 200, productionRisk: 200 } as const;
-const KEYS = new Set(['id', 'conceptFamily', ...Object.keys(FIELD_LIMITS)]);
+const KEYS = new Set(['id', 'conceptFamily', 'reviewNote', ...Object.keys(FIELD_LIMITS)]);
 const BODY = /발|다리|무릎|골반|몸통|상체|하체|팔|어깨|손|관절|앞발|뒷발|날개|지느러미|꼬리|귀|허리|고개|머리/;
 const MOTION = /딛|디딤|밟|내딛|스텝|교차|걷|걸어|걸음|가리키|가리켜|가리킨|두드|맞대|터치|튕|바운스|굽|구부|기울|옮기|옮겨|돌리|돌려|회전|비틀|흔들|흔드|접(?!촉)|모으|모아|웅크|펼|펴|뻗|벌리|벌려|밀|당기|당겨|넘기|넘겨|건네|멈추|멈춰|멈춤|찍|찍기|들어|올리|올려|내리|내려|낮추|낮춰|젖히|젖혀/;
 const LOWER_MOTION = /(?:발|다리|무릎|골반|몸통|하체|앞발|뒷발|허리)[^/;]{0,24}(?:딛|디딤|밟|내딛|스텝|교차|걷|걸어|걸음|두드|맞대|터치|튕|바운스|굽|구부|기울|옮기|옮겨|돌리|돌려|회전|비틀|흔들|흔드|밀|당기|당겨|접(?!촉)|모으|모아|웅크|펴|뻗|낮추|낮춰|젖히|젖혀)/;
@@ -43,7 +45,9 @@ function korean(value: unknown, label: string, limit: number): string {
 function normal(value: string): string { return value.normalize('NFKC').toLowerCase().replace(/[\s\p{P}\p{S}]/gu, ''); }
 function motionText(value: string): string {
   // A described held pose alone is not evidence that a body actually moves.
-  return value.replace(/(?:접은|모은|펼친|펴\s*놓은|들어\s*올린|굽힌|가리킨|내민|뻗은|기울인|돌린|고정한|멈춘)\s*(?:자세|포즈|모양)/g, '');
+  return value.replace(/(?:접은|모은|펼친|펴\s*놓은|들어\s*올린|굽힌|가리킨|내민|뻗은|기울인|돌린|고정한|멈춘)\s*(?:자세|포즈|모양)/g, '')
+    // The lift verb '들어' inside '만들어낸다' does not describe physical motion.
+    .replace(/만들어[가-힣]*/g, '');
 }
 function visibleMotion(value: string): boolean {
   const action = motionText(value);
@@ -87,12 +91,17 @@ function hasMechanism(value: string, family: DanceIdea['conceptFamily']): boolea
     && /왼|오른|좌우|상체|하체|큰|작은|크게|작게|느리|빠르|멈/.test(value);
   return /접(?!촉)|모으|모아|웅크|가리(?![키켜켰킨킬킴])|가려|가린|숨|닫|멈/.test(value) && /펼|펴|벌리|벌려|열|드러|보이|풀어/.test(value);
 }
+function mechanismReviewNote(family: DanceIdea['conceptFamily']): string {
+  if (family === 'interaction') return '첫 장면의 주고받는 관계와 결말이 직관적으로 이어지는지 확인해 주세요.';
+  if (family === 'contrast') return '첫 장면의 동작 대비와 결말이 눈에 보이게 이어지는지 확인해 주세요.';
+  return '첫 장면의 닫힌 모양이 펼쳐지는 변화와 결말이 직관적으로 이어지는지 확인해 주세요.';
+}
 
 export function validateDanceIdeas(value: unknown): DanceIdea[] {
   if (!Array.isArray(value) || value.length !== 3) invalid('구조가 다른 아이디어 세 개가 필요합니다.');
   const ids = new Set<string>(); const titles = new Set<string>(); const families = new Set<string>();
-  const openings = new Set<string>(); const movementStructures = new Set<string>();
-  return value.map((raw, index) => {
+  const openingStructures: string[] = []; const movementStructures: string[] = [];
+  const result = value.map((raw, index) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) invalid('아이디어 형식을 확인하지 못했습니다.');
     const idea = raw as Record<string, unknown>;
     if (Object.keys(idea).some(key => !KEYS.has(key))) invalid('아이디어에 지원하지 않는 항목이 있습니다.');
@@ -103,17 +112,26 @@ export function validateDanceIdeas(value: unknown): DanceIdea[] {
     const family = idea.conceptFamily as DanceIdea['conceptFamily'];
     if (ids.has(id) || titles.has(normal(fields.title)) || families.has(family)) invalid('아이디어 ID·제목·장면 구조는 서로 달라야 합니다.');
     const opening = { format: /^0\s*[-~–]\s*2\s*초\s*[:：]/.test(fields.firstTwoSeconds), motion: visibleMotion(fields.firstTwoSeconds), mechanism: hasMechanism(fields.firstTwoSeconds, family) };
-    if (!opening.format || !opening.motion || !opening.mechanism) invalid(`아이디어 ${index + 1} 첫 2초 확인: 시간 형식=${opening.format ? '통과' : '불일치'}, 신체 동작=${opening.motion ? '통과' : '미확인'}, 장면 관계=${opening.mechanism ? '통과' : '미확인'}.`);
+    if (!opening.format || !opening.motion) invalid(`아이디어 ${index + 1} 첫 2초 확인: 시간 형식=${opening.format ? '통과' : '불일치'}, 신체 동작=${opening.motion ? '통과' : '미확인'}.`);
     const payoff = { motion: visibleMotion(fields.visualPayoff), mechanism: hasMechanism(fields.visualPayoff, family) };
-    if (!payoff.motion || !payoff.mechanism) invalid(`아이디어 ${index + 1} 결과 장면 확인: 신체 동작=${payoff.motion ? '통과' : '미확인'}, 장면 관계=${payoff.mechanism ? '통과' : '미확인'}.`);
+    if (!payoff.motion) invalid(`아이디어 ${index + 1} 결과 장면 확인: 신체 동작=미확인.`);
     if (!/같은|유지|그대로|반복/.test(fields.seriesPotential) || !/바꾸|바꿔|바꾼|바꿀|변주|교체|변경|달리|다른/.test(fields.seriesPotential)) invalid('시리즈에서 유지할 훅과 바꿀 요소를 함께 설명해 주세요.');
     if (!/손|발|다리|몸통|관절|소품|위치|거리|프레임|구도|정체성|접촉|인원|방향|속도|동작/.test(fields.productionRisk)
       || !/유지|고정|줄이|줄여|피하|피해|작게|천천|단순|확인|제한|분리/.test(fields.productionRisk)) invalid('구체적인 제작 위험과 줄이는 방법을 설명해 주세요.');
     const structure = signature(fields.signatureMove);
     const openingStructure = movementFingerprint(fields.firstTwoSeconds);
-    if (openings.has(openingStructure) || movementStructures.has(structure)) invalid('제목이나 외형만 바꾸지 말고 시작 행동과 반복 동작의 구조를 다르게 만들어 주세요.');
-    ids.add(id); titles.add(normal(fields.title)); families.add(family); openings.add(openingStructure); movementStructures.add(structure);
-    return { id, ...fields, conceptFamily: family };
+    ids.add(id); titles.add(normal(fields.title)); families.add(family); openingStructures.push(openingStructure); movementStructures.push(structure);
+    // Family prose is not reliably classified by keywords; leave its meaning to creator review.
+    // Recompute this bounded static note every time, never copy provider or stored note content.
+    const reviewNote = !opening.mechanism || !payoff.mechanism ? mechanismReviewNote(family) : undefined;
+    return { id, ...fields, conceptFamily: family, ...(reviewNote ? { reviewNote } : {}) };
+  });
+  return result.map((idea, index) => {
+    // Shared verbs do not establish that two visible situations or directional actions are identical.
+    const similar = result.some((_, other) => other !== index && (openingStructures[index] === openingStructures[other] || movementStructures[index] === movementStructures[other]));
+    if (!similar) return idea;
+    const similarityNote = '시작 동작이나 카운트별 움직임이 다른 후보와 비슷합니다. 각 후보의 상황과 차이가 눈에 보이는지 확인해 주세요.';
+    return { ...idea, reviewNote: [idea.reviewNote, similarityNote].filter(Boolean).join(' ') };
   });
 }
 

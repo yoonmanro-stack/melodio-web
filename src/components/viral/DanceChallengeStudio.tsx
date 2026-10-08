@@ -391,6 +391,7 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
               <div><dt className="font-bold text-fuchsia-100">장면의 변화</dt><dd className="text-zinc-200">{idea.visualPayoff}</dd></div>
               <div><dt className="font-bold text-fuchsia-100">시리즈로 이어가기</dt><dd className="text-zinc-200">{idea.seriesPotential}</dd></div>
               <div><dt className="font-bold text-amber-200">제작 시 주의점</dt><dd className="text-zinc-200">{idea.productionRisk}</dd></div>
+              {idea.reviewNote ? <div><dt className="font-bold text-amber-200">아이디어 검토</dt><dd className="text-zinc-200">{idea.reviewNote}</dd></div> : null}
             </dl>
             <button type="button" aria-label={`${idea.title} 선택하고 장면 설계`} className={`${button} mt-5 w-full`} disabled={busy || jobLoading || uncertain || selectionChanged || Boolean(job.inFlight)} aria-busy={pendingAction === 'select-idea' && pendingIdeaId === idea.id} onClick={() => void selectIdea(idea.id)}>
               {pendingAction === 'select-idea' && pendingIdeaId === idea.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{pendingAction === 'select-idea' && pendingIdeaId === idea.id ? '장면 설계 중…' : '이 아이디어로 장면 설계'}

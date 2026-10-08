@@ -81,9 +81,8 @@ test('duplicate IDs, normalized titles and concept families are rejected', () =>
     assert.throws(() => validateDanceIdeas(changed(0, values)), { code: 'PLAN_INVALID' });
   }
 });
-test('first two seconds require a visible family mechanism, without a performer or location word ban', () => {
-  for (const firstTwoSeconds of ['성인 여성이 춤을 시작한다.', '0~2초: 아름다운 성인 여성이 거리 광장에서 멋진 춤을 춘다.',
-    '0~2초: 성인 여성이 거리 광장에서 발을 옆으로 딛고 무릎을 튕긴다.']) {
+test('first two seconds require time and physical action, without a performer or location word ban', () => {
+  for (const firstTwoSeconds of ['성인 여성이 춤을 시작한다.', '0~2초: 아름다운 성인 여성이 거리 광장에서 멋진 춤을 춘다.']) {
     assert.throws(() => validateDanceIdeas(changed(0, { firstTwoSeconds })), { code: 'PLAN_INVALID' });
   }
   assert.equal(validateDanceIdeas(ideas('성인 여성', '레트로 아케이드')).length, 3);
@@ -123,22 +122,33 @@ test('ordinary pointing, walking and tapping actions connect to spatial anchors 
     assert.equal(validateDanceIdeas(result).length, 3);
   }
 });
-test('generic music response, an unresponsive duo, held poses and pointing-only reveals remain held', () => {
+test('generic dance without physical action and held poses remain held', () => {
+  for (const firstTwoSeconds of [
+    '0~2초: 성인 여성은 거리 광장에서 아름답게 춤을 춘다.',
+    '0~2초: 성인 듀오는 거리 광장에서 리듬을 즐기며 멋진 분위기를 만든다.',
+    '0~2초: 성인 여성은 거리 광장에서 손과 발로 아름다운 분위기를 만들어낸다.',
+    '0~2초: 성인 여성은 거리 광장에서 상대의 표식 앞에서 팔을 접은 자세로 대답한다.',
+  ]) assert.throws(() => validateDanceIdeas(changed(0, { firstTwoSeconds })), { code: 'PLAN_INVALID' });
+});
+test('unrecognized physical relationships and reveals receive review hints instead of a paid-response rejection', () => {
   for (const firstTwoSeconds of [
     '0~2초: 성인 여성은 거리 광장에서 몸통을 흔들며 음악을 따라 발을 딛는다.',
     '0~2초: 성인 듀오는 거리 광장에서 발을 옆으로 딛고 무릎을 튕긴다.',
-    '0~2초: 성인 여성은 거리 광장에서 팔을 펼치고 아름답게 춤을 춘다.',
-    '0~2초: 성인 여성은 거리 광장에서 상대의 표식 앞에서 팔을 접은 자세로 대답한다.',
-  ]) assert.throws(() => validateDanceIdeas(changed(0, { firstTwoSeconds })), { code: 'PLAN_INVALID' });
+    '0~2초: 성인 여성은 거리 광장에서 손을 뻗어 비어 있는 자리를 만들며 몸통을 기울인다.',
+  ]) {
+    const result = validateDanceIdeas(changed(0, { firstTwoSeconds }));
+    assert.match(result[0].reviewNote, /주고받는 관계와 결말/);
+    assert.ok(result[0].reviewNote.length <= 240);
+  }
   for (const verb of ['가리키고', '가리켜', '가리킨 다음']) {
-    assert.throws(() => validateDanceIdeas(changed(2, { firstTwoSeconds: `0~2초: 성인 여성은 거리 광장에서 손으로 바닥 선을 ${verb} 팔을 펼친다.` })), { code: 'PLAN_INVALID' });
+    const result = validateDanceIdeas(changed(2, { firstTwoSeconds: `0~2초: 성인 여성은 거리 광장에서 손으로 바닥 선을 ${verb} 팔을 펼친다.` }));
+    assert.match(result[2].reviewNote, /닫힌 모양이 펼쳐지는 변화/);
   }
 });
 test('opening failures identify only candidate number and independent compact check flags', async () => {
   const cases = [
-    { index: 1, opening: ideas()[1].firstTwoSeconds.replace('0~2초: ', ''), expected: '아이디어 2 첫 2초 확인: 시간 형식=불일치, 신체 동작=통과, 장면 관계=통과.' },
-    { index: 0, opening: '0~2초: 성인 여성은 상대의 표식 앞에서 팔을 접은 자세로 대답한다.', expected: '아이디어 1 첫 2초 확인: 시간 형식=통과, 신체 동작=미확인, 장면 관계=통과.' },
-    { index: 0, opening: '0~2초: 성인 여성은 거리 광장에서 몸통을 흔들며 음악을 따라 발을 딛는다.', expected: '아이디어 1 첫 2초 확인: 시간 형식=통과, 신체 동작=통과, 장면 관계=미확인.' },
+    { index: 1, opening: ideas()[1].firstTwoSeconds.replace('0~2초: ', ''), expected: '아이디어 2 첫 2초 확인: 시간 형식=불일치, 신체 동작=통과.' },
+    { index: 0, opening: '0~2초: 성인 여성은 상대의 표식 앞에서 팔을 접은 자세로 대답한다.', expected: '아이디어 1 첫 2초 확인: 시간 형식=통과, 신체 동작=미확인.' },
   ];
   for (const fixture of cases) {
     const candidates = changed(fixture.index, { firstTwoSeconds: fixture.opening });
@@ -192,16 +202,53 @@ test('signature is 2–4 distinct physical movements with exactly eight counts a
   }
   assert.equal(validateDanceIdeas(changed(0, { signatureMove: '4카운트: 오른발로 공을 작게 밀기 / 4카운트: 몸통을 공 쪽으로 기울이기' })).length, 3);
 });
-test('cosmetic rewrites of a shared movement structure do not pass as independent concepts', () => {
+test('shared motion vocabulary and count structures receive comparison hints without a creative-quality verdict', () => {
   const signatureMove = '2카운트: 몸통을 왼쪽으로 돌려 대비 만들기 / 2카운트: 무릎을 작게 튕기기 / 4카운트: 오른발을 교차해 딛기';
-  assert.throws(() => validateDanceIdeas(changed(0, { signatureMove })), { code: 'PLAN_INVALID' });
-  assert.throws(() => validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 성인 여성은 거리 광장에서 상체를 왼쪽으로 돌리고 무릎을 튕겨 파트너에게 응답한다.' })), { code: 'PLAN_INVALID' });
+  const sharedCounts = validateDanceIdeas(changed(0, { signatureMove }));
+  assert.match(sharedCounts[0].reviewNote, /카운트별 움직임이 다른 후보와 비슷/);
+  assert.match(sharedCounts[1].reviewNote, /카운트별 움직임이 다른 후보와 비슷/);
+  const sharedOpening = validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 성인 여성은 거리 광장에서 상체를 왼쪽으로 돌리고 무릎을 튕겨 파트너에게 응답한다.' }));
+  assert.match(sharedOpening[0].reviewNote, /시작 동작/);
+  assert.match(sharedOpening[1].reviewNote, /시작 동작/);
+  const contextual = ideas();
+  contextual[0].firstTwoSeconds = '0~2초: 성인 여성은 거리 광장에서 손으로 바닥의 선을 가리키고 발로 옆을 딛으며 표식에 응답한다.';
+  contextual[1].firstTwoSeconds = '0~2초: 성인 여성은 거리 광장에서 손은 왼쪽을 가리키고 발은 반대인 오른쪽으로 딛어 대비를 만든다.';
+  const samePointAndStep = validateDanceIdeas(contextual);
+  assert.match(samePointAndStep[0].reviewNote, /다른 후보와 비슷/);
+  assert.match(samePointAndStep[1].reviewNote, /다른 후보와 비슷/);
+  assert.deepEqual(validateDanceIdeas(structuredClone(samePointAndStep)), samePointAndStep);
+  assert.ok(samePointAndStep.every(idea => !idea.reviewNote || idea.reviewNote.length <= 240));
 });
-test('payoff must develop its own family mechanism, with a series variable and production mitigation', () => {
-  for (const values of [{ visualPayoff: '재미있고 멋진 영상이 완성된다.' }, { visualPayoff: '발을 옆으로 딛고 팔을 펼친다.' }, { seriesPotential: '수많은 시청자가 좋아하고 바이럴이 된다.' },
+test('payoff needs physical action, with a series variable and production mitigation', () => {
+  for (const values of [{ visualPayoff: '재미있고 멋진 영상이 완성된다.' }, { visualPayoff: '손과 발로 아름다운 분위기를 만들어낸다.' }, { seriesPotential: '수많은 시청자가 좋아하고 바이럴이 된다.' },
     { seriesPotential: '다음 편에는 색상을 바꾼다.' }, { productionRisk: '문제 없이 완벽하게 잘 제작한다.' }]) {
     assert.throws(() => validateDanceIdeas(changed(0, values)), { code: 'PLAN_INVALID' });
   }
+  const lift = validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 성인 여성은 거리 광장에서 손을 들어 표식에 화답한다.', visualPayoff: '같은 표식에 손을 들어 올린다.' }));
+  assert.equal(lift.length, 3);
+});
+test('recognized family prose has no note and unrecognized physical payoff receives one', () => {
+  const recognized = validateDanceIdeas(ideas());
+  assert.ok(recognized.every(idea => !Object.hasOwn(idea, 'reviewNote')));
+  const unrecognized = validateDanceIdeas(changed(0, { visualPayoff: '발을 옆으로 딛고 팔을 펼친다.' }));
+  assert.match(unrecognized[0].reviewNote, /주고받는 관계와 결말/);
+});
+test('incoming review notes are ignored and bounded computed notes stay stable on stored revalidation', async () => {
+  for (const reviewNote of ['secret-payload'.repeat(1000), { arbitrary: 'provider secret' }, null]) {
+    const recognized = validateDanceIdeas(changed(0, { reviewNote }));
+    assert.equal(recognized[0].reviewNote, undefined);
+    const candidates = changed(0, { reviewNote, firstTwoSeconds: '0~2초: 성인 여성은 거리 광장에서 손을 뻗어 비어 있는 자리를 만들며 몸통을 기울인다.' });
+    const recomputed = validateDanceIdeas(candidates);
+    assert.match(recomputed[0].reviewNote, /주고받는 관계와 결말/);
+    assert.ok(recomputed[0].reviewNote.length <= 240);
+    assert.doesNotMatch(JSON.stringify(recomputed), /secret-payload|provider secret/);
+    assert.deepEqual(validateDanceIdeas(structuredClone(recomputed)), recomputed);
+  }
+  let calls = 0;
+  const candidates = changed(0, { reviewNote: 'secret-payload', firstTwoSeconds: '0~2초: 성인 여성은 거리 광장에서 손을 뻗어 비어 있는 자리를 만들며 몸통을 기울인다.' });
+  const result = await createDanceIdeas(JOB, async () => { calls++; return response(candidates); });
+  assert.equal(calls, 1); assert.match(result[0].reviewNote, /주고받는 관계와 결말/);
+  assert.doesNotMatch(JSON.stringify(result), /secret-payload/);
 });
 test('one bounded low-reasoning JSON request uses the saved music, cast, place and uncertain rhythm as data', async () => {
   const before = structuredClone(JOB); let calls = 0;
