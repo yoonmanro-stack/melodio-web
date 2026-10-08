@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -17,7 +18,7 @@ function loader() {
   return load;
 }
 const load = loader();
-const { DANCE_CREATIVE_OPTIONS, validateDanceCreativePreferences, resolveDanceCreativeDirection } = load('src/lib/dance/creativeDirection.ts');
+const { DANCE_CREATIVE_OPTIONS, validateDanceCreativePreferences, resolveDanceCreativeDirection, buildDanceCadenceGuide } = load('src/lib/dance/creativeDirection.ts');
 const { validateDancePlan, createDancePlan } = load('src/lib/dance/videoPlan.ts');
 const axes = ['castId', 'appearanceId', 'outfitId', 'paletteId', 'locationId', 'choreographyId'];
 const preferences = validateDanceCreativePreferences();
@@ -123,7 +124,8 @@ test('music recipes influence automatic dance recommendations without restrictin
   assert.ok(sample.some((value, i) => value.choreographyId !== resolveDanceCreativeDirection(preferences, `music-${i}`, '', [], groove).choreographyId));
   const explicit = resolveDanceCreativeDirection({ ...preferences, danceStyle: 'robot' }, 'selected', '', [], footwork);
   assert.equal(explicit.choreographyId, 'robot'); assert.equal(explicit.musicMatch.selection, 'user');
-  assert.match(explicit.concreteEn, /two beats per count/); assert.match(explicit.concreteEn, /not a measured downbeat/); assert.match(explicit.concreteEn, /no exact sync claim/);
+  assert.match(explicit.concreteEn, /one count per quarter-note beat/); assert.doesNotMatch(explicit.concreteEn, /two beats per count|adapt amplitude\/count pace/);
+  assert.match(explicit.concreteEn, /not a measured downbeat/); assert.match(explicit.concreteEn, /no exact sync claim/);
   const supplied = resolveDanceCreativeDirection(preferences, 'brief', '그루브 웨이브로 춤추는 로봇', [], footwork);
   assert.equal(supplied.choreographyId, 'groove'); assert.equal(supplied.sources.choreography, 'brief');
   const unknown = resolveDanceCreativeDirection(preferences, 'unknown', '', [], { id: 'custom-recipe', bpm: 112, rhythmPurpose: '골반 체중 이동' });
@@ -150,4 +152,49 @@ test('rhythm confidence and ending review travel in compact planner data with an
     return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(current()) } }] });
   });
   assert.equal(calls, 1);
+});
+
+test('138 BPM cadence maps one count to a beat and four complete hooks into fifteen seconds', () => {
+  const guide = buildDanceCadenceGuide(138, 15);
+  assert.match(guide, /138 BPM; one count per quarter-note beat, 0\.435s per count/);
+  assert.match(guide, /eight-count cycle 3\.478s/);
+  assert.match(guide, /In 15s perform 4 complete eight-count cycles, then continue the next cycle for 1\.087s/);
+  assert.match(guide, /fast continuous alternating footfall or weight accents on EVERY beat/);
+  assert.match(guide, /arm accents may span two beats/);
+  assert.match(guide, /Easy reduces amplitude and complexity, NOT cadence/);
+  assert.match(guide, /No slow motion, walking pace, whole-body pauses or stretching counts/);
+  assert.match(guide, /finish microfreeze is at most one beat \(0\.435s\)/);
+  assert.match(guide, /Textual nominal guidance only/);
+  assert.match(guide, /no audio input, measured downbeat or verified synchronization claim/);
+  assert.doesNotMatch(guide, /two beats per count|guaranteed|exactly synchronized|verified audio synchronization/);
+  assert.match(buildDanceCadenceGuide(138, 5), /In 5s perform 1 complete eight-count cycles, then continue the next cycle for 1\.522s/);
+});
+
+test('ordinary tempo boundaries, exact cycle boundaries and invalid tempos produce bounded nominal guides', () => {
+  for (const [bpm, duration, count, loop, cycles, remainder] of [
+    [60, 5, '1.000', '8.000', 0, '5.000'], [120, 15, '0.500', '4.000', 3, '3.000'],
+    [128, 15, '0.469', '3.750', 4, null], [200, 15, '0.300', '2.400', 6, '0.600'],
+  ]) {
+    const guide = buildDanceCadenceGuide(bpm, duration);
+    assert.ok(guide.includes(`${bpm} BPM; one count per quarter-note beat, ${count}s per count`));
+    assert.ok(guide.includes(`eight-count cycle ${loop}s`));
+    assert.ok(guide.includes(`In ${duration}s perform ${cycles} complete eight-count cycles`));
+    assert.ok(guide.includes(remainder ? `then continue the next cycle for ${remainder}s` : 'ending at the cycle boundary'));
+    assert.ok(guide.length < 800);
+  }
+  for (const invalid of [undefined, null, NaN, Infinity, -Infinity, 59.999, 200.001, '138', false, {}]) {
+    assert.equal(buildDanceCadenceGuide(invalid, 15), buildDanceCadenceGuide(120, 15));
+  }
+});
+
+test('easy and medium directions preserve one count per beat at 138 BPM without claiming measured sync', () => {
+  const music = { id: 'dance-hook-instrumental-v1', bpm: 138, rhythmPurpose: '반복 훅과 발 스텝' };
+  for (const difficulty of ['easy', 'medium']) {
+    const result = resolveDanceCreativeDirection({ ...preferences, difficulty }, 'cadence', '', [], music);
+    assert.match(result.concreteEn, /Recipe target 138 BPM; nominal beat 0\.435s/);
+    assert.match(result.concreteEn, /one count per quarter-note beat/);
+    assert.doesNotMatch(result.concreteEn, /two beats per count|adapt amplitude\/count pace/);
+    assert.match(result.concreteEn, /not a measured downbeat/); assert.match(result.concreteEn, /no exact sync claim/);
+    if (difficulty === 'easy') assert.match(result.concreteEn, /Easy reduces amplitude and complexity, not cadence/);
+  }
 });

@@ -1,7 +1,7 @@
 import { readPetBoundedBody } from '../video/petMedia';
 import { DANCE_PRESET, type DancePlan, type DancePlanFailure, type DanceVideoJob } from './preset';
 import { DANCE_PLAN_TIMEOUT_MS, DanceVideoError } from './videoService';
-import type { DanceCreativeDirection } from './creativeDirection';
+import { buildDanceCadenceGuide, type DanceCreativeDirection } from './creativeDirection';
 
 const CLEAN_VISUAL = 'Silent visual only. No sound, speech, singing, text, typography, captions, logos or watermarks. Vertical 9:16 readable full-body movement in the chosen visual style; grounded movement and anatomy appropriate to the performer species or design.';
 function planResponseFormat(hasDirection: boolean) {
@@ -84,7 +84,7 @@ function compileChoreography(c: DanceChoreography, index: number): string {
   const timeline = c.segments.filter(segment => segment.endSeconds > start && segment.startSeconds < end).map(segment => `${Math.max(0, segment.startSeconds - start)}-${Math.min(15, segment.endSeconds - start)}s: ${segment.repeatHook ? 'repeat the SAME 8-count hook; ' : ''}${segment.action}`).join('; ');
   return `CHOREOGRAPHY CONTRACT: ${c.steps.map(step => `${step.count} counts (${step.focus}): ${step.action}`).join('; ')}. Timeline, local seconds: ${timeline}. ${index === 0 ? `Opening pose: ${c.firstPose}.` : `Finish pose: ${c.endPose}.`} The hook is full-body dance: show grounded alternating foot placement, knee flexion and pelvis/torso weight transfer with arm accents. No stationary feet with hand waving, no slide across the floor without steps, no replacing the hook with gestures. Keep the whole performer and floor contact readable.`;
 }
-export function validateDancePlan(value: unknown, direction?: DanceCreativeDirection): DancePlan {
+export function validateDancePlan(value: unknown, direction?: DanceCreativeDirection, tempoBpm?: unknown): DancePlan {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new DanceVideoError('영상 계획 형식이 올바르지 않습니다.', 'PLAN_INVALID');
   const data = value as Record<string, unknown>;
   const title = boundedText(data.title, '제목', 100);
@@ -97,7 +97,8 @@ export function validateDancePlan(value: unknown, direction?: DanceCreativeDirec
   const lock = `Same original cast throughout: ${identity}. Retain exact face, surface details, wardrobe, proportions, visual style and setting from the supplied image. Keep every performer and the same formation. Motivated expressions appropriate to the character respond to movement, never a blank or unrelated smile.`;
   const clips = data.clips.map((clip, index) => {
     const motion = boundedText(clip, '클립 연출', 2400);
-    const prompt = `${lock}\n${index === 0 ? 'First 15-second clip: establish and develop the repeatable hook gesture.' : 'Second 15-second clip: the supplied image is the actual final frame of clip 1. Continue its exact pose, camera, lighting and screen position before developing the hook and a satisfying final pose.'}\n${motion}\n${choreography ? compileChoreography(choreography, index) : ''}\n${CLEAN_VISUAL}`;
+    const cadence = tempoBpm === undefined ? '' : `${buildDanceCadenceGuide(tempoBpm, 15)}\n`;
+    const prompt = `${cadence}${lock}\n${index === 0 ? 'First 15-second clip: establish and develop the repeatable hook gesture.' : 'Second 15-second clip: the supplied image is the actual final frame of clip 1. Continue its exact pose, camera, lighting and screen position before developing the hook and a satisfying final pose.'}\n${motion}\n${choreography ? compileChoreography(choreography, index) : ''}\n${CLEAN_VISUAL}`;
     if (prompt.length > 4096) throw new DanceVideoError('영상 프롬프트가 4,096자를 넘었습니다.', 'PLAN_LENGTH');
     return prompt;
   }) as [string, string];
@@ -137,6 +138,8 @@ The supplied BPM/onsets are approximate energy-analysis cues, not verified music
   const rhythm = job.rhythm ? { method: job.rhythm.method, confidence: job.rhythm.confidence, endingStatus: job.rhythm.endingStatus,
     beatSeconds: job.rhythm.beatSeconds.filter(second => Number.isFinite(second) && second >= 0 && second < 30).slice(0, 100) } : undefined;
   if (job.selectedIdea) system += `\nAPPROVED IDEA CONTRACT: ${JSON.stringify(job.selectedIdea)}\nTranslate the selected idea into the opening image, first two seconds, repeatable hook and visual payoff. Preserve its visible mechanism and audience participation rule. Do not flatten it into an attractive performer posing or generic hand waving. Keep production simple and believable, preserve ground contact and anatomy, and make the hook understandable without generated text. Other unselected ideas must not enter the plan.`;
+  const tempoBpm = job.musicSpec?.bpm || job.bpm || job.direction?.musicMatch?.tempoTargetBpm;
+  system += `\nCADENCE OVERRIDE: ${buildDanceCadenceGuide(tempoBpm, 15)} Apply this rate in both clips. A timeline segment is a window for repeated hooks, never permission to stretch eight counts across it. The opening mechanism happens inside the first hook from0s. Preserve the approved cast, setting and hook sequence; continue foot and weight accents through the clip boundary. Stable expressions and easy difficulty never reduce the count rate.`;
   let response: Response;
   try {
     response = await fetchImpl('https://api.openai.com/v1/chat/completions', {
@@ -161,7 +164,7 @@ The supplied BPM/onsets are approximate energy-analysis cues, not verified music
     if (choice?.finish_reason !== 'stop') throw new DanceVideoError('완료된 영상 기획 응답을 확인하지 못했습니다. 저장된 30초 음원은 유지됩니다.', 'PLAN_RESPONSE');
     const content = choice?.message?.content;
     if (typeof content !== 'string') throw new Error('Missing content');
-    return validateDancePlan(JSON.parse(content), job.direction);
+    return validateDancePlan(JSON.parse(content), job.direction, tempoBpm ?? 120);
   } catch (error) {
     const name = error && typeof error === 'object' && 'name' in error ? error.name : '';
     if (signal.aborted || name === 'TimeoutError' || name === 'AbortError' || name === 'TypeError') throw transportFailure(error, 'response');

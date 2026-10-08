@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { DANCE_CATEGORY_ID, DANCE_WORKFLOW, isDanceAudioSelection, isDanceMetadata, type DanceAudioSelection, type DancePlan, type DancePlanFailure, type DanceVideoJob } from './preset';
-import { validateDanceCreativePreferences, resolveDanceCreativeDirection } from './creativeDirection';
+import { validateDanceCreativePreferences, resolveDanceCreativeDirection, buildDanceCadenceGuide } from './creativeDirection';
 import { getDanceMusicSpec } from './musicProfiles';
 import { validateDanceIdeas, type DanceIdea } from './ideas';
 
@@ -332,7 +332,7 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
         if (!requestId) {
           const keyframe = second ? job.bridgeUrl : job.imageUrl;
           if (!keyframe) throw new DanceVideoError('클립 시작 프레임을 확인하지 못했습니다.', 'MISSING_IMAGE');
-          const result = await deps.startVideo(job.plan!.clips[second ? 1 : 0], 15, keyframe, { resolution: job.videoSpec?.resolution || '480p', model: job.videoSpec?.model });
+          const result = await deps.startVideo(buildDancePacedClipPrompt(job, job.plan!.clips[second ? 1 : 0]), 15, keyframe, { resolution: job.videoSpec?.resolution || '480p', model: job.videoSpec?.model });
           if (!/^[a-zA-Z0-9_-]{1,150}$/.test(result.requestId)) throw new DanceVideoError('영상 제출 결과가 불확실합니다. 자동으로 다시 제출하지 않습니다.', 'UNKNOWN_SUBMISSION');
           return finish(userId, { ...job, ...(second ? { clip2RequestId: result.requestId } : { clip1RequestId: result.requestId }) }, token);
         }
@@ -413,7 +413,16 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
 export function buildDancePreviewPrompt(job: DanceVideoJob): string {
   if (!job.plan || !job.selectedIdea) throw new DanceVideoError('확인된 아이디어와 안무가 필요합니다.', 'NOT_READY', 409);
   const idea = job.selectedIdea;
-  const prompt = `A five-second motion quality test of the approved original dance idea, not the complete thirty-second performance. Same original cast from this exact starting image: ${job.plan.identity}. Preserve faces, wardrobe, body proportions, formation, setting and image style. Full bodies, feet and floor contact remain visible in a stable vertical9:16 view. First two seconds show this visible mechanism: ${idea.firstTwoSeconds}. Then demonstrate this repeatable eight-count hook with grounded alternating steps, knee flexion and pelvis/torso weight transfer: ${idea.signatureMove}. Planned payoff: ${idea.visualPayoff}. Musical intention: ${job.musicSpec?.rhythmPurpose || ''}; approximate rhythm ${job.bpm || job.musicSpec?.bpm || 120} BPM, never claim verified audio synchronization. Do not turn the hook into stationary feet or hand waving. No camera cuts, acrobatics, malformed anatomy, text, logos, captions, dialogue, speech or generated music. Silent visual only; the original chosen music is combined separately.`;
+  const cadence = buildDanceCadenceGuide(job.musicSpec?.bpm || job.bpm, 5);
+  const prompt = `${cadence}\nA five-second motion quality test of the approved original dance idea, not the complete thirty-second performance. Same original cast from this exact starting image: ${job.plan.identity}. Preserve faces, wardrobe, body proportions, formation, setting and image style. Full bodies, feet and floor contact remain visible in a stable vertical9:16 view. Start the repeatable eight-count hook immediately at0s; its visible mechanism happens within the first two seconds of that same moving hook, with no separate intro: ${idea.firstTwoSeconds}. Grounded alternating steps, knee flexion and pelvis/torso weight transfer: ${idea.signatureMove}. Planned payoff: ${idea.visualPayoff}. Musical intention: ${job.musicSpec?.rhythmPurpose || ''}; never claim verified audio synchronization. Do not turn the hook into stationary feet or hand waving. No camera cuts, acrobatics, malformed anatomy, text, logos, captions, dialogue, speech or generated music. Silent visual only; the original chosen music is combined separately.`;
   if (prompt.length > 4096) throw new DanceVideoError('테스트 영상 프롬프트가 너무 깁니다.', 'PLAN_LENGTH', 422);
+  return prompt;
+}
+
+/** Enforce the current cadence even when reopening an already approved stored plan. */
+export function buildDancePacedClipPrompt(job: DanceVideoJob, approvedPrompt: string): string {
+  const cadence = buildDanceCadenceGuide(job.musicSpec?.bpm || job.bpm, 15);
+  const prompt = approvedPrompt.includes(cadence) ? approvedPrompt : `${cadence}\nCADENCE OVERRIDE: keep the approved cast, setting and hook, but this real-time rate takes priority over slower descriptive timing or holds below.\n${approvedPrompt}`;
+  if (prompt.length > 4096) throw new DanceVideoError('속도 지시를 포함한 영상 프롬프트가 4,096자를 넘었습니다.', 'PLAN_LENGTH', 422);
   return prompt;
 }

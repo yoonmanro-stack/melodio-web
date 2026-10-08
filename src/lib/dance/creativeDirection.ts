@@ -126,12 +126,21 @@ function musicMatching(spec?: DanceDirectionMusicSpec) {
   return { profileId, rhythmPurpose, tempoTargetBpm, preferredStyles: [...new Set(preferredStyles)], recommendationTags };
 }
 
+/** Nominal text guidance for image-to-video prompts; it does not measure audio or synchronization. */
+export function buildDanceCadenceGuide(tempoBpm: unknown, durationSeconds: 5 | 15): string {
+  const tempo = typeof tempoBpm === 'number' && Number.isFinite(tempoBpm) && tempoBpm >= 60 && tempoBpm <= 200 ? tempoBpm : 120;
+  const duration = durationSeconds === 5 ? 5 : 15;
+  const countSeconds = 60 / tempo, loopSeconds = 480 / tempo;
+  const fullCycles = Math.floor(duration / loopSeconds), remainderSeconds = duration - fullCycles * loopSeconds;
+  const continuation = remainderSeconds > 1e-9 ? `then continue the next cycle for ${remainderSeconds.toFixed(3)}s` : 'ending at the cycle boundary';
+  return `NOMINAL CADENCE: ${tempo} BPM; one count per quarter-note beat, ${countSeconds.toFixed(3)}s per count; eight-count cycle ${loopSeconds.toFixed(3)}s. In ${duration}s perform ${fullCycles} complete eight-count cycles, ${continuation}. Start immediately with fast continuous alternating footfall or weight accents on EVERY beat; arm accents may span two beats. Easy reduces amplitude and complexity, NOT cadence. No slow motion, walking pace, whole-body pauses or stretching counts to fill a segment. Any finish microfreeze is at most one beat (${countSeconds.toFixed(3)}s). Textual nominal guidance only, with no audio input, measured downbeat or verified synchronization claim.`;
+}
+
 function musicTimingEn(match: ReturnType<typeof musicMatching>, difficulty: DanceCreativePreferences['difficulty']): string {
   if (!match.profileId && !match.rhythmPurpose && !match.tempoTargetBpm) return '';
   const target = match.tempoTargetBpm;
   const nominalBeat = target ? (60 / target).toFixed(3) : 'unknown';
-  const easyFast = difficulty === 'easy' && target !== null && target >= 124;
-  return `Music-to-movement recommendation: ${(match.rhythmPurpose || 'follow the selected audio groove').slice(0, 100)}. Tags: ${match.recommendationTags.join(', ') || 'whole-body groove'}. ${target ? `Recipe target ${target} BPM; nominal beat ${nominalBeat}s, not a measured downbeat.` : 'No measured tempo.'} ${easyFast ? 'Easy fast-tempo steps: use two beats per count for weight transfers.' : 'Keep steps clear at the chosen count pace.'} Keep the8-count hook. Follow audible accents and supplied approximate energy cues; no exact sync claim. Explicit styles stay valid; adapt amplitude/count pace, never ban a genre.`;
+  return `Music-to-movement recommendation: ${(match.rhythmPurpose || 'follow the selected audio groove').slice(0, 100)}. Tags: ${match.recommendationTags.join(', ') || 'whole-body groove'}. ${target ? `Recipe target ${target} BPM; nominal beat ${nominalBeat}s, not a measured downbeat.` : 'No measured tempo.'} Use one count per quarter-note beat. ${difficulty === 'easy' ? 'Easy reduces amplitude and complexity, not cadence.' : 'Keep the same count cadence with clear movement changes.'} Keep the8-count hook. Follow audible accents and supplied approximate energy cues; no exact sync claim. Explicit styles stay valid; adapt amplitude and complexity, never halve cadence or ban a genre.`;
 }
 
 /** Independent salted axes; recent records contain only the owner's compact direction metadata. */

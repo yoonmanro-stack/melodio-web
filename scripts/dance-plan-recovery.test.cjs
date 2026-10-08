@@ -108,6 +108,23 @@ test('valid plan succeeds in one request without changing model or creative inpu
   });
   assert.equal(calls, 1); assert.equal(plan.title, PLAN.title);
 });
+test('planner and both compiled clips use saved138BPM real-time cadence over legacy half-time guidance', async () => {
+  let calls = 0;
+  const plan = await createDancePlan({ ...input, bpm: 69, musicSpec: { bpm: 138 },
+    direction: { ...DIRECTION, concreteEn: DIRECTION.concreteEn + '. Easy fast-tempo steps: use two beats per count for weight transfers.' } }, async (_url, options) => {
+    calls++; const request = JSON.parse(options.body), system = request.messages[0].content;
+    assert.match(system, /one count per quarter-note beat, 0\.435s per count/);
+    assert.match(system, /eight-count cycle 3\.478s/); assert.match(system, /4 complete eight-count cycles/);
+    assert.ok(system.lastIndexOf('CADENCE OVERRIDE') > system.indexOf('use two beats per count'));
+    assert.match(system, /never permission to stretch eight counts/);
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(V2_PLAN) } }] });
+  });
+  assert.equal(calls, 1); assert.equal(plan.identity, V2_PLAN.identity);
+  for (const prompt of plan.clips) {
+    assert.match(prompt, /one count per quarter-note beat, 0\.435s per count/);
+    assert.match(prompt, /4 complete eight-count cycles/); assert.match(prompt, /EVERY beat/);
+  }
+});
 test('v2 request constrains all objects and exactly two clips while retaining8count semantic validation', async () => {
   let calls = 0; let schema;
   const plan = await createDancePlan({ ...input, direction: DIRECTION }, async (_url, options) => {

@@ -21,13 +21,29 @@ function loader(overrides = {}, env = {}) {
   return load;
 }
 const load = loader();
-const { createDanceVideoService, DanceVideoError, DANCE_VIDEO_LEASE_MS } = load('src/lib/dance/videoService.ts');
+const { createDanceVideoService, DanceVideoError, DANCE_VIDEO_LEASE_MS, buildDancePacedClipPrompt, buildDancePreviewPrompt } = load('src/lib/dance/videoService.ts');
 const { DANCE_CATEGORY_ID, DANCE_WORKFLOW } = load('src/lib/dance/preset.ts');
 const { resolveDanceMusicSpec } = load('src/lib/dance/musicProfiles.ts');
 const USER = 'a0000000-0000-4000-8000-000000000001';
 const TRACK = 'a0000000-0000-4000-8000-000000000002';
 const OTHER = 'a0000000-0000-4000-8000-000000000003';
 const PLAN = { title: '리듬의 작은 인사', summary: '반복 손동작과 발걸음', identity: 'one original adult dancer', imagePrompt: 'opening frame', clips: ['first motion', 'second motion'] };
+test('stored clips and preview use saved138BPM cadence without changing the approved cast or audio', () => {
+  const job = { bpm: 139.5, musicSpec: { bpm: 138 }, audioUrl: 'stored-master.wav', audioHash: 'same-master', plan: PLAN,
+    selectedIdea: { firstTwoSeconds: '첫 훅 안에서 발을 옆으로 딛는다.', signatureMove: '발을 번갈아 딛는다.', visualPayoff: '같은 훅을 반복한다.' } };
+  const before = structuredClone(job), approved = 'same approved cast and scene '.padEnd(3096, 'x');
+  const paced = buildDancePacedClipPrompt(job, approved);
+  assert.ok(paced.endsWith(approved)); assert.ok(paced.length <= 4096);
+  assert.match(paced, /one count per quarter-note beat, 0\.435s per count/);
+  assert.match(paced, /eight-count cycle 3\.478s/); assert.match(paced, /4 complete eight-count cycles/);
+  assert.equal(buildDancePacedClipPrompt(job, paced), paced, 'reopening does not duplicate the guide');
+  const preview = buildDancePreviewPrompt(job);
+  assert.match(preview, /one count per quarter-note beat, 0\.435s per count/);
+  assert.match(preview, /1 complete eight-count cycle/); assert.match(preview, /no separate intro/);
+  assert.match(preview, /same moving hook/); assert.doesNotMatch(preview, /Then demonstrate/);
+  assert.deepEqual(job, before);
+  assert.throws(() => buildDancePacedClipPrompt(job, 'x'.repeat(4096)), { code: 'PLAN_LENGTH' });
+});
 function deferred() { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; }
 function fixture(overrides = {}) {
   let time = 10_000;
