@@ -19,7 +19,7 @@ function loader(env = { OPENAI_API_KEY: 'offline-fixture-key' }) {
   }
   return load;
 }
-const { createDanceIdeas, validateDanceIdeas } = loader()('src/lib/dance/ideas.ts');
+const { createDanceIdeas, validateDanceIdeas, DANCE_IDEA_VALIDATION_RULES } = loader()('src/lib/dance/ideas.ts');
 const MUSIC = { version: 2, id: 'house-footwork', label: '풋워크 · 하우스', bpm: 128, instrumental: false, language: 'ko',
   style: 'Original house with four-on-the-floor kick, open hats and Korean vocal hook.', rhythmPurpose: '발 교차·스텝 터치·방향 전환', lyrics: '새로운 노래', exclude: 'artist imitation' };
 const DIRECTION = { version: 2, castLabel: '성인 여성', locationLabel: '거리 광장', danceStyleLabel: '좌우 셔플',
@@ -52,7 +52,27 @@ function ideas(cast = '성인 여성', place = '거리 광장') {
   ];
 }
 function changed(index, values) { const result = ideas(); Object.assign(result[index], values); return result; }
-function response(value = ideas()) { return Response.json({ choices: [{ message: { content: JSON.stringify({ ideas: value }) } }] }, { headers: { 'x-request-id': 'req_ideas-1' } }); }
+function providerPayload(value = ideas(), job = JOB) {
+  return { selection: { musicProfileId: job.musicSpec?.id ?? null, castLabel: job.direction?.castLabel ?? null, locationLabel: job.direction?.locationLabel ?? null },
+    ideas: value.map(idea => {
+      if (!idea || typeof idea !== 'object') return idea;
+      const time = /^0\s*[-~–]\s*2\s*초\s*[:：]\s*/.exec(idea.firstTwoSeconds || '');
+      return { id: idea.id, title: idea.title, conceptFamily: idea.conceptFamily,
+        firstTwoSeconds: { startSeconds: time ? 0 : 3, endSeconds: time ? 2 : 5, action: time ? idea.firstTwoSeconds.slice(time[0].length) : idea.firstTwoSeconds },
+        signatureSteps: (idea.signatureMove || '').split(/\s*[/;]\s*/).map(step => {
+          const match = /^([1-7])\s*카운트\s*[:：]\s*(.+)$/.exec(step);
+          return { count: match ? Number(match[1]) : 0, action: match?.[2] || step,
+            focus: /발|다리|무릎|골반|몸|전신|하체|허리/.test(match?.[2] || step) ? 'combined' : 'arms' };
+        }), musicConnection: idea.musicConnection, visualPayoff: idea.visualPayoff, seriesPotential: idea.seriesPotential, productionRisk: idea.productionRisk };
+    }) };
+}
+function privateResponse(payload) { return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(payload) } }] }, { headers: { 'x-request-id': 'req_ideas-1' } }); }
+function response(value = ideas()) { return privateResponse(providerPayload(value)); }
+function publicFixture(value = ideas()) {
+  return validateDanceIdeas(value.map(idea => ({ ...idea,
+    firstTwoSeconds: `0~2초: ${DIRECTION.castLabel} · ${DIRECTION.locationLabel}: ` + idea.firstTwoSeconds.replace(/^0\s*[-~–]\s*2\s*초\s*[:：]\s*/, ''),
+    musicConnection: `${MUSIC.label} · ${MUSIC.rhythmPurpose}: ${idea.musicConnection}` })));
+}
 function clean(error) {
   assert.doesNotMatch(JSON.stringify({ message: error.message, diagnostics: error.planFailure }), /offline-fixture-key|private\.invalid|private-hash|secret-payload|provider secret/);
   return true;
@@ -155,7 +175,7 @@ test('opening failures identify only candidate number and independent compact ch
     assert.throws(() => validateDanceIdeas(candidates), error => { assert.equal(error.message, fixture.expected); return true; });
     let calls = 0;
     await assert.rejects(createDanceIdeas(JOB, async () => { calls++; return response(candidates); }), error => {
-      assert.equal(error.code, 'PLAN_INVALID'); assert.equal(error.message, fixture.expected); assert.equal(error.planFailure.kind, 'response');
+      assert.equal(error.code, 'PLAN_INVALID'); assert.equal(error.planFailure.validationRule, fixture.index === 1 ? 'OPENING_TIME' : 'OPENING_MOTION'); assert.equal(error.planFailure.kind, 'response');
       assert.equal(error.planFailure.providerRequestId, 'req_ideas-1'); assert.ok(error.message.length < 100); return clean(error);
     });
     assert.equal(calls, 1);
@@ -253,7 +273,7 @@ test('uninformative risk and series descriptions produce static bounded advisori
   assert.deepEqual(validateDanceIdeas(structuredClone(result)), result);
   let calls = 0;
   const provider = await createDanceIdeas(JOB, async () => { calls++; return response(candidates); });
-  assert.equal(calls, 1); assert.deepEqual(provider, result);
+  assert.equal(calls, 1); assert.deepEqual(provider, publicFixture(candidates));
   for (const values of [{ productionRisk: undefined }, { seriesPotential: '' }, { productionRisk: 'English only' }]) {
     assert.throws(() => validateDanceIdeas(changed(0, values)), { code: 'PLAN_INVALID' });
   }
@@ -288,7 +308,26 @@ test('one bounded low-reasoning JSON request uses the saved music, cast, place a
     assert.equal(options.method, 'POST'); assert.equal(options.redirect, 'error'); assert.ok(options.signal);
     const body = JSON.parse(options.body); const data = JSON.parse(body.messages[1].content); const system = body.messages[0].content;
     assert.equal(body.model, 'gpt-5.6-sol'); assert.equal(body.reasoning_effort, 'low'); assert.equal(body.max_completion_tokens, 3072);
-    assert.deepEqual(body.response_format, { type: 'json_object' });
+    const format = body.response_format;
+    assert.equal(format.type, 'json_schema'); assert.equal(format.json_schema.strict, true);
+    const schema = format.json_schema.schema;
+    function closedObjects(node) {
+      if (node.type === 'object') { assert.equal(node.additionalProperties, false); assert.deepEqual(node.required.sort(), Object.keys(node.properties).sort()); }
+      for (const child of Object.values(node.properties || {})) closedObjects(child);
+      if (node.items) closedObjects(node.items);
+    }
+    closedObjects(schema);
+    assert.deepEqual(schema.required.sort(), ['ideas', 'selection']);
+    assert.equal(schema.properties.ideas.minItems, 3); assert.equal(schema.properties.ideas.maxItems, 3);
+    const fields = schema.properties.ideas.items.properties;
+    assert.equal(fields.title.maxLength, 70); assert.equal(fields.title.pattern, '[가-힣]');
+    assert.equal(fields.id.pattern, '^[a-z][a-z0-9_-]{0,63}$'); assert.deepEqual(fields.conceptFamily.enum, ['interaction', 'contrast', 'rhythm_reveal']);
+    assert.deepEqual(fields.firstTwoSeconds.properties.startSeconds.enum, [0]); assert.deepEqual(fields.firstTwoSeconds.properties.endSeconds.enum, [2]);
+    assert.equal(fields.signatureSteps.minItems, 2); assert.equal(fields.signatureSteps.maxItems, 4);
+    assert.equal(fields.signatureSteps.items.properties.action.maxLength, 54);
+    assert.deepEqual(schema.properties.selection.properties.musicProfileId.enum, [MUSIC.id]);
+    assert.deepEqual(schema.properties.selection.properties.castLabel.enum, [DIRECTION.castLabel]);
+    assert.deepEqual(schema.properties.selection.properties.locationLabel.enum, [DIRECTION.locationLabel]);
     assert.equal(data.selectedMusic.style, MUSIC.style); assert.equal(data.selectedMusic.rhythmPurpose, MUSIC.rhythmPurpose);
     assert.equal(data.selectedDirection.castLabel, DIRECTION.castLabel); assert.equal(data.selectedDirection.locationLabel, DIRECTION.locationLabel);
     assert.equal(data.selectedDirection.concreteEn, DIRECTION.concreteEn); assert.equal(data.visualBrief, JOB.visualBrief);
@@ -299,13 +338,15 @@ test('one bounded low-reasoning JSON request uses the saved music, cast, place a
     assert.match(system, /BEFORE any full plan, image or video call/); assert.match(system, /Original characters and choreography/);
     return response();
   });
-  assert.equal(calls, 1); assert.deepEqual(result, ideas()); assert.deepEqual(JOB, before);
+  assert.equal(calls, 1); assert.deepEqual(result, publicFixture()); assert.deepEqual(JOB, before);
 });
-test('provider ideas cannot silently replace the selected cast, location or music profile', async () => {
-  for (const candidates of [ideas('성인 남성'), ideas('성인 여성', '공원'), changed(0, { musicConnection: '다른 팝 음악의 베이스를 따라 발을 딛는다.' })]) {
+test('provider selection facts cannot silently replace the selected cast, location or music profile', async () => {
+  for (const [key, value] of [['castLabel', '성인 남성'], ['locationLabel', '공원'], ['musicProfileId', 'different-music']]) {
+    const payload = providerPayload(); payload.selection[key] = value;
     let calls = 0;
-    await assert.rejects(createDanceIdeas(JOB, async () => { calls++; return response(candidates); }), error => {
-      assert.equal(error.code, 'PLAN_INVALID'); assert.equal(error.status, 502); assert.equal(error.planFailure.providerRequestId, 'req_ideas-1'); return clean(error);
+    await assert.rejects(createDanceIdeas(JOB, async () => { calls++; return privateResponse(payload); }), error => {
+      assert.equal(error.code, 'PLAN_INVALID'); assert.equal(error.status, 502); assert.equal(error.planFailure.providerRequestId, 'req_ideas-1');
+      assert.equal(error.planFailure.validationRule, 'SELECTION_FACTS'); return clean(error);
     });
     assert.equal(calls, 1);
   }
@@ -350,4 +391,142 @@ test('response transport, oversized bodies and malformed model output are safely
   }
   await assert.rejects(createDanceIdeas(JOB, async () => new Response('x'.repeat(32769))), error => { assert.equal(error.code, 'PLAN_RESPONSE'); return clean(error); });
   await assert.rejects(createDanceIdeas(JOB, async () => response([])), error => { assert.equal(error.code, 'PLAN_INVALID'); return clean(error); });
+});
+
+test('natural foot and whole-body motion has no short body-to-verb distance gate', () => {
+  for (const action of ['발을 모아 옆으로 딛기', '발바닥으로 바닥을 찍기', '발끝을 옆으로 끌기', '발목을 작게 굴리기',
+    '오른발로 공을 살짝 민다', '발을 옆으로 짚으며 돌아오기', '발끝을 번갈아 든다', '온몸을 흔든다', '몸을 움직인다',
+    '오른발을 바닥 표식의 바깥 경계에서 아주 작은 폭으로 천천히 옆으로 딛기']) {
+    const candidates = changed(0, { firstTwoSeconds: `0~2초: ${action}.`, visualPayoff: `${action}.`,
+      signatureMove: `4카운트: ${action} / 4카운트: 손을 앞으로 뻗기` });
+    assert.equal(validateDanceIdeas(candidates).length, 3, action);
+  }
+  for (const signatureMove of ['4카운트: 오른발 올리기 / 4카운트: 왼발 내리기', '4카운트: 다리 벌리기 / 4카운트: 손 올리기',
+    '4카운트: 발꿈치 들기 / 4카운트: 발 떼기', '4카운트: 손목 털기 / 4카운트: 왼발을 옆으로 딛기']) {
+    assert.equal(validateDanceIdeas(changed(0, { signatureMove })).length, 3);
+  }
+  const uncertain = validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 발끝을 바닥에 천천히 문지른다.',
+    visualPayoff: '발끝을 바닥에 천천히 문지른다.', signatureMove: '4카운트: 발끝을 바닥에 문지르기 / 4카운트: 손을 앞으로 뻗기' }));
+  assert.match(uncertain[0].reviewNote, /실제 움직임/);
+});
+
+test('held body clauses and object-only motion do not count as dance or lower-body movement', () => {
+  for (const firstTwoSeconds of ['0~2초: 양팔을 펼친 채 서 있다.', '0~2초: 팔을 접고 있는 자세를 유지한다.',
+    '0~2초: 양팔을 펼친 채 공만 회전한다.']) {
+    assert.throws(() => validateDanceIdeas(changed(0, { firstTwoSeconds })), { code: 'PLAN_INVALID' });
+  }
+  for (const signatureMove of ['4카운트: 무릎을 굽힌 채 정지하기 / 4카운트: 팔을 펼친 채 가만히 있기',
+    '4카운트: 발을 고정한 채 손을 올리기 / 4카운트: 발을 모은 채 팔을 펼치기',
+    '4카운트: 무릎을 고정한다 / 4카운트: 팔을 고정한다',
+    '4카운트: 발을 움직이지 않는다 / 4카운트: 손을 그대로 유지한다']) {
+    assert.throws(() => validateDanceIdeas(changed(0, { signatureMove })), { code: 'PLAN_INVALID' });
+  }
+  assert.equal(validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 손을 고정한 채 왼발을 딛는다.',
+    signatureMove: '4카운트: 손을 고정한 채 오른발을 옆으로 딛기 / 4카운트: 양팔을 펼친 채 무릎을 굽혀 몸통을 튕기기' })).length, 3);
+});
+
+test('perception and cognitive verbs do not satisfy physical or lower-body movement', () => {
+  for (const signatureMove of ['4카운트: 발을 바라보기 / 4카운트: 손을 바라보기',
+    '4카운트: 발을 생각하기 / 4카운트: 손을 설명하기']) {
+    assert.throws(() => validateDanceIdeas(changed(0, { signatureMove })), { code: 'PLAN_INVALID' });
+  }
+  for (const firstTwoSeconds of ['0~2초: 발을 바라본다.', '0~2초: 몸을 생각한다.']) {
+    assert.throws(() => validateDanceIdeas(changed(0, { firstTwoSeconds })), { code: 'PLAN_INVALID' });
+  }
+});
+
+test('known body movement remains valid when followed by a hold', () => {
+  assert.equal(validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 몸통을 돌리고 정지한다.',
+    signatureMove: '4카운트: 발을 옆으로 딛고 그대로 유지하기 / 4카운트: 팔을 펼치기' })).length, 3);
+  assert.equal(validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 발을 딛으며 바닥 표식을 바라본다.',
+    signatureMove: '4카운트: 발을 딛고 그대로 유지하기 / 4카운트: 손을 앞으로 뻗기' })).length, 3);
+  assert.equal(validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 팔을 뻗고 잠깐 그대로 유지한다.' })).length, 3);
+});
+
+test('bound selection facts allow paraphrased or dropped source labels in creative prose', async () => {
+  const payload = providerPayload();
+  payload.ideas[0].firstTwoSeconds.action = '발을 옆으로 끌며 바닥 표식에 몸통을 기울여 응답한다.';
+  payload.ideas[0].musicConnection = '열린 하이햇을 따라 발끝을 끌고 킥에 무릎을 튕긴다.';
+  let calls = 0;
+  const result = await createDanceIdeas(JOB, async () => { calls++; return privateResponse(payload); });
+  assert.equal(calls, 1); assert.match(result[0].firstTwoSeconds, /^0~2초: 성인 여성 · 거리 광장:/);
+  assert.ok(result[0].musicConnection.includes(MUSIC.label)); assert.ok(result[0].musicConnection.includes(MUSIC.rhythmPurpose));
+  assert.ok(result.every(idea => !('selection' in idea) && !('signatureSteps' in idea) && typeof idea.signatureMove === 'string'));
+  assert.equal(result[0].firstTwoSeconds.length <= 220, true); assert.equal(result[0].musicConnection.length <= 220, true);
+});
+
+test('machine windows, counts, focus and all four action budgets survive public compilation', async () => {
+  const cases = [
+    ['OPENING_TIME', payload => { payload.ideas[0].firstTwoSeconds.startSeconds = 1; }],
+    ['SIGNATURE_COUNTS', payload => { payload.ideas[0].signatureSteps[0].count = 1.5; }],
+    ['SIGNATURE_COUNTS', payload => { payload.ideas[0].signatureSteps[0].count = 3; }],
+    ['SIGNATURE_STEPS', payload => { payload.ideas[0].signatureSteps = payload.ideas[0].signatureSteps.slice(0, 1); }],
+    ['SIGNATURE_FOCUS', payload => { payload.ideas[0].signatureSteps[0].focus = ['feet']; }],
+    ['IDEA_KEYS', payload => { payload.ideas[0].privateUnknownField = 'secret-payload'; }],
+  ];
+  for (const [rule, change] of cases) {
+    const payload = providerPayload(); change(payload); let calls = 0;
+    await assert.rejects(createDanceIdeas(JOB, async () => { calls++; return privateResponse(payload); }), error => {
+      assert.equal(error.planFailure.validationRule, rule); assert.ok(DANCE_IDEA_VALIDATION_RULES.includes(rule)); return clean(error);
+    });
+    assert.equal(calls, 1);
+  }
+  const payload = providerPayload();
+  payload.ideas[0].signatureSteps = ['왼쪽으로 딛기', '오른쪽으로 딛기', '앞으로 딛기', '뒤로 딛기'].map(ending => {
+    const prefix = '발을 ';
+    return { count: 2, focus: 'feet', action: prefix + '조심스럽게 '.repeat(12).slice(0, 54 - prefix.length - ending.length) + ending };
+  });
+  assert.ok(payload.ideas[0].signatureSteps.every(step => step.action.length === 54));
+  const result = await createDanceIdeas(JOB, async () => privateResponse(payload));
+  assert.ok(result[0].signatureMove.length <= 250); assert.equal(validateDanceIdeas(result).length, 3);
+});
+
+test('refusal and every non-stop completion reject before parsing or validating content', async () => {
+  for (const [finishReason, refusal, code] of [['stop', 'provider secret', 'PLAN_RESPONSE'], ['length', null, 'PLAN_LENGTH'],
+    ['content_filter', null, 'PLAN_RESPONSE'], ['tool_calls', null, 'PLAN_RESPONSE'], [undefined, null, 'PLAN_RESPONSE']]) {
+    let calls = 0;
+    const message = { content: JSON.stringify(providerPayload()), refusal };
+    await assert.rejects(createDanceIdeas(JOB, async () => { calls++; return Response.json({ choices: [{ finish_reason: finishReason, message }] }); }), error => {
+      assert.equal(error.code, code); assert.equal(error.status, 502); assert.equal(error.planFailure.kind, 'response'); return clean(error);
+    });
+    assert.equal(calls, 1);
+  }
+  await assert.rejects(createDanceIdeas(JOB, async () => Response.json({ choices: [{ finish_reason: 'length', message: { content: 'invalid JSON provider secret' } }] })), { code: 'PLAN_LENGTH' });
+});
+
+test('unfittable saved references reject before dispatch and absent directions have null facts', async () => {
+  let calls = 0;
+  await assert.rejects(createDanceIdeas({ ...JOB, musicSpec: { ...MUSIC, label: '음'.repeat(100), rhythmPurpose: '박'.repeat(160) } }, async () => { calls++; throw Error('NETWORK_FORBIDDEN'); }), { code: 'PLAN_INVALID' });
+  assert.equal(calls, 0);
+  const noDirection = { ...JOB, direction: undefined };
+  await createDanceIdeas(noDirection, async (_url, options) => {
+    const facts = JSON.parse(options.body).response_format.json_schema.schema.properties.selection.properties;
+    assert.equal(facts.castLabel.type, 'null'); assert.deepEqual(facts.castLabel.enum, [null]); assert.deepEqual(facts.locationLabel.enum, [null]);
+    return privateResponse(providerPayload(ideas(), noDirection));
+  });
+});
+
+test('only allowlisted rule diagnostics survive the real service hold checkpoint', async () => {
+  const isolated = loader();
+  const { createDanceVideoService } = isolated('src/lib/dance/videoService.ts');
+  const actualIdeas = isolated('src/lib/dance/ideas.ts');
+  const userId = 'a0000000-0000-4000-8000-000000000001', trackId = 'a0000000-0000-4000-8000-000000000002';
+  const metadata = { workflow: 'dance-music-first-v1', presetId: 'dance_challenge', dancePreset: { id: 'dance-hook-instrumental-v1', bpm: 138 } };
+  let record = { id: trackId, userId, status: 'completed', title: '원곡', isPublic: false, createdAt: '2026-10-08T00:00:00Z',
+    audioUrl: 'https://offline.test/original.mp3', metadata, licenseHash: JSON.stringify(metadata) };
+  let calls = 0;
+  const store = { load: async () => structuredClone(record), compareAndSwap: async (previous, job) => {
+    assert.equal(previous.licenseHash, record.licenseHash);
+    const metadata = { ...record.metadata, danceVideo: structuredClone(job) }; record = { ...record, metadata, licenseHash: JSON.stringify(metadata) }; return structuredClone(record);
+  } };
+  const forbidden = async () => { throw Error('NETWORK_FORBIDDEN'); };
+  const service = createDanceVideoService({ store, snapshot: async () => ({ audioUrl: 'https://offline.test/master.wav',
+    audioHash: 'a'.repeat(64), sourceAudioHash: 'b'.repeat(64), sourceDurationSeconds: 180 }), reuseSnapshot: forbidden,
+    ideas: job => actualIdeas.createDanceIdeas(job, async () => { calls++; const payload = providerPayload(ideas(), job); payload.ideas[0].signatureSteps[0].count = 3; return privateResponse(payload); }),
+    plan: forbidden, generateImage: forbidden, startVideo: forbidden, pollVideo: forbidden, copyAsset: forbidden, bridge: forbidden, render: forbidden });
+  const result = await service.prepare(userId, trackId, 10, '');
+  assert.equal(result.status, 'attention'); assert.equal(calls, 1); assert.equal(result.planFailure.validationRule, 'SIGNATURE_COUNTS');
+  assert.deepEqual(record.metadata.danceVideo.planFailure, result.planFailure);
+  assert.deepEqual(Object.keys(result.planFailure).sort(), ['code', 'elapsedMs', 'kind', 'phase', 'providerRequestId', 'timeoutMs', 'validationRule'].sort());
+  assert.doesNotMatch(JSON.stringify(result.planFailure), /offline-fixture-key|private|secret|signatureSteps|musicConnection/);
 });

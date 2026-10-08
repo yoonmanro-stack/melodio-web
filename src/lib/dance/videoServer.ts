@@ -81,7 +81,7 @@ export function createDanceVideoServerService(admin: SupabaseClient, userId: str
     return admin.storage.from('melodio-assets').getPublicUrl(assetPath).data.publicUrl;
   };
   return createDanceVideoService({
-    videoModel: options.videoModel,
+    videoModel: options.videoModel || 'grok-imagine-video-1.5-lite',
     store: createDanceVideoStore(admin),
     snapshot: (job, sourceUrl) => snapshotDanceAudio(job, sourceUrl, upload),
     reuseSnapshot: reuseDanceAudio,
