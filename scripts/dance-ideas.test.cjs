@@ -62,7 +62,7 @@ function providerPayload(value = ideas(), job = JOB) {
         signatureSteps: (idea.signatureMove || '').split(/\s*[/;]\s*/).map(step => {
           const match = /^([1-7])\s*카운트\s*[:：]\s*(.+)$/.exec(step);
           return { count: match ? Number(match[1]) : 0, action: match?.[2] || step,
-            focus: /발|다리|무릎|골반|몸|전신|하체|허리/.test(match?.[2] || step) ? 'combined' : 'arms' };
+            focus: /발|다리|무릎|골반|몸|전신|가슴|흉곽|엉덩이|복부|체중|하체|허리/.test(match?.[2] || step) ? 'combined' : 'arms' };
         }), musicConnection: idea.musicConnection, visualPayoff: idea.visualPayoff, seriesPotential: idea.seriesPotential, productionRisk: idea.productionRisk };
     }) };
 }
@@ -441,6 +441,48 @@ test('known body movement remains valid when followed by a hold', () => {
   assert.equal(validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 발을 딛으며 바닥 표식을 바라본다.',
     signatureMove: '4카운트: 발을 딛고 그대로 유지하기 / 4카운트: 손을 앞으로 뻗기' })).length, 3);
   assert.equal(validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 팔을 뻗고 잠깐 그대로 유지한다.' })).length, 3);
+});
+
+test('shared public and private step classification supports anatomy, nominal weight motion and one deliberate hold', async () => {
+  for (const signatureMove of ['4카운트: 가슴을 작게 튕기기 / 4카운트: 팔을 고정하기',
+    '4카운트: 흉곽을 왼쪽으로 돌리기 / 4카운트: 손목 털기',
+    '4카운트: 엉덩이를 작게 흔들기 / 4카운트: 복부를 짧게 수축하기',
+    '4카운트: 체중 이동 / 4카운트: 손목 털기',
+    '4카운트: 팔을 고정하기 / 4카운트: 왼발을 옆으로 딛기']) {
+    const candidates = changed(0, { signatureMove });
+    const direct = validateDanceIdeas(candidates);
+    const provider = await createDanceIdeas(JOB, async () => response(candidates));
+    assert.equal(direct.length, 3); assert.equal(provider[0].signatureMove, signatureMove);
+    assert.deepEqual(validateDanceIdeas(structuredClone(provider)), provider);
+    if (signatureMove.includes('체중 이동') || signatureMove.includes('수축하기')) {
+      assert.match(direct[0].reviewNote, /실제 움직임/); assert.match(provider[0].reviewNote, /실제 움직임/);
+    }
+  }
+  for (const action of ['가슴을 작게 튕긴다.', '흉곽을 좌우로 돌린다.', '체중 이동']) {
+    const candidates = changed(0, { firstTwoSeconds: `0~2초: ${action}`, visualPayoff: action });
+    assert.equal(validateDanceIdeas(candidates).length, 3);
+    assert.equal((await createDanceIdeas(JOB, async () => response(candidates))).length, 3);
+  }
+});
+
+test('public and private classification rejects all-held, cognitive and stationary-body object steps consistently', async () => {
+  for (const signatureMove of ['4카운트: 골반 고정 / 4카운트: 무릎 정지',
+    '4카운트: 팔을 고정하기 / 4카운트: 무릎을 고정하기',
+    '4카운트: 가슴의 회전을 상상하기 / 4카운트: 왼발을 옆으로 딛기',
+    '4카운트: 발을 바라보기 / 4카운트: 왼발을 옆으로 딛기',
+    '4카운트: 손을 고정한 채 공만 회전하기 / 4카운트: 왼발을 옆으로 딛기']) {
+    const candidates = changed(0, { signatureMove });
+    assert.throws(() => validateDanceIdeas(candidates), { code: 'PLAN_INVALID' });
+    await assert.rejects(createDanceIdeas(JOB, async () => response(candidates)), error => {
+      assert.equal(error.code, 'PLAN_INVALID'); assert.equal(error.planFailure.validationRule, 'SIGNATURE_MOTION'); return clean(error);
+    });
+  }
+  // Holding feet while only the arms move cannot provide lower-body evidence.
+  const armsOnly = changed(0, { signatureMove: '4카운트: 발을 고정한 채 손목 털기 / 4카운트: 손을 앞으로 뻗기' });
+  assert.throws(() => validateDanceIdeas(armsOnly), { code: 'PLAN_INVALID' });
+  await assert.rejects(createDanceIdeas(JOB, async () => response(armsOnly)), error => {
+    assert.equal(error.planFailure.validationRule, 'SIGNATURE_LOWER_BODY'); return clean(error);
+  });
 });
 
 test('bound selection facts allow paraphrased or dropped source labels in creative prose', async () => {
