@@ -4,6 +4,35 @@ import { DANCE_PLAN_TIMEOUT_MS, DanceVideoError } from './videoService';
 import type { DanceCreativeDirection } from './creativeDirection';
 
 const CLEAN_VISUAL = 'Silent visual only. No sound, speech, singing, text, typography, captions, logos or watermarks. Vertical 9:16 readable full-body movement in the chosen visual style; grounded movement and anatomy appropriate to the performer species or design.';
+function planResponseFormat(hasDirection: boolean) {
+  const text = (maxLength: number, description: string) => ({ type: 'string', minLength: 1, maxLength, description });
+  const object = (properties: Record<string, unknown>) => ({ type: 'object', additionalProperties: false, required: Object.keys(properties), properties });
+  const properties = {
+    title: text(100, 'Short natural Korean title.'),
+    summary: text(600, 'Natural Korean explanation of the selected situation and dance.'),
+    identity: text(600, 'English description preserving the complete original cast.'),
+    imagePrompt: text(1600, 'English prompt for the opening full-body frame in the selected setting.'),
+    clips: { type: 'array', minItems: 2, maxItems: 2,
+      description: 'Exactly two English prompts, in order: the first15seconds and the continuing second15seconds.',
+      items: text(hasDirection ? 1200 : 2400, 'English scene direction for one15-second clip.') },
+  };
+  const choreography = object({
+    hookName: text(60, 'Natural Korean name for the repeatable8-count hook.'),
+    steps: { type: 'array', minItems: 2, maxItems: 4,
+      description: 'Distinct physical movements whose count values sum to exactly8; at least one moves feet, knees, pelvis or torso.',
+      items: object({ count: { type: 'integer', minimum: 1, maximum: 7 },
+        action: text(160, 'Natural Korean description of the actual physical movement.'),
+        focus: { type: 'string', enum: ['arms', 'feet', 'body', 'combined'] } }) },
+    segments: { type: 'array', minItems: 3, maxItems: 8,
+      description: 'Contiguous0–30second timeline without gaps or overlaps, repeating the same hook in both15-second halves.',
+      items: object({ startSeconds: { type: 'number', minimum: 0, maximum: 30 },
+        endSeconds: { type: 'number', minimum: 0, maximum: 30 },
+        action: text(180, 'Natural Korean description of this timeline segment.'), repeatHook: { type: 'boolean' } }) },
+    firstPose: text(160, 'Natural Korean opening pose.'), endPose: text(160, 'Natural Korean final pose.'),
+  });
+  return { type: 'json_schema', json_schema: { name: hasDirection ? 'dance_plan_v2' : 'dance_plan_v1', strict: true,
+    schema: object(hasDirection ? { ...properties, version: { type: 'integer', enum: [2] }, choreography } : properties) } };
+}
 function boundedText(value: unknown, label: string, limit: number) {
   if (typeof value !== 'string' || !value.trim() || value.trim().length > limit || /data:|base64|[\u0000-\u0008\u000b\u000c\u000e-\u001f]/i.test(value)) throw new DanceVideoError(`${label} 형식을 확인하지 못했습니다.`, 'PLAN_INVALID');
   return value.trim();
@@ -113,7 +142,7 @@ The supplied BPM/onsets are approximate energy-analysis cues, not verified music
     response = await fetchImpl('https://api.openai.com/v1/chat/completions', {
       method: 'POST', redirect: 'error', signal,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
-      body: JSON.stringify({ model: 'gpt-5.6-sol', reasoning_effort: 'low', max_completion_tokens: 4096, response_format: { type: 'json_object' },
+      body: JSON.stringify({ model: 'gpt-5.6-sol', reasoning_effort: 'low', max_completion_tokens: 4096, response_format: planResponseFormat(Boolean(job.direction)),
         messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify({ visualBrief: job.visualBrief, selectedDurationSeconds: 30, estimatedBpm: job.bpm || null, onsetSeconds: (job.onsetSeconds || []).slice(0, 100), ...(rhythm ? { rhythm } : {}) }) }] }),
     });
   } catch (error) { throw transportFailure(error, 'request'); }
@@ -126,13 +155,17 @@ The supplied BPM/onsets are approximate energy-analysis cues, not verified music
   }
   try {
     const result = JSON.parse((await readPetBoundedBody(response, 64 * 1024)).toString('utf8'));
-    const content = result?.choices?.[0]?.message?.content;
+    const choice = result?.choices?.[0];
+    if (choice?.message?.refusal) throw new DanceVideoError('영상 기획 모델이 해당 요청을 완료하지 못했습니다. 저장된 30초 음원은 유지됩니다.', 'PLAN_RESPONSE');
+    if (choice?.finish_reason === 'length') throw new DanceVideoError('영상 기획 응답이 출력 길이 한도에 도달했습니다. 저장된 30초 음원은 유지됩니다. 자동으로 다시 요청하지 않습니다.', 'PLAN_LENGTH');
+    if (choice?.finish_reason !== 'stop') throw new DanceVideoError('완료된 영상 기획 응답을 확인하지 못했습니다. 저장된 30초 음원은 유지됩니다.', 'PLAN_RESPONSE');
+    const content = choice?.message?.content;
     if (typeof content !== 'string') throw new Error('Missing content');
     return validateDancePlan(JSON.parse(content), job.direction);
   } catch (error) {
     const name = error && typeof error === 'object' && 'name' in error ? error.name : '';
     if (signal.aborted || name === 'TimeoutError' || name === 'AbortError' || name === 'TypeError') throw transportFailure(error, 'response');
-    if (error instanceof DanceVideoError && (error.code === 'PLAN_INVALID' || error.code === 'PLAN_LENGTH')) {
+    if (error instanceof DanceVideoError && (error.code === 'PLAN_INVALID' || error.code === 'PLAN_LENGTH' || error.code === 'PLAN_RESPONSE')) {
       throw new DanceVideoError(error.message, error.code, 502, diagnostics(error.code, 'response', 'response'));
     }
     throw new DanceVideoError('영상 기획 응답을 확인하지 못했습니다. 저장된 30초 음원은 유지됩니다.', 'PLAN_RESPONSE', 502,

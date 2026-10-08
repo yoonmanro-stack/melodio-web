@@ -5,6 +5,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const ts = require('typescript');
+const Ajv = require('ajv');
 const root = path.resolve(__dirname, '..');
 function loader(env = { OPENAI_API_KEY: 'offline-fixture-key' }) {
   const cache = new Map();
@@ -27,6 +28,14 @@ const USER = 'a0000000-0000-4000-8000-000000000001';
 const TRACK = 'a0000000-0000-4000-8000-000000000002';
 const JOB = 'a0000000-0000-4000-8000-000000000003';
 const PLAN = { title: '새 춤', summary: '새 무대', identity: 'original performer', imagePrompt: 'opening pose', clips: ['first motion', 'second motion'] };
+const DIRECTION = { version: 2, concreteEn: 'one original adult dancer in a clear studio with grounded steps' };
+const V2_PLAN = { ...PLAN, version: 2, choreography: {
+  hookName: '좌우 스텝', firstPose: '두 발을 바닥에 딛고 선다.', endPose: '몸통을 세워 멈춘다.',
+  steps: [{ count: 4, action: '발을 좌우로 딛는다.', focus: 'feet' }, { count: 4, action: '무릎을 굽혀 몸통을 튕긴다.', focus: 'body' }],
+  segments: [{ startSeconds: 0, endSeconds: 10, action: '좌우 스텝 훅을 반복한다.', repeatHook: true },
+    { startSeconds: 10, endSeconds: 20, action: '같은 훅의 방향을 바꾼다.', repeatHook: true },
+    { startSeconds: 20, endSeconds: 30, action: '같은 훅을 반복하고 멈춘다.', repeatHook: true }],
+} };
 const snapshot = { audioUrl: 'https://storage.test/storage/v1/object/public/melodio-assets/dance_challenge/saved.wav', audioHash: 'a'.repeat(64), sourceAudioHash: 'b'.repeat(64), sourceDurationSeconds: 180, bpm: 138, onsetSeconds: [0.5] };
 const input = { visualBrief: 'private creative brief', bpm: 138, onsetSeconds: [0.5] };
 const badError = name => Object.assign(new Error('private provider transport detail'), { name });
@@ -80,7 +89,7 @@ test('body timeout and connection failures are separated from malformed output',
       assert.equal(error.code, 'PLAN_RESPONSE'); assert.equal(error.planFailure.kind, 'response'); return clean(error);
     });
   }
-  await assert.rejects(createDancePlan(input, async () => Response.json({ choices: [{ message: { content: '{}' } }] })), error => {
+  await assert.rejects(createDancePlan(input, async () => Response.json({ choices: [{ finish_reason: 'stop', message: { content: '{}' } }] })), error => {
     assert.equal(error.code, 'PLAN_INVALID'); assert.equal(error.planFailure.kind, 'response'); return clean(error);
   });
 });
@@ -90,9 +99,80 @@ test('valid plan succeeds in one request without changing model or creative inpu
     calls++; const request = JSON.parse(options.body);
     assert.equal(request.model, 'gpt-5.6-sol'); assert.equal(request.reasoning_effort, 'low');
     assert.equal(JSON.parse(request.messages[1].content).visualBrief, input.visualBrief);
-    return Response.json({ choices: [{ message: { content: JSON.stringify(PLAN) } }] });
+    const format = request.response_format;
+    assert.equal(format.type, 'json_schema'); assert.equal(format.json_schema.strict, true); assert.equal(format.json_schema.name, 'dance_plan_v1');
+    assert.equal(format.json_schema.schema.additionalProperties, false);
+    assert.deepEqual(format.json_schema.schema.required, ['title', 'summary', 'identity', 'imagePrompt', 'clips']);
+    assert.equal(new Ajv().validate(format.json_schema.schema, PLAN), true, 'legacy output needs no version or choreography');
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(PLAN) } }] });
   });
   assert.equal(calls, 1); assert.equal(plan.title, PLAN.title);
+});
+test('v2 request constrains all objects and exactly two clips while retaining8count semantic validation', async () => {
+  let calls = 0; let schema;
+  const plan = await createDancePlan({ ...input, direction: DIRECTION }, async (_url, options) => {
+    calls++; const request = JSON.parse(options.body);
+    assert.equal(request.model, 'gpt-5.6-sol'); assert.equal(request.reasoning_effort, 'low'); assert.equal(request.max_completion_tokens, 4096);
+    assert.equal(request.response_format.type, 'json_schema'); assert.equal(request.response_format.json_schema.strict, true);
+    assert.equal(request.response_format.json_schema.name, 'dance_plan_v2'); schema = request.response_format.json_schema.schema;
+    assert.deepEqual(schema.required, ['title', 'summary', 'identity', 'imagePrompt', 'clips', 'version', 'choreography']);
+    function checkObjects(node) {
+      if (node.type === 'object') {
+        assert.equal(node.additionalProperties, false);
+        assert.deepEqual(node.required, Object.keys(node.properties));
+        Object.values(node.properties).forEach(checkObjects);
+      }
+      if (node.items) checkObjects(node.items);
+    }
+    checkObjects(schema);
+    assert.equal(schema.properties.clips.minItems, 2); assert.equal(schema.properties.clips.maxItems, 2);
+    assert.deepEqual(schema.properties.version.enum, [2]);
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(V2_PLAN) } }] });
+  });
+  assert.equal(calls, 1); assert.equal(plan.version, 2); assert.equal(plan.clips.length, 2);
+  assert.equal(plan.choreography.steps.reduce((sum, step) => sum + step.count, 0), 8);
+  const validate = new Ajv({ allErrors: true }).compile(schema);
+  assert.equal(validate(V2_PLAN), true);
+  for (const malformed of [{ ...V2_PLAN, clips: undefined }, { ...V2_PLAN, clips: 'two scenes' }, { ...V2_PLAN, clips: ['one'] },
+    { ...V2_PLAN, clips: ['one', 'two', 'three'] }, { ...V2_PLAN, version: 1 }, { ...V2_PLAN, extra: 'hidden' },
+    { ...V2_PLAN, choreography: { ...V2_PLAN.choreography, steps: [{ count: 8, action: '발을 딛는다.', focus: 'feet' }] } }]) {
+    assert.equal(validate(malformed), false, 'strict schema rejects malformed provider shape');
+  }
+  const notEight = { ...V2_PLAN, choreography: { ...V2_PLAN.choreography, steps: V2_PLAN.choreography.steps.map(step => ({ ...step, count: 3 })) } };
+  assert.equal(validate(notEight), true, 'cross-item count arithmetic remains a local semantic check');
+  let invalidCalls = 0;
+  await assert.rejects(createDancePlan({ ...input, direction: DIRECTION }, async () => {
+    invalidCalls++; return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(notEight) } }] });
+  }), error => { assert.equal(error.code, 'PLAN_INVALID'); return clean(error); });
+  assert.equal(invalidCalls, 1);
+});
+test('malformed clips are held after one response without inventing replacement scenes', async () => {
+  for (const clips of [undefined, {}, ['one'], ['one', 'two', 'three']]) {
+    let calls = 0;
+    await assert.rejects(createDancePlan({ ...input, direction: DIRECTION }, async () => {
+      calls++; return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ ...V2_PLAN, clips }) } }] });
+    }), error => { assert.equal(error.code, 'PLAN_INVALID'); assert.equal(error.planFailure.phase, 'response'); return clean(error); });
+    assert.equal(calls, 1);
+  }
+});
+test('refusal and incomplete completion reasons reject before parsing content without retries or payload leakage', async () => {
+  const cases = [
+    { finish_reason: 'stop', message: { refusal: 'secret-payload', content: '{private provider' }, code: 'PLAN_RESPONSE' },
+    { finish_reason: 'length', message: { content: '{private provider' }, code: 'PLAN_LENGTH' },
+    { finish_reason: 'length', message: { content: JSON.stringify(PLAN) }, code: 'PLAN_LENGTH' },
+    ...['content_filter', 'tool_calls', undefined, 'unknown'].map(finish_reason => ({ finish_reason,
+      message: { content: JSON.stringify(PLAN) }, code: 'PLAN_RESPONSE' })),
+  ];
+  for (const { code, ...choice } of cases) {
+    let calls = 0;
+    await assert.rejects(createDancePlan(input, async () => {
+      calls++; return Response.json({ choices: [choice] }, { headers: { 'x-request-id': 'req_incomplete' } });
+    }), error => {
+      assert.equal(error.code, code); assert.equal(error.planFailure.code, code); assert.equal(error.planFailure.kind, 'response');
+      assert.equal(error.planFailure.providerRequestId, 'req_incomplete'); return clean(error);
+    });
+    assert.equal(calls, 1);
+  }
 });
 function fixture(options = {}) {
   let time = 1000; let planCalls = 0; let snapshotCalls = 0; let reuseCalls = 0;

@@ -131,7 +131,7 @@ test('planner accepts AI selection and preserves a custom situation with selecte
       assert.deepEqual(JSON.parse(body.messages[1].content), { visualBrief: brief, selectedDurationSeconds: 30, estimatedBpm: 138, onsetSeconds: [0.4, 0.8] });
       assert.match(body.messages[0].content, /If visualBrief is empty, invent a concrete original situation/);
       assert.match(body.messages[0].content, /preserve the user's requested situation, performer, place, actions and visual style/);
-      return new Response(JSON.stringify({ choices: [{ message: { content: JSON.stringify(PLAN) } }] }));
+      return new Response(JSON.stringify({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(PLAN) } }] }));
     });
     assert.equal(calls, 1); assert.equal(result.summary, PLAN.summary); assert.equal(result.clips.length, 2);
   }
