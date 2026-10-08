@@ -34,7 +34,11 @@ const legacy = load('src/lib/video/legacyShortExport.ts');
 const media = load('src/lib/video/petMedia.ts', { './petPipeline': { PetPipelineError: FixtureMediaError } });
 const rhythm = load('src/lib/video/audioRhythm.ts');
 const preset = load('src/lib/dance/preset.ts');
-const service = load('src/lib/dance/videoService.ts', { './preset': preset });
+const creativeDirection = load('src/lib/dance/creativeDirection.ts');
+const musicProfiles = load('src/lib/dance/musicProfiles.ts', { './preset': preset });
+const service = load('src/lib/dance/videoService.ts', { './preset': preset, './creativeDirection': creativeDirection, './musicProfiles': musicProfiles,
+  './ideas': { validateDanceIdeas: () => { throw Error('IDEAS_FORBIDDEN_IN_MEDIA_TEST'); } },
+});
 function renderer(download = async () => { throw Error('NETWORK_FORBIDDEN'); }) {
   return load('src/lib/dance/renderVideo.ts', {
     '../video/petMedia': { ...media, downloadPetMedia: download },
@@ -58,6 +62,23 @@ test('range, duration and stored-media guards reject unsafe or incomplete inputs
     assert.throws(() => helper.assertDanceStoredMedia(url, 'video'), { code: 'MEDIA_STORAGE' });
   }
   assert.throws(() => helper.assertDanceStoredMedia(undefined, 'audio'), { code: 'MISSING_MEDIA' });
+});
+
+test('unsupported output dimensions are rejected before probing clips or launching FFmpeg', async () => {
+  const helper = renderer();
+  for (const dimensions of [{ width: 720, height: 854 }, { width: 480, height: 1280 }, { width: 1080, height: 1920 }, { width: 0, height: 0 }, { width: NaN, height: 1280 }]) {
+    await assert.rejects(helper.concatDanceClips('FFMPEG_FORBIDDEN', ['missing-c1.mp4', 'missing-c2.mp4'], 'missing-output.mp4', dimensions), { code: 'VIDEO_DIMENSIONS' });
+  }
+});
+
+test('preview rejects missing stored native clips and invalid master hashes before downloads', async () => {
+  const helper = renderer();
+  const job = { audioUrl: prefix + 'master.wav', audioHash: 'a'.repeat(64), previewClipUrl: prefix + 'native-preview.mp4' };
+  await assert.rejects(helper.renderDancePreview({ ...job, previewClipUrl: undefined, previewSourceUrl: 'https://files.x.ai/provider.mp4' }, async () => { throw Error('UPLOAD_FORBIDDEN'); }), { code: 'MISSING_MEDIA' });
+  await assert.rejects(helper.renderDancePreview({ ...job, previewClipUrl: 'https://files.x.ai/provider.mp4' }, async () => { throw Error('UPLOAD_FORBIDDEN'); }), { code: 'MEDIA_STORAGE' });
+  for (const audioHash of [undefined, '', 'bad-hash', 'A'.repeat(64)]) {
+    await assert.rejects(helper.renderDancePreview({ ...job, audioHash }, async () => { throw Error('UPLOAD_FORBIDDEN'); }), { code: 'AUDIO_HASH' });
+  }
 });
 
 const realMedia = { skip: !ffmpeg || !syncFs.existsSync(ffmpeg) };
@@ -160,5 +181,116 @@ test('real final frame and 2x15s render preserve ordered visuals and snapshot au
     await run(ffmpeg, ['-v', 'error', '-y', '-i', file('c1.mp4'), '-t', '14', '-an', '-c:v', 'copy', file('short.mp4')], { timeout: 20_000, maxBuffer: 128 * 1024 });
     await assert.rejects(helper.concatDanceClips(ffmpeg, [file('short.mp4'), file('c2.mp4')], file('invalid.mp4')), { code: 'CLIP_DURATION' });
     assert.equal(syncFs.existsSync(file('invalid.mp4')), false);
+  } finally { await fs.rm(temp, { recursive: true, force: true }); }
+});
+
+test('real 720p dance output has a 720x1280 canvas, 900 frames and a 30s selected audio track', realMedia, async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'dance-720p-test-'));
+  const file = name => path.join(temp, name);
+  try {
+    for (const [name, color, size, fps] of [['c1.mp4', 'red', '96x170', 24], ['c2.mp4', 'green', '160x284', 30]]) {
+      await run(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', `color=c=${color}:s=${size}:r=${fps}:d=15`, '-an', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', file(name)], { timeout: 20_000, maxBuffer: 128 * 1024 });
+    }
+    await run(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'sine=frequency=440:sample_rate=48000:duration=30', '-ac', '2', '-c:a', 'pcm_s16le', file('audio.wav')], { timeout: 20_000, maxBuffer: 128 * 1024 });
+    const assets = new Map(await Promise.all(['c1.mp4', 'c2.mp4', 'audio.wav'].map(async name => [prefix + name, await fs.readFile(file(name))])));
+    const helper = renderer(async url => {
+      assert.ok(assets.has(url), 'only injected stored fixtures may be downloaded');
+      return { buffer: assets.get(url), contentType: url.endsWith('.wav') ? 'audio/wav' : 'video/mp4' };
+    });
+    const job = { id: 'job', startSeconds: 0, audioUrl: prefix + 'audio.wav', audioHash: hash(assets.get(prefix + 'audio.wav')),
+      clip1Url: prefix + 'c1.mp4', clip2Url: prefix + 'c2.mp4', videoSpec: { model: 'grok-imagine-video', resolution: '720p', width: 720, height: 1280 } };
+    let uploaded;
+    const finalUrl = await helper.renderDanceVideo(job, async (_job, name, buffer, contentType) => {
+      assert.equal(contentType, 'video/mp4'); uploaded = buffer; return prefix + name;
+    });
+    assert.match(finalUrl, /final-captionless-[a-f0-9]{16}\.mp4$/);
+    await fs.writeFile(file('final.mp4'), uploaded);
+    assert.equal(await legacy.validateLegacyShortOutput(ffmpeg, file('final.mp4')), 30);
+    const checksums = (await run(ffmpeg, ['-v', 'error', '-i', file('final.mp4'), '-map', '0:v:0', '-f', 'framecrc', '-'], { timeout: 30_000, maxBuffer: 128 * 1024 })).stdout;
+    assert.match(checksums, /#dimensions 0: 720x1280/);
+    assert.match(checksums, /#tb 0: 1\/30/);
+    const frames = [...checksums.matchAll(/^0,\s*(-?\d+),\s*(-?\d+),\s*(\d+),/gm)];
+    assert.equal(frames.length, 900);
+    assert.equal(Number(frames[0][2]), 0);
+    assert.equal(Number(frames.at(-1)[2]) + Number(frames.at(-1)[3]), 900, 'decoded frame timestamps cover exactly 30s');
+    for (const [second, color] of [[1, 'red'], [16, 'green']]) {
+      const rgb = (await run(ffmpeg, ['-v', 'error', '-i', file('final.mp4'), '-ss', String(second), '-vf', 'crop=2:2:358:638', '-frames:v', '1', '-pix_fmt', 'rgb24', '-f', 'rawvideo', '-'], { encoding: 'buffer', timeout: 20_000, maxBuffer: 1024 })).stdout;
+      assert.ok(color === 'red' ? rgb[0] > 180 && rgb[1] < 50 : rgb[1] > 90 && rgb[0] < 50, `720p clip order at ${second}s`);
+    }
+  } finally { await fs.rm(temp, { recursive: true, force: true }); }
+});
+
+test('real preview is 5s at 720x1280 with the first master audio seconds and no native clip audio', realMedia, async () => {
+  const temp = await fs.mkdtemp(path.join(os.tmpdir(), 'dance-preview-test-'));
+  const file = name => path.join(temp, name);
+  try {
+    // A chirp distinguishes the first five seconds from any later master segment.
+    await run(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'aevalsrc=0.3*sin(2*PI*(200+10*t)*t):s=48000:d=30', '-ac', '2', '-c:a', 'pcm_s16le', file('master.wav')], { timeout: 20_000, maxBuffer: 128 * 1024 });
+    await run(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', 'color=c=blue:s=96x170:r=24:d=5', '-f', 'lavfi', '-i', 'sine=frequency=1000:sample_rate=48000:duration=5', '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', file('native-preview.mp4')], { timeout: 20_000, maxBuffer: 128 * 1024 });
+    const master = await fs.readFile(file('master.wav')), native = await fs.readFile(file('native-preview.mp4'));
+    const masterHash = hash(master);
+    const masterUrl = prefix + 'master.wav', nativeUrl = prefix + 'native-preview.mp4';
+    const assets = new Map([[masterUrl, master], [nativeUrl, native]]), downloads = [], uploads = [];
+    const helper = renderer(async url => {
+      assert.ok(assets.has(url), 'preview rendering uses only stored master and native clip fixtures');
+      downloads.push(url); return { buffer: assets.get(url), contentType: url.endsWith('.wav') ? 'audio/wav' : 'video/mp4' };
+    });
+    const job = { id: 'job', startSeconds: 0, audioUrl: masterUrl, audioHash: masterHash,
+      previewSourceUrl: 'https://files.x.ai/offline-provider-preview.mp4', previewClipUrl: nativeUrl,
+      videoSpec: { model: 'grok-imagine-video', resolution: '720p', width: 720, height: 1280 } };
+    const savedJob = structuredClone(job);
+    const previewUrl = await helper.renderDancePreview(job, async (_job, name, buffer, contentType) => {
+      assert.equal(contentType, 'video/mp4'); uploads.push(name); await fs.writeFile(file('preview.mp4'), buffer); return prefix + name;
+    });
+    assert.match(previewUrl, /preview-5s-[a-f0-9]{16}\.mp4$/);
+    assert.equal(uploads.length, 1);
+    assert.equal(previewUrl, prefix + uploads[0]);
+    assert.deepEqual(downloads.sort(), [masterUrl, nativeUrl].sort());
+    assert.equal(hash(master), masterHash, 'in-memory 30s master bytes remain unchanged');
+    assert.equal(hash(await fs.readFile(file('master.wav'))), masterHash, 'saved 30s master bytes remain unchanged');
+    assert.equal(await legacy.probeLegacyShortStream(ffmpeg, file('master.wav'), 'audio'), 30);
+    assert.deepEqual(job, savedJob, 'rendering does not alter the master selection or job fields');
+    assert.equal(await legacy.probeLegacyShortStream(ffmpeg, file('preview.mp4'), 'video'), 5);
+    const streams = (await run(ffmpeg, ['-hide_banner', '-i', file('preview.mp4'), '-t', '0', '-f', 'null', '-'], { timeout: 20_000, maxBuffer: 16 * 1024 })).stderr;
+    assert.match(streams, /Video: h264\b/);
+    assert.match(streams, /Audio: aac\b[^\n]*48000 Hz, stereo/);
+    const checksums = (await run(ffmpeg, ['-v', 'error', '-i', file('preview.mp4'), '-map', '0:v:0', '-f', 'framecrc', '-'], { timeout: 30_000, maxBuffer: 128 * 1024 })).stdout;
+    assert.match(checksums, /#dimensions 0: 720x1280/);
+    assert.match(checksums, /#tb 0: 1\/30/);
+    const frames = [...checksums.matchAll(/^0,\s*(-?\d+),\s*(-?\d+),\s*(\d+),/gm)];
+    assert.equal(frames.length, 150);
+    assert.equal(Number(frames[0][2]), 0);
+    assert.equal(Number(frames.at(-1)[2]) + Number(frames.at(-1)[3]), 150, 'decoded preview frames cover exactly five seconds');
+    const source = await decode(file('master.wav')), output = await decode(file('preview.mp4'));
+    const expectedBytes = 5 * 48000 * 4;
+    assert.ok(output.length >= expectedBytes && output.length <= 5.05 * 48000 * 4, 'preview audio contains only five seconds plus bounded AAC frame padding');
+    let error = 0, energy = 0;
+    for (let offset = 0; offset < expectedBytes; offset += 4) {
+      const expected = source.readFloatLE(offset), actual = output.readFloatLE(offset);
+      error += (expected - actual) ** 2; energy += expected ** 2;
+    }
+    assert.ok(error / energy < 0.005, 'AAC preview matches the first five master seconds and excludes the distinct native clip audio');
+
+    const forbiddenUpload = async () => { throw Error('INVALID_PREVIEW_UPLOAD_FORBIDDEN'); };
+    const alteredMaster = Buffer.from(master); alteredMaster[alteredMaster.length - 1] ^= 1;
+    assets.set(masterUrl, alteredMaster);
+    const hashGuardDownloads = downloads.length;
+    await assert.rejects(helper.renderDancePreview(job, forbiddenUpload), { code: 'AUDIO_HASH' });
+    assert.deepEqual(downloads.slice(hashGuardDownloads), [masterUrl], 'changed master is rejected before downloading native motion');
+    assets.set(masterUrl, master);
+
+    await run(ffmpeg, ['-v', 'error', '-y', '-i', file('master.wav'), '-t', '29', '-c:a', 'pcm_s16le', file('short-master.wav')], { timeout: 20_000, maxBuffer: 128 * 1024 });
+    const shortMaster = await fs.readFile(file('short-master.wav')); assets.set(masterUrl, shortMaster);
+    const durationGuardDownloads = downloads.length;
+    await assert.rejects(helper.renderDancePreview({ ...job, audioHash: hash(shortMaster) }, forbiddenUpload), { code: 'AUDIO_DURATION' });
+    assert.deepEqual(downloads.slice(durationGuardDownloads), [masterUrl], 'short master is rejected before downloading native motion');
+    assets.set(masterUrl, master);
+
+    await run(ffmpeg, ['-v', 'error', '-y', '-i', file('native-preview.mp4'), '-t', '4', '-an', '-c:v', 'copy', file('short-native.mp4')], { timeout: 20_000, maxBuffer: 128 * 1024 });
+    assets.set(nativeUrl, await fs.readFile(file('short-native.mp4')));
+    await assert.rejects(helper.renderDancePreview(job, forbiddenUpload), { code: 'PREVIEW_DURATION' });
+    assert.equal(uploads.length, 1, 'only the valid five-second preview was uploaded');
+    assert.equal(hash(master), masterHash);
+    assert.equal(hash(await fs.readFile(file('master.wav'))), masterHash);
   } finally { await fs.rm(temp, { recursive: true, force: true }); }
 });

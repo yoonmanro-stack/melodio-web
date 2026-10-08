@@ -96,7 +96,8 @@ test('valid plan succeeds in one request without changing model or creative inpu
 });
 function fixture(options = {}) {
   let time = 1000; let planCalls = 0; let snapshotCalls = 0; let reuseCalls = 0;
-  const meta = { workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, isPublic: false };
+  const meta = { workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, isPublic: false, isInstrumental: true,
+    dancePreset: { id: 'dance-hook-instrumental-v1', bpm: 138 } };
   let row = { id: TRACK, userId: USER, title: '원곡', isPublic: false, createdAt: new Date(time).toISOString(), status: 'completed', audioUrl: 'https://storage.test/full.mp3', metadata: meta, licenseHash: JSON.stringify(meta) };
   const writes = [];
   const store = {

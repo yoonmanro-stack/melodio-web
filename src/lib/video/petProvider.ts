@@ -3,10 +3,17 @@ import { assertPetMediaUrl, readPetBoundedBody } from './petMedia';
 
 // Confirmed by the live classic-model validation response on 2026-09-15.
 export const PET_XAI_VIDEO_PROMPT_MAX_LENGTH = 4096;
+export const PET_XAI_VIDEO_MODELS = ['grok-imagine-video', 'grok-imagine-video-1.5', 'grok-imagine-video-1.5-lite'] as const;
+export type PetXaiVideoModel = typeof PET_XAI_VIDEO_MODELS[number];
 
 // REST shapes verified 2026-09-14: docs.x.ai/developers/model-capabilities/images/editing
-// and /video/generation. The pilot deliberately keeps the classic model and exact approved prompts.
-export function createPetXaiProvider(fetchImpl: typeof fetch = fetch) {
+// and /video/generation. Optional video models use the same image-to-video REST shape
+// (rechecked 2026-10-08); existing pet calls keep the classic model and 480p default.
+export function createPetXaiProvider(fetchImpl: typeof fetch = fetch, options: { model?: PetXaiVideoModel; resolution?: '480p' | '720p' } = {}) {
+  const model = options.model === undefined ? 'grok-imagine-video' : options.model;
+  const resolution = options.resolution === undefined ? '480p' : options.resolution;
+  if (!PET_XAI_VIDEO_MODELS.includes(model)) throw new PetPipelineError('영상 모델 설정이 올바르지 않습니다.', 'PROVIDER_CONFIG', 503);
+  if (!['480p', '720p'].includes(resolution)) throw new PetPipelineError('영상 해상도 설정이 올바르지 않습니다.', 'PROVIDER_CONFIG', 503);
   const apiKey = process.env.XAI_API_KEY?.trim();
   const base = (process.env.XAI_API_BASE || 'https://api.x.ai/v1').replace(/\/$/, '');
   if (!apiKey) throw new PetPipelineError('영상 생성 API 설정이 필요합니다.', 'PROVIDER_CONFIG', 503);
@@ -53,7 +60,7 @@ export function createPetXaiProvider(fetchImpl: typeof fetch = fetch) {
       }
       assertPetMediaUrl(keyframeUrl, 'image');
       const data = await request('/videos/generations', {
-        model: 'grok-imagine-video', prompt, duration, aspect_ratio: '9:16', resolution: '480p', image: { url: keyframeUrl },
+        model, prompt, duration, aspect_ratio: '9:16', resolution, image: { url: keyframeUrl },
       });
       if (typeof data.request_id !== 'string' || !/^[a-zA-Z0-9_-]{1,150}$/.test(data.request_id)) throw new PetPipelineError('영상 요청 ID를 확인하지 못했습니다. 중복 결제를 막기 위해 보류합니다.', 'UNKNOWN_SUBMISSION');
       return { requestId: data.request_id };

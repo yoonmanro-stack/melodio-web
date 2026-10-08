@@ -1,9 +1,10 @@
 import { DANCE_CATEGORY_ID, DANCE_PRESET, DANCE_WORKFLOW, isDanceAudioSelection, isDanceMetadata, type DanceTrack } from './preset';
+import { getDanceMusicSpec, resolveDanceMusicSpec, type DanceVocalPreference } from './musicProfiles';
 
 export class DanceMusicError extends Error {
   constructor(message: string, public code = 'INVALID_REQUEST', public status = 400) { super(message); }
 }
-export type DanceMusicInput = { requestId: string; isPublic: boolean };
+export type DanceMusicInput = { requestId: string; isPublic: boolean; musicProfileId: string; vocalPreference: DanceVocalPreference };
 export type DanceMusicRow = {
   id: string; user_id: string; title: string; status: string; is_public: boolean;
   created_at: string; audio_url: string | null; source_audio_url: string | null; license_hash: string;
@@ -22,10 +23,14 @@ export function assertDanceMusicId(value: unknown): asserts value is string {
 export function danceMusicInput(body: unknown): DanceMusicInput {
   if (!body || typeof body !== 'object' || Array.isArray(body)) throw new DanceMusicError('올바른 음악 요청이 필요합니다.');
   const input = body as Record<string, unknown>;
-  if (Object.keys(input).some(key => !['requestId', 'isPublic'].includes(key))) throw new DanceMusicError('음악 스타일은 고정 프리셋으로만 생성할 수 있습니다.');
+  if (Object.keys(input).some(key => !['requestId', 'isPublic', 'musicProfileId', 'vocalPreference'].includes(key))) throw new DanceMusicError('목록의 댄스 음악과 보컬 옵션만 선택할 수 있습니다.');
   assertDanceMusicId(input.requestId);
   if (typeof input.isPublic !== 'boolean') throw new DanceMusicError('공개 여부를 선택해 주세요.');
-  return { requestId: input.requestId.toLowerCase(), isPublic: input.isPublic };
+  let spec;
+  try { spec = resolveDanceMusicSpec(input.musicProfileId, input.vocalPreference, input.requestId.toLowerCase()); }
+  catch (error) { throw new DanceMusicError(error instanceof Error ? error.message : '음악 선택을 확인해 주세요.'); }
+  return { requestId: input.requestId.toLowerCase(), isPublic: input.isPublic, musicProfileId: spec.id,
+    vocalPreference: (input.vocalPreference === undefined ? 'recommended' : input.vocalPreference) as DanceVocalPreference };
 }
 export function musicMetadata(row: DanceMusicRow): Record<string, unknown> {
   try { const value = JSON.parse(row.license_hash); return isDanceMetadata(value) ? value : {}; } catch { return {}; }
@@ -38,7 +43,7 @@ export function isActiveDanceMusic(row: DanceMusicRow) {
   const meta = musicMetadata(row);
   return isDanceMetadata(meta) && (row.status === 'generating' || submissionState(meta) === 'ambiguous');
 }
-export function toDanceTrack(row: DanceMusicRow, storageOrigin: string, now = Date.now()): DanceTrack {
+export function toDanceTrack(row: DanceMusicRow, storageOrigin: string, now = Date.now()): DanceTrack & { musicProfileId?: string; musicLabel?: string; instrumental?: boolean } {
   const meta = musicMetadata(row);
   const state = submissionState(meta);
   const pendingTooLong = row.status === 'generating' && !row.source_audio_url
@@ -67,9 +72,11 @@ export function toDanceTrack(row: DanceMusicRow, storageOrigin: string, now = Da
   }
   const variant = meta.danceVariant as Record<string, unknown> | undefined;
   const rootTrackId = variant && typeof variant.rootTrackId === 'string' && UUID.test(variant.rootTrackId) ? variant.rootTrackId : undefined;
+  const music = getDanceMusicSpec(meta);
   return {
     id: row.id, title: row.title.replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 200), status,
     audioUrl, durationSeconds, createdAt: row.created_at, isPublic: row.is_public,
+    ...(music ? { musicProfileId: music.id, musicLabel: music.label, instrumental: music.instrumental } : {}),
     ...(savedClip ? { savedClip, reused: true, ...(rootTrackId ? { rootTrackId } : {}) } : {}),
     ...(typeof meta.danceRequestId === 'string' && UUID.test(meta.danceRequestId) ? { requestId: meta.danceRequestId } : {}),
     ...(status === 'attention' ? { error: '음악 제출 결과 확인이 필요합니다. 중복 생성을 막기 위해 다시 제출하지 않았습니다.' }
@@ -79,7 +86,7 @@ export function toDanceTrack(row: DanceMusicRow, storageOrigin: string, now = Da
 
 export function createDanceMusicService(deps: {
   repository: DanceMusicRepository; storageOrigin: string; now?: () => Date;
-  submit: (options: { style: string; lyrics: string; title: string; instrumental: boolean; model: string; exclude: string; durationSeconds: number }) => Promise<{ taskId: string; model: string }>;
+  submit: (options: { style: string; lyrics: string; title: string; instrumental: boolean; model: string; exclude: string; naturalFullSong: boolean; vocalGender?: 'm' | 'f' }) => Promise<{ taskId: string; model: string }>;
 }) {
   const repository = deps.repository;
   const now = () => deps.now?.() || new Date();
@@ -102,14 +109,15 @@ export function createDanceMusicService(deps: {
       const active = await repository.active(userId);
       if (active) throw new DanceMusicError('진행 중이거나 확인이 필요한 음악 요청이 있습니다. 해당 요청을 먼저 확인해 주세요.', 'ACTIVE_REQUEST', 409);
       const stamp = now().toISOString();
-      const title = `댄스 훅 · ${stamp.slice(0, 10)} · ${input.requestId.slice(0, 6)}`;
+      const spec = resolveDanceMusicSpec(input.musicProfileId, input.vocalPreference, input.requestId);
+      const title = `${spec.label} · ${stamp.slice(0, 10)} · ${input.requestId.slice(0, 6)}`;
       const meta = {
-        workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, presetName: DANCE_PRESET.label,
+        workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, presetName: spec.label,
         sourceMenu: 'dance', danceRequestId: input.requestId,
-        dancePreset: { id: DANCE_PRESET.id, bpm: DANCE_PRESET.bpm },
-        stylePrompt: DANCE_PRESET.style, excludePrompt: DANCE_PRESET.exclude, lyricsPrompt: DANCE_PRESET.arrangement,
-        isInstrumental: true, engine: 'suno_v5', sunoProvider: 'kie', sunoVersion: 'v6', sunoModel: 'V6',
-        durationSeconds: DANCE_PRESET.durationSeconds, bpm: String(DANCE_PRESET.bpm),
+        dancePreset: { id: spec.id, bpm: spec.bpm }, danceMusic: spec, danceVocalPreference: input.vocalPreference,
+        stylePrompt: spec.style, excludePrompt: spec.exclude, lyricsPrompt: spec.lyrics,
+        isInstrumental: spec.instrumental, instrumental: spec.instrumental, engine: 'suno_v5', sunoProvider: 'kie', sunoVersion: 'v6', sunoModel: 'V6',
+        naturalFullSong: true, bpm: String(spec.bpm),
         isPublic: input.isPublic, auto_voice_convert: false, voiceFeatureMode: 'prompt_style_only',
         danceSubmission: { state: 'submitting', requestedAt: stamp },
       };
@@ -124,8 +132,9 @@ export function createDanceMusicService(deps: {
       }
       let acceptedTaskReference: string | undefined;
       try {
-        const result = await deps.submit({ style: DANCE_PRESET.style, lyrics: DANCE_PRESET.arrangement, title,
-          instrumental: true, model: DANCE_PRESET.model, exclude: DANCE_PRESET.exclude, durationSeconds: DANCE_PRESET.durationSeconds });
+        const result = await deps.submit({ style: spec.style, lyrics: spec.lyrics, title,
+          instrumental: spec.instrumental, model: DANCE_PRESET.model, exclude: spec.exclude, naturalFullSong: true,
+          ...(spec.vocalGender ? { vocalGender: spec.vocalGender === 'male' ? 'm' as const : 'f' as const } : {}) });
         if (!result || typeof result.taskId !== 'string' || !/^[a-zA-Z0-9_-]{1,200}$/.test(result.taskId) || result.model !== 'V6') {
           throw new Error('Unconfirmed music submission');
         }

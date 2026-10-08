@@ -27,6 +27,7 @@ function loader(mocks = {}, fakeProcess = { env: {} }) {
 const load = loader();
 const { createDanceMusicService, DanceMusicError, danceMusicInput, isActiveDanceMusic, toDanceTrack } = load('src/lib/dance/music.ts');
 const { DANCE_PRESET, DANCE_WORKFLOW, DANCE_CATEGORY_ID } = load('src/lib/dance/preset.ts');
+const { DANCE_MUSIC_PROFILES, resolveDanceMusicSpec } = load('src/lib/dance/musicProfiles.ts');
 const USER = 'a0000000-0000-4000-8000-000000000001';
 const REQUEST = 'b0000000-0000-4000-8000-000000000001';
 const NEXT = 'b0000000-0000-4000-8000-000000000002';
@@ -50,27 +51,63 @@ function fixture({ submit, update } = {}) {
     submit: async options => { calls.push(options); return submit ? submit(options) : { taskId: 'kie-task-1', model: 'V6' }; } });
   return { rows, calls, repository, service };
 }
-test('authentication and preset lock reject before storage or provider submission', async () => {
+test('authentication and music recipe overrides reject before storage or provider submission', async () => {
   const ctx = fixture();
   await assert.rejects(ctx.service.create('', { requestId: REQUEST, isPublic: false }), error => error.status === 401);
-  for (const extra of [{ stylePrompt: 'tamper' }, { durationSeconds: 28 }, { sourceMenu: 'viral' }, { isInstrumental: false }, { model: 'v5' }]) {
+  for (const extra of [{ stylePrompt: 'tamper' }, { style: 'tamper' }, { title: 'tamper' }, { lyrics: 'tamper' }, { exclude: '' }, { durationSeconds: 28 }, { sourceMenu: 'viral' }, { isInstrumental: false }, { model: 'v5' }]) {
+    assert.throws(() => danceMusicInput({ requestId: REQUEST, isPublic: false, ...extra }), DanceMusicError);
+  }
+  for (const extra of [{ musicProfileId: 'unknown' }, { musicProfileId: null }, { vocalPreference: 'female' }, { vocalPreference: true }]) {
     assert.throws(() => danceMusicInput({ requestId: REQUEST, isPublic: false, ...extra }), DanceMusicError);
   }
   assert.equal(ctx.rows.size, 0); assert.equal(ctx.calls.length, 0);
 });
-test('first request reserves ownership and submits exactly the fixed full-song instrumental', async () => {
+test('first request reserves ownership and submits the recommended full-song dance recipe', async () => {
   const ctx = fixture();
   const track = await ctx.service.create(USER, { requestId: REQUEST, isPublic: true });
   assert.equal(track.id, REQUEST); assert.equal(track.status, 'generating'); assert.equal(track.durationSeconds, null);
-  assert.deepEqual(ctx.calls[0], { style: DANCE_PRESET.style, lyrics: DANCE_PRESET.arrangement, title: track.title,
-    instrumental: true, model: DANCE_PRESET.model, exclude: DANCE_PRESET.exclude, durationSeconds: 195 });
+  const spec = resolveDanceMusicSpec(undefined, undefined, REQUEST);
+  assert.deepEqual(ctx.calls[0], { style: spec.style, lyrics: spec.lyrics, title: track.title,
+    instrumental: false, model: DANCE_PRESET.model, exclude: spec.exclude, naturalFullSong: true,
+    vocalGender: spec.vocalGender === 'male' ? 'm' : 'f' });
   const row = ctx.rows.get(REQUEST), meta = JSON.parse(row.license_hash);
   assert.equal(row.user_id, USER); assert.equal(row.source_audio_url, 'suno:kie:kie-task-1');
   assert.equal(meta.sourceMenu, 'dance'); assert.equal(meta.workflow, DANCE_WORKFLOW); assert.equal(meta.presetId, DANCE_CATEGORY_ID);
-  assert.equal(meta.bpm, '138'); assert.equal(meta.durationSeconds, 195); assert.equal(meta.danceSubmission.state, 'submitted');
+  assert.equal(meta.bpm, '116'); assert.equal(meta.durationSeconds, undefined); assert.equal(meta.naturalFullSong, true);
+  assert.deepEqual(meta.danceMusic, spec); assert.equal(meta.isInstrumental, false); assert.equal(meta.instrumental, false);
+  assert.equal(meta.danceSubmission.state, 'submitted');
+  assert.equal(track.musicProfileId, 'hook-pop'); assert.equal(track.instrumental, false);
   assert.doesNotMatch(JSON.stringify(track), /suno:kie|license_hash|stylePrompt|audioPersistence/);
   assert.deepEqual(await ctx.service.list(USER, REQUEST), [track]);
   assert.deepEqual(await ctx.service.list(OTHER, REQUEST), []);
+});
+test('each allowlisted groove and vocal option reaches the provider and metadata without duration forcing', async () => {
+  for (const profile of DANCE_MUSIC_PROFILES) {
+    for (const vocalPreference of ['recommended', 'on', 'off']) {
+      const ctx = fixture();
+      const track = await ctx.service.create(USER, { requestId: REQUEST, isPublic: false, musicProfileId: profile.id, vocalPreference });
+      const { calls } = ctx, meta = JSON.parse(ctx.rows.get(REQUEST).license_hash);
+      const expectedInstrumental = vocalPreference === 'off' || (vocalPreference === 'recommended' && !profile.recommendedVocal);
+      assert.equal(calls[0].instrumental, expectedInstrumental); assert.equal(meta.isInstrumental, expectedInstrumental); assert.equal(meta.instrumental, expectedInstrumental);
+      assert.equal(meta.danceMusic.id, profile.id); assert.equal(meta.danceVocalPreference, vocalPreference);
+      assert.equal(calls[0].style, meta.danceMusic.style); assert.equal(calls[0].lyrics, meta.danceMusic.lyrics); assert.equal(calls[0].exclude, meta.danceMusic.exclude);
+      assert.equal(calls[0].naturalFullSong, true); assert.equal(calls[0].durationSeconds, undefined); assert.equal(calls[0].model, 'v6');
+      assert.equal(track.musicLabel, profile.label); assert.equal(calls.length, 1);
+      await ctx.service.create(USER, { requestId: REQUEST, isPublic: false, musicProfileId: 'hook-pop', vocalPreference: 'off' });
+      assert.equal(calls.length, 1); assert.equal(JSON.parse(ctx.rows.get(REQUEST).license_hash).danceMusic.id, profile.id);
+    }
+  }
+});
+test('legacy completed music remains its saved 138 BPM instrumental without a new submission', async () => {
+  const ctx = fixture();
+  const legacy = { workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, dancePreset: { id: DANCE_PRESET.id, bpm: 138 },
+    isInstrumental: true, stylePrompt: DANCE_PRESET.style, durationSeconds: 195, duration: 193.92 };
+  ctx.rows.set(REQUEST, { id: REQUEST, user_id: USER, title: '기존 곡', status: 'completed', is_public: false, created_at: STAMP,
+    audio_url: 'https://storage.test/storage/v1/object/public/melodio-assets/generated_audio/legacy.mp3', source_audio_url: 'original', license_hash: JSON.stringify(legacy) });
+  const saved = structuredClone(ctx.rows.get(REQUEST));
+  const track = await ctx.service.create(USER, { requestId: REQUEST, isPublic: true, musicProfileId: 'latin-step', vocalPreference: 'on' });
+  assert.equal(track.musicProfileId, DANCE_PRESET.id); assert.equal(track.instrumental, true); assert.equal(track.durationSeconds, 193.92);
+  assert.deepEqual(ctx.rows.get(REQUEST), saved); assert.equal(ctx.calls.length, 0);
 });
 test('concurrent duplicate request token permits only one paid submit, including later retries', async () => {
   const ctx = fixture();
@@ -167,12 +204,22 @@ test('route authentication blocks before admin credentials or provider access', 
   const response = await ctx.route.POST(request(JSON.stringify({ requestId: REQUEST, isPublic: true })));
   assert.equal(response.status, 401); assert.deepEqual(ctx.counts(), { providerCalls: 0, adminCalls: 0 });
 });
-test('route enforces same-origin, bounded JSON stream, and fixed input schema before any spend', async () => {
+test('route enforces same-origin, bounded JSON stream, and recipe allowlist before any spend', async () => {
   const ctx = routeFixture(USER);
   assert.equal((await ctx.route.POST(request('{}', 'https://attacker.test'))).status, 403);
   assert.equal((await ctx.route.POST(request('"' + 'x'.repeat(2048) + '"'))).status, 400);
   assert.equal((await ctx.route.POST(request(JSON.stringify({ requestId: REQUEST, isPublic: true, stylePrompt: 'changed' })))).status, 400);
   assert.equal(ctx.counts().providerCalls, 0);
+});
+test('route passes the selected groove and vocal option to the existing Kie submission', async () => {
+  const memory = fixture();
+  const ctx = routeFixture(USER, true, { KIE_API_KEY: 'fixture-official-kie' }, memory.repository);
+  const response = await ctx.route.POST(request(JSON.stringify({ requestId: REQUEST, isPublic: false, musicProfileId: 'house-footwork', vocalPreference: 'on' })));
+  assert.equal(response.status, 200); assert.equal(ctx.counts().providerCalls, 1);
+  const { options } = ctx.providerRequests[0];
+  assert.equal(options.instrumental, false); assert.match(options.style, /128 BPM/); assert.match(options.lyrics, /\[Chorus\]/);
+  assert.equal(options.naturalFullSong, true); assert.equal(options.durationSeconds, undefined);
+  assert.equal(JSON.parse(memory.rows.get(REQUEST).license_hash).danceMusic.id, 'house-footwork');
 });
 test('retired SUNO credential alone fails closed without any Kie provider call', async () => {
   const memory = fixture();

@@ -24,6 +24,7 @@ const load = loader();
 const { createDanceVideoService, DanceVideoError } = load('src/lib/dance/videoService.ts');
 const { toDanceTrack } = load('src/lib/dance/music.ts');
 const { DANCE_CATEGORY_ID, DANCE_WORKFLOW } = load('src/lib/dance/preset.ts');
+const { resolveDanceMusicSpec } = load('src/lib/dance/musicProfiles.ts');
 const USER = 'a0000000-0000-4000-8000-000000000001';
 const TRACK = 'a0000000-0000-4000-8000-000000000002';
 const JOB = 'a0000000-0000-4000-8000-000000000003';
@@ -36,7 +37,8 @@ const PLAN = { title: '새 춤', summary: '새 상황', identity: 'original char
 function fixture(options = {}) {
   const calls = []; let insertCount = 0;
   const job = { ...selection, id: JOB, trackId: TRACK, status: 'completed', visualBrief: '기존 영상', createdAt: '2026-09-18T00:00:00Z', updatedAt: '2026-09-18T00:00:00Z', videoUrl: `${storage}/old-video.mp4` };
-  const metadata = { workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, isPublic: true, originalMusicTitle: '원곡 제목', danceVideo: job,
+  const metadata = { workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, isPublic: true, isInstrumental: true,
+    dancePreset: { id: 'dance-hook-instrumental-v1', bpm: 138 }, originalMusicTitle: '원곡 제목', danceVideo: job,
     sourceMenu: 'viral', video_url: job.videoUrl, danceSubmission: { state: 'submitted' }, audioPersistence: { shouldNotCopy: true }, stems: { secret: 'omit' } };
   const initial = { id: TRACK, userId: USER, title: '이전 영상 제목', isPublic: false, createdAt: job.createdAt, status: 'completed',
     audioUrl: `${storage}/storage/v1/object/public/melodio-assets/generated_audio/full.mp3`, metadata, licenseHash: JSON.stringify(metadata) };
@@ -81,6 +83,22 @@ test('concurrent retries insert once and return the same owned variant', async (
   const count = c.calls.length;
   assert.deepEqual(await fork(c), result[0]); assert.equal(c.calls.length, count);
   assert.deepEqual(c.rows.get(TRACK), c.original);
+});
+test('reuse preserves a vocal song recipe and false instrumental flags through the new plan', async () => {
+  const c = fixture(); const source = c.rows.get(TRACK);
+  const spec = resolveDanceMusicSpec('afro-groove', 'on', TRACK);
+  source.metadata = { ...source.metadata, danceMusic: spec, danceVocalPreference: 'on', isInstrumental: false, instrumental: false };
+  source.licenseHash = JSON.stringify(source.metadata);
+  const before = structuredClone(source);
+  await fork(c); const reused = c.rows.get(FORK);
+  assert.deepEqual(reused.metadata.danceMusic, spec);
+  assert.equal(reused.metadata.isInstrumental, false); assert.equal(reused.metadata.instrumental, false); assert.equal(reused.metadata.danceVocalPreference, 'on');
+  assert.deepEqual(reused.metadata.danceAudioSelection, selection); assert.deepEqual(c.rows.get(TRACK), before);
+  const job = await c.service.prepare(USER, FORK, 40, '두 명이 해변에서 그루브 춤을 춘다', { performer: 'duo', location: 'beach', danceStyle: 'groove' });
+  assert.equal(job.status, 'ready'); assert.deepEqual(job.musicSpec, spec);
+  assert.equal(job.direction.castId, 'duo'); assert.equal(job.direction.locationId, 'beach'); assert.equal(job.direction.choreographyId, 'groove');
+  assert.deepEqual(c.calls.map(call => call[0]), ['verify', 'verify', 'plan']);
+  assert.deepEqual(c.calls.at(-1)[1].musicSpec, spec);
 });
 test('colliding request IDs, another owner, wrong source job and mismatched source IDs fail closed', async () => {
   const c = fixture();

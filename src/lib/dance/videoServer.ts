@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto';
 import { DANCE_CATEGORY_ID, type DanceVideoJob } from './preset';
 import { createDanceVideoService, DanceVideoError, type DanceOwnedRecord, type DanceVideoStore } from './videoService';
 import { createDancePlan } from './videoPlan';
-import { extractDanceBridge, renderDanceVideo, reuseDanceAudio, snapshotDanceAudio, type DanceUpload } from './renderVideo';
+import { createDanceIdeas } from './ideas';
+import { extractDanceBridge, renderDancePreview, renderDanceVideo, reuseDanceAudio, snapshotDanceAudio, type DanceUpload } from './renderVideo';
 import { createPetXaiProvider } from '../video/petProvider';
 import { downloadPetMedia } from '../video/petMedia';
 
@@ -20,6 +21,16 @@ function record(row: GenerationRow): DanceOwnedRecord {
 const FIELDS = 'id,user_id,title,is_public,created_at,status,audio_url,license_hash';
 export function createDanceVideoStore(admin: SupabaseClient): DanceVideoStore {
   return {
+    async recentDirections(userId) {
+      const { data, error } = await admin.from('generations').select('license_hash').eq('user_id', userId)
+        .ilike('license_hash', '%dance-music-first-v1%').order('created_at', { ascending: false }).limit(12).abortSignal(AbortSignal.timeout(10000));
+      if (error) throw new DanceVideoError('최근 댄스 연출을 확인하지 못했습니다.', 'JOB_STORAGE', 503);
+      return (data || []).flatMap(row => {
+        try { const meta = JSON.parse(row.license_hash || '{}'); const direction = meta?.danceVideo?.direction;
+          return direction?.version === 2 && typeof direction.signature === 'string' ? [direction] : [];
+        } catch { return []; }
+      });
+    },
     async load(userId, trackId) {
       const { data, error } = await admin.from('generations').select(FIELDS).eq('id', trackId).eq('user_id', userId).maybeSingle();
       if (error) throw new DanceVideoError('영상 작업 저장소를 확인하지 못했습니다.', 'JOB_STORAGE', 503);
@@ -67,8 +78,9 @@ export function createDanceVideoServerService(admin: SupabaseClient, userId: str
     snapshot: (job, sourceUrl) => snapshotDanceAudio(job, sourceUrl, upload),
     reuseSnapshot: reuseDanceAudio,
     plan: (job, options) => createDancePlan(job, undefined, options),
+    ideas: (job, options) => createDanceIdeas(job, undefined, options),
     generateImage: prompt => createPetXaiProvider().generateImage(prompt),
-    startVideo: (prompt, duration, keyframe) => createPetXaiProvider().startVideo(prompt, duration, keyframe),
+    startVideo: (prompt, duration, keyframe, options) => createPetXaiProvider(undefined, { resolution: options?.resolution || '480p', model: options?.model || 'grok-imagine-video' }).startVideo(prompt, duration, keyframe),
     pollVideo: requestId => createPetXaiProvider().pollVideo(requestId),
     async copyAsset(job, kind, url, filename) {
       const media = await downloadPetMedia(url, kind);
@@ -78,5 +90,6 @@ export function createDanceVideoServerService(admin: SupabaseClient, userId: str
     },
     bridge: job => extractDanceBridge(job, upload),
     render: job => renderDanceVideo(job, upload),
+    preview: job => renderDancePreview(job, upload),
   });
 }

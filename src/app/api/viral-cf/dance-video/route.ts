@@ -50,10 +50,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, ...await service.reuse(userId, body.trackId, body.jobId, body.requestId) }, { headers });
     }
     let job;
-    if (body.action === 'prepare') job = await service.prepare(userId, body.trackId, body.startSeconds, body.visualBrief);
+    if (body.action === 'prepare') {
+      if (Object.keys(body).some(key => !['action', 'trackId', 'startSeconds', 'visualBrief', 'creativePreferences'].includes(key))) throw new DanceVideoError('지원하지 않는 영상 기획 입력입니다.', 'PREPARE_INPUT');
+      job = await service.prepare(userId, body.trackId, body.startSeconds, body.visualBrief, body.creativePreferences);
+    }
+    else if (body.action === 'select-idea') {
+      if (Object.keys(body).some(key => !['action', 'trackId', 'jobId', 'ideaId'].includes(key))) throw new DanceVideoError('저장된 아이디어 목록에서 선택해 주세요.', 'IDEA_INPUT');
+      assertDanceUuid(body.jobId);
+      job = await service.selectIdea(userId, body.trackId, body.jobId, body.ideaId);
+    }
     else {
+      if (Object.keys(body).some(key => !['action', 'trackId', 'jobId'].includes(key))) throw new DanceVideoError('저장된 작업 ID로 진행해 주세요.', 'ACTION_INPUT');
       assertDanceUuid(body.jobId);
       if (body.action === 'start') job = await service.start(userId, body.trackId, body.jobId);
+      else if (body.action === 'approve-frame') job = await service.approveFrame(userId, body.trackId, body.jobId);
+      else if (body.action === 'approve-preview') job = await service.approvePreview(userId, body.trackId, body.jobId);
+      else if (body.action === 'resume') job = await service.resume(userId, body.trackId, body.jobId);
       else if (body.action === 'advance') job = await service.advance(userId, body.trackId, body.jobId);
       else throw new DanceVideoError('지원하지 않는 작업입니다.', 'ACTION');
     }

@@ -1,5 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { DANCE_CATEGORY_ID, DANCE_PRESET, DANCE_WORKFLOW, isDanceAudioSelection, isDanceMetadata, type DanceAudioSelection, type DancePlan, type DancePlanFailure, type DanceVideoJob } from './preset';
+import { DANCE_CATEGORY_ID, DANCE_WORKFLOW, isDanceAudioSelection, isDanceMetadata, type DanceAudioSelection, type DancePlan, type DancePlanFailure, type DanceVideoJob } from './preset';
+import { validateDanceCreativePreferences, resolveDanceCreativeDirection } from './creativeDirection';
+import { getDanceMusicSpec } from './musicProfiles';
+import { validateDanceIdeas, type DanceIdea } from './ideas';
 
 export class DanceVideoError extends Error {
   constructor(message: string, public code = 'DANCE_VIDEO', public status = 400, public planFailure?: DancePlanFailure) { super(message); }
@@ -26,19 +29,23 @@ export interface DanceVideoStore {
   load(userId: string, trackId: string): Promise<DanceOwnedRecord | null>;
   compareAndSwap(record: DanceOwnedRecord, job: DanceSavedJob): Promise<DanceOwnedRecord | null>;
   insert?(record: DanceOwnedRecord): Promise<boolean>;
+  recentDirections?(userId: string): Promise<unknown[]>;
 }
-export type DanceSnapshot = Pick<DanceVideoJob, 'audioUrl' | 'sourceAudioHash' | 'audioHash' | 'sourceDurationSeconds' | 'bpm' | 'onsetSeconds'>;
+export type DanceSnapshot = Pick<DanceVideoJob, 'audioUrl' | 'sourceAudioHash' | 'audioHash' | 'sourceDurationSeconds' | 'bpm' | 'onsetSeconds' | 'rhythm'>;
 export interface DanceVideoDependencies {
   store: DanceVideoStore; now?: () => number;
   snapshot(job: DanceVideoJob, sourceUrl: string): Promise<DanceSnapshot>;
   reuseSnapshot(selection: DanceAudioSelection): Promise<void>;
   plan(job: DanceVideoJob, options?: { timeoutMs: number }): Promise<DancePlan>;
+  ideas?(job: DanceVideoJob, options?: { timeoutMs: number }): Promise<DanceIdea[]>;
   generateImage(prompt: string): Promise<{ url: string }>;
-  startVideo(prompt: string, duration: number, keyframe: string): Promise<{ requestId: string }>;
+  startVideo(prompt: string, duration: number, keyframe: string, options?: { resolution: '480p' | '720p'; model?: NonNullable<DanceVideoJob['videoSpec']>['model'] }): Promise<{ requestId: string }>;
   pollVideo(requestId: string): Promise<{ status: 'pending' | 'done' | 'failed' | 'expired'; url?: string }>;
   copyAsset(job: DanceVideoJob, kind: 'image' | 'video', url: string, filename: string): Promise<string>;
   bridge(job: DanceVideoJob): Promise<string>;
   render(job: DanceVideoJob): Promise<string>;
+  preview?(job: DanceVideoJob): Promise<string>;
+  videoModel?: NonNullable<DanceVideoJob['videoSpec']>['model'];
 }
 export function readDanceVideoJob(record: DanceOwnedRecord): DanceSavedJob | null {
   const value = record.metadata.danceVideo;
@@ -46,7 +53,7 @@ export function readDanceVideoJob(record: DanceOwnedRecord): DanceSavedJob | nul
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new DanceVideoError('저장된 영상 작업을 확인하지 못했습니다.', 'JOB_INVALID', 409);
   const job = value as DanceSavedJob;
   if (!UUID.test(job.id || '') || job.trackId !== record.id || job.durationSeconds !== 30
-    || !['preparing', 'ready', 'image', 'clip1', 'bridge', 'clip2', 'render', 'completed', 'attention'].includes(job.status)
+    || !['preparing', 'ideas', 'ready', 'image', 'image-review', 'preview', 'preview-review', 'clip1', 'bridge', 'clip2', 'render', 'completed', 'attention'].includes(job.status)
     || !Number.isFinite(job.startSeconds) || job.startSeconds < 0) throw new DanceVideoError('저장된 영상 작업이 음원과 일치하지 않습니다.', 'JOB_INVALID', 409);
   return structuredClone(job);
 }
@@ -60,7 +67,8 @@ function audioSelection(value: unknown): DanceAudioSelection {
   return { audioUrl: value.audioUrl, audioHash: value.audioHash, sourceAudioHash: value.sourceAudioHash,
     sourceDurationSeconds: value.sourceDurationSeconds, startSeconds: value.startSeconds, durationSeconds: 30,
     ...(value.bpm === undefined ? {} : { bpm: value.bpm }),
-    ...(value.onsetSeconds === undefined ? {} : { onsetSeconds: [...value.onsetSeconds] }) };
+    ...(value.onsetSeconds === undefined ? {} : { onsetSeconds: [...value.onsetSeconds] }),
+    ...(value.rhythm === undefined ? {} : { rhythm: structuredClone(value.rhythm) }) };
 }
 
 /** Every paid call is preceded by an owner-scoped CAS lease, and every provider ID is checkpointed. */
@@ -79,13 +87,26 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
   function expired(job: DanceSavedJob) {
     return Boolean(job.inFlight && (!Number.isFinite(Date.parse(job.inFlight.at)) || now() - Date.parse(job.inFlight.at) >= DANCE_VIDEO_LEASE_MS));
   }
+  function resumeStage(job: DanceSavedJob): DanceVideoJob['failedStage'] | null {
+    if (job.failureCode === 'PROVIDER_FAILED') return null;
+    const stage = job.failedStage || (expired(job) ? job.status : null);
+    if (stage === 'image' && job.imageSourceUrl) return 'image';
+    if (stage === 'preview' && (job.previewRequestId || job.previewSourceUrl || job.previewClipUrl)) return 'preview';
+    if (stage === 'clip1' && (job.clip1RequestId || job.clip1SourceUrl)) return 'clip1';
+    if (stage === 'bridge' && job.clip1Url) return 'bridge';
+    if (stage === 'clip2' && (job.clip2RequestId || job.clip2SourceUrl)) return 'clip2';
+    if (stage === 'render' && job.clip1Url && job.clip2Url) return 'render';
+    return null;
+  }
   function view(job: DanceSavedJob | null): DanceVideoJob | null {
     if (!job) return null;
     const result = structuredClone(job);
+    const recoverableStage = resumeStage(result);
     if (expired(result)) {
       result.status = 'attention';
       result.error = '이전 요청의 완료 여부를 확인해야 합니다. 중복 생성을 막기 위해 저장된 작업을 보류했습니다.';
     }
+    result.canResume = result.status === 'attention' && (!result.inFlight || expired(result)) && Boolean(recoverableStage);
     return result;
   }
   async function get(userId: string, trackId: string) { return view(readDanceVideoJob(await owned(userId, trackId, false))); }
@@ -107,7 +128,7 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     const source = await owned(userId, trackId);
     const job = readDanceVideoJob(source);
     if (!job || job.id !== jobId) throw new DanceVideoError('재사용할 저장 작업을 찾을 수 없습니다.', 'JOB_NOT_FOUND', 404);
-    if (job.inFlight || !['ready', 'completed', 'attention'].includes(job.status)) {
+    if (job.inFlight || !['ideas', 'ready', 'image-review', 'preview-review', 'completed', 'attention'].includes(job.status)) {
       throw new DanceVideoError('현재 영상 작업이 멈추거나 완료된 뒤 같은 음원을 사용할 수 있습니다.', 'REUSE_NOT_READY', 409);
     }
     const selection = audioSelection(job);
@@ -122,7 +143,7 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     // Source edits during validation cannot silently change the requested job or clip.
     const current = await owned(userId, trackId);
     const currentJob = readDanceVideoJob(current);
-    if (!currentJob || currentJob.id !== jobId || currentJob.inFlight || !['ready', 'completed', 'attention'].includes(currentJob.status)
+    if (!currentJob || currentJob.id !== jobId || currentJob.inFlight || !['ideas', 'ready', 'image-review', 'preview-review', 'completed', 'attention'].includes(currentJob.status)
       || JSON.stringify(audioSelection(currentJob)) !== JSON.stringify(selection)) {
       throw new DanceVideoError('원본 작업이 바뀌었습니다. 저장된 음원을 다시 확인해 주세요.', 'REUSE_CONFLICT', 409);
     }
@@ -130,8 +151,12 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     const rootTrackId = priorVariant && typeof priorVariant.rootTrackId === 'string' && UUID.test(priorVariant.rootTrackId) ? priorVariant.rootTrackId : source.id;
     const originalMusicTitle = (typeof source.metadata.originalMusicTitle === 'string' ? source.metadata.originalMusicTitle : source.title)
       .replace(/[\u0000-\u001f\u007f]/g, ' ').slice(0, 200);
-    const metadata = { workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, presetName: DANCE_PRESET.label,
-      sourceMenu: 'dance', isPublic: current.isPublic, isInstrumental: true, duration: selection.sourceDurationSeconds,
+    const musicSpec = getDanceMusicSpec(source.metadata);
+    if (!musicSpec) throw new DanceVideoError('원본 댄스 음악 설정을 확인하지 못했습니다.', 'MUSIC_SPEC', 409);
+    const metadata = { workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, presetName: musicSpec.label,
+      sourceMenu: 'dance', isPublic: current.isPublic, isInstrumental: musicSpec.instrumental, instrumental: musicSpec.instrumental,
+      danceMusic: musicSpec, danceVocalPreference: source.metadata.danceVocalPreference,
+      duration: selection.sourceDurationSeconds,
       originalMusicTitle, danceVariant: { sourceTrackId: trackId, sourceJobId: jobId, rootTrackId }, danceAudioSelection: selection };
     const record: DanceOwnedRecord = { id: request, userId, status: 'completed', audioUrl: source.audioUrl,
       title: `${originalMusicTitle.slice(0, 170)} · 새 영상 ${request.slice(0, 6)}`, isPublic: current.isPublic, createdAt: timestamp(), metadata, licenseHash: JSON.stringify(metadata) };
@@ -161,14 +186,20 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     const record = await owned(userId, job.trackId);
     const saved = readDanceVideoJob(record);
     if (!saved || saved.id !== job.id || saved.inFlight?.token !== token) throw error;
-    return finish(userId, { ...saved, status: 'attention', error: safeFailure(error),
+    const finished = await finish(userId, { ...saved, status: 'attention', error: safeFailure(error),
+      failureCode: error instanceof DanceVideoError && /^[A-Z0-9_]{1,60}$/.test(error.code) ? error.code : 'STAGE_FAILURE',
+      ...(['image', 'preview', 'clip1', 'bridge', 'clip2', 'render'].includes(saved.status) ? { failedStage: saved.status as DanceSavedJob['failedStage'] } : {}),
       ...(error instanceof DanceVideoError && error.planFailure ? { planFailure: error.planFailure } : {}) }, token);
+    return view(finished)! as DanceSavedJob;
   }
-  async function prepare(userId: string, trackId: string, startSeconds: unknown, visualBrief: unknown) {
+  async function prepare(userId: string, trackId: string, startSeconds: unknown, visualBrief: unknown, creativePreferences?: unknown) {
     const startedAt = now();
     if (typeof startSeconds !== 'number' || !Number.isFinite(startSeconds) || startSeconds < 0 || startSeconds > 3600) throw new DanceVideoError('올바른 30초 구간의 시작 시간을 선택해 주세요.', 'AUDIO_RANGE');
     if (typeof visualBrief !== 'string' || visualBrief.trim().length > 1000 || /[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(visualBrief)) throw new DanceVideoError('상황 설정은 1,000자 이내의 텍스트로 입력해 주세요. 비워 두면 AI가 기획합니다.', 'VISUAL_BRIEF');
     const normalizedBrief = visualBrief.trim();
+    let preferences;
+    try { preferences = validateDanceCreativePreferences(creativePreferences); }
+    catch { throw new DanceVideoError('출연자·장소·안무 선택을 확인해 주세요.', 'CREATIVE_SELECTION'); }
     const record = await owned(userId, trackId);
     const savedSelection = record.metadata.danceAudioSelection === undefined ? null : audioSelection(record.metadata.danceAudioSelection);
     if (savedSelection && startSeconds !== savedSelection.startSeconds) {
@@ -176,13 +207,25 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     }
     const previous = readDanceVideoJob(record);
     if (previous) {
-      if (previous.startSeconds === startSeconds && previous.visualBrief === normalizedBrief) return view(previous)!;
+      if (previous.startSeconds === startSeconds && previous.visualBrief === normalizedBrief
+        && JSON.stringify(validateDanceCreativePreferences(previous.creativePreferences)) === JSON.stringify(preferences)) return view(previous)!;
       const unspentPreparation = previous.status === 'attention' && !previous.planningSubmitted && !previous.imageSourceUrl;
-      if ((previous.status !== 'ready' && !unspentPreparation) || previous.inFlight) throw new DanceVideoError('이미 시작된 작업의 음원을 바꿀 수 없습니다. 저장된 작업을 확인해 주세요.', 'JOB_EXISTS', 409);
+      if ((!['ideas', 'ready'].includes(previous.status) && !unspentPreparation) || previous.inFlight) throw new DanceVideoError('이미 시작된 작업의 음원을 바꿀 수 없습니다. 저장된 작업을 확인해 주세요.', 'JOB_EXISTS', 409);
     }
     const reusableSelection = savedSelection || (previous?.startSeconds === startSeconds && isDanceAudioSelection(previous) ? audioSelection(previous) : null);
     const token = randomUUID();
-    let job: DanceSavedJob = { id: randomUUID(), trackId, status: 'preparing', startSeconds, durationSeconds: 30,
+    const id = randomUUID();
+    const musicSpec = getDanceMusicSpec(record.metadata);
+    if (!musicSpec) throw new DanceVideoError('저장된 댄스 음악 설정을 확인하지 못했습니다.', 'MUSIC_SPEC', 409);
+    const recent = await deps.store.recentDirections?.(userId) || [];
+    let direction;
+    try { direction = resolveDanceCreativeDirection(preferences, id, normalizedBrief, recent, musicSpec); }
+    catch { throw new DanceVideoError('선택한 출연자·장소와 상황 설명이 맞는지 확인해 주세요.', 'CREATIVE_SELECTION'); }
+    let job: DanceSavedJob = { id, trackId, status: 'preparing', startSeconds, durationSeconds: 30,
+      creativePreferences: preferences, direction, musicSpec, imageReviewRequired: true,
+      ideaReviewRequired: Boolean(deps.ideas),
+      qualityPreviewRequired: Boolean(deps.ideas && deps.preview),
+      videoSpec: { model: deps.videoModel || 'grok-imagine-video', resolution: '720p', width: 720, height: 1280 },
       visualBrief: normalizedBrief, createdAt: timestamp(), updatedAt: timestamp(), inFlight: { action: 'prepare', token, at: timestamp() } };
     const reserved = await deps.store.compareAndSwap(record, job);
     if (!reserved) return get(userId, trackId);
@@ -205,6 +248,10 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
       const timeoutMs = Math.min(DANCE_PLAN_TIMEOUT_MS, remaining());
       if (timeoutMs <= 0) throw new DanceVideoError('음원 준비 중 요청 대기 시간이 초과되었습니다. 저장된 30초 음원은 유지됩니다.', 'PLAN_TIMEOUT', 504,
         { code: 'PLAN_TIMEOUT', kind: 'timeout', phase: 'preparation', elapsedMs: Math.max(0, now() - startedAt), timeoutMs: DANCE_PREPARE_BUDGET_MS });
+      if (deps.ideas) {
+        const ideas = validateDanceIdeas(await deps.ideas(job, { timeoutMs }));
+        return finish(userId, { ...job, ideas, status: 'ideas' }, token);
+      }
       const plan = await deps.plan(job, { timeoutMs });
       if (plan.clips.length !== 2 || plan.clips.some(prompt => !prompt.trim() || prompt.length > 4096)) throw new DanceVideoError('두 개의 15초 영상 계획을 확인하지 못했습니다.', 'PLAN_INVALID');
       return finish(userId, { ...job, plan, status: 'ready' }, token);
@@ -216,20 +263,23 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     let job = readDanceVideoJob(record);
     if (!job || job.id !== jobId) throw new DanceVideoError('저장된 작업 ID가 일치하지 않습니다.', 'JOB_NOT_FOUND', 404);
     if (expired(job)) {
-      const stale = { ...job, status: 'attention' as const, error: '이전 요청의 완료 여부를 확인해야 합니다. 저장된 요청 ID를 보존하고 자동 재생성을 중단했습니다.', updatedAt: timestamp() };
-      return readDanceVideoJob(await deps.store.compareAndSwap(record, stale) || await owned(userId, trackId));
+      const stale = { ...job, status: 'attention' as const,
+        ...(['image', 'preview', 'clip1', 'bridge', 'clip2', 'render'].includes(job.status) ? { failedStage: job.status as DanceSavedJob['failedStage'] } : {}),
+        error: '이전 요청의 완료 여부를 확인해야 합니다. 저장된 요청 ID를 보존하고 자동 재생성을 중단했습니다.', updatedAt: timestamp() };
+      return view(readDanceVideoJob(await deps.store.compareAndSwap(record, stale) || await owned(userId, trackId)));
     }
     if (job.inFlight || job.status === 'completed' || job.status === 'attention') return view(job);
     if (action === 'start') {
       if (job.status !== 'ready') return view(job);
       if (!job.plan || !job.audioUrl) throw new DanceVideoError('선택 음원과 영상 계획을 먼저 준비해 주세요.', 'NOT_READY', 409);
-      const started = await deps.store.compareAndSwap(record, { ...job, status: 'image', updatedAt: timestamp() });
+      if (job.ideaReviewRequired && (!job.selectedIdea || !validateDanceIdeas(job.ideas).some(idea => idea.id === job!.selectedIdea!.id))) throw new DanceVideoError('아이디어를 선택하고 안무 기획을 먼저 확인해 주세요.', 'IDEA_SELECTION', 409);
+      const started = await deps.store.compareAndSwap(record, { ...job, imageReviewRequired: true, status: 'image', updatedAt: timestamp() });
       return readDanceVideoJob(started || await owned(userId, trackId));
     }
-    if (job.status === 'ready' || job.status === 'preparing') return view(job);
+    if (job.status === 'ideas' || job.status === 'ready' || job.status === 'preparing' || job.status === 'image-review' || job.status === 'preview-review') return view(job);
     if (!job.plan || !job.audioUrl) throw new DanceVideoError('저장된 음원 또는 영상 계획이 없습니다.', 'NOT_READY', 409);
     // Bound polling even if a browser accidentally dispatches duplicate advances.
-    const isPoll = (job.status === 'clip1' && job.clip1RequestId) || (job.status === 'clip2' && job.clip2RequestId);
+    const isPoll = (job.status === 'preview' && job.previewRequestId) || (job.status === 'clip1' && job.clip1RequestId) || (job.status === 'clip2' && job.clip2RequestId);
     if (isPoll && job.lastPollAt && now() - Date.parse(job.lastPollAt) < 4000) return view(job);
     const token = randomUUID();
     job = { ...job, inFlight: { action: isPoll ? `${job.status}-poll` : job.status, token, at: timestamp() }, updatedAt: timestamp() };
@@ -237,18 +287,41 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     if (!reserved) return get(userId, trackId);
     try {
       if (job.status === 'image') {
-        const result = await deps.generateImage(job.plan!.imagePrompt);
-        job = await checkpoint(userId, { ...job, imageSourceUrl: result.url }, token);
+        const result = job.imageSourceUrl ? { url: job.imageSourceUrl } : await deps.generateImage(job.plan!.imagePrompt);
+        if (!job.imageSourceUrl) job = await checkpoint(userId, { ...job, imageSourceUrl: result.url }, token);
         const imageUrl = await deps.copyAsset(job, 'image', result.url, 'first-frame');
-        return finish(userId, { ...job, imageUrl, status: 'clip1' }, token);
+        return finish(userId, { ...job, imageUrl, status: job.imageReviewRequired ? 'image-review' : 'clip1' }, token);
+      }
+      if (job.status === 'preview') {
+        if (!deps.preview || !job.imageUrl) throw new DanceVideoError('동작 테스트 준비가 필요합니다.', 'NOT_READY', 409);
+        if (!job.previewRequestId && !job.previewSourceUrl && !job.previewClipUrl) {
+          const prompt = buildDancePreviewPrompt(job);
+          const result = await deps.startVideo(prompt, 5, job.imageUrl, { resolution: job.videoSpec?.resolution || '480p', model: job.videoSpec?.model });
+          if (!/^[a-zA-Z0-9_-]{1,150}$/.test(result.requestId)) throw new DanceVideoError('테스트 영상 제출 결과가 불확실합니다. 자동 재요청하지 않습니다.', 'UNKNOWN_SUBMISSION');
+          return finish(userId, { ...job, previewRequestId: result.requestId, previewSeconds: 5 }, token);
+        }
+        if (!job.previewSourceUrl && !job.previewClipUrl) {
+          const result = await deps.pollVideo(job.previewRequestId!);
+          job = { ...job, lastPollAt: timestamp() };
+          if (result.status === 'pending') return finish(userId, job, token);
+          if (result.status !== 'done' || !result.url) throw new DanceVideoError('테스트 영상이 완료되지 않았습니다. 음원과 기획은 보존했습니다.', 'PROVIDER_FAILED');
+          job = await checkpoint(userId, { ...job, previewSourceUrl: result.url }, token);
+        }
+        if (!job.previewClipUrl) job = await checkpoint(userId, { ...job, previewClipUrl: await deps.copyAsset(job, 'video', job.previewSourceUrl!, 'preview-native') }, token);
+        return finish(userId, { ...job, previewUrl: await deps.preview(job), previewSeconds: 5, status: 'preview-review' }, token);
       }
       if (job.status === 'clip1' || job.status === 'clip2') {
         const second = job.status === 'clip2';
         const requestId = second ? job.clip2RequestId : job.clip1RequestId;
+        const storedSource = second ? job.clip2SourceUrl : job.clip1SourceUrl;
+        if (storedSource) {
+          const url = await deps.copyAsset(job, 'video', storedSource, second ? 'clip2' : 'clip1');
+          return finish(userId, { ...job, ...(second ? { clip2Url: url, status: 'render' } : { clip1Url: url, status: 'bridge' }) }, token);
+        }
         if (!requestId) {
           const keyframe = second ? job.bridgeUrl : job.imageUrl;
           if (!keyframe) throw new DanceVideoError('클립 시작 프레임을 확인하지 못했습니다.', 'MISSING_IMAGE');
-          const result = await deps.startVideo(job.plan!.clips[second ? 1 : 0], 15, keyframe);
+          const result = await deps.startVideo(job.plan!.clips[second ? 1 : 0], 15, keyframe, { resolution: job.videoSpec?.resolution || '480p', model: job.videoSpec?.model });
           if (!/^[a-zA-Z0-9_-]{1,150}$/.test(result.requestId)) throw new DanceVideoError('영상 제출 결과가 불확실합니다. 자동으로 다시 제출하지 않습니다.', 'UNKNOWN_SUBMISSION');
           return finish(userId, { ...job, ...(second ? { clip2RequestId: result.requestId } : { clip1RequestId: result.requestId }) }, token);
         }
@@ -271,5 +344,65 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
       throw new DanceVideoError('지원하지 않는 작업 단계입니다.', 'JOB_STATE');
     } catch (error) { return hold(userId, job, token, error); }
   }
-  return { get, reuse, prepare, start: (user: string, track: string, job: string) => transition(user, track, job, 'start'), advance: (user: string, track: string, job: string) => transition(user, track, job, 'advance') };
+  async function approveFrame(userId: string, trackId: string, jobId: string) {
+    assertDanceUuid(jobId);
+    const record = await owned(userId, trackId), job = readDanceVideoJob(record);
+    if (!job || job.id !== jobId) throw new DanceVideoError('저장된 작업 ID가 일치하지 않습니다.', 'JOB_NOT_FOUND', 404);
+    if (job.inFlight || job.status !== 'image-review') return view(job);
+    if (!job.imageUrl || !job.plan || !job.audioUrl) throw new DanceVideoError('확인할 첫 장면이 준비되지 않았습니다.', 'NOT_READY', 409);
+    const saved = await deps.store.compareAndSwap(record, { ...job, status: job.qualityPreviewRequired ? 'preview' : 'clip1', imageApprovedAt: timestamp(), updatedAt: timestamp() });
+    return view(readDanceVideoJob(saved || await owned(userId, trackId)));
+  }
+  async function approvePreview(userId: string, trackId: string, jobId: string) {
+    assertDanceUuid(jobId);
+    const record = await owned(userId, trackId), job = readDanceVideoJob(record);
+    if (!job || job.id !== jobId) throw new DanceVideoError('저장된 작업 ID가 일치하지 않습니다.', 'JOB_NOT_FOUND', 404);
+    if (job.inFlight || job.status !== 'preview-review') return view(job);
+    if (!job.previewUrl || job.previewSeconds !== 5 || !job.imageUrl || !job.plan) throw new DanceVideoError('완료된 동작 테스트를 먼저 확인해 주세요.', 'NOT_READY', 409);
+    const saved = await deps.store.compareAndSwap(record, { ...job, status: 'clip1', previewApprovedAt: timestamp(), updatedAt: timestamp() });
+    return view(readDanceVideoJob(saved || await owned(userId, trackId)));
+  }
+  async function selectIdea(userId: string, trackId: string, jobId: string, ideaId: unknown) {
+    assertDanceUuid(jobId);
+    if (typeof ideaId !== 'string' || !/^[A-Za-z0-9_-]{1,80}$/.test(ideaId)) throw new DanceVideoError('목록에서 아이디어를 선택해 주세요.', 'IDEA_SELECTION');
+    const record = await owned(userId, trackId), previous = readDanceVideoJob(record);
+    if (!previous || previous.id !== jobId) throw new DanceVideoError('저장된 작업 ID가 일치하지 않습니다.', 'JOB_NOT_FOUND', 404);
+    if (previous.inFlight || !['ideas', 'attention'].includes(previous.status)) return view(previous);
+    if (previous.plan || previous.imageUrl || previous.imageSourceUrl || previous.clip1RequestId || previous.clip2RequestId) return view(previous);
+    const ideas = validateDanceIdeas(previous.ideas), selectedIdea = ideas.find(idea => idea.id === ideaId);
+    if (!selectedIdea || !previous.audioUrl || !previous.audioHash) throw new DanceVideoError('현재 작업의 저장된 아이디어를 선택해 주세요.', 'IDEA_SELECTION', 409);
+    if ((previous.conceptPlanAttempts || 0) >= 2) throw new DanceVideoError('같은 아이디어의 기획 재시도 한도에 도달했습니다. 음원을 유지하고 새 챌린지를 준비해 주세요.', 'IDEA_ATTEMPTS', 409);
+    const token = randomUUID();
+    const next: DanceSavedJob = { ...previous, selectedIdea, status: 'preparing', planningSubmitted: true,
+      conceptPlanAttempts: (previous.conceptPlanAttempts || 0) + 1, updatedAt: timestamp(), inFlight: { action: 'select-idea', token, at: timestamp() } };
+    delete next.error; delete next.planFailure; delete next.failureCode; delete next.failedStage; delete next.canResume;
+    const reserved = await deps.store.compareAndSwap(record, next);
+    if (!reserved) return get(userId, trackId);
+    try {
+      const plan = await deps.plan(next, { timeoutMs: DANCE_PLAN_TIMEOUT_MS });
+      if (plan.clips.length !== 2 || plan.clips.some(prompt => !prompt.trim() || prompt.length > 4096)) throw new DanceVideoError('선택한 아이디어의 두 클립 계획이 필요합니다.', 'PLAN_INVALID');
+      return finish(userId, { ...next, plan, status: 'ready' }, token);
+    } catch (error) { return hold(userId, next, token, error); }
+  }
+  async function resume(userId: string, trackId: string, jobId: string) {
+    assertDanceUuid(jobId);
+    const record = await owned(userId, trackId), job = readDanceVideoJob(record);
+    if (!job || job.id !== jobId) throw new DanceVideoError('저장된 작업 ID가 일치하지 않습니다.', 'JOB_NOT_FOUND', 404);
+    if (job.inFlight && !expired(job)) return view(job);
+    if (job.status !== 'attention' && !expired(job)) return view(job);
+    const stage = resumeStage(job);
+    if (!stage) throw new DanceVideoError('제출 결과가 불확실해 같은 유료 요청을 다시 보내지 않습니다. 저장된 음원으로 새 챌린지를 만들 수 있습니다.', 'RESUME_UNSAFE', 409);
+    const next = { ...job, status: stage, updatedAt: timestamp() }; delete next.inFlight; delete next.error; delete next.failedStage; delete next.failureCode; delete next.canResume;
+    const saved = await deps.store.compareAndSwap(record, next);
+    return view(readDanceVideoJob(saved || await owned(userId, trackId)));
+  }
+  return { get, reuse, prepare, selectIdea, approveFrame, approvePreview, resume, start: (user: string, track: string, job: string) => transition(user, track, job, 'start'), advance: (user: string, track: string, job: string) => transition(user, track, job, 'advance') };
+}
+
+export function buildDancePreviewPrompt(job: DanceVideoJob): string {
+  if (!job.plan || !job.selectedIdea) throw new DanceVideoError('확인된 아이디어와 안무가 필요합니다.', 'NOT_READY', 409);
+  const idea = job.selectedIdea;
+  const prompt = `A five-second motion quality test of the approved original dance idea, not the complete thirty-second performance. Same original cast from this exact starting image: ${job.plan.identity}. Preserve faces, wardrobe, body proportions, formation, setting and image style. Full bodies, feet and floor contact remain visible in a stable vertical9:16 view. First two seconds show this visible mechanism: ${idea.firstTwoSeconds}. Then demonstrate this repeatable eight-count hook with grounded alternating steps, knee flexion and pelvis/torso weight transfer: ${idea.signatureMove}. Planned payoff: ${idea.visualPayoff}. Musical intention: ${job.musicSpec?.rhythmPurpose || ''}; approximate rhythm ${job.bpm || job.musicSpec?.bpm || 120} BPM, never claim verified audio synchronization. Do not turn the hook into stationary feet or hand waving. No camera cuts, acrobatics, malformed anatomy, text, logos, captions, dialogue, speech or generated music. Silent visual only; the original chosen music is combined separately.`;
+  if (prompt.length > 4096) throw new DanceVideoError('테스트 영상 프롬프트가 너무 깁니다.', 'PLAN_LENGTH', 422);
+  return prompt;
 }

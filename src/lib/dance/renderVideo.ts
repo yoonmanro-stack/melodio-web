@@ -84,7 +84,7 @@ export async function trimDanceAudio(binary: string, inputFile: string, outputFi
 }
 
 export async function snapshotDanceAudio(job: DanceVideoJob, sourceUrl: string, upload: DanceUpload): Promise<{
-  audioUrl: string; sourceAudioHash: string; audioHash: string; sourceDurationSeconds: number; bpm?: number; onsetSeconds?: number[];
+  audioUrl: string; sourceAudioHash: string; audioHash: string; sourceDurationSeconds: number; bpm?: number; onsetSeconds?: number[]; rhythm?: DanceVideoJob['rhythm'];
 }> {
   const { binary } = await preflightPetRenderer();
   const temp = await mkdtemp(path.join(os.tmpdir(), 'dance-audio-'));
@@ -96,14 +96,16 @@ export async function snapshotDanceAudio(job: DanceVideoJob, sourceUrl: string, 
     const sourceDurationSeconds = await trimDanceAudio(binary, inputFile, outputFile, job.startSeconds);
     const selected = await readFile(outputFile);
     const audioHash = sha256(selected);
-    let bpm: number | undefined; let onsetSeconds: number[] = [];
+    let bpm: number | undefined; let onsetSeconds: number[] = []; let rhythmSummary: DanceVideoJob['rhythm'];
     try {
       const rhythm = await analyzePetAudioRhythm(binary, outputFile, DANCE_CLIP_SECONDS);
       if (rhythm.method === 'energy-autocorrelation' && Number.isFinite(rhythm.bpm)) bpm = rhythm.bpm;
       onsetSeconds = rhythm.onsetSeconds.filter(second => Number.isFinite(second) && second >= 0 && second < DANCE_CLIP_SECONDS);
+      rhythmSummary = { beatSeconds: rhythm.beatSeconds.filter(t => Number.isFinite(t) && t >= 0 && t < DANCE_CLIP_SECONDS).slice(0, 500),
+        confidence: rhythm.confidence, method: rhythm.method, endingStatus: rhythm.ending.status };
     } catch { /* A rhythm estimate is optional; the selected audio remains authoritative. */ }
     const audioUrl = assertDanceStoredMedia(await upload(job, `audio-30s-${audioHash.slice(0, 16)}.wav`, selected, 'audio/wav'), 'audio');
-    return { audioUrl, sourceAudioHash: sha256(source.buffer), audioHash, sourceDurationSeconds, bpm, onsetSeconds };
+    return { audioUrl, sourceAudioHash: sha256(source.buffer), audioHash, sourceDurationSeconds, bpm, onsetSeconds, ...(rhythmSummary ? { rhythm: rhythmSummary } : {}) };
   } finally { await rm(temp, { recursive: true, force: true }); }
 }
 
@@ -150,9 +152,10 @@ export async function extractDanceBridge(job: DanceVideoJob, upload: DanceUpload
   } finally { await rm(temp, { recursive: true, force: true }); }
 }
 
-export async function concatDanceClips(binary: string, clips: [string, string], outputFile: string): Promise<void> {
+export async function concatDanceClips(binary: string, clips: [string, string], outputFile: string, dimensions: { width: number; height: number } = { width: 480, height: 854 }): Promise<void> {
+  if (!((dimensions.width === 480 && dimensions.height === 854) || (dimensions.width === 720 && dimensions.height === 1280))) throw new DanceRenderError('지원하지 않는 댄스 영상 크기입니다.', 'VIDEO_DIMENSIONS');
   for (const clip of clips) assertDanceClipDuration(await probePetMediaSeconds(binary, clip, 'video'));
-  const filters = clips.map((_, index) => `[${index}:v:0]trim=duration=15,setpts=PTS-STARTPTS,scale=480:854:force_original_aspect_ratio=decrease,pad=480:854:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[v${index}]`);
+  const filters = clips.map((_, index) => `[${index}:v:0]trim=duration=15,setpts=PTS-STARTPTS,scale=${dimensions.width}:${dimensions.height}:force_original_aspect_ratio=decrease,pad=${dimensions.width}:${dimensions.height}:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[v${index}]`);
   filters.push('[v0][v1]concat=n=2:v=1:a=0[outv]');
   try {
     await run(binary, ['-hide_banner', '-v', 'error', '-y', '-i', clips[0], '-i', clips[1], '-filter_complex', filters.join(';'),
@@ -181,11 +184,40 @@ export async function renderDanceVideo(job: DanceVideoJob, upload: DanceUpload):
       const clip = await downloadPetMedia(clipUrls[index], 'video'); await writeFile(clips[index], clip.buffer);
     }
     const videoFile = path.join(temp, 'video.mp4'); const outputFile = path.join(temp, 'final.mp4');
-    await concatDanceClips(binary, clips, videoFile);
+    await concatDanceClips(binary, clips, videoFile, job.videoSpec ? { width: job.videoSpec.width, height: job.videoSpec.height } : undefined);
     try { await muxLegacyShortVideo(binary, videoFile, audioFile, outputFile); }
     catch { throw new DanceRenderError('선택 음원과 영상의 최종 합성에 실패했습니다.', 'VIDEO_MUX'); }
     const buffer = await readFile(outputFile);
     if (buffer.length > 60 * 1024 ** 2) throw new DanceRenderError('완성 영상의 크기가 너무 큽니다.', 'FINAL_SIZE');
     return assertDanceStoredMedia(await upload(job, `final-captionless-${sha256(buffer).slice(0, 16)}.mp4`, buffer, 'video/mp4'), 'video');
+  } finally { await rm(temp, { recursive: true, force: true }); }
+}
+
+/** A five-second paid-motion review, keeping the authoritative thirty-second WAV untouched. */
+export async function renderDancePreview(job: DanceVideoJob, upload: DanceUpload): Promise<string> {
+  const audioUrl = assertDanceStoredMedia(job.audioUrl, 'audio');
+  const clipUrl = assertDanceStoredMedia(job.previewClipUrl, 'video');
+  if (!job.audioHash || !/^[a-f0-9]{64}$/.test(job.audioHash)) throw new DanceRenderError('저장된 음원을 확인해 주세요.', 'AUDIO_HASH');
+  const { binary } = await preflightPetRenderer();
+  const temp = await mkdtemp(path.join(os.tmpdir(), 'dance-preview-'));
+  try {
+    const audio = await downloadPetMedia(audioUrl, 'audio');
+    if (sha256(audio.buffer) !== job.audioHash) throw new DanceRenderError('저장된 음원이 선택한 음원과 다릅니다.', 'AUDIO_HASH');
+    const audioFile = path.join(temp, 'master.wav'), clipFile = path.join(temp, 'native.mp4'), outputFile = path.join(temp, 'preview.mp4');
+    await writeFile(audioFile, audio.buffer);
+    if (Math.abs(await probePetMediaSeconds(binary, audioFile, 'audio') - 30) > 1 / SAMPLE_RATE) throw new DanceRenderError('저장된 원본 구간은 정확히 30초여야 합니다.', 'AUDIO_DURATION');
+    const clip = await downloadPetMedia(clipUrl, 'video'); await writeFile(clipFile, clip.buffer);
+    if (Math.abs(await probePetMediaSeconds(binary, clipFile, 'video') - 5) > 1e-6) throw new DanceRenderError('동작 테스트 영상은 정확히 5초여야 합니다.', 'PREVIEW_DURATION');
+    await run(binary, ['-hide_banner', '-v', 'error', '-y', '-i', clipFile, '-i', audioFile,
+      '-filter_complex', '[0:v:0]trim=duration=5,setpts=PTS-STARTPTS,scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[v];[1:a:0]atrim=duration=5,asetpts=PTS-STARTPTS[a]',
+      '-map', '[v]', '-map', '[a]', '-t', '5', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-threads', '2', '-pix_fmt', 'yuv420p',
+      '-c:a', 'aac', '-b:a', '192k', '-movflags', '+faststart', outputFile], { timeout: 90000, maxBuffer: 256 * 1024 });
+    if (Math.abs(await probePetMediaSeconds(binary, outputFile, 'video') - 5) > 1e-6) throw new DanceRenderError('동작 테스트 합성 길이를 확인하지 못했습니다.', 'PREVIEW_DURATION');
+    const buffer = await readFile(outputFile);
+    if (buffer.length > 60 * 1024 ** 2) throw new DanceRenderError('테스트 영상 파일이 너무 큽니다.', 'FINAL_SIZE');
+    return assertDanceStoredMedia(await upload(job, `preview-5s-${sha256(buffer).slice(0, 16)}.mp4`, buffer, 'video/mp4'), 'video');
+  } catch (error) {
+    if (error instanceof DanceRenderError) throw error;
+    throw new DanceRenderError('저장된 음악과 동작 테스트를 합치지 못했습니다.', 'VIDEO_PREVIEW');
   } finally { await rm(temp, { recursive: true, force: true }); }
 }

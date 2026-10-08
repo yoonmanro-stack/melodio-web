@@ -22,6 +22,7 @@ function loader(overrides = {}, env = {}) {
 const load = loader();
 const { createDanceVideoService, DanceVideoError, DANCE_VIDEO_LEASE_MS } = load('src/lib/dance/videoService.ts');
 const { DANCE_CATEGORY_ID, DANCE_WORKFLOW } = load('src/lib/dance/preset.ts');
+const { resolveDanceMusicSpec } = load('src/lib/dance/musicProfiles.ts');
 const USER = 'a0000000-0000-4000-8000-000000000001';
 const TRACK = 'a0000000-0000-4000-8000-000000000002';
 const OTHER = 'a0000000-0000-4000-8000-000000000003';
@@ -29,7 +30,8 @@ const PLAN = { title: '리듬의 작은 인사', summary: '반복 손동작과 �
 function deferred() { let resolve; const promise = new Promise(r => { resolve = r; }); return { promise, resolve }; }
 function fixture(overrides = {}) {
   let time = 10_000;
-  let metadata = { workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, isPublic: false };
+  let metadata = { workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, isPublic: false, isInstrumental: true,
+    dancePreset: { id: 'dance-hook-instrumental-v1', bpm: 138 } };
   let row = { id: TRACK, userId: USER, status: 'completed', audioUrl: 'https://cdn.suno.ai/original.mp3', metadata, licenseHash: JSON.stringify(metadata) };
   let writes = 0;
   const calls = [];
@@ -65,6 +67,12 @@ function fixture(overrides = {}) {
 async function ready(ctx) { return ctx.service.prepare(USER, TRACK, 40, '따뜻한 표정의 밝은 댄스'); }
 async function started(ctx) { const job = await ready(ctx); return ctx.service.start(USER, TRACK, job.id); }
 async function advance(ctx, job) { ctx.tick(); return ctx.service.advance(USER, TRACK, job.id); }
+async function imageApproved(ctx) {
+  const startedJob = await started(ctx);
+  const review = await advance(ctx, startedJob);
+  assert.equal(review.status, 'image-review');
+  return ctx.service.approveFrame(USER, TRACK, review.id);
+}
 
 test('owner/workflow/input validation precedes snapshot and paid calls', async () => {
   const c = fixture();
@@ -133,7 +141,60 @@ test('parallel image advances and repeated start cannot duplicate a paid image',
   const job = await started(c); assert.equal((await c.service.start(USER, TRACK, job.id)).status, 'image');
   const first = advance(c, job); await new Promise(setImmediate);
   const concurrent = await advance(c, job); assert.ok(concurrent.inFlight);
-  gate.resolve(); const done = await first; assert.equal(done.status, 'clip1'); assert.equal(images, 1);
+  gate.resolve(); const done = await first; assert.equal(done.status, 'image-review'); assert.equal(images, 1);
+});
+test('a generated first frame stays in review and repeated advance spends zero video calls', async () => {
+  const c = fixture(); let job = await started(c); job = await advance(c, job);
+  assert.equal(job.status, 'image-review'); assert.equal(job.imageReviewRequired, true); assert.ok(job.imageUrl);
+  const calls = c.calls.length, writes = c.writes();
+  for (let attempt = 0; attempt < 3; attempt++) job = await advance(c, job);
+  assert.equal(job.status, 'image-review'); assert.equal(c.calls.length, calls); assert.equal(c.writes(), writes);
+  assert.equal(c.calls.filter(call => call[0] === 'video').length, 0);
+});
+test('frame approval rejects another owner or job, and duplicate approvals spend no video calls', async () => {
+  const c = fixture(); let job = await started(c); job = await advance(c, job);
+  const writes = c.writes();
+  await assert.rejects(c.service.approveFrame(OTHER, TRACK, job.id), { code: 'TRACK_NOT_FOUND' });
+  await assert.rejects(c.service.approveFrame(USER, TRACK, OTHER), { code: 'JOB_NOT_FOUND' });
+  await assert.rejects(c.service.approveFrame(USER, TRACK, 'bad'), { code: 'ID' });
+  assert.equal(c.writes(), writes);
+  const approvals = await Promise.all([c.service.approveFrame(USER, TRACK, job.id), c.service.approveFrame(USER, TRACK, job.id)]);
+  assert.ok(approvals.every(result => result.status === 'clip1'));
+  assert.equal(c.writes(), writes + 1); assert.ok(approvals[0].imageApprovedAt);
+  const approved = await c.service.approveFrame(USER, TRACK, job.id);
+  assert.equal(approved.imageApprovedAt, approvals[0].imageApprovedAt); assert.equal(c.writes(), writes + 1);
+  assert.equal(c.calls.filter(call => call[0] === 'video').length, 0);
+  job = await advance(c, approved); assert.equal(job.clip1RequestId, 'request-1');
+  assert.equal(c.calls.filter(call => call[0] === 'video').length, 1);
+});
+test('a legacy ready plan gains review on start, while an already-running legacy image continues unchanged', async () => {
+  for (const previousStatus of ['ready', 'image']) {
+    const c = fixture(); let job = await ready(c);
+    const legacy = { ...job, status: previousStatus }; delete legacy.imageReviewRequired; delete legacy.direction; delete legacy.creativePreferences;
+    c.setJob(legacy);
+    if (previousStatus === 'ready') job = await c.service.start(USER, TRACK, job.id);
+    else job = legacy;
+    job = await advance(c, job);
+    assert.equal(job.status, previousStatus === 'ready' ? 'image-review' : 'clip1');
+    assert.equal(c.calls.filter(call => call[0] === 'image').length, 1);
+    assert.equal(c.calls.filter(call => call[0] === 'video').length, 0);
+  }
+});
+test('selected creative preferences, source decisions and original music are persisted before planning', async () => {
+  const preferences = { performer: 'duo', location: 'rooftop', danceStyle: 'shuffle', visualStyle: 'stylized3d', difficulty: 'medium' };
+  const music = resolveDanceMusicSpec('latin-step', 'on', TRACK);
+  let plannedJob;
+  const c = fixture({ plan: async job => { plannedJob = structuredClone(job); return structuredClone(PLAN); } });
+  c.metadata({ danceMusic: music, instrumental: false, isInstrumental: false });
+  const job = await c.service.prepare(USER, TRACK, 40, '두 명이 옥상에서 셔플 춤을 춘다', preferences);
+  assert.equal(job.status, 'ready'); assert.deepEqual(job.creativePreferences, preferences); assert.deepEqual(job.musicSpec, music);
+  assert.deepEqual(job.direction.sources, { cast: 'explicit', location: 'explicit', choreography: 'explicit' });
+  assert.equal(job.direction.castId, 'duo'); assert.equal(job.direction.locationId, 'rooftop'); assert.equal(job.direction.choreographyId, 'shuffle');
+  assert.deepEqual(c.row().metadata.danceVideo.direction, job.direction);
+  assert.deepEqual(plannedJob.direction, job.direction); assert.deepEqual(plannedJob.musicSpec, music);
+  const repeated = await c.service.prepare(USER, TRACK, 40, '두 명이 옥상에서 셔플 춤을 춘다', preferences);
+  assert.equal(repeated.id, job.id);
+  assert.equal(c.calls.filter(call => call[0] === 'snapshot').length, 1);
 });
 test('image provider result survives asset-copy failure and is never auto-generated again', async () => {
   const c = fixture({ copyAsset: async () => { throw new Error('storage error with secret raw payload'); } });
@@ -142,16 +203,86 @@ test('image provider result survives asset-copy failure and is never auto-genera
   assert.doesNotMatch(job.error, /secret raw/);
   await advance(c, job); assert.equal(c.calls.filter(v => v[0] === 'image').length, 1);
 });
+test('resume copies the checkpointed image result without another paid image or video', async () => {
+  let copies = 0;
+  const c = fixture({ copyAsset: async (_job, kind, url, name) => {
+    assert.equal(kind, 'image'); assert.equal(url, 'https://imgen.x.ai/start.png'); assert.equal(name, 'first-frame');
+    if (++copies === 1) throw new Error('temporary storage failure');
+    return 'https://storage.test/recovered-first-frame.jpg';
+  } });
+  let job = await started(c); job = await advance(c, job);
+  assert.equal(job.status, 'attention'); assert.equal(job.failedStage, 'image');
+  assert.equal(job.imageSourceUrl, 'https://imgen.x.ai/start.png');
+  job = await c.service.get(USER, TRACK); assert.equal(job.canResume, true);
+  const calls = c.calls.length;
+  job = await c.service.resume(USER, TRACK, job.id); assert.equal(job.status, 'image'); assert.equal(c.calls.length, calls);
+  job = await advance(c, job);
+  assert.equal(job.status, 'image-review'); assert.equal(job.imageUrl, 'https://storage.test/recovered-first-frame.jpg');
+  assert.equal(job.imageApprovedAt, undefined); assert.equal(copies, 2);
+  assert.equal(c.calls.filter(call => call[0] === 'image').length, 1);
+  assert.equal(c.calls.filter(call => call[0] === 'video').length, 0);
+});
+test('resume of clip1 only polls its saved request or copies its saved source, without resubmission', async () => {
+  for (const failureAt of ['poll', 'copy']) {
+    let polls = 0, copies = 0;
+    const c = fixture({
+      pollVideo: async requestId => {
+        assert.equal(requestId, 'request-1'); polls++;
+        if (failureAt === 'poll' && polls === 1) throw new Error('temporary polling failure');
+        return { status: 'done', url: 'https://vidgen.x.ai/saved-clip1.mp4' };
+      },
+      copyAsset: async (_job, kind, url, name) => {
+        if (kind === 'video') {
+          assert.equal(name, 'clip1'); assert.equal(url, 'https://vidgen.x.ai/saved-clip1.mp4'); copies++;
+          if (failureAt === 'copy' && copies === 1) throw new Error('temporary clip storage failure');
+        }
+        return `https://storage.test/${name}`;
+      },
+    });
+    let job = await imageApproved(c); job = await advance(c, job); job = await advance(c, job);
+    assert.equal(job.status, 'attention'); assert.equal(job.failedStage, 'clip1'); assert.equal(job.clip1RequestId, 'request-1');
+    assert.equal(job.clip1SourceUrl, failureAt === 'copy' ? 'https://vidgen.x.ai/saved-clip1.mp4' : undefined);
+    job = await c.service.get(USER, TRACK); assert.equal(job.canResume, true);
+    const paidCalls = c.calls.filter(call => ['image', 'video'].includes(call[0])).length;
+    job = await c.service.resume(USER, TRACK, job.id); assert.equal(job.status, 'clip1');
+    job = await advance(c, job);
+    assert.equal(job.status, 'bridge'); assert.equal(job.clip1Url, 'https://storage.test/clip1');
+    assert.equal(job.clip1RequestId, 'request-1'); assert.equal(job.clip1SourceUrl, 'https://vidgen.x.ai/saved-clip1.mp4');
+    assert.equal(polls, failureAt === 'poll' ? 2 : 1); assert.equal(copies, failureAt === 'copy' ? 2 : 1);
+    assert.equal(c.calls.filter(call => ['image', 'video'].includes(call[0])).length, paidCalls);
+    assert.equal(c.calls.filter(call => call[0] === 'video').length, 1);
+  }
+});
+test('resume is owner and job scoped, and a live lease cannot be cleared or rewritten', async () => {
+  const c = fixture(); let job = await started(c); job = await advance(c, job);
+  const held = { ...job, status: 'attention', failedStage: 'image', inFlight: { action: 'image', token: OTHER, at: job.updatedAt } };
+  c.setJob(held); const writes = c.writes(), calls = c.calls.length;
+  assert.equal((await c.service.get(USER, TRACK)).canResume, false);
+  await assert.rejects(c.service.resume(OTHER, TRACK, job.id), { code: 'TRACK_NOT_FOUND' });
+  await assert.rejects(c.service.resume(USER, TRACK, OTHER), { code: 'JOB_NOT_FOUND' });
+  await assert.rejects(c.service.resume(USER, TRACK, 'bad'), { code: 'ID' });
+  const active = await c.service.resume(USER, TRACK, job.id);
+  assert.equal(active.status, 'attention'); assert.deepEqual(active.inFlight, held.inFlight);
+  assert.equal(c.writes(), writes); assert.equal(c.calls.length, calls);
+  c.tick(DANCE_VIDEO_LEASE_MS + 1);
+  assert.equal((await c.service.get(USER, TRACK)).canResume, true);
+  const resumed = await c.service.resume(USER, TRACK, job.id);
+  assert.equal(resumed.status, 'image'); assert.equal(resumed.inFlight, undefined); assert.equal(c.calls.length, calls);
+});
 test('ambiguous video submission is held; neither advance nor prepare resubmits it', async () => {
   let submissions = 0;
   const c = fixture({ startVideo: async () => { submissions++; throw new Error('timeout after provider accepted'); } });
-  let job = await started(c); job = await advance(c, job); job = await advance(c, job);
+  let job = await imageApproved(c); job = await advance(c, job);
   assert.equal(job.status, 'attention'); await advance(c, job); await ready(c);
   await assert.rejects(c.service.prepare(USER, TRACK, 50, 'different'), e => e.code === 'JOB_EXISTS');
   assert.equal(submissions, 1); assert.equal(job.audioUrl, 'https://storage.test/snapshot.wav');
+  const held = await c.service.get(USER, TRACK), writes = c.writes();
+  assert.equal(held.canResume, false); assert.equal(held.clip1RequestId, undefined); assert.equal(held.clip1SourceUrl, undefined);
+  await assert.rejects(c.service.resume(USER, TRACK, job.id), { code: 'RESUME_UNSAFE', status: 409 });
+  assert.equal(c.writes(), writes); assert.equal(submissions, 1);
 });
 test('successful restartable pipeline has exactly two 15s submissions and C2 uses real C1 final frame', async () => {
-  const c = fixture(); let job = await started(c);
+  const c = fixture(); let job = await imageApproved(c);
   for (let i = 0; i < 9 && job.status !== 'completed'; i++) job = await advance(c, job);
   assert.equal(job.status, 'completed');
   const submissions = c.calls.filter(v => v[0] === 'video');
@@ -165,7 +296,7 @@ test('successful restartable pipeline has exactly two 15s submissions and C2 use
 test('persisted provider ID is polled once in parallel, is rate bounded, and never re-submitted', async () => {
   const gate = deferred(); let polls = 0;
   const c = fixture({ pollVideo: async () => { polls++; await gate.promise; return { status: 'pending' }; } });
-  let job = await started(c); job = await advance(c, job); job = await advance(c, job);
+  let job = await imageApproved(c); job = await advance(c, job);
   assert.equal(job.clip1RequestId, 'request-1');
   const first = advance(c, job); await new Promise(setImmediate);
   await c.service.advance(USER, TRACK, job.id); gate.resolve(); job = await first;
@@ -181,6 +312,18 @@ test('stale lease is visible on read without mutation, then persists attention o
   await advance(c, job); assert.equal(c.row().metadata.danceVideo.status, 'attention');
   assert.equal(c.calls.filter(v => v[0] === 'image').length, 0);
 });
+test('an expired advance keeps the known request stage and exposes immediate safe resume without a paid resubmission', async () => {
+  const c = fixture(); let job = await started(c); job = await advance(c, job);
+  job = await c.service.approveFrame(USER, TRACK, job.id); job = await advance(c, job);
+  assert.ok(job.clip1RequestId);
+  c.setJob({ ...job, inFlight: { action: 'clip1-poll', token: OTHER, at: job.updatedAt } });
+  c.tick(DANCE_VIDEO_LEASE_MS + 1);
+  const calls = c.calls.length; job = await advance(c, job);
+  assert.equal(job.status, 'attention'); assert.equal(job.failedStage, 'clip1'); assert.equal(job.canResume, true);
+  job = await c.service.resume(USER, TRACK, job.id);
+  assert.equal(job.status, 'clip1'); assert.equal(job.inFlight, undefined); assert.equal(c.calls.length, calls);
+  assert.equal(c.calls.filter(call => call[0] === 'video').length, 1);
+});
 test('unrelated metadata CAS conflict is merged without repeating an expensive call', async () => {
   const c = fixture(); const original = c.store.compareAndSwap; let conflict = true;
   c.store.compareAndSwap = async (row, job) => {
@@ -188,21 +331,41 @@ test('unrelated metadata CAS conflict is merged without repeating an expensive c
     return original(row, job);
   };
   let job = await started(c); job = await advance(c, job);
-  assert.equal(job.status, 'clip1'); assert.equal(c.calls.filter(v => v[0] === 'image').length, 1);
+  assert.equal(job.status, 'image-review'); assert.equal(c.calls.filter(v => v[0] === 'image').length, 1);
   assert.equal(c.row().metadata.unrelated, 'preserved'); assert.equal(c.row().metadata.isPublic, true);
 });
 test('C2 failure retains C1 and selected audio; no render or single-clip loop fallback', async () => {
   const c = fixture({ pollVideo: async id => id === 'request-2' ? { status: 'failed' } : { status: 'done', url: 'https://vidgen.x.ai/first.mp4' } });
-  let job = await started(c);
+  let job = await imageApproved(c);
   for (let i = 0; i < 9 && job.status !== 'attention'; i++) job = await advance(c, job);
   assert.equal(job.status, 'attention'); assert.ok(job.clip1Url); assert.ok(job.clip2RequestId); assert.ok(job.audioUrl);
   assert.equal(c.calls.filter(v => v[0] === 'render').length, 0);
 });
 test('render failure retains both finished clips and mismatched job IDs are rejected', async () => {
-  const c = fixture({ render: async () => { throw new Error('ffmpeg failed'); } }); let job = await started(c);
+  const c = fixture({ render: async () => { throw new Error('ffmpeg failed'); } }); let job = await imageApproved(c);
   await assert.rejects(c.service.advance(USER, TRACK, OTHER), e => e.code === 'JOB_NOT_FOUND');
   for (let i = 0; i < 9 && job.status !== 'attention'; i++) job = await advance(c, job);
   assert.equal(job.status, 'attention'); assert.ok(job.clip1Url); assert.ok(job.clip2Url); assert.ok(job.audioHash);
+});
+test('resume renders the two stored clips without paying for another image or video', async () => {
+  let renders = 0;
+  const c = fixture({ render: async job => {
+    assert.equal(job.clip1Url, 'https://storage.test/clip1'); assert.equal(job.clip2Url, 'https://storage.test/clip2');
+    if (++renders === 1) throw new Error('temporary mux failure');
+    return 'https://storage.test/recovered-final.mp4';
+  } });
+  let job = await imageApproved(c);
+  for (let attempt = 0; attempt < 9 && job.status !== 'attention'; attempt++) job = await advance(c, job);
+  assert.equal(job.status, 'attention'); assert.equal(job.failedStage, 'render');
+  assert.ok(job.clip1Url); assert.ok(job.clip2Url); assert.ok(job.clip1RequestId); assert.ok(job.clip2RequestId);
+  job = await c.service.get(USER, TRACK); assert.equal(job.canResume, true);
+  const prior = structuredClone(job), paidCalls = c.calls.filter(call => ['image', 'video'].includes(call[0])).length;
+  job = await c.service.resume(USER, TRACK, job.id); assert.equal(job.status, 'render');
+  job = await advance(c, job);
+  assert.equal(job.status, 'completed'); assert.equal(job.videoUrl, 'https://storage.test/recovered-final.mp4'); assert.equal(renders, 2);
+  for (const key of ['audioUrl', 'audioHash', 'clip1Url', 'clip2Url', 'clip1RequestId', 'clip2RequestId']) assert.equal(job[key], prior[key]);
+  assert.equal(c.calls.filter(call => ['image', 'video'].includes(call[0])).length, paidCalls);
+  assert.equal(c.calls.filter(call => call[0] === 'video').length, 2);
 });
 test('plan compiler fixes exact identity, continuation, silence and no text within provider length', () => {
   const { validateDancePlan } = load('src/lib/dance/videoPlan.ts');
@@ -218,7 +381,8 @@ test('plan compiler fixes exact identity, continuation, silence and no text with
 test('real store adapter final CAS preserves originals/privacy and unrelated metadata', async () => {
   const { createDanceVideoStore } = loader({ './renderVideo': {}, './videoPlan': {}, '../video/petProvider': {}, '../video/petMedia': {} })('src/lib/dance/videoServer.ts');
   let row = { id: TRACK, user_id: USER, status: 'completed', audio_url: 'https://storage.test/original.mp3', source_audio_url: 'original-source', is_public: false,
-    title: 'old music title', cover_art_url: 'music-cover', license_hash: JSON.stringify({ workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, isPublic: false, unrelated: 'keep' }) };
+    title: 'old music title', cover_art_url: 'music-cover', license_hash: JSON.stringify({ workflow: DANCE_WORKFLOW, presetId: DANCE_CATEGORY_ID, isPublic: false,
+      isInstrumental: true, dancePreset: { id: 'dance-hook-instrumental-v1', bpm: 138 }, unrelated: 'keep' }) };
   let lastPayload;
   const admin = { from: table => {
     assert.equal(table, 'generations');

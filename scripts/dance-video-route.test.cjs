@@ -45,7 +45,7 @@ function fixture({ userId = USER, authError, serviceError, missingConfig = false
       return target[name];
     },
   });
-  const service = Object.fromEntries(['get', 'prepare', 'start', 'advance', 'reuse'].map(action => [action, async (...args) => {
+  const service = Object.fromEntries(['get', 'prepare', 'selectIdea', 'start', 'approveFrame', 'approvePreview', 'resume', 'advance', 'reuse'].map(action => [action, async (...args) => {
     calls.push([action, ...args]);
     if (serviceError) throw serviceError;
     if (args[0] !== USER || args[1] !== TRACK) throw new DanceVideoError('저장된 음원을 찾을 수 없습니다.', 'NOT_FOUND', 404);
@@ -133,9 +133,8 @@ test('JSON shape and 16KB limit count actual UTF-8 body bytes, not only declared
   await expectFailure(await ctx.api.POST(request(oversized, { headers: { 'content-length': '1' } })), 400, 'BODY');
   await expectFailure(await ctx.api.POST(request(prepare, { headers: { 'content-length': String(DANCE_VIDEO_REQUEST_BYTES + 1) } })), 400, 'BODY');
   assert.equal(ctx.calls.length, 0);
-  const atLimit = { ...prepare, padding: '' };
-  atLimit.padding = 'x'.repeat(DANCE_VIDEO_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(atLimit)));
-  assert.equal(Buffer.byteLength(JSON.stringify(atLimit)), DANCE_VIDEO_REQUEST_BYTES);
+  const atLimit = JSON.stringify(prepare) + ' '.repeat(DANCE_VIDEO_REQUEST_BYTES - Buffer.byteLength(JSON.stringify(prepare)));
+  assert.equal(Buffer.byteLength(atLimit), DANCE_VIDEO_REQUEST_BYTES);
   assert.equal((await ctx.api.POST(request(atLimit))).status, 200, 'exactly 16KB remains accepted');
 });
 
@@ -151,19 +150,69 @@ test('invalid action and track/job IDs never reach workflow methods', async () =
 
 test('authenticated identity owns forwarding; body identity cannot impersonate another owner', async () => {
   const ctx = fixture();
-  const prepared = await ctx.api.POST(request({ ...prepare, userId: OTHER, ownerId: OTHER }, { headers: { 'content-type': 'application/json; charset=utf-8' } }));
+  await expectFailure(await ctx.api.POST(request({ ...prepare, userId: OTHER, ownerId: OTHER })), 400, 'PREPARE_INPUT');
+  for (const action of ['start', 'advance', 'approve-frame', 'approve-preview', 'resume']) await expectFailure(await ctx.api.POST(request({ action, trackId: TRACK, jobId: JOB, userId: OTHER })), 400, 'ACTION_INPUT');
+  assert.equal(ctx.calls.length, 0);
+  const prepared = await ctx.api.POST(request(prepare, { headers: { 'content-type': 'application/json; charset=utf-8' } }));
   assert.equal(prepared.status, 200); assert.equal((await prepared.json()).job.id, JOB);
-  for (const action of ['start', 'advance']) {
-    const response = await ctx.api.POST(request({ action, trackId: TRACK, jobId: JOB, userId: OTHER }));
+  for (const action of ['start', 'advance', 'approve-frame', 'approve-preview', 'resume']) {
+    const response = await ctx.api.POST(request({ action, trackId: TRACK, jobId: JOB }));
     assert.equal(response.status, 200); assert.equal(response.headers.get('cache-control'), 'no-store');
   }
   assert.deepEqual(ctx.calls, [
-    ['prepare', USER, TRACK, 12.5, prepare.visualBrief], ['start', USER, TRACK, JOB], ['advance', USER, TRACK, JOB],
+    ['prepare', USER, TRACK, 12.5, prepare.visualBrief, undefined], ['start', USER, TRACK, JOB], ['advance', USER, TRACK, JOB], ['approveFrame', USER, TRACK, JOB], ['approvePreview', USER, TRACK, JOB], ['resume', USER, TRACK, JOB],
   ]);
   await expectFailure(await ctx.api.POST(request({ ...prepare, trackId: OTHER })), 404, 'NOT_FOUND');
   const outsider = fixture({ userId: OTHER });
-  await expectFailure(await outsider.api.POST(request({ ...prepare, userId: USER })), 404, 'NOT_FOUND');
+  await expectFailure(await outsider.api.POST(request(prepare)), 404, 'NOT_FOUND');
   assert.equal(outsider.calls[0][1], OTHER);
+});
+test('prepare forwards only selected creative preferences and rejects client plan or media overrides', async () => {
+  const ctx = fixture();
+  const creativePreferences = { performer: 'man', location: 'arcade', danceStyle: 'disco', visualStyle: 'realistic', difficulty: 'easy' };
+  const response = await ctx.api.POST(request({ ...prepare, creativePreferences }));
+  assert.equal(response.status, 200);
+  assert.deepEqual(ctx.calls, [['prepare', USER, TRACK, 12.5, prepare.visualBrief, creativePreferences]]);
+  const count = ctx.calls.length;
+  for (const override of [{ direction: { castId: 'woman' } }, { plan: {} }, { imageUrl: 'https://attacker.test/frame.jpg' }, { musicSpec: {} }, { jobId: JOB }]) {
+    await expectFailure(await ctx.api.POST(request({ ...prepare, ...override })), 400, 'PREPARE_INPUT');
+  }
+  for (const action of ['start', 'advance', 'approve-frame', 'approve-preview', 'resume']) {
+    for (const override of [{ imageUrl: 'https://attacker.test/frame.jpg' }, { visualBrief: 'changed' }, { creativePreferences }]) {
+      await expectFailure(await ctx.api.POST(request({ action, trackId: TRACK, jobId: JOB, ...override })), 400, 'ACTION_INPUT');
+    }
+  }
+  assert.equal(ctx.calls.length, count);
+});
+test('select-idea forwards only the owned saved IDs and rejects a replacement idea or plan object', async () => {
+  const ctx = fixture(); const input = { action: 'select-idea', trackId: TRACK, jobId: JOB, ideaId: 'ball-reply' };
+  const response = await ctx.api.POST(request(input));
+  assert.equal(response.status, 200); assert.deepEqual(ctx.calls, [['selectIdea', USER, TRACK, JOB, 'ball-reply']]);
+  for (const override of [{ selectedIdea: { id: 'ball-reply', signatureMove: 'client replacement' } }, { ideas: [] }, { plan: {} }, { creativePreferences: {} }, { userId: OTHER }]) {
+    await expectFailure(await ctx.api.POST(request({ ...input, ...override })), 400, 'IDEA_INPUT');
+  }
+  await expectFailure(await ctx.api.POST(request({ ...input, jobId: 'bad' })), 400, 'ID');
+  assert.equal(ctx.calls.length, 1);
+});
+test('approve-preview accepts only owner-scoped saved job IDs without a client approval payload', async () => {
+  const ctx = fixture(); const input = { action: 'approve-preview', trackId: TRACK, jobId: JOB };
+  const response = await ctx.api.POST(request(input));
+  assert.equal(response.status, 200); assert.deepEqual(ctx.calls, [['approvePreview', USER, TRACK, JOB]]);
+  for (const override of [{ previewUrl: 'https://attacker.test/replacement.mp4' }, { previewApprovedAt: 'client approval' }, { selectedIdea: {} }, { canResume: true }]) {
+    await expectFailure(await ctx.api.POST(request({ ...input, ...override })), 400, 'ACTION_INPUT');
+  }
+  await expectFailure(await ctx.api.POST(request({ ...input, jobId: 'bad' })), 400, 'ID');
+  assert.equal(ctx.calls.length, 1);
+});
+test('resume forwards the authenticated owner and saved IDs and cannot accept a replacement source', async () => {
+  const ctx = fixture(); const input = { action: 'resume', trackId: TRACK, jobId: JOB };
+  const response = await ctx.api.POST(request(input));
+  assert.equal(response.status, 200); assert.deepEqual(ctx.calls, [['resume', USER, TRACK, JOB]]);
+  for (const override of [{ clip1SourceUrl: 'https://attacker.test/video.mp4' }, { imageSourceUrl: 'https://attacker.test/frame.jpg' }, { failedStage: 'image' }, { canResume: true }, { requestId: OTHER }]) {
+    await expectFailure(await ctx.api.POST(request({ ...input, ...override })), 400, 'ACTION_INPUT');
+  }
+  for (const jobId of [undefined, null, 123, 'bad']) await expectFailure(await ctx.api.POST(request({ ...input, jobId })), 400, 'ID');
+  assert.equal(ctx.calls.length, 1);
 });
 
 test('GET only reads owned persisted job and does not access provider credentials or advance work', async () => {

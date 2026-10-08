@@ -1,4 +1,8 @@
-/** Versioned pilot: independently composed music, never reference-audio conditioning. */
+import type { DanceCreativePreferences, DanceCreativeDirection } from './creativeDirection';
+import type { DanceMusicSpec } from './musicProfiles';
+import type { DanceIdea } from './ideas';
+
+/** Versioned music-first workflow; legacy track and snapshot identities stay readable. */
 export const DANCE_CATEGORY_ID = 'dance_challenge' as const;
 export const DANCE_WORKFLOW = 'dance-music-first-v1' as const;
 export const DANCE_PRESET = {
@@ -14,6 +18,14 @@ export const DANCE_PRESET = {
   arrangement: '[Instrumental]\n[Immediate original melodic hook]\n[Groove variation]\n[Main hook reprise]\n[Percussion variation]\n[Full hook return]\n[Clean musical ending]',
 } as const;
 export const DANCE_CLIP_SECONDS = 30;
+export type DanceRhythm = { beatSeconds: number[]; confidence: number; method: 'energy-autocorrelation' | 'editorial-fallback'; endingStatus: 'clean' | 'review' | 'uncertain' };
+export function isDanceRhythm(value: unknown): value is DanceRhythm {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const r = value as DanceRhythm;
+  return Array.isArray(r.beatSeconds) && r.beatSeconds.length <= 500 && r.beatSeconds.every(t => Number.isFinite(t) && t >= 0 && t < 30)
+    && Number.isFinite(r.confidence) && r.confidence >= 0 && r.confidence <= 1
+    && ['energy-autocorrelation', 'editorial-fallback'].includes(r.method) && ['clean', 'review', 'uncertain'].includes(r.endingStatus);
+}
 export function isDanceMetadata(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === 'object' && !Array.isArray(value)
     && (value as Record<string, unknown>).workflow === DANCE_WORKFLOW
@@ -21,7 +33,7 @@ export function isDanceMetadata(value: unknown): value is Record<string, unknown
 }
 export type DanceAudioSelection = {
   audioUrl: string; audioHash: string; sourceAudioHash: string; sourceDurationSeconds: number;
-  startSeconds: number; durationSeconds: 30; bpm?: number; onsetSeconds?: number[];
+  startSeconds: number; durationSeconds: 30; bpm?: number; onsetSeconds?: number[]; rhythm?: DanceRhythm;
 };
 export function isDanceAudioSelection(value: unknown): value is DanceAudioSelection {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -32,22 +44,39 @@ export function isDanceAudioSelection(value: unknown): value is DanceAudioSelect
     && Number.isFinite(clip.sourceDurationSeconds) && clip.sourceDurationSeconds <= 3600
     && clip.startSeconds + 30 <= clip.sourceDurationSeconds + 0.00001
     && (clip.bpm === undefined || (Number.isFinite(clip.bpm) && clip.bpm > 0))
+    && (clip.rhythm === undefined || isDanceRhythm(clip.rhythm))
     && (clip.onsetSeconds === undefined || (Array.isArray(clip.onsetSeconds) && clip.onsetSeconds.length <= 10000
       && clip.onsetSeconds.every(second => Number.isFinite(second) && second >= 0 && second < 30)));
 }
 export type DanceTrack = { id: string; title: string; status: string; audioUrl: string | null; durationSeconds: number | null; createdAt: string; isPublic: boolean; requestId?: string; error?: string;
+  musicProfileId?: string; vocalPreference?: 'recommended' | 'on' | 'off'; musicLabel?: string; instrumental?: boolean;
   savedClip?: Pick<DanceAudioSelection, 'audioUrl' | 'audioHash' | 'startSeconds' | 'durationSeconds'>; reused?: boolean; rootTrackId?: string };
-export type DancePlan = { title: string; summary: string; identity: string; imagePrompt: string; clips: [string, string] };
+export type DanceChoreography = {
+  hookName: string;
+  steps: Array<{ count: number; action: string; focus: 'arms' | 'feet' | 'body' | 'combined' }>;
+  segments: Array<{ startSeconds: number; endSeconds: number; action: string; repeatHook: boolean }>;
+  firstPose: string; endPose: string;
+};
+export type DancePlan = { title: string; summary: string; identity: string; imagePrompt: string; clips: [string, string]; version?: 2; choreography?: DanceChoreography };
 export type DancePlanFailure = {
   code: 'PLAN_TIMEOUT' | 'PLAN_CONNECTION' | 'PLAN_HTTP' | 'PLAN_RESPONSE' | 'PLAN_INVALID' | 'PLAN_LENGTH';
   kind: 'timeout' | 'connection' | 'http' | 'response'; phase: 'preparation' | 'request' | 'response';
   elapsedMs: number; timeoutMs: number; httpStatus?: number; providerRequestId?: string;
 };
 export type DanceVideoJob = {
-  id: string; trackId: string; status: 'preparing' | 'ready' | 'image' | 'clip1' | 'bridge' | 'clip2' | 'render' | 'completed' | 'attention';
+  id: string; trackId: string; status: 'preparing' | 'ideas' | 'ready' | 'image' | 'image-review' | 'preview' | 'preview-review' | 'clip1' | 'bridge' | 'clip2' | 'render' | 'completed' | 'attention';
   startSeconds: number; durationSeconds: 30; visualBrief: string; createdAt: string; updatedAt: string;
   audioUrl?: string; sourceAudioHash?: string; audioHash?: string; sourceDurationSeconds?: number;
   bpm?: number; onsetSeconds?: number[]; plan?: DancePlan; imageUrl?: string; bridgeUrl?: string;
+  rhythm?: DanceRhythm;
+  creativePreferences?: DanceCreativePreferences; direction?: DanceCreativeDirection; musicSpec?: DanceMusicSpec;
+  imageApprovedAt?: string; imageReviewRequired?: boolean;
+  videoSpec?: { model: 'grok-imagine-video' | 'grok-imagine-video-1.5' | 'grok-imagine-video-1.5-lite'; resolution: '720p'; width: 720; height: 1280 };
+  canResume?: boolean;
+  failedStage?: 'image' | 'preview' | 'clip1' | 'bridge' | 'clip2' | 'render';
+  failureCode?: string;
+  ideas?: DanceIdea[]; selectedIdea?: DanceIdea; conceptPlanAttempts?: number; ideaReviewRequired?: boolean;
+  qualityPreviewRequired?: boolean; previewSeconds?: 5; previewRequestId?: string; previewSourceUrl?: string; previewClipUrl?: string; previewUrl?: string; previewApprovedAt?: string;
   clip1RequestId?: string; clip2RequestId?: string; clip1Url?: string; clip2Url?: string; videoUrl?: string;
   planningSubmitted?: boolean;
   planFailure?: DancePlanFailure;
