@@ -207,7 +207,9 @@ export async function renderDancePreview(job: DanceVideoJob, upload: DanceUpload
     await writeFile(audioFile, audio.buffer);
     if (Math.abs(await probePetMediaSeconds(binary, audioFile, 'audio') - 30) > 1 / SAMPLE_RATE) throw new DanceRenderError('저장된 원본 구간은 정확히 30초여야 합니다.', 'AUDIO_DURATION');
     const clip = await downloadPetMedia(clipUrl, 'video'); await writeFile(clipFile, clip.buffer);
-    if (Math.abs(await probePetMediaSeconds(binary, clipFile, 'video') - 5) > 1e-6) throw new DanceRenderError('동작 테스트 영상은 정확히 5초여야 합니다.', 'PREVIEW_DURATION');
+    // Match the full-clip policy: trim a small native frame overhang, never fill a short clip.
+    const nativeSeconds = await probePetMediaSeconds(binary, clipFile, 'video');
+    if (!Number.isFinite(nativeSeconds) || nativeSeconds < 5 || nativeSeconds > 5.1) throw new DanceRenderError('동작 테스트 영상은 5초이며 프레임 여유는 0.1초 이내여야 합니다.', 'PREVIEW_DURATION');
     await run(binary, ['-hide_banner', '-v', 'error', '-y', '-i', clipFile, '-i', audioFile,
       '-filter_complex', '[0:v:0]trim=duration=5,setpts=PTS-STARTPTS,scale=720:1280:force_original_aspect_ratio=decrease,pad=720:1280:(ow-iw)/2:(oh-ih)/2:black,setsar=1,fps=30,format=yuv420p[v];[1:a:0]atrim=duration=5,asetpts=PTS-STARTPTS[a]',
       '-map', '[v]', '-map', '[a]', '-t', '5', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '21', '-threads', '2', '-pix_fmt', 'yuv420p',

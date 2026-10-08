@@ -239,37 +239,57 @@ test('real preview is 5s at 720x1280 with the first master audio seconds and no 
       previewSourceUrl: 'https://files.x.ai/offline-provider-preview.mp4', previewClipUrl: nativeUrl,
       videoSpec: { model: 'grok-imagine-video', resolution: '720p', width: 720, height: 1280 } };
     const savedJob = structuredClone(job);
-    const previewUrl = await helper.renderDancePreview(job, async (_job, name, buffer, contentType) => {
+    const uploadPreview = async (_job, name, buffer, contentType) => {
       assert.equal(contentType, 'video/mp4'); uploads.push(name); await fs.writeFile(file('preview.mp4'), buffer); return prefix + name;
-    });
+    };
+    const previewUrl = await helper.renderDancePreview(job, uploadPreview);
     assert.match(previewUrl, /preview-5s-[a-f0-9]{16}\.mp4$/);
     assert.equal(uploads.length, 1);
     assert.equal(previewUrl, prefix + uploads[0]);
     assert.deepEqual(downloads.sort(), [masterUrl, nativeUrl].sort());
-    assert.equal(hash(master), masterHash, 'in-memory 30s master bytes remain unchanged');
-    assert.equal(hash(await fs.readFile(file('master.wav'))), masterHash, 'saved 30s master bytes remain unchanged');
-    assert.equal(await legacy.probeLegacyShortStream(ffmpeg, file('master.wav'), 'audio'), 30);
-    assert.deepEqual(job, savedJob, 'rendering does not alter the master selection or job fields');
-    assert.equal(await legacy.probeLegacyShortStream(ffmpeg, file('preview.mp4'), 'video'), 5);
-    const streams = (await run(ffmpeg, ['-hide_banner', '-i', file('preview.mp4'), '-t', '0', '-f', 'null', '-'], { timeout: 20_000, maxBuffer: 16 * 1024 })).stderr;
-    assert.match(streams, /Video: h264\b/);
-    assert.match(streams, /Audio: aac\b[^\n]*48000 Hz, stereo/);
-    const checksums = (await run(ffmpeg, ['-v', 'error', '-i', file('preview.mp4'), '-map', '0:v:0', '-f', 'framecrc', '-'], { timeout: 30_000, maxBuffer: 128 * 1024 })).stdout;
-    assert.match(checksums, /#dimensions 0: 720x1280/);
-    assert.match(checksums, /#tb 0: 1\/30/);
-    const frames = [...checksums.matchAll(/^0,\s*(-?\d+),\s*(-?\d+),\s*(\d+),/gm)];
-    assert.equal(frames.length, 150);
-    assert.equal(Number(frames[0][2]), 0);
-    assert.equal(Number(frames.at(-1)[2]) + Number(frames.at(-1)[3]), 150, 'decoded preview frames cover exactly five seconds');
-    const source = await decode(file('master.wav')), output = await decode(file('preview.mp4'));
-    const expectedBytes = 5 * 48000 * 4;
-    assert.ok(output.length >= expectedBytes && output.length <= 5.05 * 48000 * 4, 'preview audio contains only five seconds plus bounded AAC frame padding');
-    let error = 0, energy = 0;
-    for (let offset = 0; offset < expectedBytes; offset += 4) {
-      const expected = source.readFloatLE(offset), actual = output.readFloatLE(offset);
-      error += (expected - actual) ** 2; energy += expected ** 2;
+    const source = await decode(file('master.wav'));
+    async function verifyPreview() {
+      assert.equal(hash(master), masterHash, 'in-memory 30s master bytes remain unchanged');
+      assert.equal(hash(await fs.readFile(file('master.wav'))), masterHash, 'saved 30s master bytes remain unchanged');
+      assert.equal(await legacy.probeLegacyShortStream(ffmpeg, file('master.wav'), 'audio'), 30);
+      assert.deepEqual(job, savedJob, 'rendering does not alter the master selection or job fields');
+      assert.equal(await legacy.probeLegacyShortStream(ffmpeg, file('preview.mp4'), 'video'), 5);
+      const streams = (await run(ffmpeg, ['-hide_banner', '-i', file('preview.mp4'), '-t', '0', '-f', 'null', '-'], { timeout: 20_000, maxBuffer: 16 * 1024 })).stderr;
+      assert.match(streams, /Video: h264\b/);
+      assert.match(streams, /Audio: aac\b[^\n]*48000 Hz, stereo/);
+      const checksums = (await run(ffmpeg, ['-v', 'error', '-i', file('preview.mp4'), '-map', '0:v:0', '-f', 'framecrc', '-'], { timeout: 30_000, maxBuffer: 128 * 1024 })).stdout;
+      assert.match(checksums, /#dimensions 0: 720x1280/);
+      assert.match(checksums, /#tb 0: 1\/30/);
+      const frames = [...checksums.matchAll(/^0,\s*(-?\d+),\s*(-?\d+),\s*(\d+),/gm)];
+      assert.equal(frames.length, 150);
+      assert.equal(Number(frames[0][2]), 0);
+      assert.equal(Number(frames.at(-1)[2]) + Number(frames.at(-1)[3]), 150, 'decoded preview frames cover exactly five seconds');
+      const output = await decode(file('preview.mp4'));
+      const expectedBytes = 5 * 48000 * 4;
+      assert.ok(output.length >= expectedBytes && output.length <= 5.05 * 48000 * 4, 'preview audio contains only five seconds plus bounded AAC frame padding');
+      let error = 0, energy = 0;
+      for (let offset = 0; offset < expectedBytes; offset += 4) {
+        const expected = source.readFloatLE(offset), actual = output.readFloatLE(offset);
+        error += (expected - actual) ** 2; energy += expected ** 2;
+      }
+      assert.ok(error / energy < 0.005, 'AAC preview matches the first five master seconds and excludes the distinct native clip audio');
     }
-    assert.ok(error / energy < 0.005, 'AAC preview matches the first five master seconds and excludes the distinct native clip audio');
+    await verifyPreview();
+    async function nativeFrames(frameCount) {
+      const filename = file(`native-${frameCount}.mp4`);
+      await run(ffmpeg, ['-v', 'error', '-y', '-f', 'lavfi', '-i', `color=c=blue:s=96x170:r=24:d=${frameCount / 24}`,
+        '-f', 'lavfi', '-i', `sine=frequency=1000:sample_rate=48000:duration=${frameCount / 24}`,
+        '-frames:v', String(frameCount), '-c:v', 'libx264', '-preset', 'ultrafast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', filename],
+      { timeout: 20_000, maxBuffer: 128 * 1024 });
+      assert.ok(Math.abs(await legacy.probeLegacyShortStream(ffmpeg, filename, 'video') - frameCount / 24) <= 1e-6);
+      assets.set(nativeUrl, await fs.readFile(filename));
+    }
+    for (const frameCount of [121, 122]) {
+      await nativeFrames(frameCount);
+      assert.ok(frameCount / 24 > 5 && frameCount / 24 <= 5.1);
+      await helper.renderDancePreview(job, uploadPreview);
+      await verifyPreview();
+    }
 
     const forbiddenUpload = async () => { throw Error('INVALID_PREVIEW_UPLOAD_FORBIDDEN'); };
     const alteredMaster = Buffer.from(master); alteredMaster[alteredMaster.length - 1] ^= 1;
@@ -286,10 +306,11 @@ test('real preview is 5s at 720x1280 with the first master audio seconds and no 
     assert.deepEqual(downloads.slice(durationGuardDownloads), [masterUrl], 'short master is rejected before downloading native motion');
     assets.set(masterUrl, master);
 
-    await run(ffmpeg, ['-v', 'error', '-y', '-i', file('native-preview.mp4'), '-t', '4', '-an', '-c:v', 'copy', file('short-native.mp4')], { timeout: 20_000, maxBuffer: 128 * 1024 });
-    assets.set(nativeUrl, await fs.readFile(file('short-native.mp4')));
-    await assert.rejects(helper.renderDancePreview(job, forbiddenUpload), { code: 'PREVIEW_DURATION' });
-    assert.equal(uploads.length, 1, 'only the valid five-second preview was uploaded');
+    for (const frameCount of [119, 123]) {
+      await nativeFrames(frameCount);
+      await assert.rejects(helper.renderDancePreview(job, forbiddenUpload), { code: 'PREVIEW_DURATION' });
+    }
+    assert.equal(uploads.length, 3, 'only exact or bounded-overhang native previews were uploaded');
     assert.equal(hash(master), masterHash);
     assert.equal(hash(await fs.readFile(file('master.wav'))), masterHash);
   } finally { await fs.rm(temp, { recursive: true, force: true }); }
