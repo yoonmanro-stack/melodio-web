@@ -64,6 +64,73 @@ function fixture(options = {}) {
   return { service: createDanceVideoService(deps), rows, calls, store, deps, inserts: () => insertCount, original: structuredClone(initial) };
 }
 const fork = c => c.service.reuse(USER, TRACK, JOB, FORK);
+function abandonedPlanning(c, action, overrides = {}) {
+  const source = c.rows.get(TRACK);
+  const job = { ...source.metadata.danceVideo, status: 'preparing', planningSubmitted: true,
+    inFlight: { action, token: AGAIN, at: '2026-09-18T00:55:00Z' }, ...overrides };
+  delete job.videoUrl;
+  source.metadata = { ...source.metadata, danceVideo: job };
+  source.licenseHash = JSON.stringify(source.metadata);
+  return structuredClone(source);
+}
+for (const action of ['prepare', 'select-idea']) {
+  test(`expired ${action} planning can fork verified audio without changing the unknown original request`, async () => {
+    const c = fixture(); const before = abandonedPlanning(c, action);
+    const view = await c.service.get(USER, TRACK);
+    assert.equal(view.status, 'attention'); assert.equal(view.canReuseAudio, true); assert.equal(view.canResume, false);
+    assert.deepEqual(view.inFlight, before.metadata.danceVideo.inFlight);
+    const result = await Promise.all([fork(c), fork(c)]);
+    assert.ok(result.every(value => value.trackId === FORK)); assert.equal(c.inserts(), 1);
+    assert.deepEqual(c.rows.get(TRACK), before, 'source job and lease remain byte-for-byte unchanged');
+    assert.deepEqual(c.rows.get(FORK).metadata.danceAudioSelection, selection);
+    assert.equal(c.rows.get(FORK).metadata.danceVideo, undefined);
+    const verified = c.calls.length;
+    await fork(c); assert.equal(c.calls.length, verified, 'same request ID returns its existing variant');
+    await assert.rejects(c.service.resume(USER, TRACK, JOB), { code: 'RESUME_UNSAFE' });
+    assert.equal((await c.service.selectIdea(USER, TRACK, JOB, 'saved-idea')).status, 'attention');
+    assert.equal((await c.service.prepare(USER, TRACK, 40, before.metadata.danceVideo.visualBrief)).status, 'attention');
+    assert.ok(c.calls.every(call => call[0] === 'verify'), 'no planning, image, music or video calls');
+    assert.deepEqual(c.rows.get(TRACK), before);
+  });
+}
+test('planning leases held by advance remain eligible only for an explicit audio fork', async () => {
+  const c = fixture(); const before = abandonedPlanning(c, 'select-idea', { status: 'attention' });
+  assert.equal((await c.service.get(USER, TRACK)).canReuseAudio, true);
+  await fork(c); assert.deepEqual(c.rows.get(TRACK), before);
+});
+test('active planning, invalid leases and expired visual submissions cannot use the planning escape', async () => {
+  const cases = [
+    { action: 'prepare', inFlight: { action: 'prepare', token: AGAIN, at: '2026-09-18T00:59:00Z' } },
+    { action: 'select-idea', inFlight: { action: 'select-idea', token: AGAIN, at: '2026-09-18T00:59:00Z' } },
+    { action: 'prepare', inFlight: { action: 'prepare', token: AGAIN, at: 'invalid' } },
+    { action: 'prepare', plan: PLAN },
+    { action: 'prepare', previewRequestId: 'submitted-preview' },
+    { action: 'prepare', imageSourceUrl: 'https://imgen.x.ai/submitted.png' },
+    { action: 'prepare', audioHash: undefined },
+    ...['image', 'preview', 'clip1', 'bridge', 'clip2', 'render'].map(action => ({ action, status: action })),
+  ];
+  for (const { action, ...overrides } of cases) {
+    const c = fixture(); const before = abandonedPlanning(c, action, overrides);
+    assert.equal((await c.service.get(USER, TRACK)).canReuseAudio, false);
+    await assert.rejects(fork(c), { code: 'REUSE_NOT_READY' });
+    assert.equal(c.inserts(), 0); assert.equal(c.calls.length, 0); assert.deepEqual(c.rows.get(TRACK), before);
+  }
+});
+test('expired planning reuse rechecks source audio and lease after verifying the saved WAV', async () => {
+  for (const change of ['audio', 'active-lease', 'job-id']) {
+    const c = fixture(); abandonedPlanning(c, 'select-idea');
+    c.deps.reuseSnapshot = async clip => {
+      c.calls.push(['verify', structuredClone(clip)]);
+      const source = c.rows.get(TRACK), job = source.metadata.danceVideo;
+      if (change === 'audio') job.audioHash = 'c'.repeat(64);
+      else if (change === 'active-lease') job.inFlight.at = '2026-09-18T01:00:00Z';
+      else job.id = AGAIN;
+      source.licenseHash = JSON.stringify(source.metadata);
+    };
+    await assert.rejects(fork(c), { code: 'REUSE_CONFLICT' });
+    assert.equal(c.inserts(), 0); assert.deepEqual(c.calls.map(call => call[0]), ['verify']);
+  }
+});
 test('reuse reserves a separate private record with exact saved bytes reference and no paid calls', async () => {
   const c = fixture();
   assert.deepEqual(await fork(c), { trackId: FORK, job: null });

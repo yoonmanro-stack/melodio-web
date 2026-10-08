@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -394,6 +395,16 @@ test('real store adapter final CAS preserves originals/privacy and unrelated met
         return { data: structuredClone(row), error: null };
       } };
     return q;
+  }, rpc: (name, args) => {
+    assert.equal(name, 'compare_and_swap_dance_generation');
+    lastPayload = args;
+    return { maybeSingle: async () => {
+      if (row.id !== args.p_track_id || row.user_id !== args.p_user_id || row.status !== 'completed'
+        || row.license_hash !== args.p_expected_license_hash) return { data: null, error: null };
+      row = { ...row, license_hash: args.p_next_license_hash,
+        title: args.p_final_title ?? row.title, cover_art_url: args.p_final_cover_art_url ?? row.cover_art_url };
+      return { data: structuredClone(row), error: null };
+    } };
   } };
   const store = createDanceVideoStore(admin);
   assert.equal(await store.load(OTHER, TRACK), null);

@@ -57,9 +57,16 @@ export function createDanceVideoStore(admin: SupabaseClient): DanceVideoStore {
       payload.license_hash = JSON.stringify(metadata);
       // Deliberately leave original audio_url/source_audio_url and is_public untouched.
       // Existing generations stores video_url inside license_hash, not a video column.
-      let query = admin.from('generations').update(payload).eq('id', previous.id).eq('user_id', previous.userId).eq('status', 'completed');
-      query = previous.licenseHash === null ? query.is('license_hash', null) : query.eq('license_hash', previous.licenseHash);
-      const { data, error } = await query.select(FIELDS).maybeSingle();
+      // Full UTF-8 metadata belongs in the POST body, never in a URL filter.
+      // The restricted RPC retains owner/status and exact nullable TEXT CAS.
+      const { data, error } = await admin.rpc('compare_and_swap_dance_generation', {
+        p_track_id: previous.id,
+        p_user_id: previous.userId,
+        p_expected_license_hash: previous.licenseHash,
+        p_next_license_hash: payload.license_hash,
+        p_final_title: payload.title ?? null,
+        p_final_cover_art_url: payload.cover_art_url ?? null,
+      }).maybeSingle();
       if (error) throw new DanceVideoError('작업 상태를 저장하지 못했습니다. 저장된 요청을 먼저 확인해 주세요.', 'JOB_STORAGE', 503);
       return data ? record(data as GenerationRow) : null;
     },

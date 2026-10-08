@@ -96,6 +96,11 @@ function mechanismReviewNote(family: DanceIdea['conceptFamily']): string {
   if (family === 'contrast') return '첫 장면의 동작 대비와 결말이 눈에 보이게 이어지는지 확인해 주세요.';
   return '첫 장면의 닫힌 모양이 펼쳐지는 변화와 결말이 직관적으로 이어지는지 확인해 주세요.';
 }
+function combineReviewNotes(...notes: (string | undefined)[]): string | undefined {
+  const combined = [...new Set(notes.filter((note): note is string => Boolean(note)))].join(' ');
+  if (!combined) return undefined;
+  return combined.length <= 240 ? combined : '선택 전 장면 관계, 후보 간 차이, 시리즈 변주, 제작 위험과 완화 방법을 직접 확인해 주세요.';
+}
 
 export function validateDanceIdeas(value: unknown): DanceIdea[] {
   if (!Array.isArray(value) || value.length !== 3) invalid('구조가 다른 아이디어 세 개가 필요합니다.');
@@ -115,15 +120,19 @@ export function validateDanceIdeas(value: unknown): DanceIdea[] {
     if (!opening.format || !opening.motion) invalid(`아이디어 ${index + 1} 첫 2초 확인: 시간 형식=${opening.format ? '통과' : '불일치'}, 신체 동작=${opening.motion ? '통과' : '미확인'}.`);
     const payoff = { motion: visibleMotion(fields.visualPayoff), mechanism: hasMechanism(fields.visualPayoff, family) };
     if (!payoff.motion) invalid(`아이디어 ${index + 1} 결과 장면 확인: 신체 동작=미확인.`);
-    if (!/같은|유지|그대로|반복/.test(fields.seriesPotential) || !/바꾸|바꿔|바꾼|바꿀|변주|교체|변경|달리|다른/.test(fields.seriesPotential)) invalid('시리즈에서 유지할 훅과 바꿀 요소를 함께 설명해 주세요.');
-    if (!/손|발|다리|몸통|관절|소품|위치|거리|프레임|구도|정체성|접촉|인원|방향|속도|동작/.test(fields.productionRisk)
-      || !/유지|고정|줄이|줄여|피하|피해|작게|천천|단순|확인|제한|분리/.test(fields.productionRisk)) invalid('구체적인 제작 위험과 줄이는 방법을 설명해 주세요.');
+    const seriesRecognized = /같은|유지|그대로|반복/.test(fields.seriesPotential) && /바꾸|바꿔|바꾼|바꿀|변주|교체|변경|달리|다른/.test(fields.seriesPotential);
+    const riskRecognized = /손|발|다리|몸통|관절|소품|위치|거리|프레임|구도|정체성|접촉|인원|방향|속도|동작/.test(fields.productionRisk)
+      && /유지|고정|줄이|줄여|피하|피해|작게|천천|단순|확인|제한|분리/.test(fields.productionRisk);
     const structure = signature(fields.signatureMove);
     const openingStructure = movementFingerprint(fields.firstTwoSeconds);
     ids.add(id); titles.add(normal(fields.title)); families.add(family); openingStructures.push(openingStructure); movementStructures.push(structure);
-    // Family prose is not reliably classified by keywords; leave its meaning to creator review.
+    // Prose meaning is not reliably classified by keywords; leave it to creator review.
     // Recompute this bounded static note every time, never copy provider or stored note content.
-    const reviewNote = !opening.mechanism || !payoff.mechanism ? mechanismReviewNote(family) : undefined;
+    const reviewNote = combineReviewNotes(
+      !opening.mechanism || !payoff.mechanism ? mechanismReviewNote(family) : undefined,
+      !seriesRecognized ? '반복할 훅과 다음 편에서 바꿀 요소가 구체적인지 확인해 주세요.' : undefined,
+      !riskRecognized ? '제작 위험과 이를 줄이는 방법이 구체적인지 확인해 주세요.' : undefined,
+    );
     return { id, ...fields, conceptFamily: family, ...(reviewNote ? { reviewNote } : {}) };
   });
   return result.map((idea, index) => {
@@ -131,7 +140,7 @@ export function validateDanceIdeas(value: unknown): DanceIdea[] {
     const similar = result.some((_, other) => other !== index && (openingStructures[index] === openingStructures[other] || movementStructures[index] === movementStructures[other]));
     if (!similar) return idea;
     const similarityNote = '시작 동작이나 카운트별 움직임이 다른 후보와 비슷합니다. 각 후보의 상황과 차이가 눈에 보이는지 확인해 주세요.';
-    return { ...idea, reviewNote: [idea.reviewNote, similarityNote].filter(Boolean).join(' ') };
+    return { ...idea, reviewNote: combineReviewNotes(idea.reviewNote, similarityNote) };
   });
 }
 

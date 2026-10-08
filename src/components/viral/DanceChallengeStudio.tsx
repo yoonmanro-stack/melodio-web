@@ -82,6 +82,8 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
   const lockedClip = track?.savedClip;
   const clipReady = Boolean(lockedClip) || fullDuration >= 30;
   const savedAudioUrl = job?.audioUrl || lockedClip?.audioUrl;
+  const canReuseAudio = Boolean(job?.audioUrl && (job.canReuseAudio ??
+    (['ideas', 'ready', 'image-review', 'preview-review', 'completed', 'attention'].includes(job.status) && !job.inFlight)));
   const rangeFrozen = Boolean(lockedClip);
   const canRetryPlan = Boolean(job?.status === 'attention' && job.audioUrl && !job.plan && !job.inFlight && !job.imageUrl && !job.clip1RequestId && !job.clip2RequestId);
   const canRetryIdea = Boolean(canRetryPlan && job?.ideas?.length && job.selectedIdea && (job.conceptPlanAttempts || 0) < 2 && !job.previewUrl && !job.bridgeUrl && !job.clip1Url && !job.clip2Url && !job.videoUrl);
@@ -355,7 +357,8 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
       <audio key={savedAudioUrl} ref={clipAudio} aria-label="저장된 30초 음원" src={savedAudioUrl} controls preload="none" className="h-10 w-full" onPlay={e => registerActiveAudio(e.currentTarget)} />
       {job?.rhythm?.endingStatus === 'review' ? <p className="text-sm text-amber-200">마지막 보컬이나 음악이 잘리지 않는지 선택 구간을 확인하세요.</p> : null}
       <div className="flex flex-wrap gap-3"><a href={`/api/download?url=${encodeURIComponent(savedAudioUrl)}&filename=${encodeURIComponent(`${job?.plan?.title || track?.title || 'dance-clip'}-30s.wav`)}`} className="inline-flex items-center gap-1.5 text-sm font-bold text-cyan-200 underline"><Download className="h-4 w-4" />30초 음원 WAV 다운로드</a></div>
-      {job?.audioUrl && ['ideas', 'ready', 'image-review', 'preview-review', 'completed', 'attention'].includes(job.status) && !job.inFlight ? <button type="button" className={`${button} w-full`} disabled={busy} aria-busy={pendingAction === 'reuse'} onClick={() => void reuseAudio()}>{pendingAction === 'reuse' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}{pendingAction === 'reuse' ? '새 작업 준비 중…' : '같은 음원으로 새 챌린지 만들기'}</button> : null}
+      {canReuseAudio ? <button type="button" className={`${button} w-full`} disabled={busy} aria-busy={pendingAction === 'reuse'} onClick={() => void reuseAudio()}>{pendingAction === 'reuse' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Film className="h-4 w-4" />}{pendingAction === 'reuse' ? '새 작업 준비 중…' : '같은 음원으로 새 챌린지 만들기'}</button> : null}
+      {canReuseAudio && job?.inFlight ? <p className="text-sm text-amber-200">이전 기획은 결과 확인이 필요한 상태로 보존합니다. 같은 음원으로 별도의 새 챌린지를 준비할 수 있습니다.</p> : null}
       <p className="text-xs leading-relaxed text-zinc-300">이 음원은 자동 보관됩니다. 같은 음원으로 새 챌린지를 만들면 음악만 유지하고, 출연자·장소·안무를 새로 기획합니다. 기존 영상과 별도로 저장됩니다.</p>
     </div> : null}
     {audioReady ? <div className="space-y-4 border-t border-white/15 pt-5">

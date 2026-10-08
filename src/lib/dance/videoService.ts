@@ -87,6 +87,16 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
   function expired(job: DanceSavedJob) {
     return Boolean(job.inFlight && (!Number.isFinite(Date.parse(job.inFlight.at)) || now() - Date.parse(job.inFlight.at) >= DANCE_VIDEO_LEASE_MS));
   }
+  function reuseEligible(job: DanceSavedJob) {
+    if (!job.inFlight) return ['ideas', 'ready', 'image-review', 'preview-review', 'completed', 'attention'].includes(job.status);
+    // An abandoned planning request may have spent money, so leave its lease and
+    // job untouched. Only fork its verified audio into a separate, unstarted job.
+    if (!['preparing', 'attention'].includes(job.status) || !['prepare', 'select-idea'].includes(job.inFlight.action)
+      || !Number.isFinite(Date.parse(job.inFlight.at)) || !expired(job) || !isDanceAudioSelection(job)) return false;
+    return !job.plan && !job.imageSourceUrl && !job.imageUrl && !job.previewRequestId && !job.previewSourceUrl
+      && !job.previewClipUrl && !job.previewUrl && !job.clip1RequestId && !job.clip1SourceUrl && !job.clip1Url
+      && !job.bridgeUrl && !job.clip2RequestId && !job.clip2SourceUrl && !job.clip2Url && !job.videoUrl;
+  }
   function resumeStage(job: DanceSavedJob): DanceVideoJob['failedStage'] | null {
     if (job.failureCode === 'PROVIDER_FAILED') return null;
     const stage = job.failedStage || (expired(job) ? job.status : null);
@@ -102,6 +112,7 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     if (!job) return null;
     const result = structuredClone(job);
     const recoverableStage = resumeStage(result);
+    result.canReuseAudio = reuseEligible(job) && isDanceAudioSelection(job);
     if (expired(result)) {
       result.status = 'attention';
       result.error = '이전 요청의 완료 여부를 확인해야 합니다. 중복 생성을 막기 위해 저장된 작업을 보류했습니다.';
@@ -128,7 +139,7 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     const source = await owned(userId, trackId);
     const job = readDanceVideoJob(source);
     if (!job || job.id !== jobId) throw new DanceVideoError('재사용할 저장 작업을 찾을 수 없습니다.', 'JOB_NOT_FOUND', 404);
-    if (job.inFlight || !['ideas', 'ready', 'image-review', 'preview-review', 'completed', 'attention'].includes(job.status)) {
+    if (!reuseEligible(job)) {
       throw new DanceVideoError('현재 영상 작업이 멈추거나 완료된 뒤 같은 음원을 사용할 수 있습니다.', 'REUSE_NOT_READY', 409);
     }
     const selection = audioSelection(job);
@@ -143,7 +154,7 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     // Source edits during validation cannot silently change the requested job or clip.
     const current = await owned(userId, trackId);
     const currentJob = readDanceVideoJob(current);
-    if (!currentJob || currentJob.id !== jobId || currentJob.inFlight || !['ideas', 'ready', 'image-review', 'preview-review', 'completed', 'attention'].includes(currentJob.status)
+    if (!currentJob || currentJob.id !== jobId || !reuseEligible(currentJob)
       || JSON.stringify(audioSelection(currentJob)) !== JSON.stringify(selection)) {
       throw new DanceVideoError('원본 작업이 바뀌었습니다. 저장된 음원을 다시 확인해 주세요.', 'REUSE_CONFLICT', 409);
     }

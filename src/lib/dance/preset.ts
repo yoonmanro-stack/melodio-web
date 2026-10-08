@@ -73,6 +73,7 @@ export type DanceVideoJob = {
   imageApprovedAt?: string; imageReviewRequired?: boolean;
   videoSpec?: { model: 'grok-imagine-video' | 'grok-imagine-video-1.5' | 'grok-imagine-video-1.5-lite'; resolution: '720p'; width: 720; height: 1280 };
   canResume?: boolean;
+  canReuseAudio?: boolean;
   failedStage?: 'image' | 'preview' | 'clip1' | 'bridge' | 'clip2' | 'render';
   failureCode?: string;
   ideas?: DanceIdea[]; selectedIdea?: DanceIdea; conceptPlanAttempts?: number; ideaReviewRequired?: boolean;

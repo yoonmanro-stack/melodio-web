@@ -219,13 +219,44 @@ test('shared motion vocabulary and count structures receive comparison hints wit
   assert.deepEqual(validateDanceIdeas(structuredClone(samePointAndStep)), samePointAndStep);
   assert.ok(samePointAndStep.every(idea => !idea.reviewNote || idea.reviewNote.length <= 240));
 });
-test('payoff needs physical action, with a series variable and production mitigation', () => {
-  for (const values of [{ visualPayoff: '재미있고 멋진 영상이 완성된다.' }, { visualPayoff: '손과 발로 아름다운 분위기를 만들어낸다.' }, { seriesPotential: '수많은 시청자가 좋아하고 바이럴이 된다.' },
-    { seriesPotential: '다음 편에는 색상을 바꾼다.' }, { productionRisk: '문제 없이 완벽하게 잘 제작한다.' }]) {
+test('payoff still needs physical action', () => {
+  for (const values of [{ visualPayoff: '재미있고 멋진 영상이 완성된다.' }, { visualPayoff: '손과 발로 아름다운 분위기를 만들어낸다.' }]) {
     assert.throws(() => validateDanceIdeas(changed(0, values)), { code: 'PLAN_INVALID' });
   }
   const lift = validateDanceIdeas(changed(0, { firstTwoSeconds: '0~2초: 성인 여성은 거리 광장에서 손을 들어 표식에 화답한다.', visualPayoff: '같은 표식에 손을 들어 올린다.' }));
   assert.equal(lift.length, 3);
+});
+test('natural risk mitigation and series synonyms remain reviewable without paid-response rejection', () => {
+  const ordinary = validateDanceIdeas(changed(0, { productionRisk: '발이 꼬일 가능성이 있으니 넓은 간격으로 천천히 딛고 두 손은 몸통 높이에서 분리한다.' }));
+  assert.equal(ordinary.length, 3);
+  const synonyms = validateDanceIdeas(changed(0, {
+    productionRisk: '손발이 엇박으로 겹칠 우려가 있어 출연자 사이를 넉넉히 확보하고 관절이 겹치지 않도록 각자의 영역을 지킨다.',
+    seriesPotential: '매회 좌우 스텝은 되풀이하고 의상 색과 응답 방향만 새롭게 정한다.',
+  }));
+  assert.match(synonyms[0].reviewNote, /제작 위험과 이를 줄이는 방법/);
+  assert.match(synonyms[0].reviewNote, /반복할 훅과 다음 편/);
+});
+test('uninformative risk and series descriptions produce static bounded advisories', async () => {
+  const candidates = changed(0, {
+    firstTwoSeconds: '0~2초: 성인 여성은 거리 광장에서 몸통을 왼쪽으로 돌리고 무릎을 튕긴다.',
+    seriesPotential: '시청자가 좋아하고 바이럴이 된다.',
+    productionRisk: '문제 없이 완벽하게 잘 제작한다.',
+    reviewNote: 'secret-payload',
+  });
+  const result = validateDanceIdeas(candidates);
+  assert.match(result[0].reviewNote, /주고받는 관계/);
+  assert.match(result[0].reviewNote, /다른 후보와 비슷/);
+  assert.match(result[0].reviewNote, /반복할 훅과 다음 편/);
+  assert.match(result[0].reviewNote, /제작 위험과 이를 줄이는 방법/);
+  assert.ok(result.every(idea => !idea.reviewNote || idea.reviewNote.length <= 240));
+  assert.doesNotMatch(JSON.stringify(result), /secret-payload/);
+  assert.deepEqual(validateDanceIdeas(structuredClone(result)), result);
+  let calls = 0;
+  const provider = await createDanceIdeas(JOB, async () => { calls++; return response(candidates); });
+  assert.equal(calls, 1); assert.deepEqual(provider, result);
+  for (const values of [{ productionRisk: undefined }, { seriesPotential: '' }, { productionRisk: 'English only' }]) {
+    assert.throws(() => validateDanceIdeas(changed(0, values)), { code: 'PLAN_INVALID' });
+  }
 });
 test('recognized family prose has no note and unrecognized physical payoff receives one', () => {
   const recognized = validateDanceIdeas(ideas());

@@ -1,4 +1,5 @@
 /** Real component handlers/effects with offline hooks, fetch and timers. No browser or provider access. */
+/* eslint-disable @typescript-eslint/no-require-imports */
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -644,6 +645,56 @@ test('recoverable attention work resumes saved results only after one explicit c
   const posts = ui.requests.filter(request => request.body);
   assert.equal(posts.length, 1);
   assert.deepEqual(posts[0].body, { action: 'resume', trackId: 'song', jobId: held.id });
+});
+
+test('server-approved expired planning reuses only saved audio into a separate unstarted challenge', async () => {
+  const held = { id: 'held-plan', trackId: 'song', status: 'attention', startSeconds: 40, durationSeconds: 30,
+    visualBrief: '이전 기획', audioUrl: 'https://storage.test/selected.wav', audioHash: 'a'.repeat(64),
+    planningSubmitted: true, canResume: false, canReuseAudio: true,
+    inFlight: { action: 'select-idea', token: 'previous-lease', at: '2026-09-18T00:55:00Z' } };
+  const before = structuredClone(held);
+  const duplicate = track('fork', { savedClip: { audioUrl: held.audioUrl, audioHash: held.audioHash, startSeconds: 40, durationSeconds: 30 }, reused: true });
+  const ui = harness({ props: { initialTrackId: 'song' }, reply: request => {
+    if (request.body) { assert.equal(request.body.action, 'reuse'); return { trackId: 'fork' }; }
+    if (request.url.includes('dance-music?trackId=fork')) return { tracks: [duplicate] };
+    if (request.url.includes('dance-video')) return { job: request.url.includes('trackId=song') ? held : null };
+    return { tracks: [track('song')] };
+  } });
+  await ui.settle(); await ui.runTimers();
+  assert.equal(ui.requests.filter(request => request.body).length, 0);
+  assert.match(label(ui.tree), /이전 기획은 결과 확인이 필요한 상태로 보존/);
+  assert.equal(button(ui.tree, '이 아이디어로 기획 다시 시도'), undefined);
+  assert.equal(button(ui.tree, '아이디어 다시 받기'), undefined);
+  assert.equal(button(ui.tree, '저장된 결과로 이어 만들기'), undefined);
+  const reuse = button(ui.tree, '같은 음원으로 새 챌린지 만들기');
+  assert.equal(reuse.props.disabled, false);
+  reuse.props.onClick(); reuse.props.onClick(); await ui.settle();
+  assert.equal(selectedTrack(ui.tree).props.value, 'fork');
+  assert.deepEqual(ui.requests.filter(request => request.body).map(request => request.body.action), ['reuse']);
+  assert.equal(mediaNode(ui, '저장된 30초 음원').props.src, held.audioUrl);
+  assert.equal(element(ui.tree, 'textarea').props.disabled, false);
+  assert.equal(button(ui.tree, '아이디어 3개 받기').props.disabled, false);
+  assert.deepEqual(held, before, 'the held original is not rewritten or resumed');
+});
+
+test('reuse capability comes from the server; stale lease dates do not enable the client button', async () => {
+  for (const canReuseAudio of [false, undefined]) {
+    const ui = harness({ props: { initialTrackId: 'song' }, reply: request => {
+      if (request.body) assert.fail('An unapproved lease cannot fork or retry automatically');
+      return request.url.includes('dance-video') ? { job: { id: 'held-plan', trackId: 'song', status: 'attention',
+        startSeconds: 40, durationSeconds: 30, visualBrief: '', audioUrl: 'https://storage.test/selected.wav',
+        canReuseAudio, inFlight: { action: 'prepare', token: 'held', at: '2020-01-01T00:00:00Z' } } } : { tracks: [track('song')] };
+    } });
+    await ui.settle(); await ui.runTimers();
+    assert.equal(button(ui.tree, '같은 음원으로 새 챌린지 만들기'), undefined);
+    assert.equal(ui.requests.filter(request => request.body).length, 0);
+  }
+  const ui = harness({ props: { initialTrackId: 'song' }, reply: request => request.url.includes('dance-video') ? { job: {
+    id: 'ready-plan', trackId: 'song', status: 'ready', startSeconds: 40, durationSeconds: 30, visualBrief: '',
+    audioUrl: 'https://storage.test/selected.wav', canReuseAudio: false,
+  } } : { tracks: [track('song')] } });
+  await ui.settle();
+  assert.equal(button(ui.tree, '같은 음원으로 새 챌린지 만들기'), undefined, 'an explicit server refusal overrides legacy idle status');
 });
 
 test('unknown submission cannot offer resume or automatically issue another generation request', async () => {
