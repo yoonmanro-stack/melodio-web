@@ -102,6 +102,55 @@ test('Korean action synonyms and a newly named prop remain valid creative data',
   });
   assert.equal(validateDanceIdeas(result).length, 3);
 });
+test('ordinary pointing, walking and tapping actions connect to spatial anchors and natural replies', () => {
+  const cases = [
+    { cast: '성인 여성',
+      opening: '0~2초: 성인 여성은 거리 광장에서 바닥의 선을 따라 발로 두 번 걸어가고 손으로 다음 표식을 가리키며 반응한다.',
+      signature: '2카운트: 손으로 표식을 가리키기 / 2카운트: 발끝으로 바닥을 두드리기 / 4카운트: 몸통으로 답하며 발로 한 걸음 걷기',
+      payoff: '발로 선을 따라 걸어가고 손으로 같은 표식을 가리켜 몸통의 작은 움직임으로 대답한다.' },
+    { cast: '성인 듀오',
+      opening: '0~2초: 성인 듀오는 거리 광장에서 한 명이 손으로 옆을 가리키면 상대가 발을 옆으로 걸어 답한다.',
+      signature: '2카운트: 왼쪽 무용수가 손으로 옆을 가리키기 / 2카운트: 오른쪽 무용수가 발로 옆으로 걸어가기 / 4카운트: 둘이 발끝으로 바닥을 두드리기',
+      payoff: '둘이 자리를 유지하며 한 명이 손으로 가리켜 질문하면 상대는 발로 걸어 같은 신호에 화답한다.' },
+    { cast: '동물 캐릭터',
+      opening: '0~2초: 동물 캐릭터는 거리 광장에서 앞발로 표식을 두드리고 몸통을 흔들어 표식에 반응한다.',
+      signature: '2카운트: 앞발로 표식을 두드리기 / 2카운트: 몸통을 작게 흔들기 / 4카운트: 뒷발로 바닥의 선을 따라 걷기',
+      payoff: '앞발로 같은 표식을 두드리고 몸통을 작은 폭으로 흔들며 표식에 답한다.' },
+  ];
+  for (const fixture of cases) {
+    const result = ideas(fixture.cast);
+    Object.assign(result[0], { firstTwoSeconds: fixture.opening, signatureMove: fixture.signature, visualPayoff: fixture.payoff });
+    assert.equal(validateDanceIdeas(result).length, 3);
+  }
+});
+test('generic music response, an unresponsive duo, held poses and pointing-only reveals remain held', () => {
+  for (const firstTwoSeconds of [
+    '0~2초: 성인 여성은 거리 광장에서 몸통을 흔들며 음악을 따라 발을 딛는다.',
+    '0~2초: 성인 듀오는 거리 광장에서 발을 옆으로 딛고 무릎을 튕긴다.',
+    '0~2초: 성인 여성은 거리 광장에서 팔을 펼치고 아름답게 춤을 춘다.',
+    '0~2초: 성인 여성은 거리 광장에서 상대의 표식 앞에서 팔을 접은 자세로 대답한다.',
+  ]) assert.throws(() => validateDanceIdeas(changed(0, { firstTwoSeconds })), { code: 'PLAN_INVALID' });
+  for (const verb of ['가리키고', '가리켜', '가리킨 다음']) {
+    assert.throws(() => validateDanceIdeas(changed(2, { firstTwoSeconds: `0~2초: 성인 여성은 거리 광장에서 손으로 바닥 선을 ${verb} 팔을 펼친다.` })), { code: 'PLAN_INVALID' });
+  }
+});
+test('opening failures identify only candidate number and independent compact check flags', async () => {
+  const cases = [
+    { index: 1, opening: ideas()[1].firstTwoSeconds.replace('0~2초: ', ''), expected: '아이디어 2 첫 2초 확인: 시간 형식=불일치, 신체 동작=통과, 장면 관계=통과.' },
+    { index: 0, opening: '0~2초: 성인 여성은 상대의 표식 앞에서 팔을 접은 자세로 대답한다.', expected: '아이디어 1 첫 2초 확인: 시간 형식=통과, 신체 동작=미확인, 장면 관계=통과.' },
+    { index: 0, opening: '0~2초: 성인 여성은 거리 광장에서 몸통을 흔들며 음악을 따라 발을 딛는다.', expected: '아이디어 1 첫 2초 확인: 시간 형식=통과, 신체 동작=통과, 장면 관계=미확인.' },
+  ];
+  for (const fixture of cases) {
+    const candidates = changed(fixture.index, { firstTwoSeconds: fixture.opening });
+    assert.throws(() => validateDanceIdeas(candidates), error => { assert.equal(error.message, fixture.expected); return true; });
+    let calls = 0;
+    await assert.rejects(createDanceIdeas(JOB, async () => { calls++; return response(candidates); }), error => {
+      assert.equal(error.code, 'PLAN_INVALID'); assert.equal(error.message, fixture.expected); assert.equal(error.planFailure.kind, 'response');
+      assert.equal(error.planFailure.providerRequestId, 'req_ideas-1'); assert.ok(error.message.length < 100); return clean(error);
+    });
+    assert.equal(calls, 1);
+  }
+});
 test('duo response, articulated robot and grounded animal hooks have distinct real movement fixtures', () => {
   const duo = ideas('성인 듀오');
   Object.assign(duo[0], {
