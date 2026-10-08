@@ -65,7 +65,7 @@ export function createDanceVideoStore(admin: SupabaseClient): DanceVideoStore {
     },
   };
 }
-export function createDanceVideoServerService(admin: SupabaseClient, userId: string) {
+export function createDanceVideoServerService(admin: SupabaseClient, userId: string, options: { videoModel?: NonNullable<DanceVideoJob['videoSpec']>['model'] } = {}) {
   const upload: DanceUpload = async (job: DanceVideoJob, filename: string, buffer: Buffer, contentType: string) => {
     if (!/^[a-zA-Z0-9._-]{1,150}$/.test(filename)) throw new DanceVideoError('결과 파일 이름이 올바르지 않습니다.', 'ASSET_PATH');
     const assetPath = `${DANCE_CATEGORY_ID}/${userId}/${job.trackId}/${job.id}/${filename}`;
@@ -74,6 +74,7 @@ export function createDanceVideoServerService(admin: SupabaseClient, userId: str
     return admin.storage.from('melodio-assets').getPublicUrl(assetPath).data.publicUrl;
   };
   return createDanceVideoService({
+    videoModel: options.videoModel,
     store: createDanceVideoStore(admin),
     snapshot: (job, sourceUrl) => snapshotDanceAudio(job, sourceUrl, upload),
     reuseSnapshot: reuseDanceAudio,
