@@ -2,10 +2,18 @@ import { randomUUID } from 'node:crypto';
 import { DANCE_CATEGORY_ID, DANCE_WORKFLOW, isDanceAudioSelection, isDanceMetadata, type DanceAudioSelection, type DancePlan, type DancePlanFailure, type DanceVideoJob } from './preset';
 import { validateDanceCreativePreferences, resolveDanceCreativeDirection, buildDanceCadenceGuide } from './creativeDirection';
 import { getDanceMusicSpec } from './musicProfiles';
-import { validateDanceIdeas, compactDanceCastPrompt, type DanceIdea } from './ideas';
+import { validateDanceIdeas, compactDanceCastPrompt, validateDanceActorActions, validateDanceActorSequence, type DanceIdea } from './ideas';
 
 export class DanceVideoError extends Error {
   constructor(message: string, public code = 'DANCE_VIDEO', public status = 400, public planFailure?: DancePlanFailure) { super(message); }
+}
+export const DANCE_PREVIEW_SCENE_LIMIT = 650;
+export const DANCE_PREVIEW_SCENE_PATTERN = '^[ -~]+$';
+/** Bounded scene instructions shared by new plan parsing and stored preview compilation. */
+export function validateDancePreviewScene(value: unknown): string {
+  if (typeof value !== 'string' || !value.trim() || value.trim().length > DANCE_PREVIEW_SCENE_LIMIT
+    || !new RegExp(DANCE_PREVIEW_SCENE_PATTERN).test(value) || /data:|base64/i.test(value)) throw new DanceVideoError('테스트 영상 연출은 650자 이내의 영문 ASCII 문장으로 설명해 주세요.', 'PLAN_INVALID');
+  return value.trim();
 }
 export const DANCE_VIDEO_LEASE_MS = 4 * 60 * 1000;
 export const DANCE_VIDEO_REQUEST_BYTES = 16 * 1024;
@@ -419,6 +427,21 @@ export function buildDancePreviewPrompt(job: DanceVideoJob): string {
   const idea = job.selectedIdea;
   const cast = job.plan.cast || idea.cast || job.direction?.cast;
   const cadence = buildDanceCadenceGuide(job.musicSpec?.bpm || job.bpm, 5, cast);
+  if (job.plan.previewPrompt !== undefined) {
+    const scene = validateDancePreviewScene(job.plan.previewPrompt);
+    let motion = idea.signatureMove;
+    if (cast) {
+      const steps = job.plan.choreography?.steps;
+      if (!Array.isArray(steps) || steps.length < 2 || steps.length > 4 || steps.some(step => !step || typeof step !== 'object' || !Number.isInteger(step.count) || step.count < 1 || step.count > 7)
+        || steps.reduce((sum, step) => sum + step.count, 0) !== 8) throw new DanceVideoError('테스트 영상에는 확인된 8카운트 출연자 동작이 필요합니다.', 'PLAN_INVALID');
+      const validated = steps.map((step, stepIndex) => ({ count: step.count, actors: validateDanceActorActions(step.actors, cast, Math.max(8, Math.floor(48 / cast.count)), { stepIndex }) }));
+      validateDanceActorSequence(validated, cast);
+      motion = validated.map(step => `${step.count}counts:${step.actors.map(actor => `${actor.memberId}:${actor.action}`).join(',')}`).join('; ');
+    }
+    const prompt = `Five-second experimental motion test. ${scene}\n${cadence}\n${cast ? compactDanceCastPrompt(cast) : `Same original cast: ${job.plan.identity}.`} Preserve identities, setting, premise props and readable whole bodies from the action still. Start its physical conflict at0s; show the first causal response by5s, no camera-facing lineup or separate intro. Species-native role actions: ${motion}. Keep body movement and foot/weight contact readable. The later payoff/restart is outside this test. No cuts, acrobatics, text, logos, speech or generated music. Silent visual; original audio is combined separately; no verified synchronization claim.`;
+    if (Buffer.byteLength(prompt, 'utf8') > 4096) throw new DanceVideoError('테스트 영상 프롬프트가 UTF-8 기준 4,096바이트를 넘었습니다.', 'PLAN_LENGTH', 422);
+    return prompt;
+  }
   const motion = idea.signatureActors ? idea.signatureActors.map(step => `${step.count}counts:${step.actors.map(actor => `${actor.memberId}:${actor.action}`).join(',')}`).join('; ')
     : idea.signatureMove;
   const story = idea.hookStory;

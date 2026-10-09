@@ -95,6 +95,7 @@ test('body timeout and connection failures are separated from malformed output',
 });
 test('valid plan succeeds in one request without changing model or creative input', async () => {
   let calls = 0;
+  const current = { ...PLAN, previewPrompt: '0-2s: the original performer steps beside the visible cue. 2-5s: turn the torso in response while continuing foot accents.' };
   const plan = await createDancePlan(input, async (_url, options) => {
     calls++; const request = JSON.parse(options.body);
     assert.equal(request.model, 'gpt-5.6-sol'); assert.equal(request.reasoning_effort, 'low');
@@ -102,11 +103,12 @@ test('valid plan succeeds in one request without changing model or creative inpu
     const format = request.response_format;
     assert.equal(format.type, 'json_schema'); assert.equal(format.json_schema.strict, true); assert.equal(format.json_schema.name, 'dance_plan_v1');
     assert.equal(format.json_schema.schema.additionalProperties, false);
-    assert.deepEqual(format.json_schema.schema.required, ['title', 'summary', 'identity', 'imagePrompt', 'clips']);
-    assert.equal(new Ajv().validate(format.json_schema.schema, PLAN), true, 'legacy output needs no version or choreography');
-    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(PLAN) } }] });
+    assert.deepEqual(format.json_schema.schema.required, ['title', 'summary', 'identity', 'imagePrompt', 'previewPrompt', 'clips']);
+    assert.equal(new Ajv().validate(format.json_schema.schema, PLAN), false, 'new private responses require the preview scene');
+    assert.equal(new Ajv().validate(format.json_schema.schema, current), true, 'new response still needs no version or choreography without a selected direction');
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(current) } }] });
   });
-  assert.equal(calls, 1); assert.equal(plan.title, PLAN.title);
+  assert.equal(calls, 1); assert.equal(plan.title, PLAN.title); assert.equal(plan.previewPrompt, current.previewPrompt);
 });
 test('planner and both compiled clips use saved138BPM real-time cadence over legacy half-time guidance', async () => {
   let calls = 0;
@@ -117,7 +119,7 @@ test('planner and both compiled clips use saved138BPM real-time cadence over leg
     assert.match(system, /eight-count cycle 3\.478s/); assert.match(system, /4 complete eight-count cycles/);
     assert.ok(system.lastIndexOf('CADENCE OVERRIDE') > system.indexOf('use two beats per count'));
     assert.match(system, /never permission to stretch eight counts/);
-    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(V2_PLAN) } }] });
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ ...V2_PLAN, previewPrompt: '0-2s: step toward the visible cue. 2-5s: turn the torso and answer while continuing foot accents.' }) } }] });
   });
   assert.equal(calls, 1); assert.equal(plan.identity, V2_PLAN.identity);
   for (const prompt of plan.clips) {
@@ -127,12 +129,13 @@ test('planner and both compiled clips use saved138BPM real-time cadence over leg
 });
 test('v2 request constrains all objects and exactly two clips while retaining8count semantic validation', async () => {
   let calls = 0; let schema;
+  const current = { ...V2_PLAN, previewPrompt: '0-2s: the saved performer steps toward the visible cue. 2-5s: shift body weight and answer the opening direction.' };
   const plan = await createDancePlan({ ...input, direction: DIRECTION }, async (_url, options) => {
     calls++; const request = JSON.parse(options.body);
     assert.equal(request.model, 'gpt-5.6-sol'); assert.equal(request.reasoning_effort, 'low'); assert.equal(request.max_completion_tokens, 4096);
     assert.equal(request.response_format.type, 'json_schema'); assert.equal(request.response_format.json_schema.strict, true);
     assert.equal(request.response_format.json_schema.name, 'dance_plan_v2'); schema = request.response_format.json_schema.schema;
-    assert.deepEqual(schema.required, ['title', 'summary', 'identity', 'imagePrompt', 'clips', 'version', 'choreography']);
+    assert.deepEqual(schema.required, ['title', 'summary', 'identity', 'imagePrompt', 'previewPrompt', 'clips', 'version', 'choreography']);
     function checkObjects(node) {
       if (node.type === 'object') {
         assert.equal(node.additionalProperties, false);
@@ -144,18 +147,19 @@ test('v2 request constrains all objects and exactly two clips while retaining8co
     checkObjects(schema);
     assert.equal(schema.properties.clips.minItems, 2); assert.equal(schema.properties.clips.maxItems, 2);
     assert.deepEqual(schema.properties.version.enum, [2]);
-    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(V2_PLAN) } }] });
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(current) } }] });
   });
   assert.equal(calls, 1); assert.equal(plan.version, 2); assert.equal(plan.clips.length, 2);
   assert.equal(plan.choreography.steps.reduce((sum, step) => sum + step.count, 0), 8);
   const validate = new Ajv({ allErrors: true }).compile(schema);
-  assert.equal(validate(V2_PLAN), true);
-  for (const malformed of [{ ...V2_PLAN, clips: undefined }, { ...V2_PLAN, clips: 'two scenes' }, { ...V2_PLAN, clips: ['one'] },
-    { ...V2_PLAN, clips: ['one', 'two', 'three'] }, { ...V2_PLAN, version: 1 }, { ...V2_PLAN, extra: 'hidden' },
-    { ...V2_PLAN, choreography: { ...V2_PLAN.choreography, steps: [{ count: 8, action: '발을 딛는다.', focus: 'feet' }] } }]) {
+  assert.equal(validate(V2_PLAN), false, 'stored legacy shape is not the new private response contract');
+  assert.equal(validate(current), true);
+  for (const malformed of [{ ...current, clips: undefined }, { ...current, clips: 'two scenes' }, { ...current, clips: ['one'] },
+    { ...current, clips: ['one', 'two', 'three'] }, { ...current, version: 1 }, { ...current, extra: 'hidden' },
+    { ...current, choreography: { ...current.choreography, steps: [{ count: 8, action: '발을 딛는다.', focus: 'feet' }] } }]) {
     assert.equal(validate(malformed), false, 'strict schema rejects malformed provider shape');
   }
-  const notEight = { ...V2_PLAN, choreography: { ...V2_PLAN.choreography, steps: V2_PLAN.choreography.steps.map(step => ({ ...step, count: 3 })) } };
+  const notEight = { ...current, choreography: { ...current.choreography, steps: current.choreography.steps.map(step => ({ ...step, count: 3 })) } };
   assert.equal(validate(notEight), true, 'cross-item count arithmetic remains a local semantic check');
   let invalidCalls = 0;
   await assert.rejects(createDancePlan({ ...input, direction: DIRECTION }, async () => {
@@ -167,7 +171,7 @@ test('malformed clips are held after one response without inventing replacement 
   for (const clips of [undefined, {}, ['one'], ['one', 'two', 'three']]) {
     let calls = 0;
     await assert.rejects(createDancePlan({ ...input, direction: DIRECTION }, async () => {
-      calls++; return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ ...V2_PLAN, clips }) } }] });
+      calls++; return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ ...V2_PLAN, clips, previewPrompt: '0-2s: step toward the visible cue. 2-5s: turn the torso in response.' }) } }] });
     }), error => { assert.equal(error.code, 'PLAN_INVALID'); assert.equal(error.planFailure.phase, 'response'); return clean(error); });
     assert.equal(calls, 1);
   }

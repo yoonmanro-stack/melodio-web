@@ -106,7 +106,7 @@ test('planner uses actual selected music and persisted creative direction in a s
     assert.match(system, /approximate energy-analysis cues/); assert.match(system, /SUM TO EXACTLY8/);
     assert.ok(system.includes(direction.concreteEn)); assert.doesNotMatch(system, /The fixed music style/);
     assert.equal(JSON.parse(request.messages[1].content).visualBrief, job.visualBrief);
-    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(current()) } }] });
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ ...current(), previewPrompt: '0-2s: step beside the visible cue. 2-5s: shift weight and turn the torso in response.' }) } }] });
   });
   assert.equal(calls, 1); assert.equal(result.version, 2);
 });
@@ -150,7 +150,7 @@ test('rhythm confidence and ending review travel in compact planner data with an
     calls++; const request = JSON.parse(options.body); const user = JSON.parse(request.messages[1].content);
     assert.deepEqual(user.rhythm, rhythm); assert.match(request.messages[0].content, /confidence is below0.55/);
     assert.match(request.messages[0].content, /never verified downbeats/); assert.match(request.messages[0].content, /leave the audio ending for creator review/);
-    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(current()) } }] });
+    return Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify({ ...current(), previewPrompt: '0-2s: step beside the visible cue. 2-5s: shift weight and turn the torso in response.' }) } }] });
   });
   assert.equal(calls, 1);
 });

@@ -18,7 +18,7 @@ function load(relative) {
   return mod.exports;
 }
 const { resolveDanceCreativeDirection } = load('src/lib/dance/creativeDirection.ts');
-const { createDanceIdeas, danceCastRoster, validateDanceIdeas, validateDanceActorActions, validateDanceActorSequence, danceActorStepSummary, getDanceValidationDetails, DANCE_ACTOR_ACTION_GUIDE, DANCE_ACTOR_SUMMARY_GUIDE, DANCE_PHYSICAL_ACTION_GUIDE, DANCE_SITUATION_HOOK_GUIDE, DANCE_EXPRESSION_GUIDE, DANCE_MUSIC_PROFILE_CUE_GUIDE } = load('src/lib/dance/ideas.ts');
+const { createDanceIdeas, danceCastRoster, validateDanceIdeas, validateDanceActorActions, validateDanceActorSequence, danceActorStepSummary, getDanceValidationDetails, DANCE_ACTOR_ACTION_GUIDE, DANCE_ACTOR_SUMMARY_GUIDE, DANCE_ACTOR_ANATOMY_PATTERN, DANCE_PHYSICAL_ACTION_GUIDE, DANCE_SITUATION_HOOK_GUIDE, DANCE_EXPRESSION_GUIDE, DANCE_ACTION_STILL_GUIDE, DANCE_MUSIC_PROFILE_CUE_GUIDE } = load('src/lib/dance/ideas.ts');
 const { createDancePlan, validateDancePlan } = load('src/lib/dance/videoPlan.ts');
 const { buildDancePreviewPrompt, buildDancePacedClipPrompt, createDanceVideoService } = load('src/lib/dance/videoService.ts');
 const { resolveDanceMusicSpec } = load('src/lib/dance/musicProfiles.ts');
@@ -55,6 +55,7 @@ function planPayload(job) {
   const cast = job.direction.cast;
   return { version: 2, title: '응답으로 뒤집힌 기대', summary: '작은 신체 반응이 시작의 규칙을 바꾸고 다시 첫 자세로 돌아간다.', identity: `${cast.count} original performers with the exact saved identities`,
     castRoster: danceCastRoster(cast), imagePrompt: 'Show the complete saved cast in their stable slots, full bodies visible. Opening mismatch is legible through posture and gaze.',
+    previewPrompt: `0-2s: ${cast.members.map(member => member.id).join(', ')} start native foot and weight movement at the visible premise cue. 2-5s: the first moving signal changes each actor's body direction in response, preserving the saved formation.`,
     clips: ['0-2s reveal the expectation through the first moving hook; develop a changed physical response.', 'Continue the real final frame; resolve the changed response and restore the opening rule.'],
     choreography: { hookName: '방향을 바꾸는 응답', firstPose: '몸통을 약간 기울이고 서로 다른 응답을 준비한다.', endPose: '몸통을 낮추고 고개를 돌려 첫 규칙으로 돌아간다.',
       steps: [{ count: 4, action: '발과 몸통으로 첫 응답을 보내기', focus: 'body', actors: actorActions(cast) }, { count: 4, action: '몸통을 흔들어 응답 방향 바꾸기', focus: 'body', actors: actorActions(cast, true) }],
@@ -148,6 +149,123 @@ test('reused music metadata guides native rhythm without imposing its earlier pr
   assert.ok(ideas.every(idea => idea.musicConnection.startsWith(`${savedMusic.label} · ${savedMusic.rhythmPurpose}: `)));
   assert.deepEqual(plan.cast, job.direction.cast);
   assert.ok(plan.clips.every(clip => Buffer.byteLength(clip, 'utf8') <= 4096));
+});
+test('both private actor schemas require shared anatomy tokens without narrowing physical verbs or eight-character cast actions', async () => {
+  const anatomy = new RegExp(DANCE_ACTOR_ANATOMY_PATTERN);
+  for (const token of ['앞발', '뒷발', '발', '발꿈치', '발끝', '발바닥', '발목', '다리', '무릎', '골반', '온몸', '몸통', '몸', '전신', '가슴', '흉곽', '엉덩이', '복부', '체중', '상체', '하체', '팔', '양팔', '왼팔', '오른팔', '어깨', '손', '손끝', '손목', '손바닥', '양손', '왼손', '오른손', '관절', '날개', '지느러미', '꼬리', '귀', '허리', '고개', '머리']) assert.ok(anatomy.test(token), token);
+  for (const action of ['리드', '응답', '옆 스텝', '좌우 셔플', '공만 회전하기', '리본 흔들기']) assert.equal(anatomy.test(action), false, action);
+  for (const prefs of [preferences('woman', 'duo'), preferences('human_animal', 'trio', 'penguin'), preferences('crowd', 'crowd')]) {
+    for (const count of prefs.ensemble === 'crowd' ? [4, 6] : [undefined]) {
+      const job = jobFor(prefs, 'anatomy-schema', count), limit = Math.max(8, Math.floor(48 / job.direction.cast.count));
+      await createDanceIdeas(job, async (_url, options) => {
+        const schema = JSON.parse(options.body).response_format.json_schema.schema.properties.ideas.items.properties.signatureSteps.items.properties.actors.items.properties.action;
+        assert.equal(schema.pattern, DANCE_ACTOR_ANATOMY_PATTERN); assert.equal(schema.maxLength, limit);
+        return response(ideaPayload(job));
+      });
+      await createDancePlan(job, async (_url, options) => {
+        const schema = JSON.parse(options.body).response_format.json_schema.schema.properties.choreography.properties.steps.items.properties.actors.items.properties.action;
+        assert.equal(schema.pattern, DANCE_ACTOR_ANATOMY_PATTERN); assert.equal(schema.maxLength, limit);
+        return response(planPayload(job));
+      });
+    }
+  }
+  const human = jobFor(preferences('woman', 'solo')).direction.cast, animal = jobFor(preferences('animal', 'solo', 'penguin')).direction.cast;
+  for (const [cast, action] of [[human, '오른발 탭'], [human, '어깨 팝'], [human, '다리 킥'], [human, '몸통 곡선그리기'], [animal, '지느러미 펴기'], [animal, '두 발 뒤뚱딛기']]) {
+    assert.ok(anatomy.test(action)); assert.ok(action.length <= 8);
+    assert.equal(validateDanceActorActions([{ memberId: cast.members[0].id, action }], cast, 8)[0].action, action);
+  }
+  // The schema is lexical only; object-qualified, cognitive, vague and held-object clauses still need the original validator.
+  for (const action of ['의자 다리 킥', '책상 다리 킥', '소품 발 탭', '어깨 팝을 상상하기', '몸통의 존재감', '발 고정한 채 공만 회전하기']) {
+    assert.ok(anatomy.test(action));
+    assert.throws(() => validateDanceActorActions([{ memberId: human.members[0].id, action }], human, 30), { code: 'PLAN_INVALID' });
+  }
+});
+test('animal-only plan identity accepts direct human exclusions while positive human, solo and count conflicts remain held', () => {
+  const job = jobFor(preferences('animal', 'crowd', 'penguin'), 'identity-exclusion', 4);
+  for (const identity of ['four original penguins; no people', 'four original penguins without humans', 'four original penguins without any human performers',
+    'four original penguins; no one adult woman', 'four non-human performers', 'four original non human performers', 'four original nonhuman performers',
+    'four penguins without two adult human performers', 'four penguins with no people and no adult man']) {
+    const payload = planPayload(job); payload.identity = identity;
+    const plan = validateDancePlan(payload, job.direction, 138);
+    assert.equal(plan.identity, identity); assert.deepEqual(plan.cast, job.direction.cast);
+  }
+  for (const identity of ['four penguins with an adult man', 'four penguins, no people, with a human performer',
+    'four penguins without any human performers and one adult woman', 'four penguins with human performers', 'four penguins with humans',
+    'one non-human performer', 'two original penguins; no people', 'four non-human performers and one penguin', 'four penguins; only one performer dances alone']) {
+    const payload = planPayload(job); payload.identity = identity;
+    assert.throws(() => validateDancePlan(payload, job.direction, 138), { code: 'PLAN_INVALID' }, identity);
+  }
+  const soloPreview = planPayload(job); soloPreview.previewPrompt = '0-2s: a solo dancer starts. 2-5s: the single performer dances alone.';
+  assert.throws(() => validateDancePlan(soloPreview, job.direction, 138), { code: 'PLAN_INVALID' });
+});
+test('new private plans carry a bounded ASCII action preview, while stored plans retain their previous preview fallback', async () => {
+  const job = jobFor(preferences('human_animal', 'trio', 'penguin'));
+  job.selectedIdea = (await createDanceIdeas(job, async () => response(ideaPayload(job))))[0];
+  const scene = '0-2s: performer_1 steps along the fixed floor arrow while performer_2 and performer_3 waddle against it. 2-5s: performer_2 and performer_3 step first; performer_1 turns toward them while preserving the saved triangle.';
+  const payload = planPayload(job); payload.previewPrompt = scene;
+  payload.choreography.steps[0].actors = job.direction.cast.members.map(member => ({ memberId: member.id, action: member.kind === 'animal' ? '두 발 뒤뚱딛기' : '발 앞뒤 딛기' }));
+  payload.choreography.steps[1].actors = job.direction.cast.members.map(member => ({ memberId: member.id, action: '몸통 옆 돌리기' }));
+  const plan = await createDancePlan(job, async (_url, options) => {
+    const request = JSON.parse(options.body), schema = request.response_format.json_schema.schema, system = request.messages[0].content;
+    assert.ok(schema.required.includes('previewPrompt'));
+    assert.equal(schema.properties.previewPrompt.maxLength, 650);
+    assert.equal(schema.properties.previewPrompt.pattern, '^[ -~]+$');
+    assert.ok(system.includes(DANCE_ACTION_STILL_GUIDE));
+    assert.match(system, /explicit0-2s opening conflict and2-5s first causal response/);
+    assert.match(system, /Use every saved memberId and its species-native physical role/);
+    assert.ok(schema.properties.imagePrompt.description.includes(DANCE_ACTION_STILL_GUIDE));
+    return response(payload);
+  });
+  assert.equal(plan.previewPrompt, scene); assert.ok(plan.imagePrompt.includes(DANCE_ACTION_STILL_GUIDE));
+  job.plan = plan;
+  job.selectedIdea.firstTwoSeconds += ' 중복 도입 서사'; job.selectedIdea.hookStory.development += ' 중복 전개 서사'; job.musicSpec = { ...job.musicSpec, rhythmPurpose: '중복 음악 서사' };
+  const before = structuredClone(job), prompt = buildDancePreviewPrompt(job);
+  assert.ok(prompt.startsWith(`Five-second experimental motion test. ${scene}`));
+  assert.match(prompt, /NOMINAL CADENCE: 138 BPM/); assert.match(prompt, /first causal response by5s/);
+  assert.doesNotMatch(prompt, /중복 도입 서사|중복 전개 서사|중복 음악 서사/);
+  assert.ok(prompt.includes('performer_1:발 앞뒤 딛기')); assert.ok(!prompt.includes('performer_1:발 옆 딛기'));
+  for (const step of plan.choreography.steps) for (const actor of step.actors) assert.ok(prompt.includes(`${actor.memberId}:${actor.action}`));
+  assert.ok(Buffer.byteLength(prompt, 'utf8') <= 4096); assert.deepEqual(job, before);
+  const legacy = planPayload(job); delete legacy.previewPrompt; job.plan = validateDancePlan(legacy, job.direction, 138);
+  assert.ok(!Object.hasOwn(job.plan, 'previewPrompt'));
+  const oldPrompt = buildDancePreviewPrompt(job);
+  assert.ok(oldPrompt.startsWith('NOMINAL CADENCE:')); assert.match(oldPrompt, /중복 도입 서사/); assert.match(oldPrompt, /중복 전개 서사/);
+  for (const invalid of [null, 123, '', ' ', 'x'.repeat(651), '0-2s: 발 딛기. 2-5s: 몸통 돌리기.', '0-2s: turn.\n2-5s: respond.', 'data:private-marker', 'base64-private-marker', '0-2s: face left. 2-5s: turn → right.']) {
+    assert.throws(() => validateDancePlan({ ...payload, previewPrompt: invalid }, job.direction, 138), { code: 'PLAN_INVALID' });
+    job.plan.previewPrompt = invalid;
+    assert.throws(() => buildDancePreviewPrompt(job), { code: 'PLAN_INVALID' });
+    let calls = 0;
+    await assert.rejects(createDancePlan(job, async () => { calls++; return response({ ...payload, previewPrompt: invalid }); }), error => error.code === 'PLAN_INVALID' && error.planFailure.phase === 'response');
+    assert.equal(calls, 1);
+  }
+});
+test('new scene previews retain complete validated six-actor four-step matrices within the UTF8 budget', t => {
+  for (const count of [4, 6]) {
+    const job = jobFor(preferences('crowd', 'crowd'), 'new-preview-envelope', count), payload = planPayload(job);
+    const scene = `0-2s: ${job.direction.cast.members.map(member => member.id).join(', ')} face conflicting directions beside the fixed scene cue. 2-5s: the rear actor steps first and the others answer with native foot and body movement. `;
+    payload.previewPrompt = scene.padEnd(650, 'x');
+    payload.imagePrompt = 'x'.repeat(1000); payload.clips = ['x'.repeat(300), 'y'.repeat(300)];
+    const pad = (text, limit) => text.padEnd(limit, '가');
+    payload.choreography.firstPose = pad('몸통을 기울인 첫 자세', 40); payload.choreography.endPose = pad('몸통을 낮춘 재시작 자세', 40);
+    payload.choreography.steps = ['발 옆 딛기', '몸통 흔들기', '무릎 굽히기', '고개 끄덕이기'].map(action => ({ count: 2, action: '응답', focus: 'body',
+      actors: job.direction.cast.members.map(member => ({ memberId: member.id, action: pad(action, Math.max(8, Math.floor(48 / count))) })) }));
+    payload.choreography.segments = [[0, 2, 'opening'], [2, 5, 'development'], [5, 8, 'development'], [8, 12, 'development'], [12, 22, 'payoff'], [22, 30, 'restart']].map(([startSeconds, endSeconds, phase], index) =>
+      ({ startSeconds, endSeconds, phase, action: pad(`몸통을 ${index} 방향으로 기울이기`, 40), repeatHook: true }));
+    job.plan = validateDancePlan(payload, job.direction, 138);
+    job.selectedIdea = { signatureMove: '응답', firstTwoSeconds: pad('중복 도입 서사', 220), hookStory: { development: pad('중복 전개 서사', 160) } };
+    const prompt = buildDancePreviewPrompt(job), sizes = [job.plan.imagePrompt, ...job.plan.clips, prompt].map(value => Buffer.byteLength(value, 'utf8'));
+    assert.equal(job.plan.previewPrompt.length, 650); assert.ok(sizes.every(size => size <= 4096));
+    for (const step of job.plan.choreography.steps) for (const actor of step.actors) assert.ok(prompt.includes(`${actor.memberId}:${actor.action}`));
+    assert.doesNotMatch(prompt, /중복 도입 서사|중복 전개 서사/);
+    const validPlan = structuredClone(job.plan);
+    for (const change of [p => p.choreography.steps[0].actors.pop(), p => p.choreography.steps[0].actors.reverse(), p => p.choreography.steps[0].actors[0].action = '공만 회전하기',
+      p => p.choreography.steps[0].count = 3, p => p.choreography.steps[0] = null, p => p.choreography.steps[1].actors = structuredClone(p.choreography.steps[0].actors)]) {
+      job.plan = structuredClone(validPlan); change(job.plan);
+      assert.throws(() => buildDancePreviewPrompt(job), { code: 'PLAN_INVALID' });
+    }
+    job.plan = validPlan; assert.equal(buildDancePreviewPrompt(job), prompt);
+    t.diagnostic(`${count}-actor new-path image/clip1/clip2/preview UTF8 bytes: ${sizes.join('/')}`);
+  }
 });
 test('three causal candidates preserve solo, duo, trio, crowd, mixed and animals-only casts in one bounded call', async () => {
   for (const prefs of [preferences('woman', 'solo'), preferences('man', 'duo'), preferences('woman', 'trio'), preferences('crowd', 'crowd'), preferences('human_animal', 'duo', 'dog'), preferences('animal', 'duo', 'penguin')]) {
@@ -395,9 +513,10 @@ test('UTF8 bytes cap Korean prompts and the six-actor prompt contract without tr
   const long = planPayload(job); long.clips[0] = '가'.repeat(1200);
   assert.throws(() => validateDancePlan(long, job.direction, 138), { code: 'PLAN_INVALID' });
 });
-test('four- and six-actor provider envelopes retain every ID within the compiled UTF8 budget', t => {
+test('legacy four- and six-actor envelopes retain every ID within the compiled UTF8 budget', t => {
   for (const count of [4, 6]) {
     const job = jobFor(preferences('crowd', 'crowd'), `envelope-${count}`, count), payload = planPayload(job);
+    delete payload.previewPrompt;
     assert.equal(job.direction.cast.count, count);
     payload.clips = ['x'.repeat(300), 'y'.repeat(300)]; payload.imagePrompt = 'x'.repeat(1000);
     const pad = (text, limit) => text.padEnd(limit, '가');
@@ -464,4 +583,31 @@ test('site service persists safe actor diagnostics in attention before any image
   assert.deepEqual(job.planFailure.actorFailure, { category: 'missing_anatomy', memberId: 'performer_2', ideaIndex: 1, stepIndex: 0 });
   assert.deepEqual(row.metadata.danceVideo.planFailure, job.planFailure);
   assert.doesNotMatch(JSON.stringify(row.metadata.danceVideo), /공만|responseBody|"action":/);
+});
+test('a fresh plan missing its required preview scene is held after one provider request and zero media calls', async () => {
+  const userId = 'c0000000-0000-4000-8000-000000000001', trackId = 'c0000000-0000-4000-8000-000000000002', jobId = 'c0000000-0000-4000-8000-000000000003';
+  const base = jobFor(preferences('woman', 'duo'));
+  const ideas = validateDanceIdeas(ideaPayload(base).ideas.map(({ firstTwoSeconds, signatureSteps, ...idea }) => ({ ...idea,
+    firstTwoSeconds: `0~2초: ${firstTwoSeconds.action}`, signatureMove: signatureSteps.map(step => `${step.count}카운트: ${danceActorStepSummary(step.actors)}`).join(' / '),
+    signatureActors: signatureSteps.map(({ count, actors }) => ({ count, actors })), cast: base.direction.cast })), base.direction.cast);
+  const savedJob = { ...base, id: jobId, trackId, status: 'ideas', durationSeconds: 30, startSeconds: 0, ideas,
+    audioUrl: 'https://offline.test/30s.wav', audioHash: 'a'.repeat(64), sourceAudioHash: 'b'.repeat(64), sourceDurationSeconds: 180,
+    createdAt: '2026-10-09T00:00:00Z', updatedAt: '2026-10-09T00:00:00Z' };
+  const metadata = { workflow: 'dance-music-first-v1', presetId: 'dance_challenge', danceMusic: resolveDanceMusicSpec('hook-pop', 'on', 'missing-preview'), danceVideo: savedJob };
+  let row = { id: trackId, userId, status: 'completed', title: '오프라인 원곡', isPublic: false, createdAt: savedJob.createdAt,
+    audioUrl: 'https://offline.test/original.mp3', metadata, licenseHash: JSON.stringify(metadata) };
+  const store = { load: async () => structuredClone(row), compareAndSwap: async (previous, job) => { if (previous.licenseHash !== row.licenseHash) return null;
+    const metadata = { ...row.metadata, danceVideo: structuredClone(job) }; row = { ...row, metadata, licenseHash: JSON.stringify(metadata) }; return structuredClone(row); } };
+  let providerCalls = 0, mediaCalls = 0;
+  const forbidden = async () => { mediaCalls++; throw Error('NETWORK_FORBIDDEN'); };
+  const service = createDanceVideoService({ store, snapshot: forbidden, reuseSnapshot: forbidden, ideas: forbidden,
+    plan: job => createDancePlan(job, async () => { providerCalls++; const payload = planPayload(job); delete payload.previewPrompt; payload.identity = 'private-missing-preview-marker'; return response(payload); }),
+    generateImage: forbidden, copyAsset: forbidden, startVideo: forbidden, pollVideo: forbidden, bridge: forbidden, preview: forbidden, render: forbidden });
+  const held = await service.selectIdea(userId, trackId, jobId, ideas[0].id);
+  assert.equal(providerCalls, 1); assert.equal(mediaCalls, 0); assert.equal(held.status, 'attention');
+  assert.equal(held.planFailure.code, 'PLAN_INVALID'); assert.equal(held.planFailure.phase, 'response');
+  assert.equal(held.plan, undefined); assert.equal(held.imageUrl, undefined); assert.equal(held.audioHash, savedJob.audioHash);
+  assert.deepEqual(row.metadata.danceVideo.planFailure, held.planFailure);
+  assert.doesNotMatch(JSON.stringify(row.metadata.danceVideo), /private-missing-preview-marker|responseBody/);
+  await service.get(userId, trackId); assert.equal(providerCalls, 1); assert.equal(mediaCalls, 0);
 });

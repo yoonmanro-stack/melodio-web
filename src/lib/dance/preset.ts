@@ -58,7 +58,7 @@ export type DanceChoreography = {
   segments: Array<{ startSeconds: number; endSeconds: number; action: string; repeatHook: boolean; phase?: 'opening' | 'development' | 'payoff' | 'restart' }>;
   firstPose: string; endPose: string;
 };
-export type DancePlan = { title: string; summary: string; identity: string; imagePrompt: string; clips: [string, string]; version?: 2; choreography?: DanceChoreography; cast?: DanceCastContract };
+export type DancePlan = { title: string; summary: string; identity: string; imagePrompt: string; clips: [string, string]; previewPrompt?: string; version?: 2; choreography?: DanceChoreography; cast?: DanceCastContract };
 export type DanceActorFailure = {
   category: 'actors_shape' | 'actor_shape' | 'member_order' | 'action_format' | 'missing_anatomy' | 'nonphysical_action' | 'vague_action' | 'unrecognized_motion' | 'animal_anatomy' | 'sequence_motion' | 'sequence_lower_body';
   memberId?: string; ideaIndex?: number; stepIndex?: number;
