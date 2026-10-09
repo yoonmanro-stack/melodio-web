@@ -18,7 +18,7 @@ function load(relative) {
   return mod.exports;
 }
 const { resolveDanceCreativeDirection } = load('src/lib/dance/creativeDirection.ts');
-const { createDanceIdeas, danceCastRoster, validateDanceIdeas } = load('src/lib/dance/ideas.ts');
+const { createDanceIdeas, danceCastRoster, validateDanceIdeas, validateDanceActorActions, validateDanceActorSequence, getDanceValidationDetails, DANCE_ACTOR_ACTION_GUIDE } = load('src/lib/dance/ideas.ts');
 const { createDancePlan, validateDancePlan } = load('src/lib/dance/videoPlan.ts');
 const { buildDancePreviewPrompt, buildDancePacedClipPrompt, createDanceVideoService } = load('src/lib/dance/videoService.ts');
 const { resolveDanceMusicSpec } = load('src/lib/dance/musicProfiles.ts');
@@ -73,6 +73,8 @@ test('three causal candidates preserve solo, duo, trio, crowd, mixed and animals
       assert.deepEqual(input.selectedCastRoster, danceCastRoster(job.direction.cast));
       assert.match(request.messages[0].content, /no fixed character, costume or prop template/);
       assert.match(request.messages[0].content, /vocals\/instrumental status is not a creative quality gate/);
+      assert.ok(request.messages[0].content.includes(DANCE_ACTOR_ACTION_GUIDE));
+      assert.equal(request.response_format.json_schema.schema.properties.ideas.items.properties.signatureSteps.items.properties.actors.items.properties.action.description, DANCE_ACTOR_ACTION_GUIDE);
       assert.equal(request.response_format.json_schema.schema.properties.castRoster.minItems, job.direction.cast.count);
       return response(ideaPayload(job));
     });
@@ -90,6 +92,83 @@ test('wrong roster, missing actor and duplicated watch reasons are held without 
     await assert.rejects(createDanceIdeas(job, async () => { calls++; return response(payload); }), { code: 'PLAN_INVALID' }); assert.equal(calls, 1);
   }
 });
+test('short actor format examples and exact body-qualified nominal actions remain physical within the eight-character crowd budget', () => {
+  const human = jobFor(preferences('woman', 'solo')).direction.cast;
+  const dog = jobFor(preferences('animal', 'solo', 'dog')).direction.cast;
+  const penguin = jobFor(preferences('animal', 'solo', 'penguin')).direction.cast;
+  for (const [cast, action] of [[human, '발 옆 딛기'], [human, '몸통 튕기기'], [human, '팔 고정하기'], [dog, '앞발 딛기'], [penguin, '지느러미 펴기'],
+    [human, '오른발 탭'], [human, '왼발 탭'], [human, '양발 탭'], [human, '어깨 팝'], [human, '왼 어깨 팝'], [human, '다리 킥'], [human, '오른 다리 킥'], [dog, '앞발 탭']]) {
+    assert.ok(action.length <= 8, action);
+    assert.equal(validateDanceActorActions([{ memberId: cast.members[0].id, action }], cast, 8)[0].action, action);
+  }
+  validateDanceActorSequence([{ actors: [{ memberId: human.members[0].id, action: '오른발 탭' }] }, { actors: [{ memberId: human.members[0].id, action: '어깨 팝' }] }], human);
+  validateDanceActorSequence([{ actors: [{ memberId: dog.members[0].id, action: '앞발 탭' }] }, { actors: [{ memberId: dog.members[0].id, action: '몸통 흔들기' }] }], dog);
+  for (const action of ['옆 스텝', '좌우 셔플', '힙 롤', '공만 회전하기', '리본 흔들기', '공만 탭', '의자 다리 킥', '책상 다리 킥', '소품 발 탭', '발 탭의 분위기', '어깨 팝을 상상하기', '발을 바라보기', '몸을 생각하기', '손을 고정한 채 공만 회전하기']) {
+    assert.throws(() => validateDanceActorActions([{ memberId: human.members[0].id, action }], human, 24), { code: 'PLAN_INVALID' }, action);
+  }
+  assert.throws(() => validateDanceActorActions([{ memberId: dog.members[0].id, action: '양손 펼치기' }], dog, 24), { code: 'PLAN_INVALID' });
+});
+test('actor diagnostics retain bounded expected positions and categories without rejected text', async () => {
+  const job = jobFor(preferences('woman', 'duo'));
+  const cases = [
+    { change: actors => actors[1].action = '공만 회전하기', category: 'missing_anatomy', rule: 'CAST_ACTIONS' },
+    { change: actors => actors[1].action = '어깨 팝을 상상하기', category: 'nonphysical_action', rule: 'CAST_ACTIONS' },
+    { change: actors => actors[1].action = '몸통의 존재감', category: 'vague_action', rule: 'CAST_ACTIONS' },
+    { change: actors => actors[1].action = 'private-action-marker', category: 'action_format', rule: 'FIELD_KOREAN' },
+    { change: actors => actors[1].action = '', category: 'action_format', rule: 'FIELD_TEXT' },
+    { change: actors => actors[1].action = '발\u0001딛기', category: 'action_format', rule: 'FIELD_TEXT' },
+    { change: actors => actors[1].action = 'data:private-marker', category: 'action_format', rule: 'FIELD_TEXT' },
+    { change: actors => actors[1].action = '가'.repeat(25), category: 'action_format', rule: 'FIELD_TEXT' },
+    { change: actors => actors[1].memberId = 'private-member-marker', category: 'member_order', rule: 'CAST_ACTIONS' },
+    { change: actors => actors[1].unexpected = 'private-extra-marker', category: 'actor_shape', rule: 'CAST_ACTIONS' },
+    { change: actors => actors.pop(), category: 'actors_shape', rule: 'CAST_ACTIONS', noMember: true },
+  ];
+  for (const { change, category, rule, noMember } of cases) {
+    const ideas = ideaPayload(job); change(ideas.ideas[2].signatureSteps[1].actors); let ideaCalls = 0;
+    await assert.rejects(createDanceIdeas(job, async () => { ideaCalls++; return response(ideas); }), error => {
+      assert.equal(error.planFailure.validationRule, rule);
+      assert.deepEqual(error.planFailure.actorFailure, { category, ...(noMember ? {} : { memberId: 'performer_2' }), ideaIndex: 2, stepIndex: 1 });
+      assert.doesNotMatch(JSON.stringify(error.planFailure), /private-|공만|상상|존재감|"action":|"body":|responseBody/);
+      return true;
+    });
+    assert.equal(ideaCalls, 1);
+    const plan = planPayload(job); change(plan.choreography.steps[1].actors); let planCalls = 0;
+    await assert.rejects(createDancePlan(job, async () => { planCalls++; return response(plan); }), error => {
+      assert.equal(error.planFailure.validationRule, rule);
+      assert.deepEqual(error.planFailure.actorFailure, { category, ...(noMember ? {} : { memberId: 'performer_2' }), stepIndex: 1 });
+      assert.doesNotMatch(JSON.stringify(error.planFailure), /private-|공만|상상|존재감|responseBody/);
+      return true;
+    });
+    assert.equal(planCalls, 1);
+  }
+  const stored = await createDanceIdeas(job, async () => response(ideaPayload(job)));
+  stored[2].signatureActors[1].actors[1].action = '공만 회전하기';
+  assert.throws(() => validateDanceIdeas(stored, job.direction.cast), error => {
+    assert.deepEqual(getDanceValidationDetails(error), { validationRule: 'CAST_ACTIONS', actorFailure: { category: 'missing_anatomy', memberId: 'performer_2', ideaIndex: 2, stepIndex: 1 } });
+    return true;
+  });
+  assert.throws(() => validateDanceActorActions([{ memberId: 'private-member-marker', action: '발 옆 딛기' }, { memberId: 'performer_2', action: '발 옆 딛기' }], job.direction.cast, 24,
+    { ideaIndex: 99, stepIndex: -1, body: 'private-body-marker' }), error => {
+    assert.deepEqual(getDanceValidationDetails(error), { validationRule: 'CAST_ACTIONS', actorFailure: { category: 'member_order', memberId: 'performer_1' } }); return true;
+  });
+});
+test('aggregate actor sequence diagnostics identify the member without inventing a failed step', async () => {
+  const job = jobFor(preferences('woman', 'duo'));
+  for (const [action, rule, category] of [['고개 끄덕이기', 'SIGNATURE_LOWER_BODY', 'sequence_lower_body'], ['팔 고정하기', 'SIGNATURE_MOTION', 'sequence_motion']]) {
+    const ideas = ideaPayload(job);
+    for (const step of ideas.ideas[1].signatureSteps) step.actors[1].action = action;
+    await assert.rejects(createDanceIdeas(job, async () => response(ideas)), error => {
+      assert.deepEqual(error.planFailure.actorFailure, { category, memberId: 'performer_2', ideaIndex: 1 });
+      assert.equal(error.planFailure.validationRule, rule); return true;
+    });
+    const plan = planPayload(job);
+    for (const step of plan.choreography.steps) step.actors[1].action = action;
+    await assert.rejects(createDancePlan(job, async () => response(plan)), error => {
+      assert.deepEqual(error.planFailure.actorFailure, { category, memberId: 'performer_2' });
+      assert.equal(error.planFailure.validationRule, rule); return true;
+    });
+  }
+});
 test('new plan preserves actor roles, physical development/payoff/restart and exact image/cast contracts', async () => {
   for (const prefs of [preferences('human_animal', 'trio', 'dog'), preferences('animal', 'duo', 'penguin'), preferences('crowd', 'crowd')]) {
     const job = jobFor(prefs); let calls = 0;
@@ -97,6 +176,8 @@ test('new plan preserves actor roles, physical development/payoff/restart and ex
     const plan = await createDancePlan(job, async (_url, options) => {
       calls++; const request = JSON.parse(options.body);
       assert.deepEqual(JSON.parse(request.messages[1].content).selectedCastRoster, danceCastRoster(job.direction.cast));
+      assert.ok(request.messages[0].content.includes(DANCE_ACTOR_ACTION_GUIDE));
+      assert.equal(request.response_format.json_schema.schema.properties.choreography.properties.steps.items.properties.actors.items.properties.action.description, DANCE_ACTOR_ACTION_GUIDE);
       assert.match(request.messages[0].content, /opening.*development.*payoff.*restart/); return response(planPayload(job));
     });
     assert.equal(calls, 1); assert.deepEqual(plan.cast, job.direction.cast);
@@ -201,4 +282,23 @@ test('site service persists the mixed cast through idea choice, preview and both
   assert.deepEqual(submissions.map(item => item.duration), [5, 15, 15]);
   for (const submission of submissions) { assert.equal(submission.options.referenceImageUrl, job.imageUrl); assert.equal(submission.options.generateAudio, false); assert.match(submission.prompt, /performer_1.*performer_2/); assert.ok(Buffer.byteLength(submission.prompt, 'utf8') <= 4096); }
   assert.equal(submissions[2].frame, 'https://offline.test/actual-final-frame.jpg');
+});
+test('site service persists safe actor diagnostics in attention before any image or video call', async () => {
+  const userId = 'b0000000-0000-4000-8000-000000000001', trackId = 'b0000000-0000-4000-8000-000000000002';
+  const metadata = { workflow: 'dance-music-first-v1', presetId: 'dance_challenge', danceMusic: resolveDanceMusicSpec('hook-pop', 'on', 'diagnostic-service') };
+  let row = { id: trackId, userId, status: 'completed', title: '오프라인 원곡', isPublic: false, createdAt: '2026-10-09T00:00:00Z', audioUrl: 'https://offline.test/original.mp3', metadata, licenseHash: JSON.stringify(metadata) };
+  const store = { load: async () => structuredClone(row), compareAndSwap: async (previous, job) => { if (previous.licenseHash !== row.licenseHash) return null;
+    const metadata = { ...row.metadata, danceVideo: structuredClone(job) }; row = { ...row, metadata, licenseHash: JSON.stringify(metadata) }; return structuredClone(row); } };
+  let textCalls = 0, mediaCalls = 0;
+  const forbidden = async () => { mediaCalls++; throw Error('NETWORK_FORBIDDEN'); };
+  const service = createDanceVideoService({ store, reuseSnapshot: forbidden,
+    snapshot: async () => ({ audioUrl: 'https://offline.test/30s.wav', audioHash: 'a'.repeat(64), sourceAudioHash: 'b'.repeat(64), sourceDurationSeconds: 180, bpm: 138 }),
+    ideas: job => createDanceIdeas(job, async () => { textCalls++; const payload = ideaPayload(job); payload.ideas[1].signatureSteps[0].actors[1].action = '공만 회전하기'; return response(payload); }),
+    plan: forbidden, generateImage: forbidden, copyAsset: forbidden, startVideo: forbidden, pollVideo: forbidden, bridge: forbidden, preview: forbidden, render: forbidden });
+  const job = await service.prepare(userId, trackId, 0, '', preferences('woman', 'duo'));
+  assert.equal(job.status, 'attention'); assert.equal(textCalls, 1); assert.equal(mediaCalls, 0);
+  assert.equal(job.planFailure.validationRule, 'CAST_ACTIONS');
+  assert.deepEqual(job.planFailure.actorFailure, { category: 'missing_anatomy', memberId: 'performer_2', ideaIndex: 1, stepIndex: 0 });
+  assert.deepEqual(row.metadata.danceVideo.planFailure, job.planFailure);
+  assert.doesNotMatch(JSON.stringify(row.metadata.danceVideo), /공만|responseBody|"action":/);
 });

@@ -1,10 +1,11 @@
 import { readPetBoundedBody } from '../video/petMedia';
-import { DANCE_PRESET, type DancePlanFailure, type DanceVideoJob } from './preset';
+import { DANCE_PRESET, type DanceActorFailure, type DancePlanFailure, type DanceVideoJob } from './preset';
 import { DANCE_PLAN_TIMEOUT_MS, DanceVideoError } from './videoService';
 import { validateDanceCastContract, type DanceCastContract, type DanceCastMember } from './creativeDirection';
 
 export type DanceHookStory = { openingExpectation: string; watchReason: string; development: string; payoff: string; restart: string };
 export type DanceActorAction = { memberId: string; action: string };
+export const DANCE_ACTOR_ACTION_GUIDE = 'Each actor action names its own native body part plus a physical verb. Form examples only, not prescribed choreography: humans "발 옆 딛기", "몸통 튕기기"; quadrupeds "앞발 딛기"; penguins "지느러미 펴기". A deliberate hold also names the body, e.g. "팔 고정하기". Bare dance/style/role labels such as "셔플", "응답" or "리드" are insufficient. Preserve the selected idea, distinct role and species anatomy; describe its action concretely.';
 export type DanceCastRoster = Pick<DanceCastMember, 'id' | 'kind' | 'species' | 'role' | 'position'>[];
 const STORY_LIMITS = { openingExpectation: 120, watchReason: 120, development: 160, payoff: 160, restart: 120 } as const;
 export function danceCastRoster(cast: DanceCastContract): DanceCastRoster {
@@ -59,7 +60,24 @@ export const DANCE_IDEA_VALIDATION_RULES = ['IDEA_COUNT', 'IDEA_OBJECT', 'IDEA_K
 export type DanceIdeaValidationRule = typeof DANCE_IDEA_VALIDATION_RULES[number];
 export type DanceIdeaPlanFailure = DancePlanFailure & { validationRule?: DanceIdeaValidationRule };
 const VALIDATION_RULE = Symbol('danceIdeaValidationRule');
-type IdeaRuleError = DanceVideoError & { [VALIDATION_RULE]?: DanceIdeaValidationRule };
+const ACTOR_FAILURE = Symbol('danceActorFailure');
+type IdeaRuleError = DanceVideoError & { [VALIDATION_RULE]?: DanceIdeaValidationRule; [ACTOR_FAILURE]?: DanceActorFailure };
+const ACTOR_FAILURE_CATEGORIES: readonly DanceActorFailure['category'][] = ['actors_shape', 'actor_shape', 'member_order', 'action_format', 'missing_anatomy', 'nonphysical_action', 'vague_action', 'unrecognized_motion', 'animal_anatomy', 'sequence_motion', 'sequence_lower_body'];
+type ActorFailureLocation = Pick<DanceActorFailure, 'ideaIndex' | 'stepIndex'>;
+function boundedActorFailure(value: DanceActorFailure): DanceActorFailure {
+  return { category: value.category,
+    ...(typeof value.memberId === 'string' && /^performer_[1-6]$/.test(value.memberId) ? { memberId: value.memberId } : {}),
+    ...(Number.isInteger(value.ideaIndex) && value.ideaIndex! >= 0 && value.ideaIndex! <= 2 ? { ideaIndex: value.ideaIndex } : {}),
+    ...(Number.isInteger(value.stepIndex) && value.stepIndex! >= 0 && value.stepIndex! <= 3 ? { stepIndex: value.stepIndex } : {}) };
+}
+/** Safe diagnostic facts only; never retain the rejected action or provider response. */
+export function getDanceValidationDetails(error: unknown): Pick<DancePlanFailure, 'validationRule' | 'actorFailure'> {
+  if (!(error instanceof DanceVideoError)) return {};
+  const value = error as IdeaRuleError;
+  const rule = value[VALIDATION_RULE], actor = value[ACTOR_FAILURE];
+  return { ...(rule && DANCE_IDEA_VALIDATION_RULES.includes(rule) ? { validationRule: rule } : {}),
+    ...(actor && ACTOR_FAILURE_CATEGORIES.includes(actor.category) ? { actorFailure: boundedActorFailure(actor) } : {}) };
+}
 const BODY_PATTERN = '앞발|뒷발|발(?:꿈치|끝|바닥|목)?|다리|무릎|골반|온몸|몸통|몸|전신|가슴|흉곽|엉덩이|복부|체중|상체|하체|(?:양|왼|오른)?팔|어깨|(?:양|왼|오른)?손(?:끝|목|바닥)?|관절|날개|지느러미|꼬리|귀|허리|고개|머리';
 const LOWER_BODY_PATTERN = '앞발|뒷발|발(?:꿈치|끝|바닥|목)?|다리|무릎|골반|온몸|몸통|몸|전신|가슴|흉곽|엉덩이|복부|체중|하체|허리';
 const BODY = new RegExp(BODY_PATTERN);
@@ -71,6 +89,8 @@ const BODY_CLAUSE = `(?:${BODY_PATTERN})(?:(?!(?:${BODY_PATTERN}))[^.!?;/])*?`;
 const STATIC_BODY = new RegExp(`${BODY_CLAUSE}(?:(?:접은|모은|펼친|펴\\s*놓은|들어\\s*올린|굽힌|가리킨|내민|뻗은|기울인|돌린|고정한|멈춘|둔)\\s*(?:채|자세|포즈|모양|상태)|(?:접고|모으고|펼치고|들고|굽히고|뻗고|기울이고|돌리고|고정하고|멈추고|두고)\\s*있는\\s*(?:자세|포즈|모양|상태)|(?:고정한다|고정하기|고정하고|움직이지\\s*않[가-힣]*|그대로\\s*유지[가-힣]*|가만히\\s*(?:있|두)[가-힣]*|정지(?:한다|하기|하고))|(?:가만히|움직이지\\s*않고|고정하고|정지한)[^.!?;/]*?(?:두고|둔|있기|있는|채|유지하기|정지하기))`, 'g');
 const VAGUE_OUTCOME = /분위기|존재감|아름답|멋지|매력|예쁘|사랑스럽|완성|시선|즐기|느낌|춤을\s*춘|춤을\s*추/;
 const NONMOTION_ACTION = /바라(?:보|본|볼)|쳐다(?:보|본|볼)|생각|설명|기억|상상|관찰|감상/;
+// Match the whole original action so an object's leg/foot cannot become performer anatomy.
+const NOMINAL_BODY_MOTION = /^(?:(?:오른|왼|양)\s*)?(?:(?:앞발|뒷발|발(?:꿈치|끝|바닥|목)?)(?:을|를|으로|로)?\s+탭|어깨(?:를|로)?\s+팝|다리(?:를|로)?\s+킥)(?:하기)?$/;
 const MOVE_THEN_HOLD = new RegExp(`(?:${MOTION.source})[가-힣]*(?:고|며)\\s*(?:잠깐\\s*)?(?:그대로\\s*유지|정지)`);
 const HOLD_ACTION = /고정|정지|멈추|멈춰|멈춤|유지|가만히|움직이지\s*않|(?:접은|모은|펼친|굽힌)\s*(?:채|자세|포즈|모양|상태)/;
 const MOTION_THEN_OBSERVE = new RegExp(`(?:${MOTION.source})[가-힣]*(?:고|며|면서)[^.!?;/]*(?:${NONMOTION_ACTION.source})`);
@@ -83,9 +103,10 @@ const MOVEMENT_KINDS = [
   ['accent', /들어|들기|든다|떼|올리|올려|내리|내려/], ['drag', /(?<!이)끌|끄는|끄기/], ['roll', /굴리|굴려/],
 ] as const;
 
-function invalid(message: string, rule: DanceIdeaValidationRule): never {
+function invalid(message: string, rule: DanceIdeaValidationRule, actorFailure?: DanceActorFailure): never {
   // Construct at call time because ideas and videoService have a runtime import cycle.
   const error: IdeaRuleError = new DanceVideoError(message, 'PLAN_INVALID');
+  if (actorFailure) error[ACTOR_FAILURE] = boundedActorFailure(actorFailure);
   error[VALIDATION_RULE] = rule; throw error;
 }
 function text(value: unknown, label: string, limit: number, allowEmpty = false): string {
@@ -111,6 +132,7 @@ function classifyBodyAction(value: string): BodyAction {
   const evidence = clauses.map(clause => {
     if (NONMOTION_ACTION.test(clause) && !MOTION_THEN_OBSERVE.test(clause)) return { kind: 'invalid', lowerBody: false } as BodyAction;
     if (HOLD_ACTION.test(clause) && !MOVE_THEN_HOLD.test(clause)) return { kind: 'hold', lowerBody: false } as BodyAction;
+    if (NOMINAL_BODY_MOTION.test(value.trim())) return { kind: 'pass', lowerBody: LOWER_BODY.test(clause) } as BodyAction;
     if (MOTION.test(clause)) return { kind: 'pass', lowerBody: LOWER_BODY.test(clause) } as BodyAction;
     // A nominal instruction or unfamiliar physical verb is reviewable; its
     // meaning is not established by verb spelling or Korean sentence endings.
@@ -144,19 +166,35 @@ function signatureMotion(actions: string[], animal = false): void {
   }
   if (!classifications.some(action => action.kind !== 'hold' && (animal || action.lowerBody))) invalid('반복 동작에 발·무릎·몸통 움직임을 포함해 주세요.', 'SIGNATURE_LOWER_BODY');
 }
-export function validateDanceActorActions(value: unknown, cast: DanceCastContract, limit = 54): DanceActorAction[] {
-  if (!Array.isArray(value) || value.length !== cast.count) invalid('각 카운트에는 선택한 모든 출연자의 역할별 동작이 필요합니다.', 'CAST_ACTIONS');
+export function validateDanceActorActions(value: unknown, cast: DanceCastContract, limit = 54, location: ActorFailureLocation = {}): DanceActorAction[] {
+  const actorInvalid = (message: string, category: DanceActorFailure['category'], memberId?: string, rule: DanceIdeaValidationRule = 'CAST_ACTIONS'): never =>
+    invalid(message, rule, { ...location, category, ...(memberId ? { memberId } : {}) });
+  if (!Array.isArray(value) || value.length !== cast.count) actorInvalid('각 카운트에는 선택한 모든 출연자의 역할별 동작이 필요합니다.', 'actors_shape');
   return cast.members.map((member, index) => {
-    const actor = exactObject(value[index], ['memberId', 'action'], 'CAST_ACTIONS');
-    if (actor.memberId !== member.id) invalid('동작의 출연자 순서와 수가 저장된 캐스트와 다릅니다.', 'CAST_ACTIONS');
-    const action = korean(actor.action, '출연자 동작', limit);
-    if (classifyBodyAction(action).kind === 'invalid') invalid('출연자마다 실제 신체 동작 또는 의도한 정지가 필요합니다.', 'CAST_ACTIONS');
-    if (member.kind === 'animal' && /(?:사람처럼|인간처럼|양손|양팔|골반|손가락)/.test(action)) invalid('동물은 종에 맞는 보행·지느러미·고개·체중 동작을 사용해 주세요.', 'CAST_ACTIONS');
+    let actor: Record<string, unknown>;
+    try { actor = exactObject((value as unknown[])[index], ['memberId', 'action'], 'CAST_ACTIONS'); }
+    catch (error) { if (!(error instanceof DanceVideoError)) throw error; return actorInvalid(error.message, 'actor_shape', member.id); }
+    if (actor.memberId !== member.id) actorInvalid('동작의 출연자 순서와 수가 저장된 캐스트와 다릅니다.', 'member_order', member.id);
+    let action: string;
+    try { action = korean(actor.action, '출연자 동작', limit); }
+    catch (error) { if (!(error instanceof DanceVideoError)) throw error; return actorInvalid(error.message, 'action_format', member.id, getDanceValidationDetails(error).validationRule); }
+    if (classifyBodyAction(action).kind === 'invalid') {
+      const category = NONMOTION_ACTION.test(action) ? 'nonphysical_action' : VAGUE_OUTCOME.test(action) ? 'vague_action' : !BODY.test(motionText(action)) ? 'missing_anatomy' : 'unrecognized_motion';
+      actorInvalid('출연자마다 실제 신체 동작 또는 의도한 정지가 필요합니다.', category, member.id);
+    }
+    if (member.kind === 'animal' && /(?:사람처럼|인간처럼|양손|양팔|골반|손가락)/.test(action)) actorInvalid('동물은 종에 맞는 보행·지느러미·고개·체중 동작을 사용해 주세요.', 'animal_anatomy', member.id);
     return { memberId: member.id, action };
   });
 }
-export function validateDanceActorSequence(steps: { actors?: DanceActorAction[] }[], cast: DanceCastContract): void {
-  for (const member of cast.members) signatureMotion(steps.map(step => step.actors!.find(actor => actor.memberId === member.id)!.action), member.kind === 'animal');
+export function validateDanceActorSequence(steps: { actors?: DanceActorAction[] }[], cast: DanceCastContract, location: Pick<ActorFailureLocation, 'ideaIndex'> = {}): void {
+  for (const member of cast.members) {
+    try { signatureMotion(steps.map(step => step.actors!.find(actor => actor.memberId === member.id)!.action), member.kind === 'animal'); }
+    catch (error) {
+      if (!(error instanceof DanceVideoError)) throw error;
+      const rule = getDanceValidationDetails(error).validationRule || 'CAST_ACTIONS';
+      invalid(error.message, rule, { ...location, memberId: member.id, category: rule === 'SIGNATURE_LOWER_BODY' ? 'sequence_lower_body' : 'sequence_motion' });
+    }
+  }
 }
 function hookStory(value: unknown): DanceHookStory {
   const story = exactObject(value, Object.keys(STORY_LIMITS), 'HOOK_STORY');
@@ -244,13 +282,13 @@ export function validateDanceIdeas(value: unknown, expectedCast?: DanceCastContr
     let signatureActors: DanceIdea['signatureActors'];
     if (idea.signatureActors !== undefined) {
       if (!cast || !Array.isArray(idea.signatureActors) || idea.signatureActors.length < 2 || idea.signatureActors.length > 4) invalid('역할별 동작과 캐스트를 확인해 주세요.', 'CAST_ACTIONS');
-      signatureActors = idea.signatureActors.map(value => {
+      signatureActors = idea.signatureActors.map((value, stepIndex) => {
         const step = exactObject(value, ['count', 'actors'], 'CAST_ACTIONS');
         if (!Number.isInteger(step.count) || Number(step.count) < 1 || Number(step.count) > 7) invalid('역할별 동작의 카운트를 확인해 주세요.', 'CAST_ACTIONS');
-        return { count: Number(step.count), actors: validateDanceActorActions(step.actors, cast!) };
+        return { count: Number(step.count), actors: validateDanceActorActions(step.actors, cast!, 54, { ideaIndex: index, stepIndex }) };
       });
       if (signatureActors.reduce((total, step) => total + step.count, 0) !== 8) invalid('역할별 동작은 정확히 8카운트여야 합니다.', 'CAST_ACTIONS');
-      validateDanceActorSequence(signatureActors, cast);
+      validateDanceActorSequence(signatureActors, cast, { ideaIndex: index });
     }
     const structure = signature(fields.signatureMove, cast?.kind === 'animal');
     const openingStructure = movementFingerprint(fields.firstTwoSeconds);
@@ -291,7 +329,7 @@ function ideaResponseFormat(refs: IdeaReferences) {
   const selection = object(Object.fromEntries(Object.entries(refs.selection).map(([key, value]) => [key, { type: value === null ? 'null' : 'string', enum: [value] }])));
   const actorLimit = refs.cast ? Math.max(8, Math.floor(48 / refs.cast.count)) : 54;
   const actorSchema = refs.cast ? { type: 'array', minItems: refs.cast.count, maxItems: refs.cast.count, items: object({
-    memberId: { type: 'string', enum: refs.cast.members.map(member => member.id) }, action: koreanString(actorLimit),
+    memberId: { type: 'string', enum: refs.cast.members.map(member => member.id) }, action: { ...koreanString(actorLimit), description: DANCE_ACTOR_ACTION_GUIDE },
   }) } : undefined;
   const properties = {
     id: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9_-]{0,63}$' },
@@ -323,23 +361,23 @@ function compileProviderIdeas(value: unknown, refs: IdeaReferences): DanceIdea[]
   if (Object.entries(refs.selection).some(([key, expected]) => selection[key] !== expected)) invalid('아이디어가 저장된 음악·출연자·장소 선택과 일치하지 않습니다.', 'SELECTION_FACTS');
   if (refs.cast && !matchesDanceCastRoster(payload.castRoster, refs.cast)) invalid('아이디어 응답의 출연자 수·종·역할·위치가 선택과 다릅니다.', 'CAST_ROSTER');
   if (!Array.isArray(payload.ideas) || payload.ideas.length !== 3) invalid('구조가 다른 아이디어 세 개가 필요합니다.', 'IDEA_COUNT');
-  const ideas = payload.ideas.map(raw => {
+  const ideas = payload.ideas.map((raw, ideaIndex) => {
     const idea = exactObject(raw, ['id', 'title', 'firstTwoSeconds', 'signatureSteps', 'musicConnection', 'visualPayoff', 'seriesPotential', 'productionRisk', 'conceptFamily', ...(refs.cast ? ['hookStory'] : [])], 'IDEA_KEYS');
     const opening = exactObject(idea.firstTwoSeconds, ['startSeconds', 'endSeconds', 'action'], 'OPENING_TIME');
     if (opening.startSeconds !== 0 || opening.endSeconds !== 2) invalid('아이디어의 첫 구간은 정확히 0~2초여야 합니다.', 'OPENING_TIME');
     const action = korean(opening.action, '첫 구간 동작', refs.openingBudget);
     if (!visibleMotion(action)) invalid('아이디어 첫 2초 확인: 신체 동작=미확인.', 'OPENING_MOTION');
     if (!Array.isArray(idea.signatureSteps) || idea.signatureSteps.length < 2 || idea.signatureSteps.length > 4) invalid('반복 동작은 2~4개 동작과 정확히 8카운트로 설명해 주세요.', 'SIGNATURE_STEPS');
-    const steps = idea.signatureSteps.map(rawStep => {
+    const steps = idea.signatureSteps.map((rawStep, stepIndex) => {
       const step = exactObject(rawStep, ['count', 'action', 'focus', ...(refs.cast ? ['actors'] : [])], 'SIGNATURE_FORMAT');
       if (!Number.isInteger(step.count) || Number(step.count) < 1 || Number(step.count) > 7) invalid('각 동작의 카운트는 1~7 정수여야 합니다.', 'SIGNATURE_COUNTS');
       if (typeof step.focus !== 'string' || !['arms', 'feet', 'body', 'combined'].includes(step.focus)) invalid('반복 동작의 움직임 중심을 확인해 주세요.', 'SIGNATURE_FOCUS');
       return { count: Number(step.count), action: korean(step.action, '반복 동작', 54), focus: step.focus,
-        ...(refs.cast ? { actors: validateDanceActorActions(step.actors, refs.cast, Math.max(8, Math.floor(48 / refs.cast.count))) } : {}) };
+        ...(refs.cast ? { actors: validateDanceActorActions(step.actors, refs.cast, Math.max(8, Math.floor(48 / refs.cast.count)), { ideaIndex, stepIndex }) } : {}) };
     });
     if (steps.reduce((sum, step) => sum + step.count, 0) !== 8) invalid('동작의 카운트 합은 정확히 8이어야 합니다.', 'SIGNATURE_COUNTS');
     signatureMotion(steps.map(step => step.action), refs.cast?.kind === 'animal');
-    if (refs.cast) validateDanceActorSequence(steps, refs.cast);
+    if (refs.cast) validateDanceActorSequence(steps, refs.cast, { ideaIndex });
     return { id: idea.id, title: idea.title, firstTwoSeconds: refs.openingPrefix + action,
       signatureMove: steps.map(step => `${step.count}카운트: ${step.action}`).join(' / '),
       musicConnection: refs.musicPrefix + korean(idea.musicConnection, '음악 연결 설명', refs.musicBudget),
@@ -391,6 +429,7 @@ Dance suitability and a compelling immediately visible hook are the priorities; 
 interaction: a visible give-and-response relationship with another selected performer, simple object or spatial anchor; solo cast stays solo. contrast: visibly opposed body movements, directions, sizes or tempos within the selected cast. rhythm_reveal: an initially folded/closed/still body shape visibly opens into a readable rhythmic shape immediately. visualPayoff develops the SAME mechanism in concrete body action. seriesPotential says which same hook remains and what concrete variable can change in another episode. productionRisk describes a specific identity/anatomy/position/contact/motion risk and practical reduction, never a guarantee. Prefer stable full-body framing, one continuous scene, clear floor contact and limited small props. Avoid acrobatics, teleportation, transformations, elaborate VFX, impossible object physics and exact multi-character synchronization. Original characters and choreography only: no named celebrity, known artist imitation, recognizable existing choreography, melody or reference video. No audio generation, dialogue, captions, overlays, logos or watermarks. These are candidate concepts, never proof of generated-video quality.`;
   system += `\nIDEATION METHOD: Internally explore several different causes and audience expectations, then select three mechanisms with different reasons to keep watching. Use the open brief, saved cast and music as inputs; no fixed character, costume or prop template, no recycling a stock list. Consider unexpected capability, goal/body mismatch, role reversal, mistaken expectation, rule/exception, scale contrast or response escalation as thinking operations, not prescribed scene templates. The first2seconds must show a visual incongruity or changed expectation AND start physical movement. Give the viewer a concrete unresolved question. Develop it physically in the middle (a changed role, direction, scale, coordination or rule consequence); repeated medium steps alone are insufficient. Resolve the same expectation with a visible payoff, then return to a motivated restart that makes the loop understandable. A funny image alone is not a complete dancing concept. Each candidate should remain understandable without sound or text, while movement choices reflect the selected music groove.`;
   if (cast) system += `\nSTRUCTURED CAST AND STORY: Return top-level castRoster copied exactly from selectedCastRoster, in its saved order. Never add humans to animals-only or reduce duo/trio/crowd to a lead solo. Every signatureSteps item additionally has actors:[{memberId,action}], exactly one for EACH saved member in roster order; each actor action<=${Math.max(8, Math.floor(48 / cast.count))} Korean chars. Assign different contributing roles rather than forcing every actor into identical choreography. Human actors need actual foot/body/weight movement; animals use species-native gait, paws, flippers, head or weight accents and never human arms/hands/pelvis choreography. hookStory has exactly openingExpectation,watchReason,development,payoff,restart. openingExpectation states the visual mismatch and expected outcome (<=120 chars), watchReason states the concrete unresolved question (<=120), development states a new observable body-action consequence (<=160), payoff resolves it physically (<=160), restart returns the body/formation to a motivated beginning (<=120). Development/payoff/restart require explicit moving anatomy. All three watchReason values differ. Keep the simple8-count rhythm as an anchor, while the causal situation actually changes. ${compactDanceCastPrompt(cast)}`;
+  if (cast) system += `\nACTOR ACTION FORMAT: ${DANCE_ACTOR_ACTION_GUIDE}`;
   const rhythm = job.rhythm ? { method: job.rhythm.method, confidence: job.rhythm.confidence, endingStatus: job.rhythm.endingStatus,
     beatSeconds: job.rhythm.beatSeconds.filter(second => Number.isFinite(second) && second >= 0 && second < 30).slice(0, 100) } : undefined;
   const input = { visualBrief: text(job.visualBrief, '영상 요청', 1000, true), selectedMusic: music, selectedDirection: direction,
@@ -425,9 +464,9 @@ interaction: a visible give-and-response relationship with another selected perf
     const name = error && typeof error === 'object' && 'name' in error ? error.name : '';
     if (signal.aborted || name === 'TimeoutError' || name === 'AbortError' || name === 'TypeError') throw transportFailure(error, 'response');
     if (error instanceof DanceVideoError && ['PLAN_INVALID', 'PLAN_RESPONSE', 'PLAN_LENGTH'].includes(error.code)) {
-      const validationRule = (error as IdeaRuleError)[VALIDATION_RULE];
+      const details = getDanceValidationDetails(error);
       throw new DanceVideoError(error.message, error.code, 502,
-        diagnostics(error.code as DancePlanFailure['code'], 'response', 'response', undefined, validationRule));
+        { ...diagnostics(error.code as DancePlanFailure['code'], 'response', 'response'), ...details });
     }
     throw new DanceVideoError('아이디어 응답을 확인하지 못했습니다. 저장된 음원은 유지됩니다.', 'PLAN_RESPONSE', 502,
       diagnostics('PLAN_RESPONSE', 'response', 'response'));

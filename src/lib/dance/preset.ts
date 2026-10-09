@@ -1,6 +1,6 @@
 import type { DanceCreativePreferences, DanceCreativeDirection, DanceCastContract } from './creativeDirection';
 import type { DanceMusicSpec } from './musicProfiles';
-import type { DanceIdea } from './ideas';
+import type { DanceIdea, DanceIdeaValidationRule } from './ideas';
 
 /** Versioned music-first workflow; legacy track and snapshot identities stay readable. */
 export const DANCE_CATEGORY_ID = 'dance_challenge' as const;
@@ -58,10 +58,15 @@ export type DanceChoreography = {
   firstPose: string; endPose: string;
 };
 export type DancePlan = { title: string; summary: string; identity: string; imagePrompt: string; clips: [string, string]; version?: 2; choreography?: DanceChoreography; cast?: DanceCastContract };
+export type DanceActorFailure = {
+  category: 'actors_shape' | 'actor_shape' | 'member_order' | 'action_format' | 'missing_anatomy' | 'nonphysical_action' | 'vague_action' | 'unrecognized_motion' | 'animal_anatomy' | 'sequence_motion' | 'sequence_lower_body';
+  memberId?: string; ideaIndex?: number; stepIndex?: number;
+};
 export type DancePlanFailure = {
   code: 'PLAN_TIMEOUT' | 'PLAN_CONNECTION' | 'PLAN_HTTP' | 'PLAN_RESPONSE' | 'PLAN_INVALID' | 'PLAN_LENGTH';
   kind: 'timeout' | 'connection' | 'http' | 'response'; phase: 'preparation' | 'request' | 'response';
   elapsedMs: number; timeoutMs: number; httpStatus?: number; providerRequestId?: string;
+  validationRule?: DanceIdeaValidationRule; actorFailure?: DanceActorFailure;
 };
 export type DanceVideoJob = {
   id: string; trackId: string; status: 'preparing' | 'ideas' | 'ready' | 'image' | 'image-review' | 'preview' | 'preview-review' | 'clip1' | 'bridge' | 'clip2' | 'render' | 'completed' | 'attention';
