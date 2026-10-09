@@ -162,8 +162,17 @@ test('unrecognized physical relationships and reveals receive review hints inste
   }
   for (const verb of ['가리키고', '가리켜', '가리킨 다음']) {
     const result = validateDanceIdeas(changed(2, { firstTwoSeconds: `0~2초: 성인 여성은 거리 광장에서 손으로 바닥 선을 ${verb} 팔을 펼친다.` }));
-    assert.match(result[2].reviewNote, /닫힌 모양이 펼쳐지는 변화/);
+    assert.match(result[2].reviewNote, /기대한 역할·규칙·능력/);
   }
+});
+test('review-only reveal hints recognize changed agency or purpose without requiring a folded-body template', () => {
+  const result = validateDanceIdeas(changed(2, {
+    firstTwoSeconds: '0~2초: 성인 여성은 거리 광장에서 발을 옆으로 딛고 몸통을 돌려 기대와 다른 규칙의 주도권을 드러낸다.',
+    visualPayoff: '발을 중앙에 딛고 몸통을 틀어 바뀐 역할과 목적을 드러낸다.',
+  }));
+  assert.equal(result.length, 3);
+  assert.doesNotMatch(result[2].reviewNote || '', /기대한 역할·규칙·능력|닫힌 모양|펼쳐지는 변화/);
+  assert.deepEqual(validateDanceIdeas(result), result);
 });
 test('opening failures identify only candidate number and independent compact check flags', async () => {
   const cases = [

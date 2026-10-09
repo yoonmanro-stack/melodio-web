@@ -18,7 +18,7 @@ function load(relative) {
   return mod.exports;
 }
 const { resolveDanceCreativeDirection } = load('src/lib/dance/creativeDirection.ts');
-const { createDanceIdeas, danceCastRoster, validateDanceIdeas, validateDanceActorActions, validateDanceActorSequence, danceActorStepSummary, getDanceValidationDetails, DANCE_ACTOR_ACTION_GUIDE, DANCE_ACTOR_SUMMARY_GUIDE, DANCE_PHYSICAL_ACTION_GUIDE } = load('src/lib/dance/ideas.ts');
+const { createDanceIdeas, danceCastRoster, validateDanceIdeas, validateDanceActorActions, validateDanceActorSequence, danceActorStepSummary, getDanceValidationDetails, DANCE_ACTOR_ACTION_GUIDE, DANCE_ACTOR_SUMMARY_GUIDE, DANCE_PHYSICAL_ACTION_GUIDE, DANCE_SITUATION_HOOK_GUIDE, DANCE_EXPRESSION_GUIDE, DANCE_MUSIC_PROFILE_CUE_GUIDE } = load('src/lib/dance/ideas.ts');
 const { createDancePlan, validateDancePlan } = load('src/lib/dance/videoPlan.ts');
 const { buildDancePreviewPrompt, buildDancePacedClipPrompt, createDanceVideoService } = load('src/lib/dance/videoService.ts');
 const { resolveDanceMusicSpec } = load('src/lib/dance/musicProfiles.ts');
@@ -65,6 +65,90 @@ function planPayload(job) {
 }
 const response = payload => Response.json({ choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(payload) } }] });
 
+test('idea and plan requests preserve a causal scene premise, expressive reactions and active cadence across the three selected cast types', async () => {
+  for (const prefs of [preferences('woman', 'duo'), preferences('human_animal', 'trio', 'dog'), preferences('animal', 'crowd', 'penguin')]) {
+    const job = jobFor(prefs), expectedCast = job.direction.cast; let ideaCalls = 0, planCalls = 0;
+    const ideas = await createDanceIdeas(job, async (_url, options) => {
+      ideaCalls++; const request = JSON.parse(options.body), system = request.messages[0].content;
+      const schema = request.response_format.json_schema.schema, candidate = schema.properties.ideas.items.properties;
+      assert.ok(system.includes(DANCE_SITUATION_HOOK_GUIDE)); assert.ok(system.includes(DANCE_EXPRESSION_GUIDE));
+      assert.match(system, /audience expectation BEFORE writing counts/);
+      assert.match(system, /first-frame visible incongruity that reads when paused without title, sound or explanatory text/);
+      assert.match(system, /concrete observable question or outcome/);
+      assert.match(system, /causal physical consequence.*agency, a rule or purpose/);
+      assert.match(system, /payoff visibly resolves the opening expectation/);
+      assert.match(system, /Cute animals, an attractive face, count changes or a pose alone are insufficient/);
+      assert.match(system, /conceptFamily labels describe causal relationships, not prescribed body templates/);
+      assert.match(system, /expected capability, agency, purpose or rule differs visibly/);
+      assert.match(system, /rhythmic action reveals an unexpected capability, rule, role or function/);
+      assert.match(system, /Difficulty limits complexity, never cadence or character energy/);
+      assert.match(system, /Brief freezes are purposeful beat accents, at most one count/);
+      assert.match(system, /Fast selected music needs active native foot\/weight accents/);
+      assert.doesNotMatch(system, /initially folded\/closed\/still body shape|visibly opposed body movements, directions, sizes or tempos|grounded modest movement|limited small props/);
+      assert.match(system, /Avoid acrobatics, teleportation, transformations/);
+      assert.match(system, /never human arms\/hands\/pelvis choreography/);
+      assert.deepEqual(candidate.conceptFamily.enum, ['interaction', 'contrast', 'rhythm_reveal']);
+      assert.equal(schema.properties.ideas.minItems, 3); assert.equal(schema.properties.ideas.maxItems, 3);
+      assert.equal(schema.properties.castRoster.minItems, expectedCast.count); assert.equal(schema.properties.castRoster.maxItems, expectedCast.count);
+      assert.equal(candidate.signatureSteps.items.properties.actors.items.properties.action.maxLength, Math.max(8, Math.floor(48 / expectedCast.count)));
+      assert.deepEqual(JSON.parse(request.messages[1].content).selectedCastRoster, danceCastRoster(expectedCast));
+      return response(ideaPayload(job));
+    });
+    assert.equal(ideaCalls, 1); job.selectedIdea = ideas[0];
+    const premiseCue = 'An unused stool faces away from the cast beside a floor marker.';
+    const payload = planPayload(job); payload.imagePrompt += ` ${premiseCue}`;
+    const plan = await createDancePlan(job, async (_url, options) => {
+      planCalls++; const request = JSON.parse(options.body), system = request.messages[0].content;
+      assert.ok(system.includes(DANCE_SITUATION_HOOK_GUIDE)); assert.ok(system.includes(DANCE_EXPRESSION_GUIDE));
+      assert.match(system, /Preserve its situation, location, physical prop cues, actor agency/);
+      assert.match(system, /Humor or performance surprise develops through physical cause and character reaction/);
+      assert.match(system, /Do not add unrelated or unmotivated gags that replace the selected dance-driven mechanism/);
+      assert.match(system, /Keep the saved nominal count cadence, especially for fast music/);
+      assert.match(system, /Large accents and animal movement do not imply slow motion/);
+      assert.doesNotMatch(system, /Avoid forced comedic skits|small rhythm-led body accents/);
+      assert.ok(system.includes(JSON.stringify(job.selectedIdea)));
+      const schema = request.response_format.json_schema.schema.properties;
+      assert.match(schema.imagePrompt.description, /preserve the situation, visible incongruity, premise props and motivated expression/);
+      assert.equal(schema.imagePrompt.maxLength, 1000); assert.equal(schema.clips.items.maxLength, 300);
+      assert.equal(schema.choreography.properties.steps.items.properties.actors.minItems, expectedCast.count);
+      return response(payload);
+    });
+    assert.equal(planCalls, 1); assert.deepEqual(plan.cast, expectedCast);
+    assert.ok(plan.imagePrompt.includes(premiseCue));
+    assert.match(plan.imagePrompt, /Preserve requested setting\/style, identities and visible premise props/);
+    assert.match(plan.imagePrompt, /Seeded smile\/gaze is initial styling; pose and expression establish the opening expectation/);
+    for (const clip of plan.clips) {
+      assert.match(clip, /setting and premise props/);
+      assert.match(clip, /brows, gaze and mouth react to the situation/);
+      assert.ok(Buffer.byteLength(clip, 'utf8') <= 4096);
+    }
+    assert.ok(Buffer.byteLength(plan.imagePrompt, 'utf8') <= 4096);
+  }
+});
+test('reused music metadata guides native rhythm without imposing its earlier prop or story on new ideas and plans', async () => {
+  const job = jobFor(preferences('woman', 'duo'));
+  job.musicSpec = { ...music, id: 'reused-audio-profile', label: '이전 소품 연출 · 펑크', rhythmPurpose: '이전 소품 스윕과 체중 이동', bpm: 128 };
+  const savedMusic = structuredClone(job.musicSpec); let ideaCalls = 0, planCalls = 0;
+  const ideas = await createDanceIdeas(job, async (_url, options) => {
+    ideaCalls++; const request = JSON.parse(options.body), system = request.messages[0].content, input = JSON.parse(request.messages[1].content);
+    assert.ok(system.includes(DANCE_MUSIC_PROFILE_CUE_GUIDE));
+    assert.match(system, /not compulsory props, story or performer roles/);
+    assert.match(system, /only when visualBrief explicitly requests it/);
+    assert.deepEqual(input.selectedMusic, { id: savedMusic.id, label: savedMusic.label, style: savedMusic.style, rhythmPurpose: savedMusic.rhythmPurpose });
+    return response(ideaPayload(job));
+  });
+  assert.equal(ideaCalls, 1); job.selectedIdea = ideas[0];
+  const plan = await createDancePlan(job, async (_url, options) => {
+    planCalls++; const request = JSON.parse(options.body);
+    assert.ok(request.messages[0].content.includes(DANCE_MUSIC_PROFILE_CUE_GUIDE));
+    assert.match(request.messages[0].content, /audio reuse alone is not a request to recreate that concept/);
+    return response(planPayload(job));
+  });
+  assert.equal(planCalls, 1); assert.deepEqual(job.musicSpec, savedMusic);
+  assert.ok(ideas.every(idea => idea.musicConnection.startsWith(`${savedMusic.label} · ${savedMusic.rhythmPurpose}: `)));
+  assert.deepEqual(plan.cast, job.direction.cast);
+  assert.ok(plan.clips.every(clip => Buffer.byteLength(clip, 'utf8') <= 4096));
+});
 test('three causal candidates preserve solo, duo, trio, crowd, mixed and animals-only casts in one bounded call', async () => {
   for (const prefs of [preferences('woman', 'solo'), preferences('man', 'duo'), preferences('woman', 'trio'), preferences('crowd', 'crowd'), preferences('human_animal', 'duo', 'dog'), preferences('animal', 'duo', 'penguin')]) {
     const job = jobFor(prefs); let calls = 0;
