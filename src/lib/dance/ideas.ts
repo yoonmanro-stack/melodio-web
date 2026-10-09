@@ -6,6 +6,12 @@ import { validateDanceCastContract, type DanceCastContract, type DanceCastMember
 export type DanceHookStory = { openingExpectation: string; watchReason: string; development: string; payoff: string; restart: string };
 export type DanceActorAction = { memberId: string; action: string };
 export const DANCE_ACTOR_ACTION_GUIDE = 'Each actor action names its own native body part plus a physical verb. Form examples only, not prescribed choreography: humans "발 옆 딛기", "몸통 튕기기"; quadrupeds "앞발 딛기"; penguins "지느러미 펴기". A deliberate hold also names the body, e.g. "팔 고정하기". Bare dance/style/role labels such as "셔플", "응답" or "리드" are insufficient. Preserve the selected idea, distinct role and species anatomy; describe its action concretely.';
+export const DANCE_ACTOR_SUMMARY_GUIDE = 'For a structured cast, complete ordered actors are the authoritative choreography. The server derives the display summary from those validated actor actions. Supply a concise Korean summary label; never add competing movement. Every step needs a different complete actor-action matrix, not merely a different summary label.';
+export const DANCE_PHYSICAL_ACTION_GUIDE = 'Name explicit species-native anatomy plus an observable physical verb. Form examples only: "발을 딛는다", "몸통을 돌린다", "앞발을 딛는다", "지느러미를 편다". A role, dance-style label, held shape or desired result alone is insufficient. Preserve the saved situation and anatomy.';
+/** Display-only separator normalization; authoritative actor actions remain intact. */
+export function danceActorStepSummary(actors: DanceActorAction[]): string {
+  return actors.map(actor => actor.action.replace(/[/;]/g, '·')).join('·');
+}
 export type DanceCastRoster = Pick<DanceCastMember, 'id' | 'kind' | 'species' | 'role' | 'position'>[];
 const STORY_LIMITS = { openingExpectation: 120, watchReason: 120, development: 160, payoff: 160, restart: 120 } as const;
 export function danceCastRoster(cast: DanceCastContract): DanceCastRoster {
@@ -46,6 +52,7 @@ export type DanceIdea = {
   conceptFamily: 'interaction' | 'contrast' | 'rhythm_reveal';
   hookStory?: DanceHookStory;
   cast?: DanceCastContract;
+  /** Complete validated actor steps are the motion authority; saved display summaries remain readable. */
   signatureActors?: { count: number; actors: DanceActorAction[] }[];
   /** Computed review guidance; provider-supplied notes are ignored. */
   reviewNote?: string;
@@ -195,6 +202,8 @@ export function validateDanceActorSequence(steps: { actors?: DanceActorAction[] 
       invalid(error.message, rule, { ...location, memberId: member.id, category: rule === 'SIGNATURE_LOWER_BODY' ? 'sequence_lower_body' : 'sequence_motion' });
     }
   }
+  const matrices = steps.map(step => JSON.stringify(step.actors!.map(actor => [actor.memberId, normal(actor.action)])));
+  if (new Set(matrices).size !== matrices.length) invalid('반복 동작에는 서로 다른 출연자별 동작 구성이 필요합니다.', 'SIGNATURE_DISTINCTNESS');
 }
 function hookStory(value: unknown): DanceHookStory {
   const story = exactObject(value, Object.keys(STORY_LIMITS), 'HOOK_STORY');
@@ -207,22 +216,26 @@ function movementFingerprint(value: string): string {
   const action = motionText(value);
   return MOVEMENT_KINDS.filter(([, pattern]) => pattern.test(action)).map(([name]) => name).join('+');
 }
-function signature(value: string, animal = false): string {
+function signature(value: string, animal = false, actorSteps?: NonNullable<DanceIdea['signatureActors']>): string {
   const steps = value.split(/\s*[/;]\s*/);
   if (steps.length < 2 || steps.length > 4) invalid('반복 동작은 2~4개 동작과 정확히 8카운트로 설명해 주세요.', 'SIGNATURE_STEPS');
+  if (actorSteps && actorSteps.length !== steps.length) invalid('표시 안무와 출연자별 안무의 동작 순서·수가 다릅니다.', 'SIGNATURE_COUNTS');
   let total = 0;
   const actions: string[] = [];
-  const fingerprints = steps.map(step => {
+  const fingerprints = steps.map((step, index) => {
     const match = /^([1-7])\s*카운트\s*[:：]\s*(.+)$/.exec(step);
     if (!match) invalid('반복 동작은 “2카운트: 동작 / 6카운트: 동작” 형식으로 설명해 주세요.', 'SIGNATURE_FORMAT');
     total += Number(match[1]);
+    if (actorSteps && actorSteps[index].count !== Number(match[1])) invalid('표시 안무와 출연자별 안무의 카운트 순서가 다릅니다.', 'SIGNATURE_COUNTS');
     const action = korean(match[2], '반복 동작', 160);
     actions.push(action);
-    return `${match[1]}:${movementFingerprint(action)}`;
+    return `${match[1]}:${actorSteps ? actorSteps[index].actors.map(actor => movementFingerprint(actor.action)).join('|') : movementFingerprint(action)}`;
   });
   if (total !== 8) invalid('서로 다른 2~4개 동작의 카운트 합은 정확히 8이어야 합니다.', 'SIGNATURE_COUNTS');
-  if (new Set(actions.map(normal)).size !== actions.length) invalid('서로 다른 2~4개 동작의 카운트 합은 정확히 8이어야 합니다.', 'SIGNATURE_DISTINCTNESS');
-  signatureMotion(actions, animal);
+  if (!actorSteps) {
+    if (new Set(actions.map(normal)).size !== actions.length) invalid('서로 다른 2~4개 동작의 카운트 합은 정확히 8이어야 합니다.', 'SIGNATURE_DISTINCTNESS');
+    signatureMotion(actions, animal);
+  }
   return fingerprints.join('/');
 }
 
@@ -290,7 +303,7 @@ export function validateDanceIdeas(value: unknown, expectedCast?: DanceCastContr
       if (signatureActors.reduce((total, step) => total + step.count, 0) !== 8) invalid('역할별 동작은 정확히 8카운트여야 합니다.', 'CAST_ACTIONS');
       validateDanceActorSequence(signatureActors, cast, { ideaIndex: index });
     }
-    const structure = signature(fields.signatureMove, cast?.kind === 'animal');
+    const structure = signature(fields.signatureMove, cast?.kind === 'animal', cast && signatureActors ? signatureActors : undefined);
     const openingStructure = movementFingerprint(fields.firstTwoSeconds);
     ids.add(id); titles.add(normal(fields.title)); families.add(family); openingStructures.push(openingStructure); movementStructures.push(structure);
     // Prose meaning is not reliably classified by keywords; leave it to creator review.
@@ -334,18 +347,19 @@ function ideaResponseFormat(refs: IdeaReferences) {
   const properties = {
     id: { type: 'string', minLength: 1, maxLength: 64, pattern: '^[a-z][a-z0-9_-]{0,63}$' },
     title: koreanString(FIELD_LIMITS.title),
-    firstTwoSeconds: object({ startSeconds: { type: 'integer', enum: [0] }, endSeconds: { type: 'integer', enum: [2] }, action: koreanString(refs.openingBudget) }),
+    firstTwoSeconds: object({ startSeconds: { type: 'integer', enum: [0] }, endSeconds: { type: 'integer', enum: [2] }, action: { ...koreanString(refs.openingBudget), description: DANCE_PHYSICAL_ACTION_GUIDE } }),
     signatureSteps: { type: 'array', minItems: 2, maxItems: 4, items: object({
       count: { type: 'integer', minimum: 1, maximum: 7 },
       // Four54-char actions plus count labels and separators fit the public250-char signature.
-      action: { ...koreanString(54), description: 'Concise body movement or deliberate freeze among moving steps; counts sum to exactly8.' },
+      action: { ...koreanString(54), description: refs.cast ? DANCE_ACTOR_SUMMARY_GUIDE : 'Concise body movement or deliberate freeze among moving steps; counts sum to exactly8.' },
       focus: { type: 'string', enum: ['arms', 'feet', 'body', 'combined'] },
       ...(actorSchema ? { actors: actorSchema } : {}),
     }) },
-    musicConnection: koreanString(refs.musicBudget), visualPayoff: koreanString(FIELD_LIMITS.visualPayoff),
+    musicConnection: koreanString(refs.musicBudget), visualPayoff: { ...koreanString(FIELD_LIMITS.visualPayoff), description: DANCE_PHYSICAL_ACTION_GUIDE },
     seriesPotential: koreanString(FIELD_LIMITS.seriesPotential), productionRisk: koreanString(FIELD_LIMITS.productionRisk),
     conceptFamily: { type: 'string', enum: [...FAMILIES] },
-    ...(refs.cast ? { hookStory: object(Object.fromEntries(Object.entries(STORY_LIMITS).map(([key, limit]) => [key, koreanString(limit)]))) } : {}),
+    ...(refs.cast ? { hookStory: object(Object.fromEntries(Object.entries(STORY_LIMITS).map(([key, limit]) => [key,
+      ['development', 'payoff', 'restart'].includes(key) ? { ...koreanString(limit), description: DANCE_PHYSICAL_ACTION_GUIDE } : koreanString(limit)]))) } : {}),
   };
   return { type: 'json_schema', json_schema: { name: refs.cast ? 'dance_ideas_hooks_v3' : 'dance_ideas_v2', strict: true,
     schema: object({ selection, ...(refs.cast ? { castRoster: danceCastRosterSchema(refs.cast) } : {}), ideas: { type: 'array', minItems: 3, maxItems: 3, items: object(properties) } }) } };
@@ -376,10 +390,10 @@ function compileProviderIdeas(value: unknown, refs: IdeaReferences): DanceIdea[]
         ...(refs.cast ? { actors: validateDanceActorActions(step.actors, refs.cast, Math.max(8, Math.floor(48 / refs.cast.count)), { ideaIndex, stepIndex }) } : {}) };
     });
     if (steps.reduce((sum, step) => sum + step.count, 0) !== 8) invalid('동작의 카운트 합은 정확히 8이어야 합니다.', 'SIGNATURE_COUNTS');
-    signatureMotion(steps.map(step => step.action), refs.cast?.kind === 'animal');
     if (refs.cast) validateDanceActorSequence(steps, refs.cast, { ideaIndex });
+    else signatureMotion(steps.map(step => step.action));
     return { id: idea.id, title: idea.title, firstTwoSeconds: refs.openingPrefix + action,
-      signatureMove: steps.map(step => `${step.count}카운트: ${step.action}`).join(' / '),
+      signatureMove: steps.map(step => `${step.count}카운트: ${refs.cast ? danceActorStepSummary(step.actors!) : step.action}`).join(' / '),
       musicConnection: refs.musicPrefix + korean(idea.musicConnection, '음악 연결 설명', refs.musicBudget),
       visualPayoff: idea.visualPayoff, seriesPotential: idea.seriesPotential, productionRisk: idea.productionRisk, conceptFamily: idea.conceptFamily,
       ...(refs.cast ? { hookStory: hookStory(idea.hookStory), cast: refs.cast, signatureActors: steps.map(step => ({ count: step.count, actors: step.actors! })) } : {}) };
@@ -430,6 +444,8 @@ interaction: a visible give-and-response relationship with another selected perf
   system += `\nIDEATION METHOD: Internally explore several different causes and audience expectations, then select three mechanisms with different reasons to keep watching. Use the open brief, saved cast and music as inputs; no fixed character, costume or prop template, no recycling a stock list. Consider unexpected capability, goal/body mismatch, role reversal, mistaken expectation, rule/exception, scale contrast or response escalation as thinking operations, not prescribed scene templates. The first2seconds must show a visual incongruity or changed expectation AND start physical movement. Give the viewer a concrete unresolved question. Develop it physically in the middle (a changed role, direction, scale, coordination or rule consequence); repeated medium steps alone are insufficient. Resolve the same expectation with a visible payoff, then return to a motivated restart that makes the loop understandable. A funny image alone is not a complete dancing concept. Each candidate should remain understandable without sound or text, while movement choices reflect the selected music groove.`;
   if (cast) system += `\nSTRUCTURED CAST AND STORY: Return top-level castRoster copied exactly from selectedCastRoster, in its saved order. Never add humans to animals-only or reduce duo/trio/crowd to a lead solo. Every signatureSteps item additionally has actors:[{memberId,action}], exactly one for EACH saved member in roster order; each actor action<=${Math.max(8, Math.floor(48 / cast.count))} Korean chars. Assign different contributing roles rather than forcing every actor into identical choreography. Human actors need actual foot/body/weight movement; animals use species-native gait, paws, flippers, head or weight accents and never human arms/hands/pelvis choreography. hookStory has exactly openingExpectation,watchReason,development,payoff,restart. openingExpectation states the visual mismatch and expected outcome (<=120 chars), watchReason states the concrete unresolved question (<=120), development states a new observable body-action consequence (<=160), payoff resolves it physically (<=160), restart returns the body/formation to a motivated beginning (<=120). Development/payoff/restart require explicit moving anatomy. All three watchReason values differ. Keep the simple8-count rhythm as an anchor, while the causal situation actually changes. ${compactDanceCastPrompt(cast)}`;
   if (cast) system += `\nACTOR ACTION FORMAT: ${DANCE_ACTOR_ACTION_GUIDE}`;
+  if (cast) system += `\nACTOR SUMMARY CONTRACT: ${DANCE_ACTOR_SUMMARY_GUIDE}`;
+  system += `\nOPENING/PAYOFF/STORY PHYSICAL ACTION FORMAT: ${DANCE_PHYSICAL_ACTION_GUIDE}`;
   const rhythm = job.rhythm ? { method: job.rhythm.method, confidence: job.rhythm.confidence, endingStatus: job.rhythm.endingStatus,
     beatSeconds: job.rhythm.beatSeconds.filter(second => Number.isFinite(second) && second >= 0 && second < 30).slice(0, 100) } : undefined;
   const input = { visualBrief: text(job.visualBrief, '영상 요청', 1000, true), selectedMusic: music, selectedDirection: direction,

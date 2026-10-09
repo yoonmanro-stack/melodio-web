@@ -2,7 +2,7 @@ import { readPetBoundedBody } from '../video/petMedia';
 import { DANCE_PRESET, type DancePlan, type DancePlanFailure, type DanceVideoJob, type DanceChoreography as StoredDanceChoreography } from './preset';
 import { DANCE_PLAN_TIMEOUT_MS, DanceVideoError } from './videoService';
 import { buildDanceCadenceGuide, buildDanceCastPrompt, validateDanceCastContract, type DanceCreativeDirection, type DanceCastContract } from './creativeDirection';
-import { compactDanceCastPrompt, danceCastRoster, danceCastRosterSchema, matchesDanceCastRoster, validateDanceActorActions, validateDanceActorSequence, isDanceVisibleMotion, DANCE_ACTOR_ACTION_GUIDE, getDanceValidationDetails } from './ideas';
+import { compactDanceCastPrompt, danceCastRoster, danceCastRosterSchema, matchesDanceCastRoster, validateDanceActorActions, validateDanceActorSequence, danceActorStepSummary, isDanceVisibleMotion, DANCE_ACTOR_ACTION_GUIDE, DANCE_ACTOR_SUMMARY_GUIDE, DANCE_PHYSICAL_ACTION_GUIDE, getDanceValidationDetails } from './ideas';
 
 const CLEAN_VISUAL = 'Silent visual only. No sound, speech, singing, text, typography, captions, logos or watermarks. Vertical 9:16 readable full-body movement in the chosen visual style; grounded movement and anatomy appropriate to the performer species or design.';
 function planResponseFormat(hasDirection: boolean, cast?: DanceCastContract) {
@@ -22,7 +22,7 @@ function planResponseFormat(hasDirection: boolean, cast?: DanceCastContract) {
     steps: { type: 'array', minItems: 2, maxItems: 4,
       description: 'Distinct physical movements whose count values sum to exactly8; at least one moves feet, knees, pelvis or torso.',
       items: object({ count: { type: 'integer', minimum: 1, maximum: 7 },
-        action: text(cast ? 60 : 160, 'Natural Korean description of the actual physical movement.'),
+        action: text(cast ? 60 : 160, cast ? DANCE_ACTOR_SUMMARY_GUIDE : 'Natural Korean description of the actual physical movement.'),
         focus: { type: 'string', enum: ['arms', 'feet', 'body', 'combined'] },
         ...(cast ? { actors: { type: 'array', minItems: cast.count, maxItems: cast.count, items: object({
           memberId: { type: 'string', enum: cast.members.map(member => member.id) }, action: text(Math.max(8, Math.floor(48 / cast.count)), DANCE_ACTOR_ACTION_GUIDE),
@@ -31,7 +31,7 @@ function planResponseFormat(hasDirection: boolean, cast?: DanceCastContract) {
       description: 'Contiguous0–30second timeline without gaps or overlaps, repeating the same hook in both15-second halves.',
       items: object({ startSeconds: { type: 'number', minimum: 0, maximum: 30 },
         endSeconds: { type: 'number', minimum: 0, maximum: 30 },
-        action: text(cast ? (cast.count >= 4 ? 40 : 60) : 180, 'Natural Korean description of the changed physical situation in this timeline segment.'), repeatHook: { type: 'boolean' },
+        action: text(cast ? (cast.count >= 4 ? 40 : 60) : 180, DANCE_PHYSICAL_ACTION_GUIDE), repeatHook: { type: 'boolean' },
         ...(cast ? { phase: { type: 'string', enum: ['opening', 'development', 'payoff', 'restart'] } } : {}) }) },
     firstPose: text(cast ? (cast.count >= 4 ? 40 : 60) : 160, 'Natural Korean opening pose.'), endPose: text(cast ? (cast.count >= 4 ? 40 : 60) : 160, 'Natural Korean final pose.'),
   });
@@ -62,11 +62,12 @@ function validateChoreography(value: unknown, cast?: DanceCastContract): DanceCh
     if (!Number.isInteger(step.count) || Number(step.count) < 1 || Number(step.count) > 7 || !['arms', 'feet', 'body', 'combined'].includes(String(step.focus))) throw new DanceVideoError('각 동작의 카운트와 움직임 중심을 확인해 주세요.', 'PLAN_INVALID');
     const action = koreanText(step.action, '훅 동작', cast ? 60 : 160);
     if (!cast && step.focus !== 'arms' && !lowerBody.test(action)) throw new DanceVideoError('발·무릎·골반·몸통 움직임을 구체적으로 설명해 주세요.', 'PLAN_INVALID');
-    return { count: Number(step.count), action, focus: step.focus as DanceChoreography['steps'][number]['focus'],
-      ...(cast ? { actors: validateDanceActorActions(step.actors, cast, Math.max(8, Math.floor(48 / cast.count)), { stepIndex }) } : {}) };
+    const actors = cast ? validateDanceActorActions(step.actors, cast, Math.max(8, Math.floor(48 / cast.count)), { stepIndex }) : undefined;
+    return { count: Number(step.count), action: actors ? danceActorStepSummary(actors) : action, focus: step.focus as DanceChoreography['steps'][number]['focus'],
+      ...(actors ? { actors } : {}) };
   });
   if (steps.reduce((total, step) => total + step.count, 0) !== 8 || !steps.some(step => step.focus !== 'arms')) throw new DanceVideoError('훅은 정확히 8카운트이며 손짓과 함께 발 또는 몸통이 움직여야 합니다.', 'PLAN_INVALID');
-  if (new Set(steps.map(step => step.action.replace(/\s/g, ''))).size !== steps.length) throw new DanceVideoError('훅 동작을 같은 손짓으로 반복해서 채울 수 없습니다.', 'PLAN_INVALID');
+  if (!cast && new Set(steps.map(step => step.action.replace(/\s/g, ''))).size !== steps.length) throw new DanceVideoError('훅 동작을 같은 손짓으로 반복해서 채울 수 없습니다.', 'PLAN_INVALID');
   if (cast) validateDanceActorSequence(steps, cast);
   if (!Array.isArray(c.segments) || c.segments.length < 3 || c.segments.length > 8) throw new DanceVideoError('30초를 3~8개 연속 구간으로 계획해 주세요.', 'PLAN_INVALID');
   let end = 0;
@@ -164,6 +165,8 @@ The supplied BPM/onsets are approximate energy-analysis cues, not verified music
   system += '\nRHYTHM CONFIDENCE: rhythm.beatSeconds are provisional rhythm-analysis cues, never verified downbeats. If method is editorial-fallback or confidence is below0.55, keep a simple readable8-count hook guided by the saved music profile and target BPM; do not invent precise synchronization. onsetSeconds are only approximate energy cues. If endingStatus is review or uncertain, plan a stable final pose and leave the audio ending for creator review; do not claim a verified clean musical ending.';
   if (cast) system += `\nCAST/STORY CONTRACT OVERRIDE: ${compactDanceCastPrompt(cast)} Return additional top-level castRoster copied EXACTLY from selectedCastRoster in saved order. Return version:2 and choreography:{hookName,steps,segments,firstPose,endPose}; hookName<=60 Korean chars. Steps is2–4 distinct actions with count:integer1–7 and focus:arms|feet|body|combined; counts SUM TO EXACTLY8. Repeat the same rhythm hook in both15s halves. Segments are contiguous0–30s without gaps/overlap and include repeatHook:boolean. Every choreography.steps item additionally has actors:[{memberId,action}], one for EVERY saved member in roster order, action<=${Math.max(8, Math.floor(48 / cast.count))} Korean chars. Each actor contributes an appropriate role: call, answer, interruption, support or consequence; do not force unison. Animals use native paws/gait/flippers/head/weight accents; never impose human hands, knees or pelvis rules. Human/robot actors retain readable foot/body movement. Choreography steps.action<=60 Korean chars, firstPose/endPose<=${cast.count >= 4 ? 40 : 60}. Segments is4–6 items with additional phase:'opening'|'development'|'payoff'|'restart', phase groups in that order, first segment EXACTLY0–2s; action<=${cast.count >= 4 ? 40 : 60} Korean chars and explicit physical movement. Keep the8-count hook as a rhythmic anchor while the visual situation changes: development introduces a different physical consequence, payoff resolves the opening expectation, restart visibly restores the starting rule/formation. All segment actions differ. Unchanged repetitive dancing is insufficient. imagePrompt<=1000 English chars and each clips string<=300 English chars: no duplicate roster or step prose, the server adds those contracts. identity accurately describes the complete cast count/species; never describe a multi-actor cast as a solo. These are experimental production plans, without a promise of virality or verified beat alignment.`;
   if (cast) system += `\nACTOR ACTION FORMAT: ${DANCE_ACTOR_ACTION_GUIDE}`;
+  if (cast) system += `\nACTOR SUMMARY CONTRACT: ${DANCE_ACTOR_SUMMARY_GUIDE}`;
+  system += `\nTIMELINE PHYSICAL ACTION FORMAT: ${DANCE_PHYSICAL_ACTION_GUIDE}`;
   const rhythm = job.rhythm ? { method: job.rhythm.method, confidence: job.rhythm.confidence, endingStatus: job.rhythm.endingStatus,
     beatSeconds: job.rhythm.beatSeconds.filter(second => Number.isFinite(second) && second >= 0 && second < 30).slice(0, 100) } : undefined;
   if (job.selectedIdea) system += `\nAPPROVED IDEA CONTRACT: ${JSON.stringify(job.selectedIdea)}\nTranslate the selected idea into the opening image, first two seconds, repeatable hook and visual payoff. Preserve its visible mechanism and audience participation rule. Do not flatten it into an attractive performer posing or generic hand waving. Keep production simple and believable, preserve ground contact and anatomy, and make the hook understandable without generated text. Other unselected ideas must not enter the plan.`;

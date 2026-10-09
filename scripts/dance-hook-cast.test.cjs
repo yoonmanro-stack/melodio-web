@@ -18,7 +18,7 @@ function load(relative) {
   return mod.exports;
 }
 const { resolveDanceCreativeDirection } = load('src/lib/dance/creativeDirection.ts');
-const { createDanceIdeas, danceCastRoster, validateDanceIdeas, validateDanceActorActions, validateDanceActorSequence, getDanceValidationDetails, DANCE_ACTOR_ACTION_GUIDE } = load('src/lib/dance/ideas.ts');
+const { createDanceIdeas, danceCastRoster, validateDanceIdeas, validateDanceActorActions, validateDanceActorSequence, danceActorStepSummary, getDanceValidationDetails, DANCE_ACTOR_ACTION_GUIDE, DANCE_ACTOR_SUMMARY_GUIDE, DANCE_PHYSICAL_ACTION_GUIDE } = load('src/lib/dance/ideas.ts');
 const { createDancePlan, validateDancePlan } = load('src/lib/dance/videoPlan.ts');
 const { buildDancePreviewPrompt, buildDancePacedClipPrompt, createDanceVideoService } = load('src/lib/dance/videoService.ts');
 const { resolveDanceMusicSpec } = load('src/lib/dance/musicProfiles.ts');
@@ -74,6 +74,8 @@ test('three causal candidates preserve solo, duo, trio, crowd, mixed and animals
       assert.match(request.messages[0].content, /no fixed character, costume or prop template/);
       assert.match(request.messages[0].content, /vocals\/instrumental status is not a creative quality gate/);
       assert.ok(request.messages[0].content.includes(DANCE_ACTOR_ACTION_GUIDE));
+      assert.ok(request.messages[0].content.includes(DANCE_ACTOR_SUMMARY_GUIDE));
+      assert.ok(request.messages[0].content.includes(DANCE_PHYSICAL_ACTION_GUIDE));
       assert.equal(request.response_format.json_schema.schema.properties.ideas.items.properties.signatureSteps.items.properties.actors.items.properties.action.description, DANCE_ACTOR_ACTION_GUIDE);
       assert.equal(request.response_format.json_schema.schema.properties.castRoster.minItems, job.direction.cast.count);
       return response(ideaPayload(job));
@@ -90,6 +92,81 @@ test('wrong roster, missing actor and duplicated watch reasons are held without 
   for (const change of [p => p.castRoster.pop(), p => p.castRoster[1].species = 'human', p => p.ideas[0].signatureSteps[0].actors.pop(), p => p.ideas[1].hookStory.watchReason = p.ideas[0].hookStory.watchReason]) {
     const payload = ideaPayload(job); change(payload); let calls = 0;
     await assert.rejects(createDanceIdeas(job, async () => { calls++; return response(payload); }), { code: 'PLAN_INVALID' }); assert.equal(calls, 1);
+  }
+});
+test('complete actor choreography drives new idea and plan summaries while stored labels remain unchanged', async () => {
+  const job = jobFor(preferences('woman', 'duo')), payload = ideaPayload(job);
+  for (const idea of payload.ideas) for (const step of idea.signatureSteps) step.action = '응답';
+  const result = await createDanceIdeas(job, async () => response(payload));
+  for (const idea of result) {
+    const expected = idea.signatureActors.map(step => `${step.count}카운트: ${danceActorStepSummary(step.actors)}`).join(' / ');
+    assert.equal(idea.signatureMove, expected); assert.ok(!idea.signatureMove.includes('응답'));
+  }
+  const stored = structuredClone(result);
+  stored[0].signatureMove = '4카운트: 리드 / 4카운트: 응답';
+  assert.equal(validateDanceIdeas(stored, job.direction.cast)[0].signatureMove, stored[0].signatureMove);
+  const noActors = structuredClone(stored); delete noActors[0].signatureActors;
+  assert.throws(() => validateDanceIdeas(noActors, job.direction.cast), error => getDanceValidationDetails(error).validationRule === 'SIGNATURE_MOTION');
+  const noCast = structuredClone(stored); delete noCast[0].signatureActors; delete noCast[0].cast;
+  assert.throws(() => validateDanceIdeas(noCast), error => getDanceValidationDetails(error).validationRule === 'SIGNATURE_MOTION');
+  const planPayloadWithLabels = planPayload(job);
+  for (const step of planPayloadWithLabels.choreography.steps) step.action = '응답';
+  const plan = await createDancePlan(job, async () => response(planPayloadWithLabels));
+  for (const step of plan.choreography.steps) assert.equal(step.action, danceActorStepSummary(step.actors));
+});
+test('actor authority still rejects repeated full matrices, invalid motion, all-held actors and stored count/order mismatches', async () => {
+  const job = jobFor(preferences('woman', 'duo'));
+  for (const [change, rule] of [
+    [steps => { for (const actor of steps[0].actors) actor.action = '발 옆 딛기'; steps[1].actors = structuredClone(steps[0].actors); }, 'SIGNATURE_DISTINCTNESS'],
+    [steps => steps[1].actors[1].action = '공만 회전하기', 'CAST_ACTIONS'],
+    [steps => { for (const step of steps) step.actors[1].action = '팔 고정하기'; }, 'SIGNATURE_MOTION'],
+    [steps => { for (const step of steps) step.actors[1].action = '고개 끄덕이기'; }, 'SIGNATURE_LOWER_BODY'],
+  ]) {
+    const payload = ideaPayload(job); change(payload.ideas[0].signatureSteps);
+    await assert.rejects(createDanceIdeas(job, async () => response(payload)), error => error.planFailure.validationRule === rule);
+    const plan = planPayload(job); change(plan.choreography.steps);
+    await assert.rejects(createDancePlan(job, async () => response(plan)), error => error.planFailure.validationRule === rule);
+    const saved = await createDanceIdeas(job, async () => response(ideaPayload(job))); change(saved[0].signatureActors);
+    assert.throws(() => validateDanceIdeas(saved, job.direction.cast), error => getDanceValidationDetails(error).validationRule === rule);
+  }
+  const saved = await createDanceIdeas(job, async () => response(ideaPayload(job)));
+  for (const change of [
+    idea => idea.signatureMove = '2카운트: 리드 / 6카운트: 응답',
+    idea => { idea.signatureActors[0].count = 2; idea.signatureActors[1].count = 6; },
+    idea => idea.signatureMove = '2카운트: 리드 / 2카운트: 응답 / 4카운트: 결말',
+  ]) {
+    const value = structuredClone(saved); change(value[0]);
+    assert.throws(() => validateDanceIdeas(value, job.direction.cast), error => getDanceValidationDetails(error).validationRule === 'SIGNATURE_COUNTS');
+  }
+  const wrongOrder = structuredClone(saved); wrongOrder[0].signatureActors[1].actors.reverse();
+  assert.throws(() => validateDanceIdeas(wrongOrder, job.direction.cast), error => getDanceValidationDetails(error).validationRule === 'CAST_ACTIONS');
+});
+test('actor-internal separators stay intact while deterministic display keeps exact count boundaries', async () => {
+  const job = jobFor(preferences('woman', 'duo')), payload = ideaPayload(job);
+  payload.ideas[0].signatureSteps[0].actors[0].action = '발 딛기/몸통 튕기기';
+  payload.ideas[0].signatureSteps[1].actors[0].action = '발 옆 딛기;몸통 흔들기';
+  const result = await createDanceIdeas(job, async () => response(payload));
+  assert.equal(result[0].signatureActors[0].actors[0].action, '발 딛기/몸통 튕기기');
+  assert.equal(result[0].signatureActors[1].actors[0].action, '발 옆 딛기;몸통 흔들기');
+  assert.equal(result[0].signatureMove.split(' / ').length, 2); assert.ok(!result[0].signatureMove.includes(';'));
+  assert.deepEqual(validateDanceIdeas(result, job.direction.cast), result);
+  const planData = planPayload(job);
+  planData.choreography.steps[0].actors[0].action = payload.ideas[0].signatureSteps[0].actors[0].action;
+  planData.choreography.steps[1].actors[0].action = payload.ideas[0].signatureSteps[1].actors[0].action;
+  const plan = validateDancePlan(planData, job.direction, 138);
+  assert.equal(plan.choreography.steps[0].actors[0].action, '발 딛기/몸통 튕기기');
+  assert.ok(plan.choreography.steps.every(step => !/[/;]/.test(step.action)));
+});
+test('six-actor four-step idea derives a 245-character complete public signature without truncation', async () => {
+  const job = jobFor(preferences('crowd', 'crowd')), payload = ideaPayload(job);
+  const actions = ['발 옆 딛기', '몸통 흔들기', '무릎 굽히기', '고개 끄덕이기'];
+  for (const idea of payload.ideas) idea.signatureSteps = actions.map(action => ({ count: 2, action: '응답', focus: 'body',
+    actors: job.direction.cast.members.map(member => ({ memberId: member.id, action: action.padEnd(8, '.') })) }));
+  const result = await createDanceIdeas(job, async () => response(payload));
+  assert.equal(job.direction.cast.count, 6);
+  for (const idea of result) {
+    assert.equal(idea.signatureMove.length, 245); assert.equal(idea.signatureActors.length, 4);
+    for (const step of idea.signatureActors) { assert.equal(step.actors.length, 6); assert.ok(step.actors.every(actor => actor.action.length === 8)); }
   }
 });
 test('short actor format examples and exact body-qualified nominal actions remain physical within the eight-character crowd budget', () => {
@@ -177,6 +254,8 @@ test('new plan preserves actor roles, physical development/payoff/restart and ex
       calls++; const request = JSON.parse(options.body);
       assert.deepEqual(JSON.parse(request.messages[1].content).selectedCastRoster, danceCastRoster(job.direction.cast));
       assert.ok(request.messages[0].content.includes(DANCE_ACTOR_ACTION_GUIDE));
+      assert.ok(request.messages[0].content.includes(DANCE_ACTOR_SUMMARY_GUIDE));
+      assert.ok(request.messages[0].content.includes(DANCE_PHYSICAL_ACTION_GUIDE));
       assert.equal(request.response_format.json_schema.schema.properties.choreography.properties.steps.items.properties.actors.items.properties.action.description, DANCE_ACTOR_ACTION_GUIDE);
       assert.match(request.messages[0].content, /opening.*development.*payoff.*restart/); return response(planPayload(job));
     });
@@ -239,8 +318,8 @@ test('four- and six-actor provider envelopes retain every ID within the compiled
     payload.clips = ['x'.repeat(300), 'y'.repeat(300)]; payload.imagePrompt = 'x'.repeat(1000);
     const pad = (text, limit) => text.padEnd(limit, '가');
     payload.choreography.firstPose = pad('몸통을 기울인 첫 자세', 40); payload.choreography.endPose = pad('몸통을 낮춘 재시작 자세', 40);
-    payload.choreography.steps = Array.from({ length: 4 }, (_, index) => ({ count: 2, action: pad(`몸통을 ${index} 방향으로 흔들기`, 60), focus: 'body',
-      actors: job.direction.cast.members.map(member => ({ memberId: member.id, action: pad('몸통 흔들기', Math.max(8, Math.floor(48 / count))) })) }));
+    payload.choreography.steps = ['발 옆 딛기', '몸통 흔들기', '무릎 굽히기', '고개 끄덕이기'].map((action, index) => ({ count: 2, action: pad(`몸통을 ${index} 방향으로 흔들기`, 60), focus: 'body',
+      actors: job.direction.cast.members.map(member => ({ memberId: member.id, action: pad(action, Math.max(8, Math.floor(48 / count))) })) }));
     payload.choreography.segments = [[0, 2, 'opening'], [2, 5, 'development'], [5, 8, 'development'], [8, 12, 'development'], [12, 22, 'payoff'], [22, 30, 'restart']].map(([startSeconds, endSeconds, phase], index) =>
       ({ startSeconds, endSeconds, phase, action: pad(`몸통을 ${index} 방향으로 기울이기`, 40), repeatHook: true }));
     const plan = validateDancePlan(payload, job.direction, 138); job.plan = plan;

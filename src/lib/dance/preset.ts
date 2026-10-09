@@ -53,6 +53,7 @@ export type DanceTrack = { id: string; title: string; status: string; audioUrl: 
   savedClip?: Pick<DanceAudioSelection, 'audioUrl' | 'audioHash' | 'startSeconds' | 'durationSeconds'>; reused?: boolean; rootTrackId?: string };
 export type DanceChoreography = {
   hookName: string;
+  /** For structured casts, action is the display summary derived from the complete validated actors. */
   steps: Array<{ count: number; action: string; focus: 'arms' | 'feet' | 'body' | 'combined'; actors?: { memberId: string; action: string }[] }>;
   segments: Array<{ startSeconds: number; endSeconds: number; action: string; repeatHook: boolean; phase?: 'opening' | 'development' | 'payoff' | 'restart' }>;
   firstPose: string; endPose: string;
