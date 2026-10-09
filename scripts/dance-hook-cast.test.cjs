@@ -24,9 +24,9 @@ const { buildDancePreviewPrompt, buildDancePacedClipPrompt, createDanceVideoServ
 const { resolveDanceMusicSpec } = load('src/lib/dance/musicProfiles.ts');
 const preferences = (performer, ensemble, species = 'auto') => ({ performer, ensemble, species, location: 'studio', danceStyle: 'bounce', visualStyle: 'realistic', difficulty: 'easy' });
 const music = { id: 'hook-pop', label: '팝 훅', style: 'original pop with kick, syncopated bass and vocal hook', rhythmPurpose: '체중 이동과 응답 훅', bpm: 138 };
-function jobFor(prefs, seed = 'hook-contract') {
+function jobFor(prefs, seed = 'hook-contract', crowdCount = 6) {
   let direction = resolveDanceCreativeDirection(prefs, seed, '', [], music);
-  if (prefs.ensemble === 'crowd') for (let i = 0; i < 100 && direction.cast.count !== 6; i++) direction = resolveDanceCreativeDirection(prefs, `${seed}-${i}`, '', [], music);
+  if (prefs.ensemble === 'crowd') for (let i = 0; i < 100 && direction.cast.count !== crowdCount; i++) direction = resolveDanceCreativeDirection(prefs, `${seed}-${i}`, '', [], music);
   return { visualBrief: '기대한 규칙이 몸의 반응 때문에 달라지는 장면', musicSpec: music, bpm: 138, direction, creativePreferences: prefs };
 }
 function actorActions(cast, second = false) {
@@ -121,6 +121,29 @@ test('a roster echo cannot excuse contradictory solo/count prose or an unchanged
   const animal = jobFor(preferences('animal', 'duo', 'penguin')), payload = planPayload(animal); payload.identity = 'two penguins with an adult man';
   assert.throws(() => validateDancePlan(payload, animal.direction, 138), { code: 'PLAN_INVALID' });
 });
+test('clip 2 continues the actual bridge frame and applies the final pose only at its end, including legacy plans', () => {
+  const job = jobFor(preferences('human_animal', 'duo', 'dog'));
+  for (const withCast of [true, false]) {
+    const payload = planPayload(job);
+    if (!withCast) {
+      delete payload.castRoster;
+      payload.choreography.steps = payload.choreography.steps.map(({ count, action, focus }) => ({ count, action, focus }));
+      payload.choreography.segments = payload.choreography.segments.map(({ startSeconds, endSeconds, action, repeatHook }) => ({ startSeconds, endSeconds, action, repeatHook }));
+    }
+    const plan = validateDancePlan(payload, withCast ? job.direction : undefined, 138);
+    const endMarker = `Final pose at local15s only: ${payload.choreography.endPose}.`;
+    assert.match(plan.clips[1], /Continue clip1's actual final frame at local0s; no early reset\./);
+    assert.ok(plan.clips[1].includes(endMarker));
+    assert.ok(!plan.clips[0].includes(payload.choreography.endPose));
+    assert.ok(!plan.clips[1].slice(0, plan.clips[1].indexOf(endMarker)).includes(payload.choreography.endPose));
+    assert.equal(plan.clips[1].split(payload.choreography.endPose).length, 2);
+    assert.doesNotMatch(plan.clips[1], /Restart:|Start:|Opening pose:|Finish pose:/);
+    assert.ok(plan.clips.every(clip => Buffer.byteLength(clip, 'utf8') <= 4096));
+  }
+  const legacy = planPayload(job);
+  delete legacy.version; delete legacy.castRoster; delete legacy.choreography;
+  assert.equal(validateDancePlan(legacy, undefined, 138).clips.length, 2);
+});
 test('UTF8 bytes cap Korean prompts and the six-actor prompt contract without truncation', () => {
   const job = jobFor(preferences('crowd', 'crowd')); const plan = validateDancePlan(planPayload(job), job.direction, 138);
   assert.equal(plan.cast.count, 6); job.plan = plan;
@@ -128,24 +151,30 @@ test('UTF8 bytes cap Korean prompts and the six-actor prompt contract without tr
   const long = planPayload(job); long.clips[0] = '가'.repeat(1200);
   assert.throws(() => validateDancePlan(long, job.direction, 138), { code: 'PLAN_INVALID' });
 });
-test('six-actor provider envelope retains every ID within the compiled UTF8 budget', t => {
-  const job = jobFor(preferences('crowd', 'crowd')), payload = planPayload(job);
-  payload.clips = ['x'.repeat(300), 'y'.repeat(300)]; payload.imagePrompt = 'x'.repeat(1000);
-  const pad = (text, limit) => text.padEnd(limit, '가');
-  payload.choreography.firstPose = pad('몸통을 기울인 첫 자세', 40); payload.choreography.endPose = pad('몸통을 낮춘 재시작 자세', 40);
-  payload.choreography.steps = Array.from({ length: 4 }, (_, index) => ({ count: 2, action: pad(`몸통을 ${index} 방향으로 흔들기`, 60), focus: 'body',
-    actors: job.direction.cast.members.map(member => ({ memberId: member.id, action: pad('몸통 흔들기', 8) })) }));
-  payload.choreography.segments = [[0, 2, 'opening'], [2, 5, 'development'], [5, 8, 'development'], [8, 12, 'development'], [12, 22, 'payoff'], [22, 30, 'restart']].map(([startSeconds, endSeconds, phase], index) =>
-    ({ startSeconds, endSeconds, phase, action: pad(`몸통을 ${index} 방향으로 기울이기`, 40), repeatHook: true }));
-  const plan = validateDancePlan(payload, job.direction, 138); job.plan = plan;
-  const idea = { id: 'envelope', title: '범위 검사', firstTwoSeconds: pad('0~2초: 몸통을 기울인다.', 220), signatureMove: '4카운트: 발을 옆으로 딛기 / 4카운트: 몸통을 흔들기',
-    signatureActors: payload.choreography.steps.map(step => ({ count: step.count, actors: step.actors })), cast: job.direction.cast, hookStory: { ...story(0), development: pad('몸통을 반대로 기울인다.', 160) } };
-  job.selectedIdea = idea;
-  const sizes = [plan.imagePrompt, ...plan.clips, buildDancePreviewPrompt(job)].map(prompt => Buffer.byteLength(prompt, 'utf8'));
-  assert.ok(sizes.every(size => size <= 4096));
-  payload.clips[0] = '가'.repeat(300); // Same character limit, three times the UTF8 bytes.
-  assert.throws(() => validateDancePlan(payload, job.direction, 138), { code: 'PLAN_LENGTH' });
-  t.diagnostic(`six-actor image/clip1/clip2/preview UTF8 bytes: ${sizes.join('/')}`);
+test('four- and six-actor provider envelopes retain every ID within the compiled UTF8 budget', t => {
+  for (const count of [4, 6]) {
+    const job = jobFor(preferences('crowd', 'crowd'), `envelope-${count}`, count), payload = planPayload(job);
+    assert.equal(job.direction.cast.count, count);
+    payload.clips = ['x'.repeat(300), 'y'.repeat(300)]; payload.imagePrompt = 'x'.repeat(1000);
+    const pad = (text, limit) => text.padEnd(limit, '가');
+    payload.choreography.firstPose = pad('몸통을 기울인 첫 자세', 40); payload.choreography.endPose = pad('몸통을 낮춘 재시작 자세', 40);
+    payload.choreography.steps = Array.from({ length: 4 }, (_, index) => ({ count: 2, action: pad(`몸통을 ${index} 방향으로 흔들기`, 60), focus: 'body',
+      actors: job.direction.cast.members.map(member => ({ memberId: member.id, action: pad('몸통 흔들기', Math.max(8, Math.floor(48 / count))) })) }));
+    payload.choreography.segments = [[0, 2, 'opening'], [2, 5, 'development'], [5, 8, 'development'], [8, 12, 'development'], [12, 22, 'payoff'], [22, 30, 'restart']].map(([startSeconds, endSeconds, phase], index) =>
+      ({ startSeconds, endSeconds, phase, action: pad(`몸통을 ${index} 방향으로 기울이기`, 40), repeatHook: true }));
+    const plan = validateDancePlan(payload, job.direction, 138); job.plan = plan;
+    const idea = { id: 'envelope', title: '범위 검사', firstTwoSeconds: pad('0~2초: 몸통을 기울인다.', 220), signatureMove: '4카운트: 발을 옆으로 딛기 / 4카운트: 몸통을 흔들기',
+      signatureActors: payload.choreography.steps.map(step => ({ count: step.count, actors: step.actors })), cast: job.direction.cast, hookStory: { ...story(0), development: pad('몸통을 반대로 기울인다.', 160) } };
+    job.selectedIdea = idea;
+    const sizes = [plan.imagePrompt, ...plan.clips, buildDancePreviewPrompt(job)].map(prompt => Buffer.byteLength(prompt, 'utf8'));
+    assert.ok(sizes.every(size => size <= 4096));
+    assert.match(plan.clips[1], /Continue clip1's actual final frame at local0s; no early reset\./);
+    assert.ok(plan.clips[1].includes(`Final pose at local15s only: ${payload.choreography.endPose}.`));
+    for (const member of plan.cast.members) assert.ok(plan.clips.every(clip => clip.includes(member.id)));
+    payload.clips[0] = '가'.repeat(300); // Same character limit, three times the UTF8 bytes.
+    assert.throws(() => validateDancePlan(payload, job.direction, 138), { code: 'PLAN_LENGTH' });
+    t.diagnostic(`${count}-actor image/clip1/clip2/preview UTF8 bytes: ${sizes.join('/')}`);
+  }
 });
 test('site service persists the mixed cast through idea choice, preview and both clips with a fixed reference', async () => {
   const userId = 'a0000000-0000-4000-8000-000000000001', trackId = 'a0000000-0000-4000-8000-000000000002';

@@ -76,6 +76,31 @@ test('briefs preserve mixed roles and named animal counts without a conflicting 
   assert.deepEqual(severalSpecies.cast.members.map(member => member.species), ['cat', 'dog', 'dog']);
 });
 
+test('negated human mentions preserve animals-only crowds, counts and direction snapshots', t => {
+  const raw = { performer: 'animal', ensemble: 'crowd', species: 'penguin' };
+  const baseline = resolve(raw, 'animal-only-negation', 'four penguins dance', [], music);
+  for (const brief of ['펭귄4마리가 사람 없이 춤춘다', '펭귄 4마리가 사람없이 춤춘다', '펭귄4마리가 인간 없이 춤춘다', '펭귄 4마리가 인간없이 춤춘다', 'four penguins dance without people', 'four penguins dance with no humans']) {
+    const direction = resolve(raw, 'animal-only-negation', brief, [], music);
+    assert.deepEqual(direction, baseline, brief);
+    assert.equal(direction.cast.kind, 'animal', brief); assert.equal(direction.cast.count, 4, brief);
+    assert.ok(direction.cast.members.every(member => member.kind === 'animal' && member.species === 'penguin'), brief);
+    assert.equal(resolve({}, 'animal-only-negation', brief).cast.kind, 'animal', brief);
+    assert.equal(resolve({}, 'animal-only-negation', brief).cast.count, 4, brief);
+    assert.ok(direction.concreteEn.length <= 1600, brief);
+    assert.ok(Buffer.byteLength(buildDanceCastPrompt(direction.cast), 'utf8') <= 4096, brief);
+  }
+  const mixed = resolve({ performer: 'human_animal', ensemble: 'trio', species: 'penguin' }, 'positive-mixed', '한 명의 사람과 펭귄 두 마리가 함께 춤춘다');
+  assert.equal(mixed.cast.kind, 'human_animal'); assert.equal(mixed.cast.count, 3);
+  assert.equal(mixed.cast.members.filter(member => member.kind === 'human').length, 1);
+  for (const [preferences, brief] of [
+    [raw, '한 명의 사람과 펭귄 세 마리가 함께 춤춘다'],
+    [raw, 'one human and three penguins dance'],
+    [{ ...raw, ensemble: 'trio' }, '펭귄4마리가 사람 없이 춤춘다'],
+    [{ ...raw, species: 'dog' }, 'four penguins dance with no humans'],
+  ]) assert.throws(() => resolve(preferences, 'negative-conflict', brief), { code: 'CREATIVE_CONFLICT' });
+  t.diagnostic(`animals-only snapshot: ${baseline.cast.count} penguins; cast/direction UTF8 bytes ${Buffer.byteLength(buildDanceCastPrompt(baseline.cast), 'utf8')}/${Buffer.byteLength(baseline.concreteEn, 'utf8')}`);
+});
+
 test('incompatible preferences, contradictory briefs and malformed rosters are rejected', () => {
   for (const raw of [{ performer: 'human_animal', ensemble: 'solo' }, { performer: 'duo', ensemble: 'trio' }, { performer: 'group', ensemble: 'crowd' }, { performer: 'woman', species: 'cat' }, { performer: 'robot', species: 'penguin' }]) assert.throws(() => preferences(raw), { code: 'CREATIVE_CONFLICT' });
   for (const [raw, brief] of [[{ ensemble: 'duo' }, '고양이 세 마리'], [{ species: 'dog' }, 'two cats'], [{ performer: 'animal' }, 'one man and two dogs'], [{ performer: 'man' }, '여성 솔로'], [{}, 'seven dancers'], [{}, '7명이 춤춘다']]) assert.throws(() => resolve(raw, 'bad', brief), { code: 'CREATIVE_CONFLICT' });

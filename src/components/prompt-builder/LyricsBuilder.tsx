@@ -28,6 +28,10 @@ interface LyricsBuilderProps {
   // 단일곡 전용
   title: string
   onTitleChange: (title: string) => void
+  autoTitle?: boolean
+  onAutoTitleChange?: (automatic: boolean) => void
+  autoTopic?: boolean
+  onAutoTopicChange?: (automatic: boolean) => void
   youtubeTags: string
   snsHashtags: string
   onTagsChange: (youtubeTags: string, snsHashtags: string) => void
@@ -88,6 +92,10 @@ export default function LyricsBuilder({
   engine,
   title,
   onTitleChange,
+  autoTitle: controlledAutoTitle,
+  onAutoTitleChange,
+  autoTopic: controlledAutoTopic,
+  onAutoTopicChange,
   youtubeTags,
   snsHashtags,
   onTagsChange,
@@ -135,8 +143,18 @@ export default function LyricsBuilder({
   const vocalGender = artistVoice?.gender || studioGender
   const artistError = artistSelectionError || (artistVoice && artistVoice.language !== language ? '아티스트와 가사 언어가 다릅니다. 가사 언어를 맞추거나 아티스트 선택을 해제해 주세요.' : '')
   const [isGenerating, setIsGenerating] = useState(false)
-  const [autoTitle, setAutoTitle] = useState(true) // 제목 자동생성 토글 (기본: ON)
-  const [autoTopic, setAutoTopic] = useState(true) // 주제 자동생성 토글 (기본: ON)
+  const [localAutoTitle, setLocalAutoTitle] = useState(true)
+  const [localAutoTopic, setLocalAutoTopic] = useState(true)
+  const autoTitle = controlledAutoTitle ?? localAutoTitle
+  const autoTopic = controlledAutoTopic ?? localAutoTopic
+  const setAutoTitle = (value: boolean) => {
+    if (controlledAutoTitle === undefined) setLocalAutoTitle(value)
+    onAutoTitleChange?.(value)
+  }
+  const setAutoTopic = (value: boolean) => {
+    if (controlledAutoTopic === undefined) setLocalAutoTopic(value)
+    onAutoTopicChange?.(value)
+  }
 
   const selectedVoice = !hasArtistVoice && matchesStudioVoice(vocalGender, activeVoice, language) ? activeVoice : null
   const japanContextKey = isJapanCampaign ? JSON.stringify([

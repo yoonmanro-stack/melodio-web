@@ -138,10 +138,12 @@ function briefCast(brief: string): BriefCast {
     result.species.push(...Array.from({ length: count || 1 }, () => species));
   }
   const hasAnimal = foundSpecies.length > 0 || /동물|animals?\b/i.test(brief);
+  // These explicit human exclusions are not requests for an additional performer.
+  const humanBrief = brief.replace(/(?:사람|인간)\s*없이|\b(?:without\s+people|no\s+humans)\b/gi, ' ');
   // "penguin dancers" describes animals; an unqualified "two dancers and a penguin" includes humans.
-  const withoutAnimalDancers = foundSpecies.reduce((value, species) => value.replace(new RegExp(`(?:${SPECIES_HINTS[species]})\\s+dancers?\\b`, 'gi'), species), brief).replace(/animals?\s+dancers?\b/gi, 'animals');
+  const withoutAnimalDancers = foundSpecies.reduce((value, species) => value.replace(new RegExp(`(?:${SPECIES_HINTS[species]})\\s+dancers?\\b`, 'gi'), species), humanBrief).replace(/animals?\s+dancers?\b/gi, 'animals');
   const hasHuman = new RegExp(HUMAN_PATTERN, 'i').test(withoutAnimalDancers);
-  result.humanCount = namedCount(brief, HUMAN_PATTERN);
+  result.humanCount = namedCount(humanBrief, HUMAN_PATTERN);
   if (hasHuman && hasAnimal) {
     result.performer = 'human_animal';
     if (result.humanCount !== undefined || foundSpecies.some(species => namedCount(brief, SPECIES_HINTS[species]) !== undefined)) result.count = (result.humanCount || 1) + (result.species.length || 1);

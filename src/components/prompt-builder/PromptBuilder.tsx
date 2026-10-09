@@ -68,6 +68,9 @@ export default function PromptBuilder({
   const [trackCount, setTrackCount] = useState<number>(2)
   const [isGenerating, setIsGenerating] = useState(false)
   const [title, setTitle] = useState('')
+  const [autoTitle, setAutoTitle] = useState(true)
+  const [autoTopic, setAutoTopic] = useState(true)
+  const [lyricsTopic, setLyricsTopic] = useState('')
   const [youtubeTags, setYoutubeTags] = useState('')
   const [snsHashtags, setSnsHashtags] = useState('')
 
@@ -318,6 +321,10 @@ export default function PromptBuilder({
       })
       setCustomPresets(updated)
       localStorage.setItem('melodio_custom_presets', JSON.stringify(updated))
+      const savedPreset = updated.find(preset => preset.id === data.id)
+      if (savedPreset && selectedPresetId === savedPreset.id) {
+        void handlePresetApply(savedPreset, updated, true)
+      }
       setEditingPreset(null)
     } else {
       // 생성 모드
@@ -336,6 +343,7 @@ export default function PromptBuilder({
       const updated = [newPreset, ...customPresets]
       setCustomPresets(updated)
       localStorage.setItem('melodio_custom_presets', JSON.stringify(updated))
+      void handlePresetApply(newPreset, updated)
       setIsCreatePresetOpen(false)
       setEditingPreset(null)
     }
@@ -440,9 +448,9 @@ export default function PromptBuilder({
   }
 
   // 프리셋 적용
-  const handlePresetApply = async (preset: Preset) => {
+  const handlePresetApply = async (preset: Preset, availableCustomPresets = customPresets, preserveSongInputs = false) => {
     isApplyingPresetRef.current = true
-    preset = findStudioPreset(preset.id, customPresets, publicPresetCatalog) || preset
+    preset = findStudioPreset(preset.id, availableCustomPresets, publicPresetCatalog) || preset
     
     const composedFallback = preset.selections && Object.keys(preset.selections).length > 0
       ? composeStylePrompt(preset.selections, isInstrumental).prompt : ''
@@ -463,12 +471,14 @@ export default function PromptBuilder({
     const foley = preset.metadata?.ambient_foley || null
     setIsAsmrEnabled(!!foley)
 
-    setTitle("") // Clear for AI Auto-title placeholder
-    setYoutubeTags('')
-    setSnsHashtags('')
-
     setIsInstrumental(application.isInstrumental)
-    setLyricsSections(application.isInstrumental ? [] : parsePresetLyrics(application.lyricsTemplate))
+    // Editing the active recipe keeps the song the user is currently writing.
+    if (!preserveSongInputs) {
+      setTitle("") // Clear for AI Auto-title placeholder
+      setYoutubeTags('')
+      setSnsHashtags('')
+      setLyricsSections(application.isInstrumental ? [] : parsePresetLyrics(application.lyricsTemplate))
+    }
 
     // 프리셋 카드 선택 시 Style Prompt 영역으로 자동 스크롤 및 포커스
     setTimeout(() => {
@@ -566,6 +576,9 @@ export default function PromptBuilder({
     setSunoVersion('v6')
     setTrackCount(2)
     setTitle('')
+    setAutoTitle(true)
+    setAutoTopic(true)
+    setLyricsTopic('')
     setYoutubeTags('')
     setSnsHashtags('')
     setPlaylistTitle('')
@@ -832,7 +845,9 @@ export default function PromptBuilder({
         let finalSnsHashtags = snsHashtags
 
         if (isPresetDefault && !isInstrumental) {
-          const topic = currentPreset?.desc || currentPreset?.name || '자유로운 감성곡';
+          const topic = autoTopic
+            ? currentPreset?.desc || currentPreset?.name || '자유로운 감성곡'
+            : lyricsTopic;
 
           const lyricRes = await fetch('/api/lyrics/generate', {
             method: 'POST',
@@ -853,7 +868,7 @@ export default function PromptBuilder({
             throw new Error('생성된 가사를 확인하지 못했습니다. 다시 시도해 주세요.')
           }
           if (lyricData.success) {
-            if (lyricData.title) {
+            if (autoTitle && lyricData.title) {
               finalTitle = lyricData.title
               setTitle(finalTitle)
             }
@@ -997,6 +1012,12 @@ export default function PromptBuilder({
               engine={engine}
               title={title}
               onTitleChange={setTitle}
+              autoTitle={autoTitle}
+              onAutoTitleChange={setAutoTitle}
+              autoTopic={autoTopic}
+              onAutoTopicChange={setAutoTopic}
+              lyricTopic={lyricsTopic}
+              onLyricTopicChange={setLyricsTopic}
               youtubeTags={youtubeTags}
               snsHashtags={snsHashtags}
               onTagsChange={(yt, sns) => {
@@ -1484,6 +1505,12 @@ export default function PromptBuilder({
                 engine={engine}
                 title={title}
                 onTitleChange={setTitle}
+                autoTitle={autoTitle}
+                onAutoTitleChange={setAutoTitle}
+                autoTopic={autoTopic}
+                onAutoTopicChange={setAutoTopic}
+                lyricTopic={lyricsTopic}
+                onLyricTopicChange={setLyricsTopic}
                 youtubeTags={youtubeTags}
                 snsHashtags={snsHashtags}
                 onTagsChange={(yt, sns) => {
