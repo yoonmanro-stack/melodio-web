@@ -12,12 +12,13 @@ const button = 'inline-flex items-center justify-center gap-2 rounded-xl border 
 const field = 'w-full rounded-xl border border-white/20 bg-zinc-950 p-3 text-sm text-white placeholder:text-zinc-400 focus:outline-none focus:border-fuchsia-400';
 const active = (job: DanceVideoJob | null) => Boolean(job && !['ideas', 'ready', 'image-review', 'preview-review', 'completed', 'attention'].includes(job.status));
 const clock = (s: number) => `${Math.floor(s / 60)}:${Math.floor(s % 60).toString().padStart(2, '0')}`;
-const DEFAULT_CREATIVE_PREFERENCES: DanceCreativePreferences = { performer: 'auto', location: 'auto', danceStyle: 'auto', visualStyle: 'realistic', difficulty: 'easy' };
+const DEFAULT_CREATIVE_PREFERENCES: DanceCreativePreferences = { performer: 'auto', ensemble: 'auto', species: 'auto', location: 'auto', danceStyle: 'auto', visualStyle: 'realistic', difficulty: 'easy' };
 const creativeFields: { key: keyof DanceCreativePreferences; label: string }[] = [
-  { key: 'performer', label: '출연자' }, { key: 'location', label: '장소' }, { key: 'danceStyle', label: '안무 스타일' },
+  { key: 'performer', label: '출연자' }, { key: 'ensemble', label: '출연 규모' }, { key: 'species', label: '동물 종류' },
+  { key: 'location', label: '장소' }, { key: 'danceStyle', label: '안무 스타일' },
   { key: 'visualStyle', label: '영상 표현' }, { key: 'difficulty', label: '따라 추기 난이도' },
 ];
-const samePreferences = (left: DanceCreativePreferences | undefined, right: DanceCreativePreferences) => creativeFields.every(({ key }) => (left || DEFAULT_CREATIVE_PREFERENCES)[key] === right[key]);
+const samePreferences = (left: DanceCreativePreferences | undefined, right: DanceCreativePreferences) => creativeFields.every(({ key }) => ({ ...DEFAULT_CREATIVE_PREFERENCES, ...left })[key] === ({ ...DEFAULT_CREATIVE_PREFERENCES, ...right })[key]);
 const statusCopy: Record<DanceVideoJob['status'], string> = {
   preparing: '선택한 음원으로 아이디어와 장면 설계 준비 중…', ideas: '아이디어 3개를 비교하고 하나를 선택해 주세요.', ready: '선택한 아이디어의 장면 설계가 준비됐습니다.',
   image: '주인공과 배경 준비 중…', 'image-review': '첫 장면을 확인해 주세요.', clip1: '첫 번째 15초 영상 생성 중…',
@@ -285,7 +286,7 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
   return <section aria-label="댄스·챌린지 제작" className="space-y-6 pt-2">
     <div className="rounded-2xl border border-fuchsia-400/40 bg-fuchsia-950/40 p-4 space-y-2">
       <h3 className="flex items-center gap-2 font-bold text-fuchsia-100"><Music4 className="h-4 w-4" />음악부터 만드는 댄스 챌린지</h3>
-      <p className="text-sm text-zinc-200">따라 추기 좋은 리듬을 고르고, 마음에 드는 30초에 맞춰 출연자와 안무를 기획하세요.</p>
+      <p className="text-sm text-zinc-200">시선을 붙잡을 상황과 춤을 기획하세요. 솔로부터 군집, 사람과 동물의 콜라보, 동물만의 챌린지까지 만들 수 있습니다.</p>
       <p className="text-xs leading-relaxed text-zinc-300">{job && !job.qualityPreviewRequired ? '아이디어 3개 중 하나를 골라 장면을 설계하고, 첫 장면에서 출연자와 장소를 확인한 뒤 영상 제작을 시작합니다.' : '아이디어 3개 중 하나를 골라 장면을 설계합니다. 첫 장면과 5초 동작 테스트를 확인한 뒤 30초 영상 제작을 시작합니다.'}</p>
     </div>
     {!userId ? <p className="text-sm text-amber-200">로그인 후 음원을 생성할 수 있습니다.</p> : null}
@@ -363,18 +364,32 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
     </div> : null}
     {audioReady ? <div className="space-y-4 border-t border-white/15 pt-5">
       <h3 className="font-bold text-white">3 · 상황 설정 &amp; 아이디어 선택</h3>
-      <p className="text-sm leading-relaxed text-zinc-200">출연자·장소·안무를 선택하세요. 자동 선택은 새로운 조합을 제안합니다. 원하는 상황은 아래에 덧붙일 수 있습니다.</p>
+      <p className="text-sm leading-relaxed text-zinc-200">출연 구성과 규모를 선택하세요. 두세 명의 주고받는 춤, 군집의 순차 반응, 사람과 동물의 대비처럼 관계를 활용한 아이디어를 제안합니다.</p>
       <p className="text-xs leading-relaxed text-zinc-300">먼저 글로 된 아이디어 3개를 만듭니다. 아이디어 생성에는 기획 비용이 발생할 수 있으며, 이미지와 영상은 이후 버튼을 누를 때 제작합니다.</p>
       <div className="grid gap-3 sm:grid-cols-2">
-        {creativeFields.map(({ key, label }) => <label key={key} className="block space-y-2 text-sm text-zinc-200">{label}
-          <select aria-label={label} className={field} value={creativePreferences[key]} disabled={busy || frozen} onChange={e => setCreativePreferences(previous => ({ ...previous, [key]: e.target.value }))}>
-            {DANCE_CREATIVE_OPTIONS[key].map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
+        {creativeFields.filter(({ key }) => key !== 'species' || ['auto', 'animal', 'human_animal'].includes(creativePreferences.performer)).map(({ key, label }) => <label key={key} className="block space-y-2 text-sm text-zinc-200">{label}
+          <select aria-label={label} className={field} value={creativePreferences[key] ?? DEFAULT_CREATIVE_PREFERENCES[key]} disabled={busy || frozen || (key === 'ensemble' && ['duo', 'group', 'crowd'].includes(creativePreferences.performer))} onChange={e => {
+            const value = e.target.value;
+            setCreativePreferences(previous => {
+              const next = { ...previous, [key]: value };
+              if (key === 'performer') {
+                if (['woman', 'man', 'duo', 'group', 'crowd', 'robot'].includes(value)) next.species = 'auto';
+                if (value === 'duo') next.ensemble = 'duo';
+                else if (value === 'group') next.ensemble = 'trio';
+                else if (value === 'crowd') next.ensemble = 'crowd';
+                else if (value === 'human_animal' && next.ensemble === 'solo') next.ensemble = 'duo';
+                else if (['duo', 'group', 'crowd'].includes(previous.performer)) next.ensemble = 'auto';
+              }
+              return next;
+            });
+          }}>
+            {DANCE_CREATIVE_OPTIONS[key].filter(option => !(key === 'ensemble' && creativePreferences.performer === 'human_animal' && option.id === 'solo')).map(option => <option key={option.id} value={option.id}>{option.label}</option>)}
           </select>
         </label>)}
       </div>
-      <p className="text-xs leading-relaxed text-zinc-300">발끝까지 보이는 전신 구도와 장애물 없는 춤 공간으로 기획합니다.</p>
+      <p className="text-xs leading-relaxed text-zinc-300">군집은 4–6명으로 구성하고 각 출연자의 역할과 위치를 유지합니다. 동물은 종류에 맞는 걸음·고개·앞발·날개 움직임으로 기획합니다.</p>
       <label className="block space-y-2 text-sm text-zinc-200">상황 및 요구사항 입력 (선택)
-        <textarea className={`${field} min-h-28 resize-y`} maxLength={1000} disabled={busy || frozen} value={visualBrief} onChange={e => setVisualBrief(e.target.value)} placeholder="예: 청소하던 귀여운 로봇이 비트가 나오자 빗자루를 마이크처럼 들고 신나게 춤춘다. 비워두면 AI가 새로운 상황을 기획합니다." />
+        <textarea className={`${field} min-h-28 resize-y`} maxLength={1000} disabled={busy || frozen} value={visualBrief} onChange={e => setVisualBrief(e.target.value)} placeholder="장소·인물의 분위기·반전 상황을 자유롭게 적어주세요. 비워두면 선택한 출연 구성에 맞춰 첫 장면의 후킹부터 전개와 결말까지 새로 기획합니다." />
       </label>
       <button type="button" className={`${button} w-full`} aria-busy={pending && pendingAction === 'prepare'} disabled={busy || jobLoading || uncertain || frozen || !clipReady || preparedSelection} onClick={() => void act('prepare')}>
         {pending && pendingAction === 'prepare' ? <RefreshCw className="h-4 w-4 animate-spin" /> : preparedSelection ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{pending && pendingAction === 'prepare' ? '아이디어 준비 중…' : preparedSelection ? job?.status === 'ideas' ? '아이디어 준비 완료' : '장면 설계 완료' : '아이디어 3개 받기'}
@@ -388,6 +403,7 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
             <p className="mb-2 text-xs font-bold text-fuchsia-200">아이디어 {index + 1}</p>
             <h4 className="mb-4 text-base font-bold text-white">{idea.title}</h4>
             <dl className="flex-1 space-y-3 text-sm leading-relaxed">
+              {idea.hookStory ? <><div><dt className="font-bold text-fuchsia-200">계속 볼 이유</dt><dd className="text-zinc-200">{idea.hookStory.watchReason}</dd></div><div><dt className="font-bold text-fuchsia-200">전개</dt><dd className="text-zinc-200">{idea.hookStory.development}</dd></div></> : null}
               <div><dt className="font-bold text-fuchsia-100">첫 2초</dt><dd className="text-zinc-200">{idea.firstTwoSeconds}</dd></div>
               <div><dt className="font-bold text-fuchsia-100">따라 할 동작</dt><dd className="text-zinc-200">{idea.signatureMove}</dd></div>
               <div><dt className="font-bold text-fuchsia-100">음악과 맞는 포인트</dt><dd className="text-zinc-200">{idea.musicConnection}</dd></div>
@@ -406,6 +422,7 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
         <p className="font-bold text-fuchsia-100">선택한 아이디어 · {job.selectedIdea.title}</p>
         <p className="text-sm text-zinc-200">첫 2초 · {job.selectedIdea.firstTwoSeconds}</p>
         <p className="text-sm text-zinc-200">따라 할 동작 · {job.selectedIdea.signatureMove}</p>
+        {job.selectedIdea.hookStory ? <p className="text-sm text-zinc-200">계속 볼 이유 · {job.selectedIdea.hookStory.watchReason}</p> : null}
       </div> : null}
       {job?.plan ? <div className="rounded-xl border border-white/15 bg-black/30 p-4 space-y-3">
         <p className="font-bold text-white">{job.plan.title}</p><p className="text-sm leading-relaxed text-zinc-200">{job.plan.summary}</p>
@@ -414,6 +431,10 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
           <div><dt className="text-zinc-400">장소</dt><dd className="text-zinc-100">{job.direction.locationLabel}</dd></div>
           <div><dt className="text-zinc-400">안무</dt><dd className="text-zinc-100">{job.direction.danceStyleLabel}</dd></div>
         </dl> : null}
+        {job.direction?.cast ? <div className="space-y-2 border-t border-white/15 pt-3">
+          <p className="text-sm font-bold text-white">출연 구성 · {job.direction.cast.count}{job.direction.cast.kind === 'animal' ? '마리' : '명/마리'}</p>
+          <ul className="space-y-1 text-xs leading-relaxed text-zinc-300">{job.direction.cast.members.map(member => <li key={member.id}>{member.position} · {member.identity}</li>)}</ul>
+        </div> : null}
         {job.plan.choreography ? <div className="space-y-3 border-t border-white/15 pt-3">
           <p className="font-bold text-fuchsia-100">반복 훅 · {job.plan.choreography.hookName}</p>
           <div className="space-y-2"><p className="text-sm font-bold text-white">8카운트 따라 추기</p><ol className="space-y-1 text-sm text-zinc-200">
@@ -428,13 +449,14 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
     </div> : null}
     {job && job.status !== 'ideas' ? <div className="space-y-4 border-t border-white/15 pt-5">
       <h3 className="font-bold text-white">4 · 영상 만들기</h3>
+      {!job.imageUrl && !job.videoSpec?.model?.includes('lite') ? <p className="text-xs text-zinc-300">Grok 1.5 · 720p로 제작합니다. 첫 장면과 5초 테스트를 확인한 뒤 30초 본편을 요청합니다.</p> : null}
       <p role="status" aria-live="polite" className="flex items-center gap-2 text-sm font-bold text-fuchsia-100">{videoPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : null}{statusCopy[job.status]}</p>
 
       {job.status === 'ready' ? <button type="button" className={`${button} w-full`} disabled={pending || jobLoading || uncertain || selectionChanged} aria-busy={pendingAction === 'start'} onClick={() => void act('start')}><Film className="h-4 w-4" />{pendingAction === 'start' ? '첫 장면 요청 중…' : '첫 장면 만들기'}</button> : null}
       {selectionChanged ? <p className="text-sm text-amber-200">구간 또는 영상 선택이 바뀌었습니다. 아이디어를 다시 받아 주세요.</p> : null}
       {job.status === 'image-review' ? <div className="rounded-xl border border-fuchsia-400/30 bg-black/30 p-4 space-y-3">
         {job.imageUrl ? <Image unoptimized src={job.imageUrl} width={480} height={854} alt="영상 제작 전 확인할 출연자와 장소의 첫 장면" className="mx-auto max-h-[520px] w-auto max-w-full rounded-xl object-contain" /> : null}
-        <p className="text-sm leading-relaxed text-zinc-200">출연자·의상·장소가 맞는지, 발끝까지 보이고 춤출 공간에 장애물이 없는지 확인하세요.</p>
+        <p className="text-sm leading-relaxed text-zinc-200">선택한 인원과 동물 종류가 모두 보이는지, 각 출연자의 모습과 위치가 구별되는지 확인하세요. 전신과 바닥이 보이고 춤출 공간에 장애물이 없어야 합니다.</p>
         <p className="text-xs text-zinc-300">{job.qualityPreviewRequired ? '승인하면 이 출연자와 장소를 유지해 5초 동작 테스트를 만듭니다. 30초 영상은 테스트 확인 후 따로 요청합니다.' : '승인하면 이 출연자와 장소를 유지해 30초 영상을 만듭니다.'}</p>
         <button type="button" className={`${button} w-full`} disabled={pending || jobLoading || uncertain || selectionChanged || !job.imageUrl} aria-busy={pendingAction === 'approve-frame'} onClick={() => void act('approve-frame')}><Check className="h-4 w-4" />{pendingAction === 'approve-frame' ? job.qualityPreviewRequired ? '5초 테스트 요청 중…' : '영상 제작 요청 중…' : job.qualityPreviewRequired ? '이 장면으로 5초 동작 테스트' : '이 장면으로 영상 만들기'}</button>
       </div> : null}
@@ -442,7 +464,7 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
         <p className="font-bold text-fuchsia-100">5초 동작 테스트</p>
         {job.previewUrl ? <video ref={video} aria-label="5초 동작 테스트" src={job.previewUrl} poster={job.imageUrl} controls playsInline preload="metadata" className="mx-auto max-h-[520px] max-w-full rounded-xl bg-black" onPlay={e => registerActiveAudio(e.currentTarget)} /> : null}
         <p className="text-xs text-zinc-300">저장한 30초 음원의 처음 5초에 맞춘 테스트입니다.</p>
-        <p className="text-sm leading-relaxed text-zinc-200">첫 2초에 눈길을 끄는지, 훅 동작과 발동작이 보이는지, 출연자·의상·장소가 유지되는지 확인하세요.</p>
+        <p className="text-sm leading-relaxed text-zinc-200">첫 2초에 눈길을 끄는지, 각 출연자의 동작과 주고받는 반응이 보이는지 확인하세요. 인원·동물 종류·의상·위치가 유지되고 동물의 관절이 자연스러워야 합니다.</p>
         <p className="text-xs leading-relaxed text-zinc-300">동작이 약하거나 발·관절이 어색하면 같은 음원으로 새 챌린지를 만들어 아이디어를 바꿀 수 있습니다.</p>
         <p className="text-xs leading-relaxed text-zinc-300">승인하면 15초 영상 두 편으로 30초 영상을 만듭니다. 새로운 영상 제작 비용이 발생할 수 있습니다.</p>
         <button type="button" className={`${button} w-full`} disabled={pending || jobLoading || uncertain || selectionChanged || !job.previewUrl} aria-busy={pendingAction === 'approve-preview'} onClick={() => void act('approve-preview')}><Check className="h-4 w-4" />{pendingAction === 'approve-preview' ? '30초 영상 요청 중…' : '이 동작으로 30초 영상 만들기'}</button>

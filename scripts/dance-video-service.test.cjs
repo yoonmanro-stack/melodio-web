@@ -198,7 +198,7 @@ test('a legacy ready plan gains review on start, while an already-running legacy
   }
 });
 test('selected creative preferences, source decisions and original music are persisted before planning', async () => {
-  const preferences = { performer: 'duo', location: 'rooftop', danceStyle: 'shuffle', visualStyle: 'stylized3d', difficulty: 'medium' };
+  const preferences = { performer: 'duo', ensemble: 'auto', species: 'auto', location: 'rooftop', danceStyle: 'shuffle', visualStyle: 'stylized3d', difficulty: 'medium' };
   const music = resolveDanceMusicSpec('latin-step', 'on', TRACK);
   let plannedJob;
   const c = fixture({ plan: async job => { plannedJob = structuredClone(job); return structuredClone(PLAN); } });

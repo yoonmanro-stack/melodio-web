@@ -22,7 +22,8 @@ const { DANCE_CREATIVE_OPTIONS, validateDanceCreativePreferences, resolveDanceCr
 const { validateDancePlan, createDancePlan } = load('src/lib/dance/videoPlan.ts');
 const axes = ['castId', 'appearanceId', 'outfitId', 'paletteId', 'locationId', 'choreographyId'];
 const preferences = validateDanceCreativePreferences();
-const direction = resolveDanceCreativeDirection(preferences, 'plan-fixture');
+// These fixtures cover saved v2 plans from before structured casts existed.
+const direction = { ...resolveDanceCreativeDirection(preferences, 'plan-fixture'), cast: undefined };
 const legacy = { title: '사이드 바운스', summary: '발과 몸통이 함께 움직이는 쉬운 춤', identity: 'one original adult dancer', imagePrompt: 'full-body first pose with feet planted', clips: ['Side step with knee bounce and torso transfer.', 'Continue the side step and finish.'] };
 const current = () => ({ ...legacy, version: 2, choreography: {
   hookName: '좌우 바운스 훅', steps: [{ count: 4, action: '오른발 왼발을 번갈아 옆으로 딛기', focus: 'feet' }, { count: 4, action: '무릎을 굽히고 골반을 이동하며 손을 뻗기', focus: 'combined' }],

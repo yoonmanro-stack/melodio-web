@@ -197,7 +197,7 @@ function serverFixture(options = {}, savedJob) {
     './videoPlan': { createDancePlan: async () => { work.push('plan'); return structuredClone(plan); } },
     // Model routing uses injected idea data; semantic idea checks have their own suite.
     './ideas': { createDanceIdeas: async () => { work.push('ideas'); return [structuredClone(idea)]; },
-      validateDanceIdeas: value => structuredClone(value) },
+      validateDanceIdeas: value => structuredClone(value), compactDanceCastPrompt: cast => `CAST: ${cast.count} ${cast.kind} performers; ${cast.members.map(member => member.id).join(',')}` },
     '../video/petProvider': { createPetXaiProvider: (_fetch, config = {}) => ({
       generateImage: async () => ({ url: 'https://images.x.ai/offline-opening.jpg' }),
       startVideo: async (prompt, duration, keyframe) => {
@@ -247,10 +247,10 @@ async function completeServerJob(c, service, current) {
   return current;
 }
 
-test('real server factory reserves Lite for new jobs and uses the saved model for the 5/15/15 second sequence', async () => {
+test('real server factory reserves Full 1.5 for new jobs and uses the saved model for the 5/15/15 second sequence', async () => {
   const c = serverFixture();
   const prepared = await c.service.prepare(USER, TRACK, 10, '원래 기획');
-  const expected = { model: 'grok-imagine-video-1.5-lite', resolution: '720p', width: 720, height: 1280 };
+  const expected = { model: 'grok-imagine-video-1.5', resolution: '720p', width: 720, height: 1280 };
   assert.equal(prepared.status, 'ideas'); assert.deepEqual(prepared.videoSpec, expected);
   assert.deepEqual(c.writes[0].videoSpec, expected); assert.deepEqual(c.row().metadata.danceVideo.videoSpec, expected);
   assert.deepEqual(c.work, ['snapshot', 'ideas']); assert.equal(c.submissions.length, 0);
@@ -260,12 +260,14 @@ test('real server factory reserves Lite for new jobs and uses the saved model fo
   for (const call of c.submissions) {
     assert.equal(call.model, expected.model); assert.equal(call.resolution, expected.resolution);
     assert.deepEqual(call.savedVideoSpec, expected);
+    assert.equal(call.generateAudio, false);
+    assert.equal(call.referenceImageUrl, c.row().metadata.danceVideo.imageUrl);
   }
   assert.ok(c.writes.every(next => JSON.stringify(next.videoSpec) === JSON.stringify(expected)));
 });
 
 test('real server factory persists and submits each explicit model override', async () => {
-  for (const model of ['grok-imagine-video', 'grok-imagine-video-1.5']) {
+  for (const model of ['grok-imagine-video', 'grok-imagine-video-1.5', 'grok-imagine-video-1.5-lite']) {
     const c = serverFixture({ videoModel: model });
     const prepared = await c.service.prepare(USER, TRACK, 10, '원래 기획');
     assert.equal(prepared.videoSpec.model, model); assert.equal(c.writes[0].videoSpec.model, model);
@@ -275,7 +277,7 @@ test('real server factory persists and submits each explicit model override', as
   }
 });
 
-test('new Lite server default preserves saved Classic jobs and old jobs without videoSpec', async () => {
+test('new Full 1.5 server default preserves saved Classic jobs and old jobs without videoSpec', async () => {
   for (const videoSpec of [{ model: 'grok-imagine-video', resolution: '720p', width: 720, height: 1280 }, undefined]) {
     const setup = serverFixture();
     const saved = job({ status: 'ready', imageReviewRequired: true, qualityPreviewRequired: true, ideaReviewRequired: true,

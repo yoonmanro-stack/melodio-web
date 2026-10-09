@@ -18,7 +18,7 @@ vm.runInNewContext(compile(fs.readFileSync(path.join(root, 'src/lib/dance/preset
 const danceModule = filename => {
   const mod = { exports: {} };
   vm.runInNewContext(compile(fs.readFileSync(path.join(root, 'src/lib/dance', filename), 'utf8'), filename), {
-    module: mod, exports: mod.exports, require(name) { if (name === './preset') return presetModule.exports; return require(name); },
+    module: mod, exports: mod.exports, require(name) { if (name === './preset') return presetModule.exports; if (name.startsWith('./')) return danceModule(`${name.slice(2)}.ts`); return require(name); },
   });
   return mod.exports;
 };
@@ -987,7 +987,7 @@ test('new frame approval produces a 5-second test and full video waits for one e
   assert.equal(element(ui.tree, 'video').props['aria-label'], '5초 동작 테스트');
   assert.equal(element(ui.tree, 'video').props.autoPlay, undefined);
   assert.match(label(ui.tree), /처음 5초/); assert.match(label(ui.tree), /첫 2초/);
-  assert.match(label(ui.tree), /발동작/); assert.match(label(ui.tree), /출연자·의상·장소/);
+  assert.match(label(ui.tree), /각 출연자의 동작과 주고받는 반응/); assert.match(label(ui.tree), /인원·동물 종류·의상·위치/);
   assert.match(label(ui.tree), /선택한 아이디어 · 발끝 신호/);
   assert.equal(ui.timers.size, 0);
   approveFrame.props.onClick(); await ui.settle();
@@ -1066,4 +1066,148 @@ test('missing image or preview assets keep the matching approval disabled and do
     approve.props.onClick(); await ui.settle();
     assert.equal(ui.requests.filter(request => request.body).length, 0);
   }
+});
+
+test('site mixed trio and penguin choices reach preparation and switching to women clears the animal species', async () => {
+  const prepared = [];
+  const ui = completedMusicUi(request => {
+    assert.equal(request.body.action, 'prepare');
+    const preferences = request.body.creativePreferences;
+    const direction = creativeDirection.resolveDanceCreativeDirection(preferences, `ui-cast-${prepared.length}`);
+    prepared.push(direction);
+    return { job: ideasJob({ creativePreferences: preferences, direction }) };
+  });
+  await ui.settle();
+  assert.ok(walk(select(ui.tree, '출연자'), node => node.type === 'option').some(option => option.props.value === 'human_animal'));
+  assert.deepEqual(walk(select(ui.tree, '출연 규모'), node => node.type === 'option').map(option => option.props.value), ['auto', 'solo', 'duo', 'trio', 'crowd']);
+  select(ui.tree, '출연자').props.onChange({ target: { value: 'human_animal' } });
+  select(ui.tree, '출연 규모').props.onChange({ target: { value: 'trio' } });
+  select(ui.tree, '동물 종류').props.onChange({ target: { value: 'penguin' } });
+  select(ui.tree, '장소').props.onChange({ target: { value: 'park' } });
+  await ui.settle();
+  assert.equal(select(ui.tree, '출연자').props.value, 'human_animal');
+  assert.equal(select(ui.tree, '출연 규모').props.value, 'trio');
+  assert.equal(select(ui.tree, '동물 종류').props.value, 'penguin');
+  button(ui.tree, '아이디어 3개 받기').props.onClick(); await ui.settle(); await ui.runTimers();
+  const firstPost = ui.requests.find(request => request.body);
+  assert.deepEqual(firstPost.body.creativePreferences, { performer: 'human_animal', ensemble: 'trio', species: 'penguin', location: 'park', danceStyle: 'auto', visualStyle: 'realistic', difficulty: 'easy' });
+  assert.equal(prepared[0].cast.count, 3); assert.equal(prepared[0].cast.kind, 'human_animal');
+  assert.ok(prepared[0].cast.members.some(member => member.kind === 'human'));
+  assert.ok(prepared[0].cast.members.filter(member => member.kind === 'animal').every(member => member.species === 'penguin'));
+  assert.equal(button(ui.tree, '첫 장면 만들기'), undefined);
+  select(ui.tree, '출연자').props.onChange({ target: { value: 'woman' } }); await ui.settle();
+  assert.equal(select(ui.tree, '동물 종류'), undefined);
+  assert.equal(select(ui.tree, '출연 규모').props.value, 'trio');
+  assert.ok(ideaChoices(ui.tree).every(choice => choice.props.disabled));
+  button(ui.tree, '아이디어 3개 받기').props.onClick(); await ui.settle();
+  const posts = ui.requests.filter(request => request.body);
+  assert.deepEqual(posts.map(request => request.body.action), ['prepare', 'prepare']);
+  assert.equal(posts[1].body.creativePreferences.species, 'auto');
+  assert.equal(posts[1].body.creativePreferences.performer, 'woman');
+  assert.equal(prepared[1].cast.kind, 'human'); assert.equal(prepared[1].cast.count, 3);
+  assert.ok(prepared[1].cast.members.every(member => /attractive adult woman/.test(member.identity)));
+});
+
+test('legacy human ensembles keep a coherent count and mixed performers replace a solo choice with a duo', async () => {
+  const ui = completedMusicUi(); await ui.settle();
+  select(ui.tree, '출연 규모').props.onChange({ target: { value: 'solo' } }); await ui.settle();
+  select(ui.tree, '출연자').props.onChange({ target: { value: 'human_animal' } }); await ui.settle();
+  assert.equal(select(ui.tree, '출연 규모').props.value, 'duo');
+  assert.equal(select(ui.tree, '출연 규모').props.disabled, false);
+  assert.equal(walk(select(ui.tree, '출연 규모'), node => node.type === 'option' && node.props.value === 'solo').length, 0);
+  assert.ok(select(ui.tree, '동물 종류'));
+  for (const [performer, ensemble] of [['duo', 'duo'], ['group', 'trio'], ['crowd', 'crowd']]) {
+    select(ui.tree, '출연자').props.onChange({ target: { value: performer } }); await ui.settle();
+    assert.equal(select(ui.tree, '출연 규모').props.value, ensemble);
+    assert.equal(select(ui.tree, '출연 규모').props.disabled, true);
+    assert.equal(select(ui.tree, '동물 종류'), undefined);
+  }
+  select(ui.tree, '출연자').props.onChange({ target: { value: 'animal' } }); await ui.settle();
+  assert.equal(select(ui.tree, '출연 규모').props.value, 'auto');
+  assert.equal(select(ui.tree, '출연 규모').props.disabled, false);
+  assert.equal(ui.requests.filter(request => request.body).length, 0);
+});
+
+test('legacy saved preferences missing count and species still allow frame and preview approval', async () => {
+  const preferences = { performer: 'animal', location: 'park', danceStyle: 'bounce', visualStyle: 'stylized3d', difficulty: 'easy' };
+  for (const [status, action, approvalText, nextStatus] of [
+    ['image-review', 'approve-frame', '이 장면으로 5초 동작 테스트', 'preview'],
+    ['preview-review', 'approve-preview', '이 동작으로 30초 영상 만들기', 'clip1'],
+  ]) {
+    const saved = previewJob({ status, creativePreferences: preferences });
+    const snapshot = JSON.stringify(saved);
+    const ui = harness({ props: { initialTrackId: 'song' }, reply: request => {
+      if (request.body) return { job: { ...saved, status: nextStatus } };
+      return request.url.includes('dance-video') ? { job: saved } : { tracks: [track('song')] };
+    } });
+    await ui.settle(); await ui.runTimers();
+    assert.equal(select(ui.tree, '출연 규모').props.value, 'auto');
+    assert.equal(select(ui.tree, '동물 종류').props.value, 'auto');
+    assert.doesNotMatch(label(ui.tree), /구간 또는 영상 선택이 바뀌었습니다/);
+    const approve = button(ui.tree, approvalText); assert.equal(approve.props.disabled, false);
+    approve.props.onClick(); approve.props.onClick(); await ui.settle();
+    assert.deepEqual(ui.requests.filter(request => request.body).map(request => request.body), [{ action, trackId: 'song', jobId: saved.id }]);
+    assert.equal(JSON.stringify(saved), snapshot);
+  }
+});
+
+test('a new count invalidates an old ready plan and stale image callbacks until preparation completes', async () => {
+  const preferences = { performer: 'animal', location: 'park', danceStyle: 'bounce', visualStyle: 'stylized3d', difficulty: 'easy' };
+  const saved = { id: 'old-ready', trackId: 'song', status: 'ready', startSeconds: 0, durationSeconds: 30, visualBrief: '', creativePreferences: preferences };
+  let current = saved;
+  const ui = harness({ props: { initialTrackId: 'song' }, reply: request => {
+    if (request.body?.action === 'prepare') {
+      current = { ...saved, id: 'new-ready', creativePreferences: request.body.creativePreferences };
+      return { job: current };
+    }
+    if (request.body?.action === 'start') return { job: { ...current, status: 'image' } };
+    if (request.body) assert.fail('Unexpected operation');
+    return request.url.includes('dance-video') ? { job: saved } : { tracks: [track('song')] };
+  } });
+  await ui.settle();
+  const staleStart = button(ui.tree, '첫 장면 만들기'); assert.equal(staleStart.props.disabled, false);
+  select(ui.tree, '출연 규모').props.onChange({ target: { value: 'trio' } }); await ui.settle();
+  assert.equal(button(ui.tree, '첫 장면 만들기').props.disabled, true);
+  assert.equal(button(ui.tree, '아이디어 3개 받기').props.disabled, false);
+  staleStart.props.onClick(); button(ui.tree, '첫 장면 만들기').props.onClick(); await ui.settle();
+  assert.equal(ui.requests.filter(request => request.body).length, 0);
+  button(ui.tree, '아이디어 3개 받기').props.onClick(); await ui.settle();
+  assert.equal(button(ui.tree, '첫 장면 만들기').props.disabled, false);
+  assert.deepEqual(ui.requests.filter(request => request.body).map(request => request.body.action), ['prepare']);
+  button(ui.tree, '첫 장면 만들기').props.onClick(); await ui.settle();
+  const posts = ui.requests.filter(request => request.body);
+  assert.deepEqual(posts.map(request => request.body.action), ['prepare', 'start']);
+  assert.equal(posts[0].body.creativePreferences.ensemble, 'trio');
+  assert.equal(posts[1].body.jobId, 'new-ready');
+});
+
+test('a changed species disables old ideas and stale selection handlers before a new idea batch', async () => {
+  const preferences = { performer: 'animal', ensemble: 'duo', species: 'cat', location: 'park', danceStyle: 'bounce', visualStyle: 'stylized3d', difficulty: 'easy' };
+  const saved = ideasJob({ creativePreferences: preferences });
+  let current = saved;
+  const ui = harness({ props: { initialTrackId: 'song' }, reply: request => {
+    if (request.body?.action === 'prepare') {
+      current = ideasJob({ id: 'new-ideas', creativePreferences: request.body.creativePreferences });
+      return { job: current };
+    }
+    if (request.body?.action === 'select-idea') return { job: { ...current, status: 'ready', selectedIdea: current.ideas[0] } };
+    if (request.body) assert.fail('No media is generated while changing ideas');
+    return request.url.includes('dance-video') ? { job: saved } : { tracks: [track('song')] };
+  } });
+  await ui.settle(); const oldChoice = ideaChoices(ui.tree)[0];
+  assert.equal(oldChoice.props.disabled, false);
+  select(ui.tree, '동물 종류').props.onChange({ target: { value: 'penguin' } }); await ui.settle();
+  assert.ok(ideaChoices(ui.tree).every(choice => choice.props.disabled));
+  oldChoice.props.onClick(); ideaChoices(ui.tree)[0].props.onClick(); await ui.settle();
+  assert.equal(ui.requests.filter(request => request.body).length, 0);
+  button(ui.tree, '아이디어 3개 받기').props.onClick(); await ui.settle();
+  assert.ok(ideaChoices(ui.tree).every(choice => !choice.props.disabled));
+  assert.deepEqual(ui.requests.filter(request => request.body).map(request => request.body.action), ['prepare']);
+  assert.equal(button(ui.tree, '첫 장면 만들기'), undefined);
+  ideaChoices(ui.tree)[0].props.onClick(); await ui.settle();
+  const posts = ui.requests.filter(request => request.body);
+  assert.deepEqual(posts.map(request => request.body.action), ['prepare', 'select-idea']);
+  assert.equal(posts[0].body.creativePreferences.species, 'penguin');
+  assert.equal(posts[1].body.jobId, 'new-ideas');
+  assert.equal(button(ui.tree, '첫 장면 만들기').props.disabled, false);
 });

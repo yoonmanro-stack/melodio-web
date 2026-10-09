@@ -81,14 +81,17 @@ export function createDanceVideoServerService(admin: SupabaseClient, userId: str
     return admin.storage.from('melodio-assets').getPublicUrl(assetPath).data.publicUrl;
   };
   return createDanceVideoService({
-    videoModel: options.videoModel || 'grok-imagine-video-1.5-lite',
+    videoModel: options.videoModel || 'grok-imagine-video-1.5',
     store: createDanceVideoStore(admin),
     snapshot: (job, sourceUrl) => snapshotDanceAudio(job, sourceUrl, upload),
     reuseSnapshot: reuseDanceAudio,
     plan: (job, options) => createDancePlan(job, undefined, options),
     ideas: (job, options) => createDanceIdeas(job, undefined, options),
     generateImage: prompt => createPetXaiProvider().generateImage(prompt),
-    startVideo: (prompt, duration, keyframe, options) => createPetXaiProvider(undefined, { resolution: options?.resolution || '480p', model: options?.model || 'grok-imagine-video' }).startVideo(prompt, duration, keyframe),
+    startVideo: (prompt, duration, keyframe, options) => createPetXaiProvider(undefined, {
+      resolution: options?.resolution || '480p', model: options?.model || 'grok-imagine-video',
+      ...(options?.referenceImageUrl ? { referenceImageUrl: options.referenceImageUrl } : {}), generateAudio: false,
+    }).startVideo(prompt, duration, keyframe),
     pollVideo: requestId => createPetXaiProvider().pollVideo(requestId),
     async copyAsset(job, kind, url, filename) {
       const media = await downloadPetMedia(url, kind);

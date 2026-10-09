@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { readPetBoundedBody } from '@/lib/video/petMedia';
+import { getCategoryQualityDirection } from '@/lib/vle/categoryQualityDirection';
+import { createCategoryBrief, CATEGORY_BRIEF_CATEGORIES, CategoryBriefPlannerError } from '@/lib/vle/categoryBriefPlanner';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
   createPetEpisode,
@@ -416,32 +419,21 @@ async function handleLegacy(category: string, seed?: number) {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as {
-      category?: string;
-      seed?: number;
-      topic?: string;
-      species?: 'cat' | 'dog';
-      pov?: 'owner_inner_voice' | 'pet_inner_voice';
-      // Step 2 사용자 선택. 없으면 카테고리 기본 사운드를 쓴다.
-      vocalEn?: string;
-      genreEn?: string;
-      moodEn?: string;
-    };
-    const category = body.category || 'trend';
-    const overrides: StyleOverrides = {
-      vocalEn: body.vocalEn,
-      genreEn: body.genreEn,
-      moodEn: body.moodEn,
-    };
-
+    const origin = request.headers.get('origin');
+    if (origin && origin !== request.nextUrl.origin) return NextResponse.json({ success: false, error: '같은 서비스 화면에서 요청해 주세요.' }, { status: 403 });
     const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json({ error: '로그인이 필요합니다.' }, { status: 401 });
-    }
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
+    if (!request.headers.get('content-type')?.includes('application/json')) return NextResponse.json({ success: false, error: 'JSON 요청이 필요합니다.' }, { status: 415 });
+    let raw: unknown;
+    try { raw = JSON.parse((await readPetBoundedBody(new Response(request.body), 16 * 1024)).toString('utf8')); }
+    catch { return NextResponse.json({ success: false, error: '요청 본문이 올바르지 않거나 너무 큽니다.' }, { status: 400 }); }
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return NextResponse.json({ success: false, error: '기획 입력을 확인해 주세요.' }, { status: 400 });
+    const body = raw as { category?: string; seed?: number; topic?: string; species?: 'cat' | 'dog'; pov?: 'owner_inner_voice' | 'pet_inner_voice'; vocalEn?: string; genreEn?: string; moodEn?: string };
+    if (Object.keys(body).some(key => !['category', 'seed', 'topic', 'species', 'pov', 'vocalEn', 'genreEn', 'moodEn'].includes(key))) return NextResponse.json({ success: false, error: '지원하지 않는 기획 입력입니다.' }, { status: 400 });
+    const category = body.category || 'trend';
+    if (!getCategoryQualityDirection(category) && !['dance', 'ai_future'].includes(category)) return NextResponse.json({ success: false, error: '카테고리를 확인해 주세요.' }, { status: 400 });
+    const overrides: StyleOverrides = { vocalEn: body.vocalEn, genreEn: body.genreEn, moodEn: body.moodEn };
 
     // The pet pilot owns a separate story contract. Other categories retain their existing handlers.
     if (category === 'pet') {
@@ -490,6 +482,15 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    if (CATEGORY_BRIEF_CATEGORIES.includes(category as never)) {
+      try {
+        const brief = await createCategoryBrief({ category, topic: body.topic, ...overrides, seed: body.seed });
+        return NextResponse.json({ success: true, brief }, { headers: { 'Cache-Control': 'no-store' } });
+      } catch (error) {
+        if (error instanceof CategoryBriefPlannerError) return NextResponse.json({ success: false, error: error.message, code: error.code }, { status: error.status });
+        return NextResponse.json({ success: false, error: '새 기획을 완료하지 못했습니다. 자동으로 다시 요청하지 않습니다.' }, { status: 500 });
+      }
+    }
     const spec = getCategorySpec(category);
     return spec
       ? await handleV2(spec, body.seed, overrides)

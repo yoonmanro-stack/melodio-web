@@ -41,6 +41,28 @@ function fixture() {
   return { calls, fetch };
 }
 
+test('dance Full 1.5 pins bridge frame while retaining the original cast reference and disabling generated audio', async () => {
+  const f = fixture(), bridge = 'https://images.x.ai/offline-bridge.jpg';
+  const provider = createPetXaiProvider(f.fetch, { model: 'grok-imagine-video-1.5', resolution: '720p', referenceImageUrl: keyframe, generateAudio: false });
+  for (const frame of [keyframe, bridge]) await provider.startVideo('approved species-native movement', 15, frame);
+  assert.equal(f.calls.length, 2);
+  assert.deepEqual(f.calls.map(call => call.body.image), [{ url: keyframe }, { url: bridge }]);
+  for (const call of f.calls) {
+    assert.deepEqual(call.body.reference_images, [{ url: keyframe }]);
+    assert.equal(call.body.generate_audio, false);
+    assert.equal(call.body.model, 'grok-imagine-video-1.5');
+  }
+});
+
+test('unsupported reference model, unsafe reference URL and reference prompt byte overflow stop before a paid fetch', async () => {
+  const f = fixture();
+  assert.throws(() => createPetXaiProvider(f.fetch, { model: 'grok-imagine-video-1.5-lite', referenceImageUrl: keyframe }), { code: 'PROVIDER_CONFIG' });
+  assert.throws(() => createPetXaiProvider(f.fetch, { model: 'grok-imagine-video-1.5', referenceImageUrl: 'http://127.0.0.1/private.jpg' }));
+  const provider = createPetXaiProvider(f.fetch, { model: 'grok-imagine-video-1.5', referenceImageUrl: keyframe, generateAudio: false });
+  await assert.rejects(provider.startVideo('가'.repeat(1366), 15, keyframe), { code: 'PROVIDER_PROMPT_LENGTH' });
+  assert.equal(f.calls.length, 0);
+});
+
 test('720p option reaches the classic video request with its exact prompt, duration and keyframe', async () => {
   const f = fixture();
   assert.deepEqual(await createPetXaiProvider(f.fetch, { resolution: '720p' }).startVideo('approved dance motion', 15, keyframe), { requestId: 'offline-video-1' });

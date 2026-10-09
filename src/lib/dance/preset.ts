@@ -1,4 +1,4 @@
-import type { DanceCreativePreferences, DanceCreativeDirection } from './creativeDirection';
+import type { DanceCreativePreferences, DanceCreativeDirection, DanceCastContract } from './creativeDirection';
 import type { DanceMusicSpec } from './musicProfiles';
 import type { DanceIdea } from './ideas';
 
@@ -53,11 +53,11 @@ export type DanceTrack = { id: string; title: string; status: string; audioUrl: 
   savedClip?: Pick<DanceAudioSelection, 'audioUrl' | 'audioHash' | 'startSeconds' | 'durationSeconds'>; reused?: boolean; rootTrackId?: string };
 export type DanceChoreography = {
   hookName: string;
-  steps: Array<{ count: number; action: string; focus: 'arms' | 'feet' | 'body' | 'combined' }>;
-  segments: Array<{ startSeconds: number; endSeconds: number; action: string; repeatHook: boolean }>;
+  steps: Array<{ count: number; action: string; focus: 'arms' | 'feet' | 'body' | 'combined'; actors?: { memberId: string; action: string }[] }>;
+  segments: Array<{ startSeconds: number; endSeconds: number; action: string; repeatHook: boolean; phase?: 'opening' | 'development' | 'payoff' | 'restart' }>;
   firstPose: string; endPose: string;
 };
-export type DancePlan = { title: string; summary: string; identity: string; imagePrompt: string; clips: [string, string]; version?: 2; choreography?: DanceChoreography };
+export type DancePlan = { title: string; summary: string; identity: string; imagePrompt: string; clips: [string, string]; version?: 2; choreography?: DanceChoreography; cast?: DanceCastContract };
 export type DancePlanFailure = {
   code: 'PLAN_TIMEOUT' | 'PLAN_CONNECTION' | 'PLAN_HTTP' | 'PLAN_RESPONSE' | 'PLAN_INVALID' | 'PLAN_LENGTH';
   kind: 'timeout' | 'connection' | 'http' | 'response'; phase: 'preparation' | 'request' | 'response';

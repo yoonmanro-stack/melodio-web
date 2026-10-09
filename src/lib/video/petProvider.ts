@@ -9,11 +9,16 @@ export type PetXaiVideoModel = typeof PET_XAI_VIDEO_MODELS[number];
 // REST shapes verified 2026-09-14: docs.x.ai/developers/model-capabilities/images/editing
 // and /video/generation. Optional video models use the same image-to-video REST shape
 // (rechecked 2026-10-08); existing pet calls keep the classic model and 480p default.
-export function createPetXaiProvider(fetchImpl: typeof fetch = fetch, options: { model?: PetXaiVideoModel; resolution?: '480p' | '720p' } = {}) {
+export function createPetXaiProvider(fetchImpl: typeof fetch = fetch, options: { model?: PetXaiVideoModel; resolution?: '480p' | '720p'; referenceImageUrl?: string; generateAudio?: boolean } = {}) {
   const model = options.model === undefined ? 'grok-imagine-video' : options.model;
   const resolution = options.resolution === undefined ? '480p' : options.resolution;
   if (!PET_XAI_VIDEO_MODELS.includes(model)) throw new PetPipelineError('영상 모델 설정이 올바르지 않습니다.', 'PROVIDER_CONFIG', 503);
   if (!['480p', '720p'].includes(resolution)) throw new PetPipelineError('영상 해상도 설정이 올바르지 않습니다.', 'PROVIDER_CONFIG', 503);
+  if (options.referenceImageUrl !== undefined) {
+    if (model !== 'grok-imagine-video-1.5') throw new PetPipelineError('첫 장면과 인물 참조를 함께 사용하는 영상은 Grok 1.5가 필요합니다.', 'PROVIDER_CONFIG', 503);
+    assertPetMediaUrl(options.referenceImageUrl, 'image');
+  }
+  if (options.generateAudio !== undefined && typeof options.generateAudio !== 'boolean') throw new PetPipelineError('영상 오디오 설정이 올바르지 않습니다.', 'PROVIDER_CONFIG', 503);
   const apiKey = process.env.XAI_API_KEY?.trim();
   const base = (process.env.XAI_API_BASE || 'https://api.x.ai/v1').replace(/\/$/, '');
   if (!apiKey) throw new PetPipelineError('영상 생성 API 설정이 필요합니다.', 'PROVIDER_CONFIG', 503);
@@ -58,9 +63,14 @@ export function createPetXaiProvider(fetchImpl: typeof fetch = fetch, options: {
       if (!prompt.trim() || prompt.length > PET_XAI_VIDEO_PROMPT_MAX_LENGTH) {
         throw new PetPipelineError('영상 프롬프트는 1~4,096자여야 합니다. 유료 요청 전 중단했습니다.', 'PROVIDER_PROMPT_LENGTH', 422);
       }
+      if (options.referenceImageUrl && Buffer.byteLength(prompt, 'utf8') > PET_XAI_VIDEO_PROMPT_MAX_LENGTH) {
+        throw new PetPipelineError('참조 영상 프롬프트는 UTF-8 4,096바이트 이내여야 합니다. 유료 요청 전 중단했습니다.', 'PROVIDER_PROMPT_LENGTH', 422);
+      }
       assertPetMediaUrl(keyframeUrl, 'image');
       const data = await request('/videos/generations', {
         model, prompt, duration, aspect_ratio: '9:16', resolution, image: { url: keyframeUrl },
+        ...(options.referenceImageUrl ? { reference_images: [{ url: options.referenceImageUrl }] } : {}),
+        ...(options.generateAudio === undefined ? {} : { generate_audio: options.generateAudio }),
       });
       if (typeof data.request_id !== 'string' || !/^[a-zA-Z0-9_-]{1,150}$/.test(data.request_id)) throw new PetPipelineError('영상 요청 ID를 확인하지 못했습니다. 중복 결제를 막기 위해 보류합니다.', 'UNKNOWN_SUBMISSION');
       return { requestId: data.request_id };

@@ -14,6 +14,8 @@ import {
 } from "lucide-react";
 import DanceChallengeStudio from "@/components/viral/DanceChallengeStudio";
 import { DANCE_CATEGORY_ID } from "@/lib/dance/preset";
+import { getCategoryQualityDirection } from "@/lib/vle/categoryQualityDirection";
+import { readCategoryBriefExtras, type CategoryBriefExtras, type CategoryCreativePlan } from "@/lib/vle/categoryCreativePlan";
 import { registerActiveAudio } from "@/lib/globalAudio";
 import { selectTopViralVideos } from '@/lib/video/viralVideoRanking';
 import ViralVideoLibrary, { readCachedViralVideos, type ViralVideo, type ViralCategory } from "@/components/viral/ViralVideoLibrary";
@@ -22,7 +24,7 @@ import { VIRAL_SONG_SPEC, estimateSeconds } from "@/lib/vle/viralSongSpec";
 import PetVideoStudio, { PetEpisodeEditor, readPetEpisode } from "@/components/viral/PetVideoStudio";
 import { validatePetEpisode, type PetEpisode, type PetVideoJobView } from "@/lib/vle/petEpisode";
 
-type ViralBriefSnapshot = {
+type ViralBriefSnapshot = CategoryBriefExtras & {
   sourceTopic: string;
   categoryId: string;
   title: string;
@@ -48,7 +50,7 @@ function readViralBrief(track: unknown): ViralBriefSnapshot | null {
       && typeof brief.hook === 'string'
       && typeof brief.lyrics === 'string'
       && typeof brief.stylePrompt === 'string'
-      ? brief as ViralBriefSnapshot
+      ? { sourceTopic: brief.sourceTopic, categoryId: brief.categoryId, title: brief.title, hook: brief.hook, lyrics: brief.lyrics, stylePrompt: brief.stylePrompt, ...readCategoryBriefExtras(brief) }
       : null;
   } catch {
     return null;
@@ -785,6 +787,7 @@ function ViralTrendZoneStudio() {
           topic: sourceTopic,
           category: cat,
           genre: genreStyle,
+          ...(savedBrief?.creativePlan ? { creativePlan: savedBrief.creativePlan } : {}),
         })
       });
       if (res.ok) {
@@ -1370,6 +1373,7 @@ function ViralTrendZoneStudio() {
       hook: producerBrief.hook,
       lyrics: customLyrics,
       stylePrompt: optimizedPrompt,
+      ...readCategoryBriefExtras(producerBrief),
     } : null;
     const generationCategory = genCategory;
     const generationOwner = petUserId;
@@ -1398,9 +1402,9 @@ function ViralTrendZoneStudio() {
       // 카테고리 사운드 정체성은 서버(producer-brief)가 결정한다.
       // 여기서 "B-grade meme energy" 같은 전역 접미사를 덧붙이면 모든
       // 카테고리가 같은 소리가 나고, 귀여운 댕냥이가 디스곡이 된다.
-      const neutralSuffix = ", no intro, instant vocal start, vocal-centric mix, dry close-up vocals, minimal instrumentation, crystal clear vocal delivery";
+      const neutralSuffix = selectedVocal.includes("Instrumental") ? ", no vocals, immediate groove, complete musical ending" : ", no intro, instant vocal start, vocal-centric mix, dry close-up vocals, minimal instrumentation, crystal clear vocal delivery";
       let finalStyle = optimizedPrompt || `${baseGenrePrompt}, ${selectedMood}, ${selectedVocal}${neutralSuffix}, high-fidelity studio mastering`;
-      if (optimizedPrompt && !optimizedPrompt.includes('no intro')) {
+      if (optimizedPrompt && !selectedVocal.includes('Instrumental') && !optimizedPrompt.includes('no intro')) {
         finalStyle = `no intro, instant vocal start, ${optimizedPrompt}`;
       }
       let finalLyrics = customLyrics;
@@ -1434,7 +1438,7 @@ function ViralTrendZoneStudio() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stylePrompt: finalStyle,
-          lyricsPrompt: finalLyrics,
+          lyricsPrompt: selectedVocal.includes('Instrumental') ? '' : finalLyrics,
           title: finalTitle,
           isInstrumental: selectedVocal.includes('Instrumental'),
           sunoVersion: 'v5.5',
@@ -2148,6 +2152,23 @@ function ViralTrendZoneStudio() {
                 <div className="w-6 h-6 rounded-lg bg-fuchsia-500/20 border border-fuchsia-500/40 flex items-center justify-center text-xs font-mono text-fuchsia-300 shrink-0">3</div>
                 상황 설정 & AI 기획
               </h3>
+              {(() => {
+                const direction = getCategoryQualityDirection(genCategory);
+                if (!direction) return null;
+                const plan = (producerBrief as { creativePlan?: CategoryCreativePlan } | null)?.creativePlan;
+                return <div className="space-y-2 rounded-xl border border-fuchsia-400/25 bg-fuchsia-950/20 p-3 text-xs leading-relaxed text-zinc-200">
+                  <p className="font-bold text-fuchsia-100">{direction.labelKo} · 기획 방향</p>
+                  {plan ? <dl className="space-y-2">
+                    <div><dt className="font-bold">첫 2초</dt><dd>{plan.opening2s.action}</dd></div>
+                    <div><dt className="font-bold">계속 볼 이유</dt><dd>{plan.watchReason}</dd></div>
+                    <div><dt className="font-bold">전개</dt><dd>{plan.development.join(' → ')}</dd></div>
+                    <div><dt className="font-bold">결말</dt><dd>{plan.payoff}</dd></div>
+                    <div><dt className="font-bold">출연 구성</dt><dd>{plan.roles.map(role => `${role.role} · ${role.count}명/마리 · ${role.appearance}${role.visibility === "off_screen" ? " (화면 밖)" : ""}`).join(" / ")}</dd></div>
+                  </dl> : <p>{direction.hookFamilies.map(family => family.labelKo).join(' · ')} 등 다양한 방식으로 새 상황을 기획합니다.</p>}
+                  <ul className="space-y-1 text-zinc-300">{direction.quickChecksKo.map(check => <li key={check}>· {check}</li>)}</ul>
+                </div>;
+              })()}
+
 
               <div className="space-y-2 w-full">
                 <label className="text-xs sm:text-sm text-zinc-200 font-extrabold flex items-center gap-1.5">

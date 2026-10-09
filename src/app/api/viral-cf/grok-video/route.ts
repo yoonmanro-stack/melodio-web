@@ -1,4 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { createClient as createAuthClient } from '@/lib/supabase/server';
+import { getCategoryQualityDirection } from '@/lib/vle/categoryQualityDirection';
+import { readPetBoundedBody } from '@/lib/video/petMedia';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import fs from 'fs';
@@ -17,7 +20,8 @@ async function generateGrokClip(
   promptText: string,
   apiKey: string,
   apiBase: string,
-  allowDance: boolean
+  allowDance: boolean,
+  category?: string
 ): Promise<string> {
   const outputRequirements = `Output Requirements: - Silent video only - No audio track - No music - No dialogue - No narration - No sound effects - Visual output only`;
   // 춤 금지는 카테고리별로 판단한다. '도파민 응원'이나 '트렌드·이슈'처럼
@@ -25,7 +29,10 @@ async function generateGrokClip(
   const motionRule = allowDance
     ? `MOTION DIRECTIVE: ENERGETIC CHALLENGE-STYLE BODY MOVEMENT AND SIMPLE REPEATABLE GESTURES ARE ENCOURAGED. KEEP IT SITUATIONAL AND COMEDIC, NOT A POLISHED STAGE PERFORMANCE.`
     : `STRICT DIRECTIVE: ABSOLUTELY NO DANCING, NO STAGE DANCE, NO CHOREOGRAPHY, NO DANCERS, NO DANCE MOVES. FOCUS ON DRAMATIC STORYLINE ACTING, SITUATIONAL HUMOR, AND REALISTIC CHARACTER EMOTIONS.`;
-  const cleanPrompt = `${promptText.trim()}, expert short-form comedy camera direction, rapid crash-zooms, whip-pans, fisheye angle, ${motionRule}, ${outputRequirements}, ${LEGACY_NO_TEXT_RULE}`;
+  const direction = getCategoryQualityDirection(category);
+  const camera = direction ? `${direction.cameraRuleEn} ${direction.motionRuleEn}` : 'expert short-form comedy camera direction';
+  const cleanPrompt = `${promptText.trim()}, ${camera}, ${direction ? 'Preserve the authored movements, causal reveal and original cast; no generic dance or reaction substitution.' : motionRule}, ${outputRequirements}, ${LEGACY_NO_TEXT_RULE}`;
+  if (Buffer.byteLength(cleanPrompt, 'utf8') > 4096) throw new LegacyShortExportError('영상 연출이 너무 깁니다. 기획을 간결하게 수정해 주세요.', 'PROMPT_LENGTH', 422);
 
   const initRes = await fetch(`${apiBase}/videos/generations`, {
     method: 'POST',
@@ -48,14 +55,14 @@ async function generateGrokClip(
 
   const initText = await initRes.text();
   if (!initRes.ok) {
-    throw new Error(`xAI Grok 비디오 요청 실패 (${initRes.status}): ${initText}`);
+    throw new Error(`xAI Grok 비디오 요청을 확인하지 못했습니다 (HTTP ${initRes.status}).`);
   }
 
   let initData: any;
   try {
     initData = JSON.parse(initText);
   } catch (parseErr) {
-    throw new Error(`xAI Grok API가 유효하지 않은 응답을 반환했습니다 (JSON 파싱 실패): ${initText.slice(0, 100)}`);
+    throw new Error('xAI Grok 응답 형식을 확인하지 못했습니다.');
   }
   const requestId = initData.request_id || initData.id || initData.task_id;
   if (!requestId) {
@@ -285,6 +292,12 @@ async function mergeClipsAndAudio(
 
 export async function POST(req: NextRequest) {
   try {
+    const origin = req.headers.get('origin');
+    if (origin && origin !== req.nextUrl.origin) return NextResponse.json({ success: false, error: '같은 서비스 화면에서 요청해 주세요.' }, { status: 403 });
+    const auth = await createAuthClient();
+    const { data, error: authError } = await auth.auth.getUser();
+    if (authError || !data.user) return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
+    if (!req.headers.get('content-type')?.includes('application/json')) return NextResponse.json({ success: false, error: 'JSON 요청이 필요합니다.' }, { status: 415 });
     const xaiApiKey = process.env.XAI_API_KEY;
     if (!xaiApiKey || xaiApiKey.includes('여기에') || xaiApiKey.trim() === '') {
       return NextResponse.json(
@@ -293,14 +306,17 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const body = await req.json();
+    let body;
+    try { body = JSON.parse((await readPetBoundedBody(new Response(req.body), 16 * 1024)).toString('utf8')); }
+    catch { return NextResponse.json({ success: false, error: '요청 본문이 올바르지 않거나 너무 큽니다.' }, { status: 400 }); }
+    if (!body || typeof body !== 'object' || Array.isArray(body)) return NextResponse.json({ success: false, error: '영상 입력을 확인해 주세요.' }, { status: 400 });
     const {
       prompt,
       audioUrl,
       generate30SecFull = true,
       // 카테고리를 받아 연출을 결정한다. 기존에는 이 값이 없어서 모든 카테고리에
       // 'butler / pet reaction' 연출이 하드코딩으로 주입됐다.
-      category,
+      category = 'trend',
       allowDance = false,
       cutCadenceSeconds = 1.5,
     } = body as {
@@ -312,7 +328,9 @@ export async function POST(req: NextRequest) {
       cutCadenceSeconds?: number;
     };
 
-    if (!prompt) {
+    if (typeof category !== 'string' || (!getCategoryQualityDirection(category) && !['dance', 'ai_future'].includes(category))) return NextResponse.json({ success: false, error: '카테고리를 확인해 주세요.' }, { status: 400 });
+    if (typeof allowDance !== 'boolean' || typeof generate30SecFull !== 'boolean' || typeof cutCadenceSeconds !== 'number' || !Number.isFinite(cutCadenceSeconds) || cutCadenceSeconds < 0.5 || cutCadenceSeconds > 8) return NextResponse.json({ success: false, error: '영상 연출 선택을 확인해 주세요.' }, { status: 400 });
+    if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 2400) {
       return NextResponse.json(
         { success: false, error: 'prompt 파라미터가 필요합니다.' },
         { status: 400 }
@@ -333,14 +351,15 @@ export async function POST(req: NextRequest) {
       // 컷 밀도는 클립 수를 늘리지 않고 클립 내부 하드컷 지시로 확보한다.
       // 15초 클립 × 1.5초 케이던스 = 클립당 10컷, 30초 영상에 총 20컷.
       const CLIP_SECONDS = 15;
+      const qualityDirection = getCategoryQualityDirection(category);
       const cutsPerClip = Math.max(2, Math.round(CLIP_SECONDS / cutCadenceSeconds));
-      const cutDirective = `EDITING RHYTHM: ${cutsPerClip} DISTINCT HARD CUTS ACROSS THIS ${CLIP_SECONDS}-SECOND CLIP, A NEW CAMERA ANGLE EVERY ${cutCadenceSeconds} SECONDS. RAPID WHIP-PAN AND CRASH-ZOOM TRANSITIONS BETWEEN CUTS. NEVER HOLD A SINGLE STATIC SHOT LONGER THAN ${cutCadenceSeconds} SECONDS.`;
+      const cutDirective = qualityDirection ? `EDITING: ${qualityDirection.cameraRuleEn} Keep movements and consequence readable; change angle only when it reveals story information. Do not force cuts at a fixed interval.` : `EDITING RHYTHM: ${cutsPerClip} DISTINCT HARD CUTS ACROSS THIS ${CLIP_SECONDS}-SECOND CLIP, A NEW CAMERA ANGLE EVERY ${cutCadenceSeconds} SECONDS. RAPID WHIP-PAN AND CRASH-ZOOM TRANSITIONS BETWEEN CUTS. NEVER HOLD A SINGLE STATIC SHOT LONGER THAN ${cutCadenceSeconds} SECONDS.`;
 
       // 전반부/후반부 연출은 카테고리 중립적으로 기술한다.
       // (기존에는 'frantic butler interaction', 'pet reaction'이 하드코딩돼
       //  K-드라마·역사 부캐 영상에도 집사와 반려동물 연출이 주입됐다.)
-      const comicCam1 = `CAMERAWORK: Dynamic whip-pan entrance, 0.5x ultra-wide fisheye angle, rapid crash-zoom onto the protagonist's comedic facial expression as the situation is set up.`;
-      const comicCam2 = `CAMERAWORK: High-dopamine climax, Dutch-angle snap zooms, slow-mo spin cuts, the protagonist's most exaggerated reaction of the whole skit.`;
+      const comicCam1 = qualityDirection ? `CAMERAWORK: ${qualityDirection.cameraRuleEn} Show immediate visible hook and its physical development.` : `CAMERAWORK: Dynamic whip-pan entrance, 0.5x ultra-wide fisheye angle, rapid crash-zoom onto the protagonist's comedic facial expression as the situation is set up.`;
+      const comicCam2 = qualityDirection ? `CAMERAWORK: ${qualityDirection.cameraRuleEn} Develop the same physical situation into its causal payoff and resolved reaction; do not restart the setup.` : `CAMERAWORK: High-dopamine climax, Dutch-angle snap zooms, slow-mo spin cuts, the protagonist's most exaggerated reaction of the whole skit.`;
 
       const promptPart1 = `${prompt}\n(Part 1 - Hook & Setup: ${comicCam1} ${cutDirective} ${continuityDirective} ${noTextRule})`;
       const promptPart2 = `${prompt}\n(Part 2 - Hook Repeat & Climax: ${comicCam2} ${cutDirective} ${continuityDirective} ${noTextRule})`;
@@ -353,8 +372,8 @@ export async function POST(req: NextRequest) {
           `[API/grok-video] Rendering 2 clips in PARALLEL (category=${category ?? 'n/a'}, ${cutsPerClip} cuts/clip @ ${cutCadenceSeconds}s, allowDance=${allowDance})...`
         );
         const [result1, result2] = await Promise.allSettled([
-          generateGrokClip(promptPart1, xaiApiKey, apiBase, allowDance),
-          generateGrokClip(promptPart2, xaiApiKey, apiBase, allowDance)
+          generateGrokClip(promptPart1, xaiApiKey, apiBase, allowDance, category),
+          generateGrokClip(promptPart2, xaiApiKey, apiBase, allowDance, category)
         ]);
 
         if (result1.status === 'fulfilled') videoUrl1 = result1.value;
@@ -390,7 +409,7 @@ export async function POST(req: NextRequest) {
       });
     } else {
       console.log(`[API/grok-video] Generating single 15-sec Grok AI video clip...`);
-      const singleUrl = await generateGrokClip(prompt, xaiApiKey, apiBase, allowDance);
+      const singleUrl = await generateGrokClip(prompt, xaiApiKey, apiBase, allowDance, category);
       const merged = await mergeClipsAndAudio([singleUrl], audioUrl);
       if (!merged) throw new Error('비디오 결합 및 음원 인코딩에 실패했습니다. 원본 클립과 음원은 보존됩니다.');
       const finalUrl = merged.url;
@@ -407,9 +426,9 @@ export async function POST(req: NextRequest) {
     }
 
   } catch (err: any) {
-    console.error('[API/grok-video] Exception:', err.message);
+    console.error('[API/grok-video]', { code: err instanceof LegacyShortExportError ? err.code : 'VIDEO_FAILED' });
     return NextResponse.json(
-      { success: false, error: err.message || 'Grok 비디오 생성 처리 중 오류 발생', ...(err instanceof LegacyShortExportError ? { code: err.code } : {}) },
+      { success: false, error: err instanceof LegacyShortExportError ? err.message : '영상 제작을 완료하지 못했습니다. 자동으로 다시 생성하지 않습니다.', ...(err instanceof LegacyShortExportError ? { code: err.code } : {}) },
       { status: err instanceof LegacyShortExportError ? err.status : 500 }
     );
   }

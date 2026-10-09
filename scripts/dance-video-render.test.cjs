@@ -23,7 +23,7 @@ function load(relative, overrides = {}) {
   }).outputText;
   const mod = { exports: {} };
   new Function('require', 'module', 'exports', 'process', 'fetch', source)(
-    name => name in overrides ? overrides[name] : require(name), mod, mod.exports,
+    name => name in overrides ? overrides[name] : name.startsWith('.') ? load(path.join(path.dirname(relative), `${name}.ts`), overrides) : require(name), mod, mod.exports,
     { env: { NEXT_PUBLIC_SUPABASE_URL: storage } }, () => { throw Error('NETWORK_FORBIDDEN'); },
   );
   return mod.exports;

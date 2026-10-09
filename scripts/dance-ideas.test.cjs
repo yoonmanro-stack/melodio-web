@@ -564,7 +564,8 @@ test('only allowlisted rule diagnostics survive the real service hold checkpoint
   const forbidden = async () => { throw Error('NETWORK_FORBIDDEN'); };
   const service = createDanceVideoService({ store, snapshot: async () => ({ audioUrl: 'https://offline.test/master.wav',
     audioHash: 'a'.repeat(64), sourceAudioHash: 'b'.repeat(64), sourceDurationSeconds: 180 }), reuseSnapshot: forbidden,
-    ideas: job => actualIdeas.createDanceIdeas(job, async () => { calls++; const payload = providerPayload(ideas(), job); payload.ideas[0].signatureSteps[0].count = 3; return privateResponse(payload); }),
+    // Legacy saved directions remain readable; this case isolates the old count diagnostic.
+    ideas: job => actualIdeas.createDanceIdeas({ ...job, direction: { ...job.direction, cast: undefined } }, async () => { calls++; const payload = providerPayload(ideas(), job); payload.ideas[0].signatureSteps[0].count = 3; return privateResponse(payload); }),
     plan: forbidden, generateImage: forbidden, startVideo: forbidden, pollVideo: forbidden, copyAsset: forbidden, bridge: forbidden, render: forbidden });
   const result = await service.prepare(userId, trackId, 10, '');
   assert.equal(result.status, 'attention'); assert.equal(calls, 1); assert.equal(result.planFailure.validationRule, 'SIGNATURE_COUNTS');

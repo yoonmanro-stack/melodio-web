@@ -1,3 +1,4 @@
+import { readCategoryBriefExtras, type CategoryBriefExtras } from '@/lib/vle/categoryCreativePlan'
 import { isPresetStudioSource, resolvePresetStudioStyle, fitPresetStudioStyleBudget, preservePresetStudioMusicWhileScrubbing } from '@/lib/preset-studio-profile'
 import { sealSunoRetryIdentity } from '../../../../worker/suno-retry-identity'
 import { ensureGenerationBatch } from '@/lib/generation-batches/server'
@@ -38,7 +39,7 @@ import { registeredVoicePersona } from '@/lib/voice/custom-voice-integrity'
 import { readCustomVoice } from '@/lib/voice/custom-voice-repository'
 import { compileLyricsSections, prepareLyricsSubmission, assertSafeVocalLyrics, LyricsInstructionError } from '@/lib/lyrics/compile-sections'
 
-type ViralBriefSnapshot = {
+type ViralBriefSnapshot = CategoryBriefExtras & {
   sourceTopic: string
   categoryId: string
   title: string
@@ -50,7 +51,7 @@ type ViralBriefSnapshot = {
 function readViralBriefSnapshot(value: unknown): ViralBriefSnapshot | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   const brief = value as Record<string, unknown>
-  const limits: Record<keyof ViralBriefSnapshot, number> = {
+  const limits = {
     sourceTopic: 1500,
     categoryId: 40,
     title: 200,
@@ -58,11 +59,14 @@ function readViralBriefSnapshot(value: unknown): ViralBriefSnapshot | null {
     lyrics: 10_000,
     stylePrompt: 5_000,
   }
-  for (const [key, max] of Object.entries(limits) as Array<[keyof ViralBriefSnapshot, number]>) {
+  for (const [key, max] of Object.entries(limits) as Array<[keyof typeof limits, number]>) {
     const field = brief[key]
     if (typeof field !== 'string' || field.length > max || /data:|base64/i.test(field)) return null
   }
+  let extras: CategoryBriefExtras
+  try { extras = readCategoryBriefExtras(brief) } catch { return null }
   return {
+    ...extras,
     sourceTopic: brief.sourceTopic as string,
     categoryId: brief.categoryId as string,
     title: brief.title as string,
@@ -461,7 +465,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '콘티의 가사와 음원 가사가 다릅니다. 콘티를 다시 확인해 주세요.' }, { status: 400 })
     }
     if (viralBrief && (rawBody.sourceMenu !== 'viral' || rawBody.presetId === 'pet'
-      || viralBrief.categoryId !== rawBody.presetId || viralBrief.lyrics !== payload.lyricsPrompt
+      || viralBrief.categoryId !== rawBody.presetId
+      || (payload.isInstrumental === true ? payload.lyricsPrompt !== '' : viralBrief.lyrics !== payload.lyricsPrompt)
+      || (viralBrief.isInstrumental !== undefined && viralBrief.isInstrumental !== (payload.isInstrumental === true))
       || viralBrief.stylePrompt !== payload.stylePrompt)) {
       return NextResponse.json({ error: '기획한 상황·가사·음악 스타일이 다릅니다. 다시 기획해 주세요.' }, { status: 400 })
     }
