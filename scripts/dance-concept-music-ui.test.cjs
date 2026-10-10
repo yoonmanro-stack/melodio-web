@@ -8,8 +8,8 @@ const existing = fs.readFileSync(path.join(__dirname, 'dance-ui.test.cjs'), 'utf
 const boundary = existing.indexOf("\ntest('guest fresh entry");
 assert.ok(boundary > 0, 'Shared real-component harness must exist');
 const shared = { exports: {} };
-new Function('require', 'module', '__dirname', `${existing.slice(0, boundary)}\nmodule.exports = { harness, track, walk, label, select, button, selectedTrack, deferred };`)(require, shared, __dirname);
-const { harness, track, walk, label, select, button, selectedTrack, deferred } = shared.exports;
+new Function('require', 'module', '__dirname', `${existing.slice(0, boundary)}\nmodule.exports = { harness, track, walk, label, select, button, selectedTrack, deferred, creativeDirection };`)(require, shared, __dirname);
+const { harness, track, walk, label, select, button, selectedTrack, deferred, creativeDirection } = shared.exports;
 function storageHarness(storage, options) {
   const scoped = { exports: {} };
   const injected = existing.slice(0, boundary).replace('module: mod, exports: mod.exports, console, AbortController, Error,',
@@ -233,4 +233,30 @@ test('matching completed DB audio supersedes and removes the local receipt while
   const audio = walk(ui.tree, node => node.type === 'audio' && node.props['aria-label'] === '곡 전체 듣기')[0];
   assert.equal(audio.props.src, sourceUrl); assert.ok(label(ui.tree).includes('보컬 없음'));
   await ui.runTimers(); assert.equal(posts(ui).length, 0); assert.equal(ui.uuidCount, 0);
+});
+
+test('idea cards render exact stored anchor IDs as readable cast labels without changing the selected idea or saved identity', async () => {
+  const preferences = { performer: 'duo', ensemble: 'duo', species: 'auto', location: 'auto', danceStyle: 'auto', visualStyle: 'realistic', difficulty: 'easy' };
+  const seed = creativeDirection.resolveDanceProductionSeedV3(preferences, 'display-label-seed');
+  const idea = { version: 3, id: 'stored-idea', conceptFamily: 'interaction', title: 'performer_1의 첫 인사',
+    visibleHook: 'performer_1이 performer_2를 바라보고 손을 든다.', characterGoal: 'performer_2가 먼저 웃도록 기다린다.',
+    emotionalReaction: 'performer_1은 어깨를 들고 performer_2는 고개를 끄덕인다.', turn: 'performer_2가 먼저 한 걸음 내딛는다.',
+    payoff: 'performer_1과 performer_2가 함께 웃는다.', participation: '둘의 인사를 따라 해 본다.',
+    productionRisk: '두 사람의 간격을 유지한다. performer_10은 별도 문자열이다.', musicConnection: 'performer_1이 짧은 훅에 손을 펼친다.' };
+  const job = { id: 'display-job', trackId: 'song', status: 'ideas', startSeconds: 0, durationSeconds: 30,
+    visualBrief: '', productionSeed: seed, creativePreferences: preferences, ideas: [idea] };
+  const original = JSON.stringify(job);
+  const ui = harness({ props: { initialTrackId: 'song' }, reply: request => request.body
+    ? { job: { ...job, status: 'ready', selectedIdea: idea } }
+    : request.url.includes('dance-video') ? { job } : { tracks: [track('song')] } });
+  await ui.settle();
+  const card = walk(ui.tree, node => node.type === 'article')[0];
+  assert.ok(label(card).includes('출연자 1이 출연자 2를 바라보고 손을 든다.'));
+  assert.ok(label(card).includes('출연자 2가 먼저 웃도록 기다린다.')); assert.ok(label(card).includes('performer_10은 별도 문자열이다.'));
+  assert.doesNotMatch(label(card), /performer_[12](?![0-9_])/); assert.equal(card.props['aria-label'], '아이디어 1 · 출연자 1의 첫 인사');
+  const choose = walk(card, node => node.type === 'button')[0]; assert.equal(choose.props['aria-label'], '출연자 1의 첫 인사 선택하고 장면 설계');
+  choose.props.onClick(); await ui.settle();
+  assert.deepEqual(posts(ui)[0].body, { action: 'select-idea', trackId: 'song', jobId: job.id, ideaId: idea.id });
+  assert.ok(label(ui.tree).includes('선택한 아이디어 · 출연자 1의 첫 인사')); assert.equal(JSON.stringify(job), original);
+  assert.equal(seed.anchors[0].id, 'performer_1'); assert.equal(idea.visibleHook, 'performer_1이 performer_2를 바라보고 손을 든다.');
 });

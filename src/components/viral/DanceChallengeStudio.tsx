@@ -51,14 +51,14 @@ const statusCopy: Record<DanceVideoJob['status'], string> = {
   render: '선택한 음악과 영상 합치는 중…', completed: '30초 영상이 완성됐습니다.', attention: '작업 상태를 확인해 주세요.',
 };
 
-function premiseDetails(idea: DancePerformancePremiseV3) {
+function premiseDetails(idea: DancePerformancePremiseV3, displayText: (value: string) => string) {
   const rows = [
     ['첫 장면', idea.visibleHook], ['출연자의 목표', idea.characterGoal], ['표정과 반응', idea.emotionalReaction],
     ['전개와 반전', idea.turn], ['마지막 변화', idea.payoff], ['참여 포인트', idea.participation],
     ['음악과 맞는 포인트', idea.musicConnection], ['제작 시 주의점', idea.productionRisk],
   ];
   return <dl className="flex-1 space-y-3 text-sm leading-relaxed">{rows.map(([label, value]) => <div key={label}>
-    <dt className={`font-bold ${label === '제작 시 주의점' ? 'text-amber-200' : 'text-fuchsia-100'}`}>{label}</dt><dd className="text-zinc-200">{value}</dd>
+    <dt className={`font-bold ${label === '제작 시 주의점' ? 'text-amber-200' : 'text-fuchsia-100'}`}>{label}</dt><dd className="text-zinc-200">{displayText(value)}</dd>
   </div>)}</dl>;
 }
 
@@ -112,6 +112,8 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
   const currentJob = useRef(job);
   currentJob.current = job;
   const track = tracks.find(t => t.id === trackId);
+  const premiseMemberLabels = new Map<string, string>(job?.productionSeed?.anchors.map((anchor, index) => [anchor.id, `출연자 ${index + 1}`] as const));
+  const premiseText = (value: string) => value.replace(/[A-Za-z0-9_]+/g, token => premiseMemberLabels.get(token) || token);
   const conceptContextForIdeas = track?.id === trackId && track.musicMode === 'concept' && !track.reused ? track.coreContext || '' : '';
   const musicProfile = DANCE_MUSIC_PROFILES.find(profile => profile.id === musicProfileId);
   const musicPending = Boolean(track && ['generating', 'pending'].includes(track.status));
@@ -527,10 +529,10 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
         <p className="text-xs leading-relaxed text-zinc-300">아이디어를 고르면 자동으로 맡긴 연출을 정하고 동작과 30초 흐름을 설계합니다. 첫 장면은 설계 확인 후 따로 요청합니다.</p>
         {selectionChanged ? <p className="text-sm text-amber-200">설정이 바뀌었습니다. 아이디어 3개 받기를 눌러 새 설정에 맞는 아이디어를 확인하세요.</p> : null}
         <div className="grid gap-3 lg:grid-cols-3">
-          {job.ideas?.map((idea, index) => <article key={idea.id} aria-label={`아이디어 ${index + 1} · ${idea.title}`} className="flex flex-col rounded-2xl border border-fuchsia-400/25 bg-black/30 p-4">
+          {job.ideas?.map((idea, index) => <article key={idea.id} aria-label={`아이디어 ${index + 1} · ${premiseText(idea.title)}`} className="flex flex-col rounded-2xl border border-fuchsia-400/25 bg-black/30 p-4">
             <p className="mb-2 text-xs font-bold text-fuchsia-200">아이디어 {index + 1}</p>
-            <h4 className="mb-4 text-base font-bold text-white">{idea.title}</h4>
-            {isDancePerformancePremiseV3(idea) ? premiseDetails(idea) : <dl className="flex-1 space-y-3 text-sm leading-relaxed">
+            <h4 className="mb-4 text-base font-bold text-white">{premiseText(idea.title)}</h4>
+            {isDancePerformancePremiseV3(idea) ? premiseDetails(idea, premiseText) : <dl className="flex-1 space-y-3 text-sm leading-relaxed">
               {idea.hookStory ? <><div><dt className="font-bold text-fuchsia-200">계속 볼 이유</dt><dd className="text-zinc-200">{idea.hookStory.watchReason}</dd></div><div><dt className="font-bold text-fuchsia-200">전개</dt><dd className="text-zinc-200">{idea.hookStory.development}</dd></div></> : null}
               <div><dt className="font-bold text-fuchsia-100">첫 2초</dt><dd className="text-zinc-200">{idea.firstTwoSeconds}</dd></div>
               <div><dt className="font-bold text-fuchsia-100">따라 할 동작</dt><dd className="text-zinc-200">{idea.signatureMove}</dd></div>
@@ -540,15 +542,15 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
               <div><dt className="font-bold text-amber-200">제작 시 주의점</dt><dd className="text-zinc-200">{idea.productionRisk}</dd></div>
               {idea.reviewNote ? <div><dt className="font-bold text-amber-200">아이디어 검토</dt><dd className="text-zinc-200">{idea.reviewNote}</dd></div> : null}
             </dl>}
-            <button type="button" aria-label={`${idea.title} 선택하고 장면 설계`} className={`${button} mt-5 w-full`} disabled={busy || jobLoading || uncertain || selectionChanged || Boolean(job.inFlight)} aria-busy={pendingAction === 'select-idea' && pendingIdeaId === idea.id} onClick={() => void selectIdea(idea.id)}>
+            <button type="button" aria-label={`${premiseText(idea.title)} 선택하고 장면 설계`} className={`${button} mt-5 w-full`} disabled={busy || jobLoading || uncertain || selectionChanged || Boolean(job.inFlight)} aria-busy={pendingAction === 'select-idea' && pendingIdeaId === idea.id} onClick={() => void selectIdea(idea.id)}>
               {pendingAction === 'select-idea' && pendingIdeaId === idea.id ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}{pendingAction === 'select-idea' && pendingIdeaId === idea.id ? '장면 설계 중…' : '이 아이디어로 장면 설계'}
             </button>
           </article>)}
         </div>
       </div> : null}
       {job?.selectedIdea ? <div className="rounded-xl border border-fuchsia-400/30 bg-fuchsia-950/30 p-4 space-y-2">
-        <p className="font-bold text-fuchsia-100">선택한 아이디어 · {job.selectedIdea.title}</p>
-        {isDancePerformancePremiseV3(job.selectedIdea) ? premiseDetails(job.selectedIdea) : <>
+        <p className="font-bold text-fuchsia-100">선택한 아이디어 · {premiseText(job.selectedIdea.title)}</p>
+        {isDancePerformancePremiseV3(job.selectedIdea) ? premiseDetails(job.selectedIdea, premiseText) : <>
         <p className="text-sm text-zinc-200">첫 2초 · {job.selectedIdea.firstTwoSeconds}</p>
         <p className="text-sm text-zinc-200">따라 할 동작 · {job.selectedIdea.signatureMove}</p>
         {job.selectedIdea.hookStory ? <p className="text-sm text-zinc-200">계속 볼 이유 · {job.selectedIdea.hookStory.watchReason}</p> : null}
