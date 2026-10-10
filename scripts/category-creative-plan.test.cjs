@@ -65,3 +65,18 @@ test('arrays must be dense ordinary data arrays without extra metadata or inheri
   for (const mutate of [p => delete p.development[0], p => p.development.extra = 'secret', p => p.roles[Symbol('secret')] = true, p => Object.setPrototypeOf(p.roles, {}),
     p => Object.defineProperty(p.development, '0', { get() { throw Error('raw payload'); }, enumerable: true }), p => Object.defineProperty(p.roles, '0', { value: p.roles[0], enumerable: false })]) { const value = plan(); mutate(value); rejects(value); }
 });
+
+function contextualPlan() {
+  return { ...plan(), sceneContext: { place: '직원과 동료가 일하는 사무실', ongoingActivity: '여성이 일을 시작하려고 커피잔을 든다.', immediateTrigger: '커피를 마시려는 순간 빈 잔을 발견한다.', settingEvidence: '직원 업무와 동료 출입으로 공용 업무 공간이 드러난다.' },
+    wardrobes: [{ roleId: 'R1', clothing: '출근에 맞는 단정한 셔츠와 바지', footwear: '셔츠와 어울리는 낮은 구두' }, { roleId: 'R2', clothing: '동료의 사무실 재킷과 바지', footwear: '업무 복장과 맞는 신발' }],
+    music: { genreEn: 'deadpan funk', vocalEn: 'natural adult Korean voice', moodEn: 'wry anticipation', styleEn: 'clipped bass and piano reveal accent', rationale: '짧은 정지와 속마음의 반응을 또렷하게 드러낸다.', targetBpm: 118, isInstrumental: false } };
+}
+test('new context and wardrobes persist canonically while old plans remain unchanged', () => {
+  const value = contextualPlan(), result = validate(value);
+  assert.deepEqual(validate(JSON.parse(serialize(value))), result);
+  assert.deepEqual(result.sceneContext, value.sceneContext); assert.notEqual(result.wardrobes, value.wardrobes);
+  assert.deepEqual(moduleFixture.exports.validateFreshCategoryCreativePlan(value), result);
+  assert.throws(() => moduleFixture.exports.validateFreshCategoryCreativePlan(plan()), CategoryCreativePlanError);
+  for (const mutate of [p => delete p.music, p => p.wardrobes.reverse(), p => p.sceneContext.settingEvidence = 'private https://private.test/', p => p.music.targetBpm = 171]) { const input = contextualPlan(); mutate(input); rejects(input); }
+  assert.throws(() => extras({ ...legacy(), creativePlan: value, isInstrumental: true }), CategoryCreativePlanError);
+});

@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { createPetPlanningBudget, type PetPlanningPhase, type PetProviderDiagnostics } from './petPlanningBudget';
 import { buildViralVisualDirection } from './viralVisualDirection';
 import { buildPetPerformanceDirection } from './petPerformanceDirection';
+import { buildConceptContextInstructions } from './conceptContextDirection';
+import { compileCategoryMusicStyle, validateCategoryMusicDirection, type CategoryMusicDirection } from './categoryCreativePlan';
 import {
   LEGACY_PET_SHOT_SECONDS as PET_SHOT_SECONDS,
   validatePetEpisode,
@@ -81,6 +83,8 @@ const PLAN_SCHEMA = objectSchema({
   }),
   lyricLines: { type: 'array', minItems: 6, maxItems: 6, items: stringSchema },
   shots: { type: 'array', minItems: 6, maxItems: 6, items: objectSchema({ id: stringSchema, beat: stringSchema, caption: stringSchema, action: stringSchema, camera: stringSchema }) },
+  music: objectSchema({ genreEn: stringSchema, vocalEn: stringSchema, moodEn: stringSchema, styleEn: stringSchema, rationale: stringSchema,
+    targetBpm: { type: 'integer', minimum: 70, maximum: 170 }, isInstrumental: { type: 'boolean', enum: [false] } }),
 });
 const COMPILE_SCHEMA = objectSchema({
   shots: { type: 'array', minItems: 6, maxItems: 6, items: objectSchema({ id: stringSchema, keyframePrompt: stringSchema, videoPrompt: stringSchema }) },
@@ -102,6 +106,9 @@ The sourceContract describes the full story arc, not the state of every frame. D
 Write exactly six natural Korean lyricLines, one for each shot in order; every shot caption must equal its lyricLine exactly. They form a coherent, rhythmic short song with one adult inner-voice narrator, not a pile of slogans. The story moves forward every line. Total Korean syllables: 42–78. Each line has at least 5 Korean syllables; per-shot maximum syllables are 10,13,13,16,16,10 respectively. Aim near 7,9,9,10,10,7 syllables so the song has breaths and a clear ending. Use no English words, digits, metadata, bracketed directions or vocal sound filler. The first 4-second line must be understandable immediately. Do not pad or repeat an entire chorus. Match the chosen music style in cadence. Captions are one readable line, at most 32 characters. Korean title <=40 characters. Story <=500 characters.
 ${buildViralVisualDirection('pet')}
 PET STORY PRIORITY: The visual defaults above supply atmosphere and casting preferences. Optional furnishings and decorative details are discretionary, not required plot objects or exact set locks. Continuity preserves chosen identities and story-essential cause/effect, not every background object or pose. The immediately readable situation, main action, contradiction, earned reversal and reaction take priority over decorative precision. Preserve the user's specific visual requests and genre preferences.
+${buildConceptContextInstructions('pet')}
+PET CONTEXT INFERENCE: The shared concept/context priority above governs unspecified details ahead of decorative defaults. Resolve the actual place, its recognizable function, ongoing activity and observable trigger inside character.setting and the authored actions. Choose each human's role-appropriate clothing and footwear together in character.owner; preserve source identities and counts. No extra characters, state schema or shot timings are introduced.
+PET MUSIC INFERENCE: Return music {genreEn,vocalEn,moodEn,styleEn,rationale,targetBpm,isInstrumental}. Infer genre, adult inner-narrator voice, mood and arrangement jointly from this selected event; no universal indie-pop/warm style. isInstrumental is false to preserve this existing inner-narrator production contract. genreEn<=80,vocalEn<=120,moodEn<=80,styleEn<=160 English ASCII characters; styleEn contains instruments/arrangement and the musical turn only, without another genre, voice or mood. rationale<=240 Korean characters explains how the music serves this event, targetBpm70–170 is provisional. Preserve each nonempty musicOverrides field; unspecified dimensions are yours. Do not change saved music or add any planning/evaluation call.
 Return the requested structured JSON. Keep prose concise while satisfying the lyric budget. Do not return analysis, scores, explanations of your reasoning, or provider/tool instructions.`;
 
 const COMPILATION_INSTRUCTIONS = `Compile the approved six-shot pet storyboard into concise production prompts. Keep the chosen cast and relationship, core action, props essential to its cause/outcome, user-specified visual meaning, and the authored reversal/payoff timing. Return the existing six shot IDs in order without rewriting the story.
@@ -299,6 +306,8 @@ interface Plan {
   character: PetEpisode['character'];
   lyricLines: string[];
   shots: PlannedShot[];
+  /** New provider proposals include music; old planner fixtures and saved v3 contracts remain readable. */
+  music?: CategoryMusicDirection;
 }
 
 const ONLY_LIMB_PATTERN = /(?:shown|visible|framed|represented)\s+only\s+(?:as|by)?[^.;]{0,30}\b(?:hand|arm|forearm)\b|\bonly\s+(?:one\s+)?(?:visible\s+)?(?:right\s+|left\s+)?(?:hand|forearm)\b|\b(?:all|every)\s+other\s+(?:human\s+)?body\s+parts?\s+(?:stay|remain|kept|outside)/iu;
@@ -345,6 +354,10 @@ function recognizablePersonFrame(value: string, human?: PetSourceContract['cast'
 
 function validateSourceContractPlan(plan: JsonRecord, character: JsonRecord | null, contract: PetSourceContract): string[] {
   const issues: string[] = [];
+  if (Object.hasOwn(plan, 'music')) {
+    try { validateCategoryMusicDirection(plan.music); }
+    catch { issues.push('상황에 맞춘 음악 선택과 짧은 근거를 확인해 주세요.'); }
+  }
   const candidates = Array.isArray(plan.candidates) ? plan.candidates : [];
   const selected = typeof plan.selectedCandidateIndex === 'number' ? asRecord(candidates[plan.selectedCandidateIndex]) : null;
   const beats = asRecord(selected?.storyBeats);
@@ -512,7 +525,6 @@ export async function createPetEpisode(input: PetPlanningInput, dependencies: Pe
   };
   const sourceContract = derivePetSourceContract(input.topic, effectiveInput.species);
   const recent = petRecentFingerprints((input.recent || []).slice(0, 10).map(fingerprint => ({ episode: { fingerprint } })));
-  const stylePrompt = soundPrompt(input);
 
   async function call(model: string, purpose: PetModelUsage['purpose'], instructions: string, prompt: string, schema: JsonRecord, phase: PetPlanningPhase = purpose): Promise<unknown> {
     const callStartedAt = clock();
@@ -573,7 +585,8 @@ export async function createPetEpisode(input: PetPlanningInput, dependencies: Pe
     catch { throw new PetPlannerError('pet_invalid_output', '기획 결과의 JSON 형식을 확인할 수 없습니다.', 502, [...models]); }
   }
 
-  const context = JSON.stringify({ sourceTopic: sourceContract.sourceTopic, sourceContract, species: effectiveInput.species ?? 'choose_from_topic', pov: effectiveInput.pov ?? 'choose_from_topic_default_owner_inner_voice', music: stylePrompt, recentEpisodesNewestFirst: recent });
+  const context = JSON.stringify({ sourceTopic: sourceContract.sourceTopic, sourceContract, species: effectiveInput.species ?? 'choose_from_topic', pov: effectiveInput.pov ?? 'choose_from_topic_default_owner_inner_voice',
+    musicOverrides: { genreEn: input.genreEn || '', vocalEn: input.vocalEn || '', moodEn: input.moodEn || '' }, recentEpisodesNewestFirst: recent });
   let raw = normalizePlanMetadata(await call(PET_PLANNING_MODEL, 'planning', PLANNING_INSTRUCTIONS, context, PLAN_SCHEMA));
   let issues = validatePlan(raw, effectiveInput, recent, sourceContract);
   if (issues.length) {
@@ -585,6 +598,8 @@ export async function createPetEpisode(input: PetPlanningInput, dependencies: Pe
   }
   if (issues.length) throw new PetPlannerError('pet_plan_invalid', 'AI 기획 결과가 콘티 형식 검증을 통과하지 못했습니다. 입력 내용은 그대로 유지됩니다.', 422, [...models], issues);
   const plan = raw as Plan;
+  const selectedAudio = plan.music ? compileCategoryMusicStyle(plan.music, input) : null;
+  const stylePrompt = selectedAudio ? `${selectedAudio.stylePrompt}${selectedAudio.isInstrumental ? '' : ', sing the supplied six lines once in order, no extra verses or repeated chorus'}` : soundPrompt(input);
   const candidate = plan.candidates[plan.selectedCandidateIndex];
   const compiled = asRecord(await call(PET_COMPILATION_MODEL, 'compilation', COMPILATION_INSTRUCTIONS,
     JSON.stringify({ sourceContract, selectedStoryBeats: candidate.storyBeats, character: plan.character, shots: plan.shots.map((shot, i) => ({ ...shot, durationSeconds: PET_SHOT_SECONDS[i] })) }), COMPILE_SCHEMA));

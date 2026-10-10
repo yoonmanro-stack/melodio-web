@@ -649,3 +649,19 @@ test('a budget exhausted during local draft processing refuses repair without an
   });
   assert.equal(r.requests.length, 1);
 });
+
+test('pet music is inferred in its existing planning call and compiles after the selected event without changing native contracts', async () => {
+  const proposal = plan();
+  proposal.music = { genreEn: 'dry swing', vocalEn: 'natural adult Korean close voice', moodEn: 'wry anticipation', styleEn: 'brushed snare and plucked bass answer the visible consequence', rationale: '동물의 행동과 집사의 짧은 반응을 가볍고 또렷하게 들려준다.', targetBpm: 114, isInstrumental: false };
+  const r = runner([providerResponse(proposal, PET_PLANNING_MODEL), providerResponse(compilation(), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({}, r.dependencies);
+  assert.equal(r.requests.length, 2, 'existing planner and compilation only');
+  assert.deepEqual(JSON.parse(r.requests[0].input).musicOverrides, { genreEn: '', vocalEn: '', moodEn: '' });
+  assert.match(episode.stylePrompt, /dry swing/); assert.doesNotMatch(episode.stylePrompt, /light rhythmic indie pop/);
+  assert.equal(episode.version, 'pet-v3'); assert.deepEqual(episode.shots.map(shot => shot.id), ['S1','S2','S3','S4','S5','S6']);
+  assert.deepEqual(episode.shots.map(shot => shot.durationSeconds), [4,5,5,6,6,4]);
+  const selected = runner([providerResponse(proposal, PET_PLANNING_MODEL), providerResponse(compilation(), PET_COMPILATION_MODEL)]);
+  const override = await createPetEpisode({ genreEn: 'acoustic jazz', vocalEn: 'expressive adult male Korean voice', moodEn: 'deadpan amusement' }, selected.dependencies);
+  assert.match(override.stylePrompt, /acoustic jazz/); assert.match(override.stylePrompt, /adult male Korean voice/); assert.match(override.stylePrompt, /deadpan amusement/);
+  assert.doesNotMatch(override.stylePrompt, /dry swing|wry anticipation/);
+});

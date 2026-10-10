@@ -10,8 +10,11 @@ const source = fs.readFileSync(filename, 'utf8');
 const compiled = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
+const commonFilename = path.resolve(__dirname, '../src/lib/vle/conceptContextDirection.ts');
+const commonCode = ts.transpileModule(fs.readFileSync(commonFilename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+const commonMod = { exports: {} }; new Function('module', 'exports', commonCode)(commonMod, commonMod.exports);
 const denied = () => { throw Error('SERVER_OR_PROVIDER_ACCESS_FORBIDDEN'); };
-const sandbox = { module: { exports: {} }, require: denied, fetch: denied };
+const sandbox = { module: { exports: {} }, require: name => { assert.equal(name, './conceptContextDirection'); return commonMod.exports; }, fetch: denied };
 sandbox.exports = sandbox.module.exports;
 Object.defineProperty(sandbox, 'process', { get: denied });
 vm.runInNewContext(compiled, sandbox, { filename, timeout: 1000 });
@@ -60,14 +63,14 @@ test('instructions keep explicit story and audio first, and distinguish planning
   for (const category of visibleStoryCategories) {
     const prompt = build(category, 'offline-episode');
     assert.ok(prompt.length < 5000, `${category}: ${prompt.length}`);
-    assert.match(prompt, /Preserve explicit choices/);
-    assert.match(prompt, /person count/);
-    assert.match(prompt, /0–2 seconds/);
+    assert.match(prompt, /Preserve their complete source text/);
+    assert.match(prompt, /exact counts/);
+    assert.match(prompt, /first two seconds/);
     assert.match(prompt, /existing completed song/);
     assert.match(prompt, /do not rewrite its story or audio/);
     assert.match(prompt, /Planned times require later measurement/);
     assert.match(prompt, /Do not claim verified humor/);
-    assert.match(prompt, /never copy a finished example/);
+    assert.match(prompt, /not a fixed plot/);
   }
 });
 
@@ -81,21 +84,29 @@ test('casting appeal is role-aware and never erases pets, no-human stories, hist
   assert.match(get('challenge').castingRuleEn, /without forcing.*one gender/);
 });
 
-test('seeded variation rotates all three suggestions while retaining every mechanism and bounded input', () => {
-  const order = prompt => prompt.split('\n').filter(line => line.startsWith('- '));
-  const variants = Array.from({ length: 24 }, (_, seed) => build('human', seed));
-  assert.equal(new Set(variants.map(prompt => order(prompt)[0])).size, 3);
-  const expected = [...order(variants[0])].sort();
-  variants.forEach(prompt => assert.deepEqual([...order(prompt)].sort(), expected));
-  assert.equal(build('human', 10), build('human', 10));
-  const prefix = 'x'.repeat(200);
-  assert.equal(build('human', prefix + 'large-untrusted-tail'), build('human', prefix));
-  assert.equal(build('human', Infinity), build('human'));
+test('active guidance uses category purpose and coherent inference without fixed hook family catalogs', () => {
+  for (const category of visibleStoryCategories) {
+    const prompt = build(category, 10);
+    assert.match(prompt, /AUDIENCE PURPOSE/); assert.match(prompt, /purposeful activity/); assert.match(prompt, /clothing and footwear together/);
+    assert.doesNotMatch(prompt, /These hook families|STORY:|CAST:|MOTION:|MUSIC:/);
+    get(category).hookFamilies.forEach(family => assert.ok(!prompt.includes(family.mechanismEn)));
+    assert.equal(prompt, build(category, 20), 'a seed must not prescribe one of three canned plots');
+  }
 });
 
 test('the shared module has no browser, provider, secret or Node runtime dependency', () => {
   const ast = ts.createSourceFile(filename, source, ts.ScriptTarget.ES2022, true);
-  assert.equal(ast.statements.some(statement => ts.isImportDeclaration(statement)), false);
+  assert.deepEqual(ast.statements.filter(statement => ts.isImportDeclaration(statement)).map(statement => statement.moduleSpecifier.text), ['./conceptContextDirection']);
   assert.doesNotMatch(source, /\b(?:process|fetch|require|window|document)\s*[.(]|node:|server-only|client-only/);
   assert.equal(typeof build('drama'), 'string');
+});
+
+test('the common client-safe purpose map covers all twelve visible categories with distinct rewards and separate hidden compatibility', () => {
+  const api = commonMod.exports;
+  assert.deepEqual(api.VIRAL_VISIBLE_CATEGORY_IDS, [...visibleStoryCategories, 'dance']);
+  const purposes = api.VIRAL_VISIBLE_CATEGORY_IDS.map(id => api.getConceptContextPurpose(id));
+  assert.equal(new Set(purposes.map(purpose => purpose.purposeEn)).size, 12);
+  assert.ok(!api.VIRAL_VISIBLE_CATEGORY_IDS.includes('ai_future'));
+  assert.equal(api.getConceptContextPurpose('ai_future').categoryId, 'ai_future');
+  assert.equal(api.getConceptContextPurpose('unknown'), null);
 });

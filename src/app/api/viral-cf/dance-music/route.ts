@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createAdminClient } from '@supabase/supabase-js';
 import { createClient } from '@/lib/supabase/server';
 import { DANCE_WORKFLOW } from '@/lib/dance/preset';
-import { createDanceMusicService, DanceMusicError, isActiveDanceMusic, type DanceMusicRepository, type DanceMusicRow } from '@/lib/dance/music';
+import { createDanceMusicService, DanceMusicError, danceConceptCheckpoint, isActiveDanceMusic, type DanceMusicRepository, type DanceMusicRow } from '@/lib/dance/music';
+import { createDanceConceptMusicPlan } from '@/lib/dance/conceptMusicPlan';
 import { submitKieSunoJob } from '../../../../../worker/suno-provider';
 
 export const runtime = 'nodejs';
-export const maxDuration = 60;
+export const maxDuration = 300;
 const FIELDS = 'id,user_id,title,status,is_public,created_at,audio_url,source_audio_url,license_hash';
-const MAX_BODY_BYTES = 1024;
+const MAX_BODY_BYTES = 8 * 1024;
 const headers = { 'Cache-Control': 'no-store' };
 
 async function context() {
@@ -40,12 +41,16 @@ async function context() {
       check(error); return true;
     },
     async updatePending(row, change) {
-      const { data, error } = await admin.from('generations').update(change).eq('id', row.id).eq('user_id', row.user_id)
-        .eq('status', 'generating').is('source_audio_url', null).eq('license_hash', row.license_hash).select('id').maybeSingle();
+      let query = admin.from('generations').update(change).eq('id', row.id).eq('user_id', row.user_id)
+        .eq('status', 'generating').is('source_audio_url', null);
+      const token = danceConceptCheckpoint(row);
+      query = token ? query.like('license_hash', `{"danceConceptCheckpoint":"${token}",%`) : query.eq('license_hash', row.license_hash);
+      const { data, error } = await query.select('id').maybeSingle();
       check(error); return Boolean(data);
     },
   };
   return { userId: data.user.id, service: createDanceMusicService({ repository, storageOrigin: new URL(url).origin,
+    planConceptMusic: createDanceConceptMusicPlan,
     submit: async options => {
       const apiKey = (process.env.KIE_API_KEY || '').trim();
       if (!apiKey) throw new DanceMusicError('음악 생성 설정을 확인해 주세요.', 'SERVER_CONFIG', 503);

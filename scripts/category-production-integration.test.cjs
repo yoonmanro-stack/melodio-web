@@ -28,7 +28,8 @@ function evaluate(relative, overrides, env, fetchImpl) {
   return mod.exports;
 }
 const noNetwork = () => { throw Error('REAL_PROVIDER_ACCESS_FORBIDDEN'); };
-const quality = evaluate('src/lib/vle/categoryQualityDirection.ts', {}, {}, noNetwork);
+const common = evaluate('src/lib/vle/conceptContextDirection.ts', {}, {}, noNetwork);
+const quality = evaluate('src/lib/vle/categoryQualityDirection.ts', { './conceptContextDirection': common }, {}, noNetwork);
 const creative = evaluate('src/lib/vle/categoryCreativePlan.ts', {}, {}, noNetwork);
 function extractFunction(relative, name, dependencies = {}) {
   const file = ts.createSourceFile(relative, fs.readFileSync(path.join(stage, relative), 'utf8'), ts.ScriptTarget.ES2022, true);
@@ -217,8 +218,8 @@ test('visual prompt compilation uses the completed song and category rules, with
   const c = fixture('grok-video/prompt', { providerResponse: () => Response.json({ choices: [{ finish_reason: 'stop', message: { content, refusal: null } }] }) });
   const response = await c.api.POST(request('grok-video/prompt', { category: 'horror_mystery', title: '잠들기 전의 민망함', topic: '잠들려다 옛 실수가 떠올라 이불을 덮는다.', lyrics: '옛 인사만 떠올라', genre: 'quiet piano' }));
   assert.equal(response.status, 200); assert.equal(c.calls.provider.length, 1);
-  const body = c.calls.provider[0].body; assert.match(body.messages[0].content, /embarrassment comedy/);
-  assert.match(body.messages[0].content, /quiet medium|Quiet medium/);
+  const body = c.calls.provider[0].body; assert.match(body.messages[0].content, /recognizable embarrassment/);
+  assert.match(body.messages[0].content, /Frame the cause and response/);
   assert.match(body.messages[1].content, /옛 인사만 떠올라/); assert.match(body.messages[1].content, /잠들려다 옛 실수/);
   assert.equal((await response.json()).prompt, content.trim());
 });
@@ -292,7 +293,7 @@ test('visual compiler receives exact approved cast and does not contradict it wi
   const response = await c.api.POST(request('grok-video/prompt', { category: 'human', title: '가방만 퇴근', topic: '퇴근하려는 직장인의 새 일상', lyrics: '가방만 먼저 퇴근', creativePlan: plan }));
   assert.equal(response.status, 200); assert.equal(c.calls.provider.length, 1);
   const system = c.calls.provider[0].body.messages[0].content;
-  assert.match(system, /APPROVED SCENE\/Cast CONTRACT/);
+  assert.match(system, /APPROVED COMPLETE PRODUCTION CONTRACT/);
   assert.ok(system.includes(plan.roles[0].appearance)); assert.ok(system.includes(plan.roles[1].appearance));
   assert.match(system, /off_screen roles must not be added/);
   assert.doesNotMatch(system, /THIS RENDER'S MANDATORY VARIATION/);
@@ -300,4 +301,20 @@ test('visual compiler receives exact approved cast and does not contradict it wi
   const badPlan = approvedPlan(); badPlan.roles[1].id = 'R1';
   const denied = await malformed.api.POST(request('grok-video/prompt', { category: 'human', topic: '새 일상', creativePlan: badPlan }));
   assert.equal(denied.status, 400); assert.equal(malformed.calls.provider.length, 0);
+});
+
+function freshProductionPlan() {
+  return { ...approvedPlan(), sceneContext: { place: '직원이 손님을 맞는 실제 카페', ongoingActivity: '여성이 주문을 마치고 자리에 가려 한다.', immediateTrigger: '동료가 같은 자리로 가려는 모습을 본다.', settingEvidence: '주문을 받는 직원과 손님 동선으로 공용 영업 공간이 보인다.' },
+    wardrobes: [{ roleId: 'R1', clothing: '카페 외출에 맞는 단정한 재킷과 바지', footwear: '재킷과 어울리는 편한 낮은 구두' }, { roleId: 'R2', clothing: '외출용 남색 재킷과 바지', footwear: '남색 재킷과 맞는 단정한 신발' }],
+    music: { genreEn: 'playful funk', vocalEn: 'natural Korean adult voice', moodEn: 'wry anticipation', styleEn: 'clipped bass with a brief piano answer', rationale: '같은 자리로 향하는 몸의 반응을 리듬으로 드러낸다.', targetBpm: 116, isInstrumental: false } };
+}
+
+test('visual compilation receives the entire saved context and role-bound clothing and footwear', async () => {
+  const plan = freshProductionPlan(), content = 'Preserve the selected commercial cafe setting and the exact original actors, clothing and shoes while showing the same authored action and outcome. '.repeat(8);
+  const c = fixture('grok-video/prompt', { providerResponse: () => Response.json({ choices: [{ finish_reason: 'stop', message: { content, refusal: null } }] }) });
+  const response = await c.api.POST(request('grok-video/prompt', { category: 'human', title: '같은 자리', topic: '카페에서 벌어진 같은 상황', lyrics: '같은 자리로 향해', creativePlan: plan }));
+  assert.equal(response.status, 200); assert.equal(c.calls.provider.length, 1);
+  const system = c.calls.provider[0].body.messages[0].content;
+  assert.ok(system.includes(JSON.stringify(plan))); assert.match(system, /Do not re-invent the setting/);
+  assert.match(system, /Every wardrobe entry remains bound to its roleId/); assert.match(system, /Music is already selected and remains unchanged/);
 });

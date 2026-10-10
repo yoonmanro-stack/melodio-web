@@ -162,14 +162,17 @@ test('network failure reuses the same music request ID and chosen privacy on ret
     return { track: track(request.body.requestId, { status: 'generating', audioUrl: null, isPublic: request.body.isPublic }) };
   } });
   await ui.settle();
+  walk(ui.tree, node => node.type === 'textarea' && node.props['aria-label'] === '새 음원의 핵심 컨셉과 맥락')[0].props.onChange({ target: { value: '  카페 마감 뒤 동료들이 해방감을 춤으로 표현한다.  ' } });
   walk(ui.tree, node => node.type === 'input' && node.props.type === 'checkbox')[0].props.onChange({ target: { checked: false } });
   await ui.settle();
   button(ui.tree, '새 댄스 음원 만들기').props.onClick(); await ui.settle();
   assert.match(label(ui.tree), /테스트 연결 끊김/);
-  button(ui.tree, '새 댄스 음원 만들기').props.onClick(); await ui.settle();
+  button(ui.tree, '같은 음원 요청 상태 확인').props.onClick(); await ui.settle();
   const posts = ui.requests.filter(request => request.body);
   assert.equal(posts.length, 2); assert.equal(posts[0].body.requestId, posts[1].body.requestId);
   assert.equal(posts[0].body.isPublic, false); assert.equal(posts[1].body.isPublic, false); assert.equal(ui.uuidCount, 1);
+  assert.equal(posts[0].body.musicMode, 'concept'); assert.equal(posts[0].body.coreContext, '카페 마감 뒤 동료들이 해방감을 춤으로 표현한다.');
+  assert.deepEqual(posts[0].body, posts[1].body); assert.equal(Object.hasOwn(posts[0].body, 'musicProfileId'), false);
 });
 
 test('old selected deep-link track is merged into the newest 30 and retained during music polling', async () => {
@@ -495,19 +498,22 @@ test('music profile and optional vocal choice are submitted and frozen for an un
     return { track: track(request.body.requestId, { status: 'generating', audioUrl: null }) };
   } });
   await ui.settle();
-  assert.equal(walk(select(ui.tree, '댄스 음악'), node => node.type === 'option').length, 6);
+  assert.equal(walk(select(ui.tree, '댄스 음악'), node => node.type === 'option').length, 7);
+  assert.equal(select(ui.tree, '댄스 음악').props.value, '');
+  walk(ui.tree, node => node.type === 'textarea' && node.props['aria-label'] === '새 음원의 핵심 컨셉과 맥락')[0].props.onChange({ target: { value: '  늦은 밤 동료 셋이 카페를 마무리한다.  ' } });
   select(ui.tree, '댄스 음악').props.onChange({ target: { value: 'house-footwork' } });
   select(ui.tree, '보컬').props.onChange({ target: { value: 'on' } });
   await ui.settle();
   button(ui.tree, '새 댄스 음원 만들기').props.onClick(); await ui.settle();
   assert.equal(select(ui.tree, '댄스 음악').props.disabled, true);
   assert.equal(select(ui.tree, '보컬').props.disabled, true);
-  button(ui.tree, '새 댄스 음원 만들기').props.onClick(); await ui.settle();
+  button(ui.tree, '같은 음원 요청 상태 확인').props.onClick(); await ui.settle();
   const posts = ui.requests.filter(request => request.body);
   assert.equal(posts.length, 2);
   assert.deepEqual(posts[0].body, posts[1].body);
   assert.equal(posts[0].body.musicProfileId, 'house-footwork');
   assert.equal(posts[0].body.vocalPreference, 'on');
+  assert.equal(posts[0].body.musicMode, 'concept'); assert.equal(posts[0].body.coreContext, '늦은 밤 동료 셋이 카페를 마무리한다.');
 });
 
 test('saved creative choices restore, edits require a new plan, and prepare carries all choices', async () => {

@@ -14,12 +14,11 @@ import {
 } from "lucide-react";
 import DanceChallengeStudio from "@/components/viral/DanceChallengeStudio";
 import { DANCE_CATEGORY_ID } from "@/lib/dance/preset";
-import { getCategoryQualityDirection } from "@/lib/vle/categoryQualityDirection";
+import { getConceptContextPurpose } from "@/lib/vle/conceptContextDirection";
 import { readCategoryBriefExtras, type CategoryBriefExtras, type CategoryCreativePlan } from "@/lib/vle/categoryCreativePlan";
 import { registerActiveAudio } from "@/lib/globalAudio";
 import { selectTopViralVideos } from '@/lib/video/viralVideoRanking';
 import ViralVideoLibrary, { readCachedViralVideos, type ViralVideo, type ViralCategory } from "@/components/viral/ViralVideoLibrary";
-import { getCategorySpec } from "@/lib/vle/viralCategorySpec";
 import { VIRAL_SONG_SPEC, estimateSeconds } from "@/lib/vle/viralSongSpec";
 import PetVideoStudio, { PetEpisodeEditor, readPetEpisode } from "@/components/viral/PetVideoStudio";
 import { validatePetEpisode, type PetEpisode, type PetVideoJobView } from "@/lib/vle/petEpisode";
@@ -349,9 +348,9 @@ function ViralTrendZoneStudio() {
   // Step 4: 가사 확인 & 음원 생성 (customLyrics + generatedResult)
   // Step 5: AI 영상 생성 (grokVideoResult)
 
-  const [selectedGenre, setSelectedGenre] = useState(VIRAL_GENRE_OPTIONS[0]);
-  const [selectedMood, setSelectedMood] = useState(VIRAL_MOOD_OPTIONS[0]);
-  const [selectedVocal, setSelectedVocal] = useState(VOCAL_OPTIONS[0].value);
+  const [selectedGenre, setSelectedGenre] = useState('');
+  const [selectedMood, setSelectedMood] = useState('');
+  const [selectedVocal, setSelectedVocal] = useState('');
   const [duration, setDuration] = useState('30s');
 
   const [brandName, setBrandName] = useState("");
@@ -387,49 +386,20 @@ function ViralTrendZoneStudio() {
   // 사용자가 고른 사운드가 카테고리 톤과 충돌할 때 서버가 내려주는 경고
   const [styleWarnings, setStyleWarnings] = useState<string[]>([]);
 
-  // 카테고리를 바꾸면 Step 2 드롭다운을 그 카테고리의 권장 사운드로 맞춘다.
-  // 사용자는 이후 자유롭게 바꿀 수 있고, 바꾼 값이 항상 우선한다.
+  // Empty overrides let the planner choose music from the concept and context.
+  // Changing category preserves choices the user explicitly made.
   useEffect(() => {
-    const spec = getCategorySpec(genCategory);
-    if (!spec) return;
-    setSelectedGenre(spec.recommendedUi.genre);
-    setSelectedMood(spec.recommendedUi.mood);
-    setSelectedVocal(genCategory === 'pet' ? 'Talk-Sung, Spoken Word, Comical Narrative Vocal' : spec.recommendedUi.vocal);
     setStyleWarnings([]);
   }, [genCategory]);
 
   const handleAutoTuneShortsSound = () => {
     if (isOptimizing || isGenerating || isGeneratingGrokVideo) return;
-    // 카테고리 권장 사운드가 있으면 그것을 쓴다. 무작위 조합을 던지면
-    // 귀여운 댕냥이에 사이버펑크·떼창이 걸리는 사고가 다시 난다.
-    const spec = getCategorySpec(genCategory);
-    if (spec) {
-      const nextVocal = genCategory === 'pet' ? 'Talk-Sung, Spoken Word, Comical Narrative Vocal' : spec.recommendedUi.vocal;
-      const changed = selectedGenre !== spec.recommendedUi.genre || selectedMood !== spec.recommendedUi.mood || selectedVocal !== nextVocal;
-      setSelectedGenre(spec.recommendedUi.genre);
-      setSelectedMood(spec.recommendedUi.mood);
-      setSelectedVocal(nextVocal);
-      if (changed) invalidatePlanningOutput();
-      setStyleWarnings([]);
-      setAutoTuneFlash(true);
-      setTimeout(() => setAutoTuneFlash(false), 2000);
-      return;
-    }
-
-    const presetPairs = [
-      { genre: "K-Pop 댄스", mood: "Comical (코믹한)", vocal: "Bright Female Vocal" },
-      { genre: "힙합/디스곡", mood: "Raw (날것의)", vocal: "Auto-Tune Vocal" },
-      { genre: "펑크/디스코", mood: "Sarcastic (풍자적인)", vocal: "Talk-Sung, Spoken Word, Comical Narrative Vocal" },
-      { genre: "테크/사이버펑크", mood: "High Energy (에너지 넘치는)", vocal: "Group Chant, Gang Vocals, Comical Chorus" },
-      { genre: "애니 OST/락", mood: "Rebellious (반항적인)", vocal: "High-pitched Cute Vocal, Sped-up Vocal, Chipmunk Voice" },
-    ];
-    const picked = presetPairs[Math.floor(Math.random() * presetPairs.length)];
-    const changed = selectedGenre !== picked.genre || selectedMood !== picked.mood || selectedVocal !== picked.vocal;
-    setSelectedGenre(picked.genre);
-    setSelectedMood(picked.mood);
-    setSelectedVocal(picked.vocal);
+    const changed = !!(selectedGenre || selectedMood || selectedVocal);
+    setSelectedGenre('');
+    setSelectedMood('');
+    setSelectedVocal('');
     if (changed) invalidatePlanningOutput();
-
+    setStyleWarnings([]);
     setAutoTuneFlash(true);
     setTimeout(() => setAutoTuneFlash(false), 2000);
   };
@@ -1493,13 +1463,14 @@ function ViralTrendZoneStudio() {
     setSelectedGrokTrackId('');
     setIsPlaying(false);
     try {
-      const baseGenrePrompt = VIRAL_GENRE_PROMPT_MAP[selectedGenre];
+      const baseGenrePrompt = VIRAL_GENRE_PROMPT_MAP[selectedGenre] || '';
+      const isInstrumental = viralBriefSnapshot?.isInstrumental ?? selectedVocal.includes('Instrumental');
       // 카테고리 사운드 정체성은 서버(producer-brief)가 결정한다.
       // 여기서 "B-grade meme energy" 같은 전역 접미사를 덧붙이면 모든
       // 카테고리가 같은 소리가 나고, 귀여운 댕냥이가 디스곡이 된다.
-      const neutralSuffix = selectedVocal.includes("Instrumental") ? ", no vocals, immediate groove, complete musical ending" : ", no intro, instant vocal start, vocal-centric mix, dry close-up vocals, minimal instrumentation, crystal clear vocal delivery";
+      const neutralSuffix = isInstrumental ? ", no vocals, immediate groove, complete musical ending" : ", no intro, instant vocal start, vocal-centric mix, dry close-up vocals, minimal instrumentation, crystal clear vocal delivery";
       let finalStyle = optimizedPrompt || `${baseGenrePrompt}, ${selectedMood}, ${selectedVocal}${neutralSuffix}, high-fidelity studio mastering`;
-      if (optimizedPrompt && !selectedVocal.includes('Instrumental') && !optimizedPrompt.includes('no intro')) {
+      if (optimizedPrompt && !isInstrumental && !optimizedPrompt.includes('no intro')) {
         finalStyle = `no intro, instant vocal start, ${optimizedPrompt}`;
       }
       let finalLyrics = customLyrics;
@@ -1533,11 +1504,11 @@ function ViralTrendZoneStudio() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           stylePrompt: finalStyle,
-          lyricsPrompt: selectedVocal.includes('Instrumental') ? '' : finalLyrics,
+          lyricsPrompt: isInstrumental ? '' : finalLyrics,
           title: finalTitle,
-          isInstrumental: selectedVocal.includes('Instrumental'),
+          isInstrumental,
           sunoVersion: 'v5.5',
-          selections: { genre: [selectedGenre], mood: [selectedMood], vocal: [selectedVocal] },
+          selections: { genre: selectedGenre ? [selectedGenre] : [], mood: selectedMood ? [selectedMood] : [], vocal: selectedVocal ? [selectedVocal] : [] },
           presetId: genCategory,
           presetName: `${categoryLabel} 템플릿`,
           sourceMenu: 'viral',
@@ -1603,7 +1574,7 @@ function ViralTrendZoneStudio() {
                 audio_url: gen.audio_url || gen.source_audio_url,
                 thumbnailUrl: gen.thumbnail_url || gen.image_url || CATEGORY_THUMBNAIL_MAP[genCategory] || 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png',
                 visualGuide: "9:16 vertical shorts visual outline",
-                tags: [selectedGenre, selectedMood, selectedVocal, 'viral'],
+                tags: [selectedGenre, selectedMood, selectedVocal, 'viral'].filter(Boolean),
                 suggestedTitle: finalTitle,
                 is_viral: true,
                 source: 'viral',
@@ -1910,13 +1881,13 @@ function ViralTrendZoneStudio() {
             {/* ─── Step Progress Indicator ─── */}
             {genCategory !== DANCE_CATEGORY_ID && (() => {
               const step1Done = !!genCategory;
-              const step2Done = !!(selectedGenre && selectedMood && selectedVocal);
+              const step2Done = true;
               const step3Done = planIsCurrent;
               const step4Done = !!generatedResult;
               const step5Done = !!grokVideoResult;
               const steps = [
                 { num: 1, label: '카테고리', done: step1Done },
-                { num: 2, label: '스타일', done: step2Done },
+                { num: 2, label: '음악 스타일', done: step2Done },
                 { num: 3, label: 'AI 기획', done: step3Done },
                 { num: 4, label: '음원 생성', done: step4Done },
                 { num: 5, label: '영상 생성', done: step5Done },
@@ -2166,11 +2137,11 @@ function ViralTrendZoneStudio() {
               <DanceChallengeStudio userId={petUserId} initialTrackId={searchParams.get('danceTrack') || ''}
                 onBusyChange={setDanceBusy} onCompleted={onDanceCompleted} />
             ) : <>
-            {/* Step 2: 스타일 선택 */}
+            {/* Step 2: optional music overrides */}
             <div className="space-y-4 pt-2">
               <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2 border-b border-white/10 pb-3">
                 <div className="w-6 h-6 rounded-lg bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-xs font-mono text-indigo-300 shrink-0">2</div>
-                스타일 선택
+                음악 스타일 AI 설계
                 <button
                   type="button"
                   onClick={handleAutoTuneShortsSound}
@@ -2182,19 +2153,22 @@ function ViralTrendZoneStudio() {
                   }`}
                 >
                   <Sparkles className={`w-3.5 h-3.5 ${autoTuneFlash ? 'text-black' : 'text-cyan-300'} shrink-0`} />
-                  <span>{autoTuneFlash ? '✓ 스타일 자동 선택 완료!' : '⚡ 스타일 자동 선택'}</span>
+                  <span>{autoTuneFlash ? '✓ AI 스타일 설계 사용' : 'AI 설계에 맡기기'}</span>
                 </button>
               </h3>
-
+              <p className="text-[11px] sm:text-xs text-zinc-400">AI가 컨셉에 맞춰 장르·무드·보컬을 설계합니다. 다음 단계에서 새 음원을 생성합니다.</p>
+              <details className="space-y-4">
+                <summary className="cursor-pointer text-xs sm:text-sm font-bold text-zinc-200">음악 스타일을 직접 지정하기</summary>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-xs sm:text-sm text-zinc-200 font-extrabold flex items-center gap-1.5">
                     <Music4 className="w-4 h-4 text-cyan-400" />
-                    풍자/밈 전용 장르
+                    장르
                   </label>
                   <div className="relative">
                     <select value={selectedGenre} onChange={(e) => handlePlanningStyleChange('genre', e.target.value)} disabled={isOptimizing || isGenerating || isGeneratingGrokVideo}
                       className="w-full bg-black/60 border border-white/15 rounded-xl px-4 py-3 text-xs sm:text-sm font-bold text-white appearance-none focus:outline-none focus:border-indigo-500">
+                      <option value="" className="bg-zinc-900 text-white">AI 설계 · 컨셉과 맥락에 맞춤</option>
                       {VIRAL_GENRE_OPTIONS.map(g => <option key={g} value={g} className="bg-zinc-900 text-white">{g}</option>)}
                     </select>
                     <ChevronDown className="w-4 h-4 text-zinc-300 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -2203,11 +2177,12 @@ function ViralTrendZoneStudio() {
                 <div className="space-y-2">
                   <label className="text-xs sm:text-sm text-zinc-200 font-extrabold flex items-center gap-1.5">
                     <Sparkles className="w-4 h-4 text-purple-400" />
-                    전용 무드
+                    분위기
                   </label>
                   <div className="relative">
                     <select value={selectedMood} onChange={(e) => handlePlanningStyleChange('mood', e.target.value)} disabled={isOptimizing || isGenerating || isGeneratingGrokVideo}
                       className="w-full bg-black/60 border border-white/15 rounded-xl px-4 py-3 text-xs sm:text-sm font-bold text-white appearance-none focus:outline-none focus:border-indigo-500">
+                      <option value="" className="bg-zinc-900 text-white">AI 설계 · 컨셉과 맥락에 맞춤</option>
                       {VIRAL_MOOD_OPTIONS.map(m => <option key={m} value={m} className="bg-zinc-900 text-white">{m}</option>)}
                     </select>
                     <ChevronDown className="w-4 h-4 text-zinc-300 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
@@ -2223,11 +2198,13 @@ function ViralTrendZoneStudio() {
                 <div className="relative">
                   <select value={selectedVocal} onChange={(e) => handlePlanningStyleChange('vocal', e.target.value)} disabled={isOptimizing || isGenerating || isGeneratingGrokVideo}
                     className="w-full bg-black/60 border border-white/15 rounded-xl px-4 py-3 text-xs sm:text-sm font-bold text-white appearance-none focus:outline-none focus:border-indigo-500">
+                    <option value="" className="bg-zinc-900 text-white">AI 설계 · 보컬 여부와 스타일</option>
                     {VOCAL_OPTIONS.map(v => <option key={v.value} value={v.value} className="bg-zinc-900 text-white">{v.label}</option>)}
                   </select>
                   <ChevronDown className="w-4 h-4 text-zinc-300 absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                 </div>
               </div>
+              </details>
 
               {/* 카테고리 톤과 충돌하는 사운드를 골랐을 때의 경고. 생성은 막지 않는다. */}
               {styleWarnings.length > 0 && (
@@ -2245,22 +2222,25 @@ function ViralTrendZoneStudio() {
             <div className="space-y-4 pt-2">
               <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2 border-b border-white/10 pb-3">
                 <div className="w-6 h-6 rounded-lg bg-fuchsia-500/20 border border-fuchsia-500/40 flex items-center justify-center text-xs font-mono text-fuchsia-300 shrink-0">3</div>
-                상황 설정 & AI 기획
+                핵심 컨셉·맥락 & AI 기획
               </h3>
               {(() => {
-                const direction = getCategoryQualityDirection(genCategory);
+                const direction = getConceptContextPurpose(genCategory);
                 if (!direction) return null;
                 const plan = (producerBrief as { creativePlan?: CategoryCreativePlan } | null)?.creativePlan;
                 return <div className="space-y-2 rounded-xl border border-fuchsia-400/25 bg-fuchsia-950/20 p-3 text-xs leading-relaxed text-zinc-200">
                   <p className="font-bold text-fuchsia-100">{direction.labelKo} · 기획 방향</p>
+                  <p>{direction.purposeKo}</p>
                   {plan ? <dl className="space-y-2">
                     <div><dt className="font-bold">첫 2초</dt><dd>{plan.opening2s.action}</dd></div>
                     <div><dt className="font-bold">계속 볼 이유</dt><dd>{plan.watchReason}</dd></div>
                     <div><dt className="font-bold">전개</dt><dd>{plan.development.join(' → ')}</dd></div>
                     <div><dt className="font-bold">결말</dt><dd>{plan.payoff}</dd></div>
                     <div><dt className="font-bold">출연 구성</dt><dd>{plan.roles.map(role => `${role.role} · ${role.count}명/마리 · ${role.appearance}${role.visibility === "off_screen" ? " (화면 밖)" : ""}`).join(" / ")}</dd></div>
-                  </dl> : <p>{direction.hookFamilies.map(family => family.labelKo).join(' · ')} 등 다양한 방식으로 새 상황을 기획합니다.</p>}
-                  <ul className="space-y-1 text-zinc-300">{direction.quickChecksKo.map(check => <li key={check}>· {check}</li>)}</ul>
+                    {plan.sceneContext ? <div><dt className="font-bold">장소와 상황</dt><dd>{plan.sceneContext.place} · {plan.sceneContext.ongoingActivity} · {plan.sceneContext.immediateTrigger}</dd></div> : null}
+                    {plan.wardrobes ? <div><dt className="font-bold">의상과 신발</dt><dd>{plan.wardrobes.map(wardrobe => `${plan.roles.find(role => role.id === wardrobe.roleId)?.role || wardrobe.roleId}: ${wardrobe.clothing} · ${wardrobe.footwear}`).join(' / ')}</dd></div> : null}
+                    {plan.music ? <div><dt className="font-bold">음악</dt><dd>{plan.music.isInstrumental ? '인스트루멘탈' : '보컬곡'} · 목표 {plan.music.targetBpm} BPM · {plan.music.styleEn}<br />{plan.music.rationale}</dd></div> : null}
+                  </dl> : <p>핵심 컨셉과 맥락을 입력하면 출연자, 장소, 의상·신발, 행동과 음악을 하나의 이야기로 기획합니다.</p>}
                 </div>;
               })()}
 
@@ -2268,17 +2248,17 @@ function ViralTrendZoneStudio() {
               <div className="space-y-2 w-full">
                 <label className="text-xs sm:text-sm text-zinc-200 font-extrabold flex items-center gap-1.5">
                   <FileText className="w-4 h-4 text-zinc-300" />
-                  상황 및 요구사항 입력
+                  핵심 컨셉과 맥락
                 </label>
                 <textarea
-                  placeholder={genCategory === 'pet' ? '예: 휴대폰을 들면 애교를 멈추는 고양이. 집사는 결국 촬영을 포기한다. 고양이 속마음으로 말하듯 노래해 줘.' : '예: 퇴근 직전 팀장이 “잠깐만”이라며 일을 더 준다. 주인공이 웃으며 노트북을 닫는 반전으로, 속마음 독백처럼 만들어 줘.'}
+                  placeholder={genCategory === 'pet' ? '예: 평소 애교가 많은 고양이가 집사가 휴대폰을 들기만 하면 행동을 멈춘다. 집사는 고양이의 일상을 촬영하고 싶다.' : '예: 퇴근 직전마다 팀장이 “잠깐만”이라며 일을 더 준다. 하루를 마친 직장인은 가방을 챙기고 나갈 준비를 하고 있다.'}
                   value={customTopic}
                   onChange={(e) => handleSituationChange(e.target.value)}
                   disabled={isOptimizing || isGenerating || isGeneratingGrokVideo}
                   maxLength={1500}
                   className="w-full bg-black/50 border border-white/15 rounded-xl px-4 py-3.5 text-xs sm:text-sm text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 resize-y h-36 min-h-[144px] leading-relaxed font-medium"
                 />
-                <p className="text-[11px] sm:text-xs text-zinc-400">입력 후 AI 기획하기를 눌러 가사와 영상 방향을 정합니다. 내용을 바꾸면 다시 기획해야 합니다.</p>
+                <p className="text-[11px] sm:text-xs text-zinc-400">어떤 이야기인지와 알아야 할 맥락만 적어 주세요. 세부 연출과 음악은 AI가 정합니다. 내용을 바꾸면 다시 기획해야 합니다.</p>
               </div>
 
               {/* AI 기획 실행 버튼 (Step 3 유일한 CTA) */}

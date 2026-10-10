@@ -51,6 +51,7 @@ export function isDanceAudioSelection(value: unknown): value is DanceAudioSelect
       && clip.onsetSeconds.every(second => Number.isFinite(second) && second >= 0 && second < 30)));
 }
 export type DanceTrack = { id: string; title: string; status: string; audioUrl: string | null; durationSeconds: number | null; createdAt: string; isPublic: boolean; requestId?: string; error?: string;
+  musicMode?: 'concept'; coreContext?: string; musicPlanningState?: 'planning' | 'planned' | 'attention'; musicProfileLock?: string; acceptedTaskReference?: string;
   musicProfileId?: string; vocalPreference?: 'recommended' | 'on' | 'off'; musicLabel?: string; instrumental?: boolean;
   savedClip?: Pick<DanceAudioSelection, 'audioUrl' | 'audioHash' | 'startSeconds' | 'durationSeconds'>; reused?: boolean; rootTrackId?: string };
 export type DanceChoreography = {

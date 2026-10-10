@@ -20,6 +20,29 @@ const creativeFields: { key: keyof DanceCreativePreferences; label: string }[] =
   { key: 'visualStyle', label: '영상 표현' }, { key: 'difficulty', label: '따라 추기 난이도' },
 ];
 const samePreferences = (left: DanceCreativePreferences | undefined, right: DanceCreativePreferences) => creativeFields.every(({ key }) => ({ ...DEFAULT_CREATIVE_PREFERENCES, ...left })[key] === ({ ...DEFAULT_CREATIVE_PREFERENCES, ...right })[key]);
+type MusicRequestSnapshot = { id: string; isPublic: boolean; musicMode: 'concept'; coreContext: string; musicProfileId?: string; vocalPreference: DanceVocalPreference };
+type MusicReceipt = MusicRequestSnapshot & { version: 1; ownerId: string; trackId: string; acceptedTaskReference: string };
+const receiptUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const receiptKey = (owner: string) => `melodio:dance-music-receipt:v1:${owner}`;
+function readMusicReceipt(raw: unknown, owner: string): MusicReceipt | null {
+  if (!receiptUuid.test(owner) || !raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const value = raw as Record<string, unknown>;
+  if (value.version !== 1 || value.ownerId !== owner || typeof value.id !== 'string' || !receiptUuid.test(value.id)
+    || value.trackId !== value.id || value.musicMode !== 'concept' || typeof value.isPublic !== 'boolean'
+    || typeof value.coreContext !== 'string' || !value.coreContext.trim() || value.coreContext.length > 1000 || /data\s*:|base64/i.test(value.coreContext)
+    || typeof value.acceptedTaskReference !== 'string' || !/^suno:kie:[a-zA-Z0-9_-]{1,200}$/.test(value.acceptedTaskReference)
+    || !['recommended', 'on', 'off'].includes(String(value.vocalPreference))
+    || (value.musicProfileId !== undefined && !DANCE_MUSIC_PROFILES.some(profile => profile.id === value.musicProfileId))) return null;
+  return { version: 1, ownerId: owner, id: value.id, trackId: value.id, musicMode: 'concept', isPublic: value.isPublic,
+    coreContext: value.coreContext, acceptedTaskReference: value.acceptedTaskReference, vocalPreference: value.vocalPreference as DanceVocalPreference,
+    ...(typeof value.musicProfileId === 'string' ? { musicProfileId: value.musicProfileId } : {}) };
+}
+function receiptTrack(receipt: MusicReceipt, row?: DanceTrack): DanceTrack {
+  return { ...row, id: receipt.trackId, requestId: receipt.id, title: row?.title || '제출 확인이 필요한 새 음원', status: 'attention',
+    audioUrl: null, durationSeconds: null, createdAt: row?.createdAt || '', isPublic: receipt.isPublic, musicMode: 'concept',
+    coreContext: receipt.coreContext, musicPlanningState: 'attention', acceptedTaskReference: receipt.acceptedTaskReference,
+    error: '음원 제출은 확인됐지만 저장 상태는 확인이 필요합니다. 같은 요청의 상태를 확인해 주세요.' };
+}
 const statusCopy: Record<DanceVideoJob['status'], string> = {
   preparing: '선택한 음원으로 아이디어와 장면 설계 준비 중…', ideas: '아이디어 3개를 비교하고 하나를 선택해 주세요.', ready: '선택한 아이디어의 장면 설계가 준비됐습니다.',
   image: '주인공과 배경 준비 중…', 'image-review': '첫 장면을 확인해 주세요.', clip1: '첫 번째 15초 영상 생성 중…',
@@ -58,8 +81,9 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
   const [duration, setDuration] = useState(0);
   const [playing, setPlaying] = useState(false);
   const [visualBrief, setVisualBrief] = useState('');
+  const [coreContext, setCoreContext] = useState('');
   const [creativePreferences, setCreativePreferences] = useState<DanceCreativePreferences>(DEFAULT_CREATIVE_PREFERENCES);
-  const [musicProfileId, setMusicProfileId] = useState<string>(DANCE_MUSIC_PROFILES[0].id);
+  const [musicProfileId, setMusicProfileId] = useState<string>('');
   const [vocalPreference, setVocalPreference] = useState<DanceVocalPreference>('recommended');
   const [job, setJob] = useState<DanceVideoJob | null>(null);
   const [uncertain, setUncertain] = useState(false);
@@ -67,7 +91,10 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
   const [listenPosition, setListenPosition] = useState(0);
   const [pendingAction, setPendingAction] = useState<'music' | 'prepare' | 'select-idea' | 'start' | 'approve-frame' | 'approve-preview' | 'resume' | 'reuse' | 'retry-plan' | null>(null);
   const [pendingIdeaId, setPendingIdeaId] = useState('');
-  const requestId = useRef<{ id: string; isPublic: boolean; musicProfileId: string; vocalPreference: DanceVocalPreference } | null>(null);
+  const requestId = useRef<MusicRequestSnapshot | null>(null);
+  const [musicReceipt, setMusicReceipt] = useState<MusicReceipt | null>(null);
+  const [receiptStored, setReceiptStored] = useState(true);
+  const receiptCache = useRef(new Map<string, MusicReceipt>());
   const reuseRequest = useRef<{ source: string; id: string } | null>(null);
   const handoff = useRef<{ userId: string; trackId: string; brief: string; preferences: DanceCreativePreferences; job: DanceVideoJob | null; uncertain: boolean } | null>(null);
   const revision = useRef(0);
@@ -85,7 +112,8 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
   const currentJob = useRef(job);
   currentJob.current = job;
   const track = tracks.find(t => t.id === trackId);
-  const musicProfile = DANCE_MUSIC_PROFILES.find(profile => profile.id === musicProfileId) || DANCE_MUSIC_PROFILES[0];
+  const conceptContextForIdeas = track?.id === trackId && track.musicMode === 'concept' && !track.reused ? track.coreContext || '' : '';
+  const musicProfile = DANCE_MUSIC_PROFILES.find(profile => profile.id === musicProfileId);
   const musicPending = Boolean(track && ['generating', 'pending'].includes(track.status));
   const videoPending = active(job);
   const busy = pending || musicPending || videoPending;
@@ -109,10 +137,26 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
   useEffect(() => {
     if (previousUser.current !== null && previousUser.current !== userId) {
       revision.current += 1; audio.current?.pause(); previewAudio.current?.pause(); clipAudio.current?.pause(); video.current?.pause();
-      setTracks([]); setTrackId(''); setJob(null); setVisualBrief(''); setCreativePreferences(DEFAULT_CREATIVE_PREFERENCES); setMusicProfileId(DANCE_MUSIC_PROFILES[0].id); setVocalPreference('recommended'); setError(''); setUncertain(false); requestId.current = null; reuseRequest.current = null; handoff.current = null;
+      setTracks([]); setTrackId(''); setJob(null); setVisualBrief(''); setCoreContext(''); setCreativePreferences(DEFAULT_CREATIVE_PREFERENCES); setMusicProfileId(''); setVocalPreference('recommended'); setError(''); setUncertain(false); requestId.current = null; reuseRequest.current = null; handoff.current = null;
     }
     previousUser.current = userId;
   }, [userId]);
+  useEffect(() => {
+    setMusicReceipt(null); setReceiptStored(true);
+    if (!userId || !receiptUuid.test(userId)) return;
+    let receipt = receiptCache.current.get(userId) || null;
+    if (!receipt) try {
+      const stored = localStorage.getItem(receiptKey(userId));
+      if (stored && stored.length <= 5000) receipt = readMusicReceipt(JSON.parse(stored), userId);
+    } catch { setReceiptStored(false); }
+    if (!receipt) return;
+    receiptCache.current.set(userId, receipt); setMusicReceipt(receipt);
+    try { localStorage.setItem(receiptKey(userId), JSON.stringify(receipt)); } catch { setReceiptStored(false); }
+    requestId.current = { id: receipt.id, isPublic: receipt.isPublic, musicMode: 'concept', coreContext: receipt.coreContext,
+      ...(receipt.musicProfileId ? { musicProfileId: receipt.musicProfileId } : {}), vocalPreference: receipt.vocalPreference };
+    setCoreContext(receipt.coreContext); setMusicProfileId(receipt.musicProfileId || ''); setVocalPreference(receipt.vocalPreference);
+    if (!initialTrackId || initialTrackId === receipt.trackId) setTrackId(receipt.trackId);
+  }, [userId, initialTrackId]);
   useEffect(() => { if (track) setIsPublic(track.isPublic); }, [track?.id, track?.isPublic]);
   useEffect(() => { if (lockedClip) setStartSeconds(lockedClip.startSeconds); }, [trackId, lockedClip?.startSeconds]);
   useEffect(() => { onBusyChange(busy); return () => onBusyChange(false); }, [busy, onBusyChange]);
@@ -131,7 +175,20 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
       const chosen = await jsonRequest<{ tracks: DanceTrack[] }>(`/api/viral-cf/dance-music?trackId=${encodeURIComponent(selected)}`, undefined, signal);
       result.tracks = [...chosen.tracks, ...result.tracks];
     }
-    if (!signal?.aborted && currentUser.current === userId) setTracks(result.tracks);
+    if (signal?.aborted || currentUser.current !== userId) return result.tracks;
+    const receipt = receiptCache.current.get(userId);
+    if (receipt) {
+      const row = result.tracks.find(item => item.id === receipt.trackId);
+      const matches = row?.requestId === receipt.id && row.musicMode === 'concept' && row.coreContext === receipt.coreContext;
+      if (matches && row.status === 'completed' && row.audioUrl) {
+        receiptCache.current.delete(userId); setMusicReceipt(null); setError('');
+        if (requestId.current?.id === receipt.id) requestId.current = null;
+        try { localStorage.removeItem(receiptKey(userId)); } catch { /* Memory still follows the verified completed source. */ }
+      } else if (!row || (matches && row.acceptedTaskReference !== receipt.acceptedTaskReference)) {
+        result.tracks = [receiptTrack(receipt, row), ...result.tracks.filter(item => item.id !== receipt.trackId)];
+      }
+    }
+    setTracks(result.tracks);
     return result.tracks;
   }, [userId]);
 
@@ -171,6 +228,13 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
     return () => controller.abort();
   }, [trackId, userId]);
 
+  // Recover the saved video brief first. A fresh concept song supplies the same
+  // context to ideas only when there is no existing video selection to preserve.
+  useEffect(() => {
+    if (!conceptContextForIdeas || !audioReady || job || jobLoading || uncertain) return;
+    setVisualBrief(previous => previous || conceptContextForIdeas);
+  }, [conceptContextForIdeas, audioReady, job, jobLoading, uncertain]);
+
   const refreshJob = useCallback(async () => {
     if (!trackId || !userId || inRequest.current) return;
     const current = revision.current;
@@ -203,15 +267,47 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
 
   async function createMusic() {
     if (!userId || pending || inRequest.current) return;
+    if (!requestId.current && (!coreContext.trim() || coreContext.trim().length > 1000)) {
+      setError('새 음원의 핵심 컨셉과 맥락을 1–1000자로 입력해 주세요.'); return;
+    }
     inRequest.current = true; setPending(true); setPendingAction('music'); setError('');
     const current = revision.current;
-    requestId.current ||= { id: crypto.randomUUID(), isPublic, musicProfileId, vocalPreference };
+    requestId.current ||= { id: crypto.randomUUID(), isPublic, musicMode: 'concept', coreContext: coreContext.trim(), ...(musicProfileId ? { musicProfileId } : {}), vocalPreference };
     try {
       const { id, ...musicRequest } = requestId.current;
-      const data = await jsonRequest<{ track: DanceTrack }>('/api/viral-cf/dance-music', { requestId: id, ...musicRequest });
-      if (current !== revision.current) return;
-      setTracks(old => [data.track, ...old.filter(t => t.id !== data.track.id)]); setTrackId(data.track.id); requestId.current = null; reuseRequest.current = null;
-    } catch (e) { setError(e instanceof Error ? e.message : '음원 제출 상태를 확인해 주세요.'); }
+      const knownReceipt = receiptCache.current.get(userId);
+      let data: { track: DanceTrack };
+      if (knownReceipt?.id === id) {
+        // A browser receipt can request an owner-scoped read, never another submission.
+        const saved = await jsonRequest<{ tracks: DanceTrack[] }>(`/api/viral-cf/dance-music?trackId=${encodeURIComponent(id)}`);
+        data = { track: saved.tracks.find(item => item.id === id && item.requestId === id && item.musicMode === 'concept'
+          && item.coreContext === knownReceipt.coreContext) || receiptTrack(knownReceipt) };
+      } else data = await jsonRequest<{ track: DanceTrack }>('/api/viral-cf/dance-music', { requestId: id, ...musicRequest });
+      const returnedReceipt = data.track.id === id && data.track.requestId === id && data.track.musicMode === 'concept'
+        && data.track.coreContext === musicRequest.coreContext && data.track.acceptedTaskReference
+        ? readMusicReceipt({ ...musicRequest, id, version: 1, ownerId: userId, trackId: id, acceptedTaskReference: data.track.acceptedTaskReference }, userId) : null;
+      const cachedReceipt = receiptCache.current.get(userId);
+      const receipt = returnedReceipt || (cachedReceipt?.id === id ? cachedReceipt : null);
+      const matchesReceipt = receipt && data.track.id === receipt.trackId && data.track.requestId === receipt.id
+        && data.track.musicMode === 'concept' && data.track.coreContext === receipt.coreContext;
+      const completedReceipt = matchesReceipt && data.track.status === 'completed' && Boolean(data.track.audioUrl);
+      let stored = true;
+      if (receipt && !completedReceipt) {
+        receiptCache.current.set(userId, receipt);
+        try { localStorage.setItem(receiptKey(userId), JSON.stringify(receipt)); } catch { stored = false; }
+      } else if (completedReceipt) {
+        receiptCache.current.delete(userId);
+        try { localStorage.removeItem(receiptKey(userId)); } catch { /* Completed audio remains authoritative. */ }
+      }
+      if (current !== revision.current || currentUser.current !== userId) return;
+      if (receipt && !completedReceipt) { setMusicReceipt(receipt); setReceiptStored(stored); }
+      else if (completedReceipt) setMusicReceipt(null);
+      const receivedTrack = receipt && matchesReceipt && !completedReceipt && data.track.acceptedTaskReference !== receipt.acceptedTaskReference
+        ? receiptTrack(receipt, data.track) : data.track;
+      setTracks(old => [receivedTrack, ...old.filter(t => t.id !== data.track.id)]); setTrackId(data.track.id);
+      if (!receipt || completedReceipt) requestId.current = null;
+      reuseRequest.current = null;
+    } catch (e) { if (current === revision.current && currentUser.current === userId) setError(e instanceof Error ? e.message : '음원 제출 상태를 확인해 주세요.'); }
     finally { inRequest.current = false; setPending(false); setPendingAction(null); }
   }
   async function act(action: 'prepare' | 'start' | 'approve-frame' | 'approve-preview' | 'resume') {
@@ -297,43 +393,60 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
 
   return <section aria-label="댄스·챌린지 제작" className="space-y-6 pt-2">
     <div className="rounded-2xl border border-fuchsia-400/40 bg-fuchsia-950/40 p-4 space-y-2">
-      <h3 className="flex items-center gap-2 font-bold text-fuchsia-100"><Music4 className="h-4 w-4" />음악부터 만드는 댄스 챌린지</h3>
-      <p className="text-sm text-zinc-200">시선을 붙잡을 상황과 춤을 기획하세요. 솔로부터 군집, 사람과 동물의 콜라보, 동물만의 챌린지까지 만들 수 있습니다.</p>
+      <h3 className="flex items-center gap-2 font-bold text-fuchsia-100"><Music4 className="h-4 w-4" />컨셉에서 시작하는 댄스 챌린지</h3>
+      <p className="text-sm text-zinc-200">핵심 컨셉과 맥락을 적으면 AI가 어울리는 음악 스타일을 설계하고 새 음원을 만듭니다. 같은 맥락으로 춤과 영상을 이어서 기획합니다.</p>
       <p className="text-xs leading-relaxed text-zinc-300">{job && !job.qualityPreviewRequired ? '아이디어 3개 중 하나를 골라 장면을 설계하고, 첫 장면에서 출연자와 장소를 확인한 뒤 영상 제작을 시작합니다.' : '아이디어 3개 중 하나를 골라 장면을 설계합니다. 첫 장면과 5초 동작 테스트를 확인한 뒤 30초 영상 제작을 시작합니다.'}</p>
     </div>
     {!userId ? <p className="text-sm text-amber-200">로그인 후 음원을 생성할 수 있습니다.</p> : null}
     {error ? <p role="alert" className="rounded-xl border border-amber-400/40 bg-amber-950/40 p-3 text-sm text-amber-100">{error}</p> : null}
     <div className="space-y-3">
       <h3 className="font-bold text-white">1 · 음악 만들기</h3>
+      {!trackId ? <label className="block space-y-2 text-sm text-zinc-200">새 음원의 핵심 컨셉과 맥락
+        <textarea aria-label="새 음원의 핵심 컨셉과 맥락" className={`${field} min-h-28 resize-y`} maxLength={1000} disabled={busy || Boolean(requestId.current)} value={coreContext}
+          onChange={e => setCoreContext(e.target.value)} placeholder="예: 영업이 끝난 카페에서 동료 셋이 함께 마무리하며 들뜬 마음을 춤으로 표현한다." />
+      </label> : null}
+      <p className="text-xs leading-relaxed text-zinc-300">AI가 컨셉에 맞춰 장르·무드·보컬 여부와 가사를 설계한 뒤 새 음원을 생성합니다.</p>
+      <details className="space-y-3">
+        <summary className="cursor-pointer text-sm font-bold text-zinc-200">음악 스타일 직접 지정 (선택)</summary>
       <div className="grid gap-3 sm:grid-cols-2">
         <label className="block space-y-2 text-sm text-zinc-200">댄스 음악
           <select aria-label="댄스 음악" className={field} value={musicProfileId} disabled={busy || Boolean(requestId.current)} onChange={e => setMusicProfileId(e.target.value)}>
+            <option value="">AI 설계 · 컨셉과 맥락에 맞춤</option>
             {DANCE_MUSIC_PROFILES.map(profile => <option key={profile.id} value={profile.id}>{profile.label}</option>)}
           </select>
         </label>
         <label className="block space-y-2 text-sm text-zinc-200">보컬
           <select aria-label="보컬" className={field} value={vocalPreference} disabled={busy || Boolean(requestId.current)} onChange={e => setVocalPreference(e.target.value as DanceVocalPreference)}>
-            <option value="recommended">음악에 맞춰 추천</option><option value="on">보컬 포함</option><option value="off">보컬 없이</option>
+            <option value="recommended">AI 설계 · 보컬 여부 판단</option><option value="on">보컬 포함</option><option value="off">보컬 없이</option>
           </select>
         </label>
       </div>
-      <div className="rounded-xl border border-white/15 bg-black/30 p-3 text-sm text-zinc-200 space-y-1">
+      {musicProfile ? <div className="rounded-xl border border-white/15 bg-black/30 p-3 text-sm text-zinc-200 space-y-1">
         <p>{musicProfile.description}</p><p className="text-xs text-zinc-300">{musicProfile.rhythmPurpose}</p>
-      </div>
+      </div> : null}
+      </details>
       {trackId ? <p className="text-xs text-zinc-300">음악·보컬 선택은 다음 새 음원에 적용됩니다. 저장된 음원은 그대로 유지됩니다.</p> : null}
-      {requestId.current && !pending ? <p className="text-xs text-amber-200">처음 선택한 음악·보컬 설정으로 요청 상태를 확인합니다.</p> : null}
+      {requestId.current && !pending ? <p className="text-xs text-amber-200">처음 입력한 컨셉·맥락과 음악 설정으로 같은 요청의 상태를 확인합니다.</p> : null}
+      {musicReceipt?.ownerId === userId ? <div role="status" className="space-y-1 rounded-xl border border-amber-400/30 bg-amber-950/20 p-3 text-xs text-amber-100">
+        <p>음원 제출 확인 번호: <code>{musicReceipt.acceptedTaskReference}</code></p>
+        <p>원래 요청 {musicReceipt.id}의 저장 상태를 확인합니다.</p>
+        {!receiptStored ? <p>브라우저에 복구 영수증을 저장하지 못했습니다. 이 창의 확인 번호를 보관해 주세요.</p> : null}
+      </div> : null}
       <label className="flex items-center gap-2 text-sm text-zinc-200"><input type="checkbox" checked={isPublic} disabled={busy || Boolean(trackId) || Boolean(requestId.current)} onChange={e => setIsPublic(e.target.checked)} />완성 영상을 바이럴 & 트렌드 존에 공개</label>
-      <button type="button" className={`${button} w-full`} disabled={!userId || busy} onClick={() => void createMusic()} aria-busy={(pending && pendingAction === 'music') || musicPending}>
-        {(pending && pendingAction === 'music') || musicPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Music4 className="h-4 w-4" />}{musicPending ? '음원 생성 중…' : pending && pendingAction === 'music' ? '요청 중…' : '새 댄스 음원 만들기'}
+      <button type="button" className={`${button} w-full`} disabled={!userId || busy || (!requestId.current && !coreContext.trim())} onClick={() => void createMusic()} aria-busy={(pending && pendingAction === 'music') || musicPending}>
+        {(pending && pendingAction === 'music') || musicPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Music4 className="h-4 w-4" />}{musicPending ? track?.musicPlanningState === 'planning' ? '음악 스타일 설계 중…' : '음원 생성 중…' : pending && pendingAction === 'music' ? '요청 중…' : requestId.current ? '같은 음원 요청 상태 확인' : '새 댄스 음원 만들기'}
       </button>
       {tracks.length ? <label className="block space-y-1 text-sm text-zinc-200">내 댄스 음원
         <select aria-label="내 댄스 음원" className={field} value={trackId} disabled={pending || videoPending} onChange={e => { setError(''); setUncertain(false); setTrackId(e.target.value); setVisualBrief(''); setCreativePreferences(DEFAULT_CREATIVE_PREFERENCES); }}>
-          <option value="">음원을 선택해 주세요</option>
+          <option value="">새 컨셉으로 음악 만들기</option>
           {tracks.map(t => <option key={t.id} value={t.id}>{t.title}{t.status !== 'completed' ? ` · ${t.status === 'generating' ? '생성 중' : '상태 확인 필요'}` : ''}</option>)}
         </select>
       </label> : null}
+      {track?.musicMode === 'concept' && track.coreContext ? <div className="space-y-1 rounded-xl border border-fuchsia-400/25 bg-fuchsia-950/20 p-3">
+        <p className="text-xs font-bold text-fuchsia-100">이 음원에 사용한 핵심 컨셉과 맥락</p><p className="whitespace-pre-wrap text-sm text-zinc-200">{track.coreContext}</p>
+      </div> : null}
       {track?.musicLabel ? <p className="text-sm text-fuchsia-100">선택한 음원의 음악 · {track.musicLabel}{typeof track.instrumental === 'boolean' ? ` · ${track.instrumental ? '보컬 없음' : '보컬 포함'}` : ''}</p> : null}
-      {musicPending || error ? <button type="button" className="text-sm text-cyan-200 underline" onClick={() => void refreshTracks().catch(e => setError(e.message))}>음원 상태 확인</button> : null}
+      {musicPending || error || musicReceipt?.ownerId === userId ? <button type="button" className="text-sm text-cyan-200 underline" onClick={() => void refreshTracks().catch(e => setError(e.message))}>음원 상태 확인</button> : null}
       {track?.error ? <p className="text-sm text-amber-200">{track.error}</p> : null}
     </div>
     {audioReady ? <div className="space-y-4 border-t border-white/15 pt-5">
@@ -376,8 +489,10 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
     </div> : null}
     {audioReady ? <div className="space-y-4 border-t border-white/15 pt-5">
       <h3 className="font-bold text-white">3 · 상황 설정 &amp; 아이디어 선택</h3>
-      <p className="text-sm leading-relaxed text-zinc-200">출연 구성과 규모를 선택하세요. 두세 명의 주고받는 춤, 군집의 순차 반응, 사람과 동물의 대비처럼 관계를 활용한 아이디어를 제안합니다.</p>
+      <p className="text-sm leading-relaxed text-zinc-200">음원의 컨셉과 맥락으로 영상 아이디어를 기획합니다. 출연자·장소·의상·신발·동작은 AI가 함께 정하며, 원하는 설정만 직접 지정할 수 있습니다.</p>
       <p className="text-xs leading-relaxed text-zinc-300">먼저 글로 된 아이디어 3개를 만듭니다. 아이디어 생성에는 기획 비용이 발생할 수 있으며, 이미지와 영상은 이후 버튼을 누를 때 제작합니다.</p>
+      <details className="space-y-3">
+        <summary className="cursor-pointer text-sm font-bold text-zinc-200">영상 연출 직접 지정 (선택)</summary>
       <div className="grid gap-3 sm:grid-cols-2">
         {creativeFields.filter(({ key }) => key !== 'species' || ['auto', 'animal', 'human_animal'].includes(creativePreferences.performer)).map(({ key, label }) => <label key={key} className="block space-y-2 text-sm text-zinc-200">{label}
           <select aria-label={label} className={field} value={creativePreferences[key] ?? DEFAULT_CREATIVE_PREFERENCES[key]} disabled={busy || frozen || (key === 'ensemble' && ['duo', 'group', 'crowd'].includes(creativePreferences.performer))} onChange={e => {
@@ -400,8 +515,9 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
         </label>)}
       </div>
       <p className="text-xs leading-relaxed text-zinc-300">군집은 4–6명으로 구성하고 각 출연자의 역할과 위치를 유지합니다. 동물은 종류에 맞는 걸음·고개·앞발·날개 움직임으로 기획합니다.</p>
-      <label className="block space-y-2 text-sm text-zinc-200">상황 및 요구사항 입력 (선택)
-        <textarea className={`${field} min-h-28 resize-y`} maxLength={1000} disabled={busy || frozen} value={visualBrief} onChange={e => setVisualBrief(e.target.value)} placeholder="장소·인물의 분위기·반전 상황을 자유롭게 적어주세요. 비워두면 선택한 출연 구성에 맞춰 첫 장면의 후킹부터 전개와 결말까지 새로 기획합니다." />
+      </details>
+      <label className="block space-y-2 text-sm text-zinc-200">영상의 핵심 컨셉과 맥락 (선택)
+        <textarea aria-label="영상의 핵심 컨셉과 맥락" className={`${field} min-h-28 resize-y`} maxLength={1000} disabled={busy || frozen} value={visualBrief} onChange={e => setVisualBrief(e.target.value)} placeholder="새 음원에 사용한 컨셉과 맥락이 이어집니다. 기존 음원을 직접 선택했다면 새로운 상황을 적거나 AI에 맡길 수 있습니다." />
       </label>
       <button type="button" className={`${button} w-full`} aria-busy={pending && pendingAction === 'prepare'} disabled={busy || jobLoading || uncertain || frozen || !clipReady || preparedSelection} onClick={() => void act('prepare')}>
         {pending && pendingAction === 'prepare' ? <RefreshCw className="h-4 w-4 animate-spin" /> : preparedSelection ? <Check className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}{pending && pendingAction === 'prepare' ? '아이디어 준비 중…' : preparedSelection ? job?.status === 'ideas' ? '아이디어 준비 완료' : '장면 설계 완료' : '아이디어 3개 받기'}

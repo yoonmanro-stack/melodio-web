@@ -6,7 +6,7 @@ const ts = require('typescript');
 
 const root = path.resolve(__dirname, '..');
 const baseline = process.env.CATEGORY_BRIEF_BASELINE_ROOT || root;
-const authored = new Set(['src/lib/vle/categoryBriefPlanner.ts', 'src/lib/vle/categoryQualityDirection.ts', 'src/lib/vle/categoryCreativePlan.ts']);
+const authored = new Set(['src/lib/vle/categoryBriefPlanner.ts', 'src/lib/vle/categoryQualityDirection.ts', 'src/lib/vle/categoryCreativePlan.ts', 'src/lib/vle/conceptContextDirection.ts']);
 const cache = new Map();
 function load(relative) {
   if (cache.has(relative)) return cache.get(relative).exports;
@@ -47,6 +47,9 @@ function draft(category = 'human') {
     payoff: '여성이 빈 잔을 들어 보며 자기 가방만 의자에 다시 놓는다.',
     roles: [{ id: 'R1', role: '먼저 출근한 성인 여성 직장인', appearance: '짧은 검은 머리와 흰 셔츠를 입은 성인 여성', count: 1, visibility: 'on_screen' },
       { id: 'R2', role: '잠시 들른 성인 동료', appearance: '갈색 재킷을 입은 성인 남성', count: 1, visibility: 'on_screen' }],
+    sceneContext: { place: '동료가 잠시 들르는 실제 사무실', ongoingActivity: '먼저 출근한 여성이 일을 시작하려고 커피잔을 든다.', immediateTrigger: '커피를 마시려는 순간 빈 잔이 손에 잡힌다.', settingEvidence: '업무를 준비하는 직원과 동료의 출입으로 공용 업무 공간임이 보인다.' },
+    wardrobes: [{ roleId: 'R1', clothing: '활동하기 편한 흰 셔츠와 깔끔한 슬랙스', footwear: '출근 복장과 맞는 단정한 낮은 구두' }, { roleId: 'R2', clothing: '사무실에 맞는 갈색 재킷과 긴 바지', footwear: '재킷에 맞는 단정한 업무용 신발' }],
+    music: { genreEn: 'dry office funk', vocalEn: 'one expressive adult Korean female voice', moodEn: 'wry everyday tension', styleEn: 'muted bass and clipped piano answer the empty-cup reveal', rationale: '빈 잔을 확인하는 짧은 정지와 속마음을 또렷하게 들려준다.', targetBpm: 118, isInstrumental: false },
   }, lyricsStructure: structuredClone(structure) };
 }
 function envelope(value = draft(), overrides = {}) {
@@ -76,10 +79,10 @@ test('one strict request preserves topic and all music overrides and returns the
   assert.ok(init.signal instanceof AbortSignal);
   const supplied = JSON.parse(body.messages[1].content);
   assert.equal(supplied.sourceTopic, input.topic);
-  assert.deepEqual(supplied.music, { genreEn: 'acoustic jazz', vocalEn: 'warm female voice', moodEn: 'dry playful tension', targetBpm: 120, isInstrumental: false });
+  assert.deepEqual(supplied.musicOverrides, { genreEn: 'acoustic jazz', vocalEn: 'warm female voice', moodEn: 'dry playful tension', isInstrumental: false });
   assert.match(body.messages[0].content, /새 기획|NEW complete Korean/);
   assert.match(body.messages[0].content, /Existing|existing completed song/);
-  assert.match(result.stylePrompt, /acoustic jazz/); assert.match(result.stylePrompt, /warm female voice/); assert.match(result.stylePrompt, /dry playful tension/);
+  assert.doesNotMatch(result.stylePrompt, /dry office funk/); assert.match(result.stylePrompt, /acoustic jazz/); assert.match(result.stylePrompt, /warm female voice/); assert.match(result.stylePrompt, /dry playful tension/);
   assert.equal(result.sourceTopic, input.topic); assert.equal(result.categoryId, 'human');
   assert.equal(result.specVersion, 'category-brief-v1'); assert.equal(result.source, 'fresh-ai-planner');
   assert.equal(result.aiGenerated, true); assert.equal(result.qualityStatus, 'planning-only');
@@ -125,9 +128,9 @@ test('invalid input shape, prototype values, encoded content and oversize option
 test('instrumental mode is independent of genre and removes vocal demands while retaining an editorial story guide', async () => {
   const c = fixture(); const result = await create({ ...input, genreEn: 'acoustic jazz', vocalEn: 'Instrumental (연주곡)', moodEn: 'calm' }, options(c));
   assert.equal(result.isInstrumental, true); assert.equal(result.lyricsPurpose, 'story-guide');
-  assert.match(result.stylePrompt, /acoustic jazz/); assert.match(result.stylePrompt, /instrumental only/);
+  assert.doesNotMatch(result.stylePrompt, /dry office funk/); assert.match(result.stylePrompt, /acoustic jazz/); assert.match(result.stylePrompt, /instrumental only/);
   assert.doesNotMatch(result.stylePrompt, /instant vocal|vocal-centric|Korean diction|female voice/);
-  assert.equal(JSON.parse(c.calls[0].body.messages[1].content).music.isInstrumental, true);
+  assert.equal(JSON.parse(c.calls[0].body.messages[1].content).musicOverrides.isInstrumental, true);
   const voice = fixture(); const vocalResult = await create({ ...input, genreEn: 'instrumental jazz arrangement', vocalEn: 'female voice' }, options(voice));
   assert.equal(vocalResult.isInstrumental, false); assert.match(vocalResult.stylePrompt, /female voice/);
   const backing = fixture(); const backingResult = await create({ ...input, vocalEn: 'warm female vocals over instrumental backing' }, options(backing));
@@ -253,3 +256,26 @@ test('each request has a new nonce and the configured abort signal bounds an int
   finally { clearTimeout(keepAlive); }
   assert.equal(calls, 1);
 });
+
+test('automatic music is selected from the fresh plan and may use an instrumental story guide without matrix defaults', async () => {
+  const value = draft(); value.creativePlan.music.isInstrumental = true;
+  const c = fixture(() => Response.json(envelope(value)));
+  const result = await create(input, options(c));
+  assert.equal(c.calls.length, 1);
+  const supplied = JSON.parse(c.calls[0].body.messages[1].content);
+  assert.deepEqual(supplied.musicOverrides, { genreEn: '', vocalEn: '', moodEn: '', isInstrumental: null });
+  assert.equal(result.isInstrumental, true); assert.equal(result.lyricsPurpose, 'story-guide');
+  assert.match(result.stylePrompt, /dry office funk/); assert.match(result.stylePrompt, /muted bass/);
+  assert.doesNotMatch(result.stylePrompt, /female voice|Korean diction/);
+  assert.deepEqual(result.creativePlan.sceneContext, value.creativePlan.sceneContext);
+  assert.deepEqual(result.creativePlan.wardrobes, value.creativePlan.wardrobes);
+});
+
+test('fresh production context and role-bound wardrobes are required without another call', async () => {
+  for (const mutate of [p => delete p.sceneContext, p => p.wardrobes[0].roleId = 'R2', p => p.music.rationale = 'https://private.test/']) {
+    const value = draft(); mutate(value.creativePlan); const c = fixture(() => Response.json(envelope(value)));
+    await assert.rejects(create(input, options(c)), error => error.status === 422);
+    assert.equal(c.calls.length, 1);
+  }
+});
+
