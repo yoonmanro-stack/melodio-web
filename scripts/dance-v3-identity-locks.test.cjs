@@ -133,6 +133,52 @@ test('provider scene fields cannot inject replacements after environment validat
   assert.doesNotThrow(() => validatePlan(planFor(duo, { imagePrompt: 'One dancer recoils while the partner responds with a weight shift.' }), duo, 138));
 });
 
+test('actual V3 plan compilation accepts clip time windows and scene durations without changing frozen mixed cast', () => {
+  const seed = seedFor(prefs({ performer: 'human_animal', ensemble: 'trio', species: 'penguin' }), 'temporal-scenes', '성인 여성 한 명과 펭귄 두 마리가 함께 공연한다.');
+  const clips = ['0-15s: performer_1 steps back as performer_2 and performer_3 close the gap.',
+    '15-30s: performer_1 moves around the closing pair.'];
+  const input = planFor(seed, { imagePrompt: 'A 30s dance sequence with continuous native movement.', clips });
+  const plan = validatePlan(input, seed, 138);
+  assert.equal(plan.performanceVersion, 3); assert.equal(plan.version, 2);
+  assert.deepEqual(plan.cast.members.map(member => [member.id, member.species]), seed.anchors.map(anchor => [anchor.id, anchor.species]));
+  assert.equal(plan.choreography.steps.reduce((sum, step) => sum + step.count, 0), 8);
+  assert.ok(plan.imagePrompt.includes(input.imagePrompt));
+  for (const [index, clip] of clips.entries()) assert.ok(plan.clips[index].includes(clip));
+  assert.ok([plan.imagePrompt, ...plan.clips].every(prompt => Buffer.byteLength(prompt) <= 4096));
+  for (const imagePrompt of ['For 30s the saved cast keeps continuous native movement.', 'The scene is 30s long with continuous native movement.',
+    'A 30s performance with continuous native movement.', 'Duration: 30s. Continuous native movement.', 'A sequence with a length of 30s and continuous native movement.']) {
+    assert.doesNotThrow(() => validatePlan(planFor(seed, { imagePrompt, clips }), seed, 138));
+  }
+});
+
+test('scene timing exceptions still reject explicit actor ages, bare decades and wardrobe age data', () => {
+  const seed = seedFor(prefs(), 'actor-age-guard');
+  for (const clip of ['0-15s: performer_1 is in her 20s and steps back.', '15-30s: performer_1 is in her 30s and moves forward.',
+    'performer_1 age: 30s, with continuous foot movement.', 'A 20s dancer moves toward the cue.', '30s']) {
+    assert.throws(() => validatePlan(planFor(seed, { clips: [clip, 'Continue the same native movement.'] }), seed, 138),
+      error => error.code === 'PLAN_INVALID' && error.message.startsWith('클립 1 연출:') && error.message.includes('나이'), clip);
+  }
+  const wardrobe = manifest(seed, { wardrobes: [{ memberId: 'performer_1', description: 'red tracksuit, 30s' }] });
+  assert.throws(() => validatePlan(planFor(seed, { productionManifest: wardrobe }), seed, 138),
+    error => error.code === 'PLAN_INVALID' && error.message.startsWith('공연 제작 설정:') && error.message.includes('의상'));
+  assert.throws(() => validatePlan(planFor(seed, { imagePrompt: 'A 30s dance sequence with a woman in her 20s.' }), seed, 138),
+    error => error.code === 'PLAN_INVALID' && error.message.startsWith('시작 프레임:') && error.message.includes('나이'));
+});
+
+test('known local creative validation keeps field-specific diagnostics while unknown or spoofed errors stay generic', () => {
+  const seed = seedFor(prefs(), 'safe-diagnostics');
+  assert.throws(() => validatePlan(planFor(seed, { imagePrompt: 'Change the dancer hair to blonde. UNTRUSTED_SCENE_TEXT' }), seed, 138), error => {
+    assert.equal(error.code, 'PLAN_INVALID'); assert.match(error.message, /^시작 프레임:/); assert.match(error.message, /정체성/);
+    assert.doesNotMatch(error.message, /blonde|UNTRUSTED_SCENE_TEXT/); return true;
+  });
+  const external = Object.assign(new Error('UNTRUSTED_EXTERNAL_FAILURE'), { name: 'DanceCreativeInputError', code: 'CREATIVE_CONFLICT' });
+  const untrustedManifest = new Proxy(manifest(seed), { get(target, key, receiver) { if (key === 'version') throw external; return Reflect.get(target, key, receiver); } });
+  assert.throws(() => validatePlan(planFor(seed, { productionManifest: untrustedManifest }), seed, 138), error => {
+    assert.equal(error.code, 'PLAN_INVALID'); assert.equal(error.message, '공연 제작 설정이 저장된 정체성·선택과 다릅니다.');
+    assert.doesNotMatch(JSON.stringify({ message: error.message, diagnostics: error.planFailure }), /UNTRUSTED_EXTERNAL_FAILURE/); return true;
+  });
+});
+
 test('seed validation accepts saved V3 seeds without member wardrobe locks and rejects malformed authoritative fields', () => {
   const seed = seedFor(prefs(), 'stored'); const older = structuredClone(seed); delete older.locks.wardrobeByMember;
   assert.deepEqual(validateDanceProductionSeedV3(older, 'stored'), older); assert.doesNotThrow(() => directionFor(older, manifest(older)));

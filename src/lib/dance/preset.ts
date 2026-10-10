@@ -1,6 +1,7 @@
 import type { DanceCreativePreferences, DanceCreativeDirection, DanceCastContract, DanceProductionSeedV3, DanceProductionManifestV3 } from './creativeDirection';
 import type { DanceMusicSpec } from './musicProfiles';
 import type { DanceProposal, DanceIdeaValidationRule } from './ideas';
+import type { DancePerformanceStaging } from './cast';
 
 /** Versioned music-first workflow; legacy track and snapshot identities stay readable. */
 export const DANCE_CATEGORY_ID = 'dance_challenge' as const;
@@ -59,7 +60,7 @@ export type DanceChoreography = {
   firstPose: string; endPose: string;
 };
 export type DancePlan = { title: string; summary: string; identity: string; imagePrompt: string; clips: [string, string]; previewPrompt?: string; version?: 2; choreography?: DanceChoreography; cast?: DanceCastContract;
-  performanceVersion?: 3; productionManifest?: DanceProductionManifestV3 };
+  performanceVersion?: 3; productionManifest?: DanceProductionManifestV3; performanceStaging?: DancePerformanceStaging };
 export type DanceActorFailure = {
   category: 'actors_shape' | 'actor_shape' | 'member_order' | 'action_format' | 'missing_anatomy' | 'nonphysical_action' | 'vague_action' | 'unrecognized_motion' | 'animal_anatomy' | 'sequence_motion' | 'sequence_lower_body';
   memberId?: string; ideaIndex?: number; stepIndex?: number;

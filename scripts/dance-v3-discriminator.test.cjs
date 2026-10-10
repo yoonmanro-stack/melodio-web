@@ -57,7 +57,7 @@ function readyJob() {
 function legacyJob(version) {
   const job = readyJob();
   for (const key of ['planningVersion', 'productionSeed', 'productionManifest', 'productionLockedAt', 'ideas', 'selectedIdea']) delete job[key];
-  delete job.plan.performanceVersion; delete job.plan.productionManifest;
+  delete job.plan.performanceVersion; delete job.plan.productionManifest; delete job.plan.performanceStaging;
   job.ideaReviewRequired = false; job.qualityPreviewRequired = false;
   if (version === 1) { delete job.plan.version; delete job.plan.choreography; delete job.plan.cast; delete job.direction; }
   return job;

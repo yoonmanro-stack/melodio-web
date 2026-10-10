@@ -69,6 +69,7 @@ export function readDanceVideoJob(record: DanceOwnedRecord): DanceSavedJob | nul
 }
 function performancePlanDirection(job: DanceVideoJob, plan: DancePlan) {
   if (!job.productionSeed || plan.performanceVersion !== 3 || plan.version !== 2 || !plan.productionManifest || !plan.choreography) throw new DanceVideoError('선택한 공연의 완성된 제작 설정이 필요합니다.', 'PLAN_INVALID');
+  if (Object.hasOwn(plan, 'performanceStaging') && plan.performanceStaging !== (job.productionSeed.locks.layoutId ? 'layout-locked' : 'initial')) throw new DanceVideoError('공연 배치 설정이 저장된 배치 선택과 다릅니다.', 'PLAN_INVALID', 409);
   if (typeof plan.imagePrompt !== 'string' || !plan.imagePrompt.trim() || Buffer.byteLength(plan.imagePrompt, 'utf8') > 4096
     || !Array.isArray(plan.clips) || plan.clips.length !== 2 || plan.clips.some(prompt => typeof prompt !== 'string' || !prompt.trim() || Buffer.byteLength(prompt, 'utf8') > 4096)) throw new DanceVideoError('저장된 공연 제작 프롬프트를 확인해 주세요.', 'PLAN_INVALID');
   const preview = validateDancePreviewScene(plan.previewPrompt);
@@ -87,7 +88,7 @@ function version3(value: unknown): boolean { return object(value) && value.versi
 /** V3-only fields remain version evidence even when another discriminator is damaged. */
 function hasPerformanceMarkers(job: DanceVideoJob): boolean {
   return job.planningVersion === 3 || ['productionSeed', 'productionManifest', 'productionLockedAt'].some(key => Object.hasOwn(job, key))
-    || (object(job.plan) && (version3(job.plan) || ['performanceVersion', 'productionManifest'].some(key => Object.hasOwn(job.plan!, key))))
+    || (object(job.plan) && (version3(job.plan) || ['performanceVersion', 'productionManifest', 'performanceStaging'].some(key => Object.hasOwn(job.plan!, key))))
     || version3(job.selectedIdea) || (Array.isArray(job.ideas) && job.ideas.some(version3));
 }
 function assertPerformanceDiscriminator(job: DanceVideoJob): boolean {
@@ -514,7 +515,8 @@ export function buildDancePreviewPrompt(job: DanceVideoJob): string {
       validateDanceActorSequence(validated, cast);
       motion = validated.map(step => `${step.count}counts:${step.actors.map(actor => `${actor.memberId}:${actor.action}`).join(',')}`).join('; ');
     }
-    const prompt = `Five-second experimental motion test. ${scene}\n${cadence}\n${cast ? compactDanceCastPrompt(cast) : `Same original cast: ${job.plan.identity}.`} Preserve identities, setting, premise props and readable whole bodies from the action still. Start its physical conflict at0s; show the first causal response by5s, no camera-facing lineup or separate intro. Species-native role actions: ${motion}. Keep body movement and foot/weight contact readable. The later payoff/restart is outside this test. No cuts, acrobatics, text, logos, speech or generated music. Silent visual; original audio is combined separately; no verified synchronization claim.`;
+    const staging = job.planningVersion === 3 ? job.plan.performanceStaging : undefined;
+    const prompt = `Five-second experimental motion test. ${scene}\n${cadence}\n${cast ? compactDanceCastPrompt(cast, staging) : `Same original cast: ${job.plan.identity}.`} Preserve identities, setting, premise props and readable whole bodies from the action still. Start its physical conflict at0s; show the first causal response by5s, no camera-facing lineup or separate intro. Species-native role actions: ${motion}. Keep body movement and foot/weight contact readable. The later payoff/restart is outside this test. No cuts, acrobatics, text, logos, speech or generated music. Silent visual; original audio is combined separately; no verified synchronization claim.`;
     if (Buffer.byteLength(prompt, 'utf8') > 4096) throw new DanceVideoError('테스트 영상 프롬프트가 UTF-8 기준 4,096바이트를 넘었습니다.', 'PLAN_LENGTH', 422);
     return prompt;
   }

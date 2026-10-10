@@ -2,6 +2,7 @@ import { readPetBoundedBody } from '../video/petMedia';
 import { DANCE_PRESET, type DanceActorFailure, type DancePlanFailure, type DanceVideoJob } from './preset';
 import { DANCE_PLAN_TIMEOUT_MS, DanceVideoError } from './videoService';
 import { validateDanceCastContract, type DanceCastContract, type DanceCastMember } from './creativeDirection';
+import type { DancePerformanceStaging } from './cast';
 import { DANCE_PERFORMANCE_PREMISE_LIMITS, DANCE_PERFORMANCE_FAMILIES, validateDancePerformancePremisesV3, dancePerformanceSelectionFacts, danceExactFactsSchema, matchesDanceExactFacts, type DancePerformancePremiseV3 } from './premises';
 
 export type DanceHookStory = { openingExpectation: string; watchReason: string; development: string; payoff: string; restart: string };
@@ -42,7 +43,13 @@ function sameDanceCast(left: DanceCastContract, right: DanceCastContract): boole
     && left.members.every((member, index) => member.identity === right.members[index].identity && member.movementAnatomy === right.members[index].movementAnatomy);
 }
 /** Small identity/slot contract; the starting image carries the detailed appearance. */
-export function compactDanceCastPrompt(cast: DanceCastContract): string {
+export function compactDanceCastPrompt(cast: DanceCastContract, staging?: DancePerformanceStaging): string {
+  if (staging !== undefined) {
+    if (staging !== 'initial' && staging !== 'layout-locked') throw Object.assign(new Error('공연 배치 설정을 확인해 주세요.'), { code: 'CREATIVE_CAST' });
+    const placement = staging === 'initial' ? `Initial staging: ${cast.formation}. Position labels are opening stage anchors; follow approved continuous native paths.`
+      : `Explicit required relative formation: ${cast.formation}. Preserve it while moving natively within its constraint; bodies are not static. Position labels are opening stage anchors.`;
+    return `CAST CONTRACT: exactly ${cast.count} ${cast.kind} performers. ${placement} ${cast.members.map(member => `${member.id}=${member.species}/${member.role}/${member.position}`).join('; ')}. Immutable IDs, species, appearance and native anatomy; all remain visible, no instant relocation or extra, missing, merged or replaced actors. Continue clip2 from actual ending poses and positions; never reapply opening anchors. Each follows its own role and native anatomy, never identical forced human steps.`;
+  }
   return `CAST CONTRACT: exactly ${cast.count} ${cast.kind} performers; ${cast.formation}. ${cast.members.map(member => `${member.id}=${member.species}/${member.role}/${member.position}`).join('; ')}. All remain visible; no extra, missing, merged or replaced actors. Each follows its own role and native anatomy, never identical forced human steps.`;
 }
 

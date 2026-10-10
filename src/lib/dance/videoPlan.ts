@@ -1,7 +1,8 @@
 import { readPetBoundedBody } from '../video/petMedia';
 import { DANCE_PRESET, type DancePlan, type DancePlanFailure, type DanceVideoJob, type DanceChoreography as StoredDanceChoreography } from './preset';
 import { DANCE_PLAN_TIMEOUT_MS, DANCE_PREVIEW_SCENE_LIMIT, DANCE_PREVIEW_SCENE_PATTERN, validateDancePreviewScene, DanceVideoError } from './videoService';
-import { buildDanceCadenceGuide, buildDanceCastPrompt, validateDanceCastContract, resolveDanceProductionDirectionV3, validateDanceProductionManifestV3, assertDanceProductionSceneTextV3, DANCE_CREATIVE_OPTIONS, DANCE_PRODUCTION_LAYOUTS, type DanceCreativeDirection, type DanceCastContract, type DanceProductionSeedV3 } from './creativeDirection';
+import { buildDanceCadenceGuide, buildDanceCastPrompt, validateDanceCastContract, resolveDanceProductionDirectionV3, validateDanceProductionManifestV3, assertDanceProductionSceneTextV3, DanceCreativeInputError, DANCE_CREATIVE_OPTIONS, DANCE_PRODUCTION_LAYOUTS, type DanceCreativeDirection, type DanceCastContract, type DanceProductionSeedV3 } from './creativeDirection';
+import type { DancePerformanceStaging } from './cast';
 import { isDancePerformancePremiseV3, danceExactFactsSchema, type DancePerformancePremiseV3 } from './premises';
 import { compactDanceCastPrompt, danceCastRoster, danceCastRosterSchema, matchesDanceCastRoster, validateDanceActorActions, validateDanceActorSequence, danceActorStepSummary, isDanceVisibleMotion, DANCE_ACTOR_ACTION_GUIDE, DANCE_ACTOR_SUMMARY_GUIDE, DANCE_ACTOR_ANATOMY_PATTERN, DANCE_PHYSICAL_ACTION_GUIDE, DANCE_SITUATION_HOOK_GUIDE, DANCE_EXPRESSION_GUIDE, DANCE_ACTION_STILL_GUIDE, DANCE_MUSIC_PROFILE_CUE_GUIDE, getDanceValidationDetails } from './ideas';
 
@@ -65,7 +66,11 @@ function performanceSeedCast(seed: DanceProductionSeedV3): DanceCastContract {
   }).cast!;
 }
 function performancePlanSystem(seed: DanceProductionSeedV3, premise: DancePerformancePremiseV3): string {
+  const staging = seed.locks.layoutId
+    ? `STAGING: layout-locked. The explicit relative layout ${seed.locks.layoutId} remains a hard contract throughout. Plan continuous species-native paths within that relative constraint; bodies need not stay motionless, but no action may break the required relative layout.`
+    : 'STAGING: initial. Resolve layoutId and positions as opening stage anchors only. Then use continuous species-native paths required by the approved premise and choreography; distances and positions may change through visible movement. Do not turn the opening formation into fixed zones that prevent the selected interaction or its consequence.';
   return `You are a performance production director resolving ONLY the selected premise into one complete original30-second dance production. Return strict dance_plan_performance_v3 JSON, version:3 and seedId copied exactly. First resolve productionManifest (version3,locationId,danceStyleId,layoutId,locationDetail,wardrobes[{memberId,description}]) to serve that premise. Unlocked production choices are yours; saved automatic ideas-stage hints are not production contracts. Keep every hard lock, complete FULL visualBrief and frozenCast identity fact. Never add or replace performers or redesign faces, human adult age/gender/hair, animal coat, robot face/surface or anatomy. Wardrobes in exact frozenCast order contain ONLY clothing/accessory descriptions, <=60 English ASCII characters, with no new identity facts. Use explicit requested garment/color terms in English on each member specified by wardrobeByMember. locationDetail<=240 English ASCII characters describes ONLY environment, lighting and visible scene objects, preserving the selected locationId and requested place; no cast, identity, age, gender, wardrobe or replacement instructions.
+${staging} Keep every saved actor and identity readable with complete bodies, grounded contact and no instant relocation. Clip2 starts from clip1's actual ending positions, facing and spacing; never reapply the opening stage anchors. An explicit relative layout still applies at that boundary.
 The first image is an action still with readable first-frame premise cue, character purpose and motivated gaze/weight/body direction. Emotion may develop while facial identity stays fixed. Build toward the approved emotionalReaction,turn,payoff and participation; the visible pleasure, tension, comedy or spectacle is the watch motivation. Do not flatten the premise into a generic camera-facing lineup, marching, arbitrary prop-rule puzzle or a geometry-only pose. Other unselected ideas never enter this plan. ${DANCE_ACTION_STILL_GUIDE}
 Then supply complete choreography:{hookName,steps,segments,firstPose,endPose} in concise Korean. hookName<=60. steps contains2-4 distinct movements, count integer1-7, SUM EXACTLY8, focus arms|feet|body|combined. Every step includes actors:[{memberId,action}] for ALL ${seed.count} saved members in exact frozenCast order, action<=${Math.max(8, Math.floor(48 / seed.count))} Korean chars. Different contributing roles may react to the same rhythm; do not force all members into identical movement. ${DANCE_ACTOR_ACTION_GUIDE} ${DANCE_ACTOR_SUMMARY_GUIDE}
 Use native gait/paws/flippers/hops/weight for animal actors, never human arms/hands/knees/pelvis rules. Human/robot actors need actual foot/body/weight movement. firstPose/endPose<=${seed.count >= 4 ? 40 : 60} Korean chars. segments4-6 items {startSeconds,endSeconds,phase,action,repeatHook}, contiguous0-30 without gaps/overlap, grouped opening,development,payoff,restart. First segment EXACTLY0-2s. Segment action<=${seed.count >= 4 ? 40 : 60} Korean chars with explicit anatomy and physical movement, all segment actions differ. Repeat the SAME8-count hook in both15-second halves while the performance situation changes. ${DANCE_PHYSICAL_ACTION_GUIDE}
@@ -78,22 +83,29 @@ export function validateDancePerformancePlanV3(value: unknown, seed: DanceProduc
   const data = value as Record<string, unknown>;
   const keys = ['version', 'seedId', 'productionManifest', 'title', 'summary', 'imagePrompt', 'previewPrompt', 'clips', 'choreography'];
   if (data.version !== 3 || data.seedId !== seed.seedId || Object.keys(data).length !== keys.length || keys.some(key => !Object.hasOwn(data, key))) throw new DanceVideoError('새 공연 계획의 버전과 필수 항목이 다릅니다.', 'PLAN_INVALID');
+  let validationField = '공연 제작 설정';
   try {
     const productionManifest = validateDanceProductionManifestV3(data.productionManifest, seed);
     const direction = resolveDanceProductionDirectionV3(seed, productionManifest), cast = direction.cast!;
     const preview = validateDancePreviewScene(data.previewPrompt);
     if (seed.anchors.some(anchor => !preview.includes(anchor.id)) || !/0\s*-\s*2\s*s/i.test(preview) || !/2\s*-\s*5\s*s/i.test(preview)) throw new DanceVideoError('테스트 연출에는 모든 출연자와 첫 0~2초·2~5초 반응이 필요합니다.', 'PLAN_INVALID');
-    // Scan provider prose, including the appended environment, before adding authoritative cast text.
-    const visualText = [data.imagePrompt, data.previewPrompt, ...(Array.isArray(data.clips) ? data.clips : []), productionManifest.locationDetail].join(' ');
-    assertDanceProductionSceneTextV3(visualText, false, seed);
-    const compiled = validateDancePlan({ ...data, version: 2, identity: `${seed.count} original ${seed.kind} performers with the frozen saved identities`, castRoster: danceCastRoster(cast) }, direction, tempoBpm);
+    // Label local validation failures before adding authoritative cast text; never quote provider prose.
+    const visualFields = [['시작 프레임', data.imagePrompt], ['동작 테스트', preview],
+      ...(Array.isArray(data.clips) ? data.clips.map((clip, index) => [`클립 ${index + 1} 연출`, clip]) : []), ['장소 세부 설정', productionManifest.locationDetail]];
+    for (const [field, value] of visualFields) {
+      validationField = field as string;
+      if (typeof value === 'string') assertDanceProductionSceneTextV3(value, false, seed);
+    }
+    const performanceStaging: DancePerformanceStaging = seed.locks.layoutId ? 'layout-locked' : 'initial';
+    const compiled = validateDancePlan({ ...data, version: 2, identity: `${seed.count} original ${seed.kind} performers with the frozen saved identities`, castRoster: danceCastRoster(cast) }, direction, tempoBpm, performanceStaging);
     const visual = { realistic: 'photorealistic live action', stylized3d: 'expressive stylized 3D animation', illustration: 'fluid illustrated animation' }[seed.locks.visualStyle];
     const production = `LOCKED PRODUCTION: ${productionManifest.locationDetail}; ${productionManifest.danceStyleId} translated to native anatomy; ${visual}; difficulty ${seed.locks.difficulty}.`;
     const imagePrompt = `${compiled.imagePrompt}\n${production}`, clips = compiled.clips.map(clip => `${clip}\n${production}`) as [string, string];
     if ([imagePrompt, ...clips].some(prompt => Buffer.byteLength(prompt, 'utf8') > 4096)) throw new DanceVideoError('공연 제작 설정을 포함한 프롬프트가 4,096바이트를 넘었습니다.', 'PLAN_LENGTH');
-    return { ...compiled, imagePrompt, clips, performanceVersion: 3, productionManifest };
+    return { ...compiled, imagePrompt, clips, performanceVersion: 3, productionManifest, performanceStaging };
   } catch (error) {
     if (error instanceof DanceVideoError) throw error;
+    if (error instanceof DanceCreativeInputError) throw new DanceVideoError(`${validationField}: ${error.message}`, 'PLAN_INVALID');
     throw new DanceVideoError('공연 제작 설정이 저장된 정체성·선택과 다릅니다.', 'PLAN_INVALID');
   }
 }
@@ -167,7 +179,7 @@ function assertNarrativeCast(identity: string, visualText: string, cast: DanceCa
   const numbers: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
   if (counts.length && counts.reduce((sum, match) => sum + (numbers[match[1].toLowerCase()] || Number(match[1])), 0) !== cast.count) throw new DanceVideoError('영상 설명의 출연자 수가 저장된 캐스트와 다릅니다.', 'PLAN_INVALID');
 }
-export function validateDancePlan(value: unknown, direction?: DanceCreativeDirection, tempoBpm?: unknown): DancePlan {
+export function validateDancePlan(value: unknown, direction?: DanceCreativeDirection, tempoBpm?: unknown, staging?: DancePerformanceStaging): DancePlan {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new DanceVideoError('영상 계획 형식이 올바르지 않습니다.', 'PLAN_INVALID');
   const data = value as Record<string, unknown>;
   const title = boundedText(data.title, '제목', 100);
@@ -181,7 +193,7 @@ export function validateDancePlan(value: unknown, direction?: DanceCreativeDirec
   if (direction && data.version !== 2) throw new DanceVideoError('새 연출에는 8카운트 안무 계획이 필요합니다.', 'PLAN_INVALID');
   if (!Array.isArray(data.clips) || data.clips.length !== 2) throw new DanceVideoError('정확히 두 개의 15초 클립이 필요합니다.', 'PLAN_INVALID');
   if (cast) assertNarrativeCast(identity, `${image} ${data.clips.filter(clip => typeof clip === 'string').join(' ')} ${previewPrompt || ''}`, cast);
-  const lock = cast ? `${compactDanceCastPrompt(cast)} Retain faces, surfaces, wardrobe, proportions, setting and premise props. Seeded smile/gaze is initial styling; brows, gaze and mouth react to the situation.`
+  const lock = cast ? `${compactDanceCastPrompt(cast, staging)} Retain faces, surfaces, wardrobe, proportions, setting and premise props. Seeded smile/gaze is initial styling; brows, gaze and mouth react to the situation.`
     : `Same original cast throughout: ${identity}. Retain face, surface, wardrobe, proportions, style, setting and premise props from the image. Keep every performer and formation. Seeded smile/gaze is initial styling; brows, gaze and mouth react with character-appropriate emotion.`;
   const clips = data.clips.map((clip, index) => {
     const motion = boundedText(clip, '클립 연출', cast ? 300 : 2400);
@@ -190,7 +202,7 @@ export function validateDancePlan(value: unknown, direction?: DanceCreativeDirec
     if (Buffer.byteLength(prompt, 'utf8') > 4096) throw new DanceVideoError('영상 프롬프트가 UTF-8 기준 4,096바이트를 넘었습니다.', 'PLAN_LENGTH');
     return prompt;
   }) as [string, string];
-  const imagePrompt = `${cast ? buildDanceCastPrompt(cast) : `Original cast: ${identity}.`} Preserve requested setting/style, identities and visible premise props. Seeded smile/gaze is initial styling; pose and expression establish the opening expectation. ${DANCE_ACTION_STILL_GUIDE}${choreography ? ` Opening pose: ${choreography.firstPose}.` : ''}\n${image}\n${CLEAN_VISUAL}`;
+  const imagePrompt = `${cast ? buildDanceCastPrompt(cast, staging) : `Original cast: ${identity}.`} Preserve requested setting/style, identities and visible premise props. Seeded smile/gaze is initial styling; pose and expression establish the opening expectation. ${DANCE_ACTION_STILL_GUIDE}${choreography ? ` Opening pose: ${choreography.firstPose}.` : ''}\n${image}\n${CLEAN_VISUAL}`;
   if (Buffer.byteLength(imagePrompt, 'utf8') > 4096) throw new DanceVideoError('시작 프레임 프롬프트가 UTF-8 기준 4,096바이트를 넘었습니다.', 'PLAN_LENGTH');
   return { title, summary, identity, imagePrompt, clips, ...(previewPrompt === undefined ? {} : { previewPrompt }), ...(choreography ? { version: 2 as const, choreography } : {}), ...(cast ? { cast } : {}) };
 }

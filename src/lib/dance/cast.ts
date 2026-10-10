@@ -4,6 +4,8 @@ export type DanceAnimalSpecies = typeof DANCE_ANIMAL_SPECIES[number];
 export type DanceCastKind = 'human' | 'robot' | 'animal' | 'human_animal';
 export type DanceEnsemble = 'solo' | 'duo' | 'trio' | 'crowd';
 export type DanceMovementAnatomy = 'human_biped' | 'robot_joints' | 'quadruped' | 'penguin_biped' | 'rabbit_hop' | 'otter_quadruped';
+/** Server-derived V3 staging; omission preserves saved V1/V2 and earlier V3 prompts. */
+export type DancePerformanceStaging = 'initial' | 'layout-locked';
 export type DanceCastMember = {
   id: string; kind: Exclude<DanceCastKind, 'human_animal'>; species: 'human' | 'robot' | DanceAnimalSpecies;
   role: 'lead' | 'partner' | 'ensemble'; position: string; identity: string; movementAnatomy: DanceMovementAnatomy;
@@ -42,9 +44,15 @@ export function validateDanceCastContract(raw: unknown): DanceCastContract {
 }
 
 /** Compact text for providers. Structured members remain the authoritative identities. */
-export function buildDanceCastPrompt(raw: DanceCastContract): string {
+export function buildDanceCastPrompt(raw: DanceCastContract, staging?: DancePerformanceStaging): string {
   const cast = validateDanceCastContract(raw);
   const roster = cast.members.map(member => `${member.id}=${member.identity}@${member.position}`).join('; ');
   const anatomy = [...new Set(cast.members.map(member => member.movementAnatomy))].map(id => `${id}: ${DANCE_ANATOMY_GUIDANCE[id]}`).join('; ');
+  if (staging !== undefined) {
+    if (staging !== 'initial' && staging !== 'layout-locked') return castError();
+    const placement = staging === 'initial' ? `Initial staging: ${cast.formation}. Opening stage anchors: ${roster}. Positions may change along approved continuous native paths.`
+      : `Explicit required relative formation: ${cast.formation}. Opening stage anchors: ${roster}. Preserve that relative formation while moving natively within its constraint; bodies are not static.`;
+    return `CAST CONTRACT: exactly ${cast.count} ${cast.kind} performers; ${cast.ensemble}. ${placement} Immutable IDs, species, appearance and native anatomy; no instant relocation, added, merged or missing bodies. Anatomy: ${anatomy}.`;
+  }
   return `CAST CONTRACT: exactly ${cast.count} ${cast.kind} performers; ${cast.ensemble}; ${cast.formation}. ${roster}. Stable IDs, species, appearance and slots; no added, merged or missing bodies. Anatomy: ${anatomy}.`;
 }

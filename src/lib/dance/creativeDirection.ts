@@ -620,11 +620,20 @@ export function assertDanceProductionSceneTextV3(value: string, environmentOnly 
   const actor = '(?:performer_[1-6]|cast|dancers?|performers?|humans?|people|persons?|child(?:ren)?|kids?|teenagers?|adults?|wom[ae]n|m[ae]n|boys?|girls?|animals?|robots?|cats?|dogs?|penguins?|otters?|bears?|rabbits?|fox(?:es)?)';
   const intrinsic = '(?:identity|identities|faces?|hair|hairstyle|eyes?|skin|ethnicity|age|gender|species|anatomy|wardrobe|clothing|outfits?|dress|suit|jacket|hoodie|hat|coat|fur|shell|surface)';
   const qualifiers = '(?:(?:a|an|the|all|one|two|three|four|five|six|[1-6]|new|additional|extra|saved|original|adult)\\s+){0,5}';
+  // Seconds in explicit windows/durations are timing data; unqualified decades remain identity data.
+  const ageText = positive
+    .replace(/\b\d+(?:\.\d+)?\s*[-–~]\s*\d+(?:\.\d+)?\s*s\b/gi, 'time window')
+    .replace(/\b(?:for|over|during|lasting|after|before|at|by|within|throughout|first|next|last|remaining)\s+(?:the\s+)?\d+(?:\.\d+)?\s*s\b/gi, 'duration')
+    .replace(/\b(?:duration|length)\s*(?::|=|of)\s*\d+(?:\.\d+)?\s*s\b/gi, 'duration')
+    .replace(/\b\d+(?:\.\d+)?\s*s\b(?=\s+(?:dance\s+)?(?:sequence|clip|video|performance|preview|scene|segment|window|duration|test|take|animation)\b|\s+long\b)/gi, 'duration');
+  if (/\b\d{2}s\b/i.test(ageText) || /\b(?:age(?:d)?\s*[:=]?|in\s+(?:her|his|their|the))\s+(?:(?:early|mid|late)[- ]?)?\d{2}s\b/i.test(positive)) {
+    throw new DanceCreativeInputError('공연 설명으로 저장된 출연자의 나이를 바꿀 수 없습니다.', 'CREATIVE_CONFLICT');
+  }
   if (new RegExp(`\\b(?:replace|swap|recast|add|remove|omit|substitute)\\s+${qualifiers}(?:${actor}|${intrinsic})\\b`, 'i').test(positive)
     || new RegExp(`\\b(?:change|transform|convert|redesign)\\s+${qualifiers}(?:${actor}(?:'s)?\\s+)?${intrinsic}\\b`, 'i').test(positive)
     || new RegExp(`\\b(?:turn|make|change)\\b[^.!?;]{0,50}\\b${actor}\\b[^.!?;]{0,30}\\b(?:into|younger|older|male|female|wear)\\b`, 'i').test(positive)
     || new RegExp(`\\b${actor}\\b[^.!?;]{0,70}\\b(?:becomes?|turns? into|transforms? into|is now|are now)\\s+${qualifiers}(?:${actor}|${intrinsic}|younger|older|male|female)\\b`, 'i').test(positive)
-    || /\b(?:blonde|brunette|redhead|hairstyle|hair|eye color|skin tone|ethnicity|years old|beard|new face|different face|child(?:ren)?|kids?|teenagers?|boys?|girls?)\b|\b\d{2}s\b/i.test(positive)
+    || /\b(?:blonde|brunette|redhead|hairstyle|hair|eye color|skin tone|ethnicity|years old|beard|new face|different face|child(?:ren)?|kids?|teenagers?|boys?|girls?)\b/i.test(positive)
     || /\b(?:blue|brown|green|gr[ae]y|black|hazel)\s+eyes\b|\b(?:round|oval|square|angular)\s+face\b|\b(?:fair|pale|tan|dark|light|brown)\s+skin\b/i.test(positive)
     || /\b(?:black|brown|white|gr[ae]y|red|orange|cream|silver|gold|copper)\s+(?:fur|shell|cat|dog|penguin|otter|bear|rabbit|fox|robot)\b|\b(?:young|elderly|middle-aged|teenage|younger|older)\s+(?:adult\s+)?(?:dancer|performer|woman|man)\b/i.test(positive)
     || /출연자.*(?:교체|바꾸|변경|추가)|어린이|미성년|머리\s*색|성별\s*변경/i.test(positive)
