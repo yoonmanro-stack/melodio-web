@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { createHash } = require('node:crypto');
 const ts = require('typescript');
 const root = path.resolve(__dirname, '..');
 const cache = new Map();
@@ -100,6 +101,44 @@ test('the same single ideas request uses a new discriminator, immutable selectio
     return response({ version: 3, selection: input.selectionFacts, ideas: premises() });
   });
   assert.equal(calls, 1); assert.deepEqual(result, premises());
+});
+test('V3 request directs an immediate consequential performance while the deployed legacy request stays byte-identical', async () => {
+  const job = jobFor(); let v3Calls = 0;
+  const result = await createDanceIdeas(job, async (_url, options) => {
+    v3Calls++; const request = JSON.parse(options.body), system = request.messages[0].content, input = JSON.parse(request.messages[1].content);
+    assert.match(system, /Internally compare a broad range of varied premises before choosing three distinct performances/);
+    assert.match(system, /visibleHook is an action-still captured INSIDE an arresting ongoing action or an imminent physical event/);
+    assert.match(system, /not a standing, waiting or lineup introduction/);
+    assert.match(system, /characterGoal, emotionalReaction, turn and payoff form an observable causal chain through consequential body, partner or place action/);
+    assert.match(system, /meaningful status reversal, comic physical event or earned skill achievement/);
+    assert.match(system, /musical groove or instrument cue drives the attempt, reaction and turn/);
+    assert.match(system, /productionRisk.*simplification that preserves the premise's cause and effect/);
+    assert.match(system, /do not delete the interaction or impose fixed zones that contradict the premise/);
+    assert.match(system, /without fixed named characters, props, story templates or examples/);
+    assert.match(system, /no named celebrity, recognizable artist imitation or replicated existing choreography/);
+    assert.match(system, /Do NOT write signature moves, count sequences, actor action matrices/);
+    assert.match(system, /Creative appeal is reviewed by a human/);
+    assert.equal(request.model, 'gpt-5.6-sol'); assert.equal(request.reasoning_effort, 'low'); assert.equal(request.max_completion_tokens, 6144);
+    assert.equal(request.response_format.json_schema.name, 'dance_performance_ideas_v3');
+    const fields = request.response_format.json_schema.schema.properties.ideas.items.properties;
+    assert.match(fields.visibleHook.description, /frozen instant INSIDE consequential ongoing action or an imminent physical event/);
+    assert.match(fields.payoff.description, /specific observable physical consequence resolving the same goal or uncertainty/);
+    assert.equal(fields.visibleHook.type, 'string'); assert.equal(fields.visibleHook.maxLength, 180);
+    assert.equal(fields.payoff.type, 'string'); assert.equal(fields.payoff.maxLength, 160);
+    assert.deepEqual(input.selectionFacts, dancePerformanceSelectionFacts(job.productionSeed, job.musicSpec.id));
+    assert.deepEqual(input.selectedMusic, Object.fromEntries(['id', 'label', 'style', 'rhythmPurpose'].map(key => [key, job.musicSpec[key]])));
+    return response({ version: 3, selection: input.selectionFacts, ideas: premises() });
+  });
+  assert.equal(v3Calls, 1); assert.deepEqual(result, premises(), 'creative quality remains human-reviewed rather than a new semantic rejection gate');
+  const legacy = { ...job }; delete legacy.planningVersion; delete legacy.productionSeed; let legacyCalls = 0;
+  await assert.rejects(createDanceIdeas(legacy, async (_url, options) => {
+    legacyCalls++; const request = JSON.parse(options.body);
+    assert.equal(request.response_format.json_schema.name, 'dance_ideas_v2'); assert.equal(request.max_completion_tokens, 3072);
+    // Captured from the same fixture against deployed commit 516b824 before this V3-only prompt edit.
+    assert.equal(createHash('sha256').update(options.body).digest('hex'), '398b73d001a3ad196fc26c35e52fdb587a58f0a142f655c87abbcbf7120a37df');
+    return Response.json({}, { status: 503 });
+  }), error => error.code === 'PLAN_HTTP');
+  assert.equal(legacyCalls, 1);
 });
 test('wrong V3 response discriminator, cast facts or locks reject without novelty retries', async () => {
   const job = jobFor();
