@@ -5,6 +5,7 @@ const nextConfig: NextConfig = {
   outputFileTracingIncludes: {
     '/api/viral-cf/dance-video': ['./node_modules/ffmpeg-static/**', './public/fonts/NotoSansKR-Regular.ttf'],
     '/api/viral-cf/pet-video': ['./node_modules/ffmpeg-static/**', './public/fonts/NotoSansKR-Regular.ttf'],
+    '/api/viral-cf/grok-video/jobs': ['./node_modules/ffmpeg-static/**'],
   },
   allowedDevOrigins: [
     "100.100.27.10",
