@@ -7,6 +7,7 @@ const { load, jobFor, rawV3, legacyJob, rawLegacy, capture, structuralSchema } =
 const { resolveDanceProductionSeedV3, resolveDanceProductionDirectionV3 } = load('src/lib/dance/creativeDirection.ts');
 const { validateDancePerformancePlanV3 } = load('src/lib/dance/videoPlan.ts');
 const { buildDancePreviewPrompt } = load('src/lib/dance/videoService.ts');
+const { DANCE_ACTOR_ANATOMY_PATTERN } = load('src/lib/dance/ideas.ts');
 const hash = value => createHash('sha256').update(value).digest('hex');
 
 test('actual V3 request reserves the ensemble action envelope without mandating one camera setup', async () => {
@@ -31,6 +32,8 @@ test('actual V3 request reserves the ensemble action envelope without mandating 
 test('framing instructions leave schema contracts and V1/V2 request bytes unchanged', async () => {
   const job = jobFor(), result = await capture(job, rawV3(job)), schema = structuralSchema(result.request.response_format.json_schema.schema);
   schema.properties.productionManifest.properties.layoutId.enum = [];
+  // Normalize only the intentional V3 generation pattern; retain the deployed structural SHA.
+  schema.properties.choreography.properties.steps.items.properties.actors.items.properties.action.pattern = DANCE_ACTOR_ANATOMY_PATTERN;
   assert.equal(hash(JSON.stringify(schema)), '285a04c072ba04f0e6464272907ee950b8d1da259fea1510ab4e95ba07c42196');
   for (const [version, expected] of [[1, 'ef8f3e8d4b47cbc04ea6537b32e1f7a8591a099526695c7be27490c1f35d4ce8'],
     [2, 'd6f7ce79f9490cc2f694bbba9af3436dcb3f8cd2846fb1c0707e92470726cce0']]) {

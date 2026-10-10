@@ -12,7 +12,7 @@ function load(relative) {
 }
 const { createDancePlan, validateDancePerformancePlanV3 } = load('src/lib/dance/videoPlan.ts');
 const { resolveDanceProductionSeedV3, resolveDanceProductionDirectionV3, DANCE_PRODUCTION_LAYOUTS } = load('src/lib/dance/creativeDirection.ts');
-const { danceCastRoster } = load('src/lib/dance/ideas.ts');
+const { danceCastRoster, DANCE_ACTOR_ANATOMY_PATTERN } = load('src/lib/dance/ideas.ts');
 const { buildDancePreviewPrompt } = load('src/lib/dance/videoService.ts');
 const MUSIC = { id: 'fixture-music', label: '리듬', style: 'Original upbeat rhythm', rhythmPurpose: '짧은 발 스텝을 받치는 리듬', bpm: 128 };
 const PREFS = { performer: 'human_animal', ensemble: 'trio', species: 'penguin', location: 'auto', danceStyle: 'auto', visualStyle: 'realistic', difficulty: 'easy' };
@@ -83,7 +83,9 @@ test('schema constraints stay fixed and legacy requests do not inherit V3 descri
   assert.deepEqual([p.productionManifest.properties.wardrobes.minItems, p.productionManifest.properties.wardrobes.maxItems, p.productionManifest.properties.wardrobes.items.properties.description.maxLength], [3, 3, 60]);
   assert.deepEqual(p.choreography.properties.segments.items.properties.phase.enum, ['opening', 'development', 'payoff', 'restart']);
   const signature = structuralSchema(c.request.response_format.json_schema.schema); signature.properties.productionManifest.properties.layoutId.enum = [];
-  // Independently captured from deployed 8c9b9615; only descriptions and the approved new layout enum choices differ.
+  // Normalize only the intentional V3 generation pattern; action-schema tests verify it directly.
+  signature.properties.choreography.properties.steps.items.properties.actors.items.properties.action.pattern = DANCE_ACTOR_ANATOMY_PATTERN;
+  // Independently captured from deployed 8c9b9615; the remaining structural baseline stays fixed.
   assert.equal(sha(JSON.stringify(signature)), '285a04c072ba04f0e6464272907ee950b8d1da259fea1510ab4e95ba07c42196');
   for (const [version, expected] of [[1, 'ef8f3e8d4b47cbc04ea6537b32e1f7a8591a099526695c7be27490c1f35d4ce8'], [2, 'd6f7ce79f9490cc2f694bbba9af3436dcb3f8cd2846fb1c0707e92470726cce0']]) { const legacy = legacyJob(version), first = await capture(legacy, rawLegacy(legacy));
     await capture(job, rawV3(job)); const after = await capture(legacy, rawLegacy(legacy)); assert.equal(sha(first.body), sha(after.body)); assert.equal(sha(first.body), expected);
