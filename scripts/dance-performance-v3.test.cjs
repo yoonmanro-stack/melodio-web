@@ -33,7 +33,8 @@ function premises() {
     characterGoal: '상대와 함께 즐거운 순간을 만들고 싶다.', emotionalReaction: '뜻밖의 반응에 놀랐다가 웃음을 터뜨린다.',
     turn: '감추던 즐거움이 상대에게 전해져 함께 리듬을 탄다.', payoff: '서로를 보며 환하게 웃고 함께 첫 움직임을 다시 시작한다.',
     participation: '숨은 반응이 시작되는 순간을 예상하고 함께 흉내 낸다.', productionRisk: '표정 변화와 몸이 섞일 수 있어 몸 전체를 고정 화면에 둔다.',
-    musicConnection: '짧은 킥과 밝은 신스의 응답이 감정의 변화와 활기찬 체중 이동을 이끈다.' }));
+    musicConnection: '짧은 킥과 밝은 신스의 응답이 감정의 변화와 활기찬 체중 이동을 이끈다.',
+    sceneContext: { place: '몸 전체가 보이는 열린 공연장', ongoingActivity: '상대와 함께 즐거운 순간을 만들려는 몸의 시도가 진행 중이다.', immediateTrigger: '상대의 뜻밖의 몸 반응이 감추던 즐거움을 드러낸다.' } }));
 }
 function jobFor(preferences = prefs(), brief = '') {
   return { planningVersion: 3, visualBrief: brief, creativePreferences: preferences, musicSpec: music, bpm: 138,
@@ -96,7 +97,7 @@ test('the same single ideas request uses a new discriminator, immutable selectio
     calls++; const request = JSON.parse(options.body), input = JSON.parse(request.messages[1].content), schema = request.response_format.json_schema;
     assert.equal(request.model, 'gpt-5.6-sol'); assert.equal(request.reasoning_effort, 'low'); assert.equal(schema.name, 'dance_performance_ideas_v3');
     const keys = Object.keys(schema.schema.properties.ideas.items.properties);
-    assert.equal(keys.length, 12); assert.ok(!keys.includes('signatureSteps')); assert.equal(input.selectedDirection, undefined); assert.equal(input.visualBrief, job.visualBrief);
+    assert.equal(keys.length, 13); assert.ok(!keys.includes('signatureSteps')); assert.equal(input.selectedDirection, undefined); assert.equal(input.visualBrief, job.visualBrief);
     assert.ok(matchesDanceExactFacts(input.selectionFacts, dancePerformanceSelectionFacts(job.productionSeed, job.musicSpec.id)));
     return response({ version: 3, selection: input.selectionFacts, ideas: premises() });
   });

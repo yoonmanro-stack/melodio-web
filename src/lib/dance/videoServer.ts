@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { createHash } from 'node:crypto';
-import { DANCE_CATEGORY_ID, type DanceVideoJob } from './preset';
+import { DANCE_CATEGORY_ID, isDanceMetadata, type DanceVideoJob } from './preset';
+import { DANCE_RECENT_PREMISE_RECORD_LIMIT, DANCE_RECENT_PREMISE_METADATA_BYTES, projectDanceRecentPremiseV3, boundDanceRecentPremisesV3 } from './premises';
 import { createDanceVideoService, DanceVideoError, type DanceOwnedRecord, type DanceVideoStore } from './videoService';
 import { createDancePlan } from './videoPlan';
 import { createDanceIdeas } from './ideas';
@@ -21,6 +22,24 @@ function record(row: GenerationRow): DanceOwnedRecord {
 const FIELDS = 'id,user_id,title,is_public,created_at,status,audio_url,license_hash';
 export function createDanceVideoStore(admin: SupabaseClient): DanceVideoStore {
   return {
+    async recentPremises(userId, excludeTrackId) {
+      const { data, error } = await admin.from('generations').select('license_hash').eq('user_id', userId).neq('id', excludeTrackId)
+        .ilike('license_hash', '%dance-music-first-v1%').order('created_at', { ascending: false })
+        .limit(DANCE_RECENT_PREMISE_RECORD_LIMIT).abortSignal(AbortSignal.timeout(10000));
+      if (error) throw new DanceVideoError('최근 공연 아이디어를 확인하지 못했습니다.', 'JOB_STORAGE', 503);
+      const premises = (data || []).slice(0, DANCE_RECENT_PREMISE_RECORD_LIMIT).flatMap(row => {
+        if (typeof row.license_hash !== 'string' || Buffer.byteLength(row.license_hash, 'utf8') > DANCE_RECENT_PREMISE_METADATA_BYTES) return [];
+        try {
+          const meta: unknown = JSON.parse(row.license_hash);
+          if (!isDanceMetadata(meta)) return [];
+          const job = meta.danceVideo;
+          if (!job || typeof job !== 'object' || Array.isArray(job) || (job as DanceVideoJob).planningVersion !== 3) return [];
+          const premise = projectDanceRecentPremiseV3((job as DanceVideoJob).selectedIdea);
+          return premise ? [premise] : [];
+        } catch { return []; }
+      });
+      return boundDanceRecentPremisesV3(premises);
+    },
     async recentDirections(userId) {
       const { data, error } = await admin.from('generations').select('license_hash').eq('user_id', userId)
         .ilike('license_hash', '%dance-music-first-v1%').order('created_at', { ascending: false }).limit(12).abortSignal(AbortSignal.timeout(10000));

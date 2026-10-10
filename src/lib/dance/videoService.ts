@@ -3,8 +3,9 @@ import { DANCE_CATEGORY_ID, DANCE_WORKFLOW, isDanceAudioSelection, isDanceMetada
 import { validateDanceCreativePreferences, resolveDanceCreativeDirection, buildDanceCadenceGuide, resolveDanceProductionSeedV3, resolveDanceProductionDirectionV3, validateDanceProductionSeedV3 } from './creativeDirection';
 import { getDanceMusicSpec } from './musicProfiles';
 import { validateDanceProposals, compactDanceCastPrompt, validateDanceActorActions, validateDanceActorSequence, type DanceProposal } from './ideas';
-import { isDancePerformancePremiseV3, matchesDanceExactFacts } from './premises';
+import { isDancePerformancePremiseV3, matchesDanceExactFacts, boundDanceRecentPremisesV3, type DanceRecentPremiseV3 } from './premises';
 import { validateDanceChoreography } from './videoPlan';
+import { danceGroupRelativePosition, DANCE_V3_ENSEMBLE_COMPOSITION } from './cast';
 
 export class DanceVideoError extends Error {
   constructor(message: string, public code = 'DANCE_VIDEO', public status = 400, public planFailure?: DancePlanFailure) { super(message); }
@@ -40,6 +41,7 @@ export interface DanceVideoStore {
   compareAndSwap(record: DanceOwnedRecord, job: DanceSavedJob): Promise<DanceOwnedRecord | null>;
   insert?(record: DanceOwnedRecord): Promise<boolean>;
   recentDirections?(userId: string): Promise<unknown[]>;
+  recentPremises?(userId: string, excludeTrackId: string): Promise<DanceRecentPremiseV3[]>;
 }
 export type DanceSnapshot = Pick<DanceVideoJob, 'audioUrl' | 'sourceAudioHash' | 'audioHash' | 'sourceDurationSeconds' | 'bpm' | 'onsetSeconds' | 'rhythm'>;
 export interface DanceVideoDependencies {
@@ -295,6 +297,7 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     const musicSpec = getDanceMusicSpec(record.metadata);
     if (!musicSpec) throw new DanceVideoError('저장된 댄스 음악 설정을 확인하지 못했습니다.', 'MUSIC_SPEC', 409);
     const recent = await deps.store.recentDirections?.(userId) || [];
+    const recentPremises = planningVersion === 3 ? boundDanceRecentPremisesV3(await deps.store.recentPremises?.(userId, trackId)) : undefined;
     let direction, productionSeed;
     try {
       if (planningVersion === 3) productionSeed = resolveDanceProductionSeedV3(preferences, id, normalizedBrief, recent, musicSpec);
@@ -303,6 +306,7 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
     catch { throw new DanceVideoError('선택한 출연자·장소와 상황 설명이 맞는지 확인해 주세요.', 'CREATIVE_SELECTION'); }
     let job: DanceSavedJob = { id, trackId, status: 'preparing', startSeconds, durationSeconds: 30,
       creativePreferences: preferences, ...(direction ? { direction } : {}), ...(productionSeed ? { planningVersion: 3 as const, productionSeed } : {}), musicSpec, imageReviewRequired: true,
+      ...(recentPremises ? { recentPremises } : {}),
       ideaReviewRequired: Boolean(deps.ideas),
       qualityPreviewRequired: Boolean(deps.ideas && deps.preview),
       videoSpec: { model: deps.videoModel || 'grok-imagine-video', resolution: '720p', width: 720, height: 1280 },
@@ -516,7 +520,9 @@ export function buildDancePreviewPrompt(job: DanceVideoJob): string {
       motion = validated.map(step => `${step.count}counts:${step.actors.map(actor => `${actor.memberId}:${actor.action}`).join(',')}`).join('; ');
     }
     const staging = job.planningVersion === 3 ? job.plan.performanceStaging : undefined;
-    const prompt = `Five-second experimental motion test. ${scene}\n${cadence}\n${cast ? compactDanceCastPrompt(cast, staging) : `Same original cast: ${job.plan.identity}.`} Preserve identities, setting, premise props and readable whole bodies from the action still. Start its physical conflict at0s; show the first causal response by5s, no camera-facing lineup or separate intro. Species-native role actions: ${motion}. Keep body movement and foot/weight contact readable. The later payoff/restart is outside this test. No cuts, acrobatics, text, logos, speech or generated music. Silent visual; original audio is combined separately; no verified synchronization claim.`;
+    const promptCast = cast && staging !== undefined ? { ...cast, members: cast.members.map(member => ({ ...member, position: danceGroupRelativePosition(member.position) })) } : cast;
+    const composition = staging === undefined ? '' : `${DANCE_V3_ENSEMBLE_COMPOSITION} `;
+    const prompt = `Five-second experimental motion test. ${scene}\n${cadence}\n${promptCast ? compactDanceCastPrompt(promptCast, staging) : `Same original cast: ${job.plan.identity}.`} ${composition}Preserve identities, setting, premise props and readable whole bodies from the action still. Start its physical conflict at0s; show the first causal response by5s, no camera-facing lineup or separate intro. Species-native role actions: ${motion}. Keep body movement and foot/weight contact readable. The later payoff/restart is outside this test. No cuts, acrobatics, text, logos, speech or generated music. Silent visual; original audio is combined separately; no verified synchronization claim.`;
     if (Buffer.byteLength(prompt, 'utf8') > 4096) throw new DanceVideoError('테스트 영상 프롬프트가 UTF-8 기준 4,096바이트를 넘었습니다.', 'PLAN_LENGTH', 422);
     return prompt;
   }

@@ -27,6 +27,7 @@ export interface ViralStoryClip {
 }
 export interface ViralStoryJob {
   version: 1; id: string; trackId: string; input: ViralStoryInput; inputFingerprint: string;
+  promptVersion?: 2;
   prompts: [string, string]; sourceAudioUrl: string; status: ViralStoryStage;
   audio?: ViralStoryAsset; clips: [ViralStoryClip, ViralStoryClip]; bridge?: { url: string; hash: string };
   final?: ViralStoryAsset; createdAt: string; updatedAt: string;
@@ -35,6 +36,7 @@ export interface ViralStoryJob {
 }
 export interface ViralStoryJobView {
   version: 1; id: string; trackId: string; category: string; inputFingerprint: string;
+  promptVersion?: 2;
   prompt: string; allowDance: boolean; cutCadenceSeconds: number;
   status: ViralStoryStage; progress: number; inFlight: boolean; canResume: boolean;
   failureCode?: string; failureMessage?: string; updatedAt: string;
@@ -77,8 +79,8 @@ export function validateViralStoryInput(value: unknown): ViralStoryInput {
   }
   return { prompt: value.prompt.trim(), category: value.category, allowDance: value.allowDance, cutCadenceSeconds: value.cutCadenceSeconds };
 }
-/** Compile both final provider prompts before reserving a job or making any paid call. */
-export function compileViralStoryPrompts(input: ViralStoryInput): [string, string] {
+/** Exact compiler for saved jobs without a promptVersion. Never rewrite their paid inputs. */
+function compileViralStoryPromptsV1(input: ViralStoryInput): [string, string] {
   const direction = getCategoryQualityDirection(input.category);
   if (!direction || input.category === 'pet') throw new ViralStoryError('지원하는 스토리 카테고리를 선택해 주세요.', 'INPUT');
   const common = `${direction.cameraRuleEn} ${direction.motionRuleEn} Preserve the authored cast, actions, causal reveal and original visual style. Silent visual output only; no audio track, music, dialogue, narration or sound effects. ${LEGACY_NO_TEXT_RULE}`;
@@ -90,10 +92,32 @@ export function compileViralStoryPrompts(input: ViralStoryInput): [string, strin
   if (prompts.some(prompt => Buffer.byteLength(prompt, 'utf8') > 4096)) throw new ViralStoryError('두 영상의 연출이 Grok 한도를 넘습니다. 기획을 간결하게 수정해 주세요.', 'PROMPT_LENGTH', 422);
   return prompts;
 }
-export function viralStoryInputFingerprint(trackId: string, sourceAudioUrl: string, input: ViralStoryInput): string {
-  return createHash('sha256').update(JSON.stringify({ version: 1, trackId, sourceAudioUrl, ...input })).digest('hex');
+/** Fresh jobs bind both final prompts before reserving a job or making any paid call. */
+export function compileViralStoryPrompts(input: ViralStoryInput, promptVersion: 1 | 2 = 2): [string, string] {
+  if (promptVersion === 1) return compileViralStoryPromptsV1(input);
+  if (promptVersion !== 2) throw new ViralStoryError('저장된 영상 연출 버전을 확인해 주세요.', 'PROMPT_VERSION', 409);
+  const direction = getCategoryQualityDirection(input.category);
+  if (!direction || input.category === 'pet') throw new ViralStoryError('지원하는 스토리 카테고리를 선택해 주세요.', 'INPUT');
+  const continuity = 'CONTINUITY: Preserve subject identity, wardrobe, supporting cast, prop inventory, set and lighting. Match positions, prop contact and eye lines at the clip boundary; then let them evolve continuously through motivated authored movement. Do not freeze actors in the starting pose.';
+  const movement = input.allowDance
+    ? 'MOVEMENT CHOICE: allowDance=true. Authored rhythmic movement and dance-like gestures are allowed. Each actor, including supporting actors, must perform their own authored action and payoff; do not replace them with a generic reaction or category-default gesture.'
+    : 'MOVEMENT CHOICE: allowDance=false. Do not add dancing or choreography. Perform each actor\'s authored situational action and payoff with continuous motivated movement.';
+  const cadence = `EDITING PREFERENCE: nominal ${input.cutCadenceSeconds} seconds per shot. This is a pacing target, not a mandatory cut schedule. Hold longer for readable action and payoff; cut only when motivated by new visual information.`;
+  const common = `${direction.cameraRuleEn} CATEGORY PHYSICAL FEASIBILITY GUIDE (examples only, not action selection): ${direction.motionRuleEn} Apply that guide only where compatible with the authored action. The authored prompt controls each actor's cause, movement and payoff; a guide's example must not substitute for them. ${movement} ${cadence} Preserve the authored visual style. Silent visual output only; no audio track, music, dialogue, narration or sound effects. ${LEGACY_NO_TEXT_RULE}`;
+  const prompts: [string, string] = [
+    `${input.prompt}\nPART 1, 0-15s: Begin the immediate visible hook and develop its physical cause in the same situation. Keep each authored action readable and continuously motivated. ${continuity} ${common}`,
+    `${input.prompt}\nPART 2, 15-30s: Continue directly from the supplied final frame of part 1. That frame is the authoritative starting state, including initial positions, prop state, contacts and eye lines. From that state, let each actor continue the authored movement and cause into their own payoff and resolved reaction; do not restart or repeat the hook, introduce a new cast, or reset the scene. ${continuity} ${common}`,
+  ];
+  if (prompts.some(prompt => Buffer.byteLength(prompt, 'utf8') > 4096)) throw new ViralStoryError('두 영상의 연출이 Grok 한도를 넘습니다. 기획을 간결하게 수정해 주세요.', 'PROMPT_LENGTH', 422);
+  return prompts;
+}
+export function viralStoryInputFingerprint(trackId: string, sourceAudioUrl: string, input: ViralStoryInput, promptVersion?: 2): string {
+  if (promptVersion !== undefined && promptVersion !== 2) throw new ViralStoryError('저장된 영상 연출 버전을 확인해 주세요.', 'PROMPT_VERSION', 409);
+  return createHash('sha256').update(JSON.stringify({ version: 1, trackId, sourceAudioUrl, ...input,
+    ...(promptVersion === 2 ? { promptVersion } : {}) })).digest('hex');
 }
 const FAILURE_MESSAGES: Record<string, string> = {
+  PROMPT_VERSION: '저장된 영상 연출 버전을 지원하지 않습니다. 기존 요청과 원본을 보존하고 운영자 확인을 기다립니다.',
   UNKNOWN_SUBMISSION: '영상 제출 응답을 확인하지 못했습니다. 중복 결제를 막기 위해 보류했습니다. 운영자 확인이 필요합니다.',
   PROVIDER_RESULT: '저장된 영상 요청이 실패하거나 만료되었습니다. 자동 재생성하지 않습니다.',
   AUDIO_DURATION: '음원이 30초를 넘거나 끝에서 소리가 남아 있습니다. 가창을 자르지 않고 제작을 보류했습니다.',
@@ -115,7 +139,7 @@ const FAILURE_MESSAGES: Record<string, string> = {
 };
 function retryable(job: ViralStoryJob): boolean {
   return job.status === 'held' && !!job.failedOperation && !job.failedOperation.endsWith('_submit')
-    && !['UNKNOWN_SUBMISSION', 'PROVIDER_RESULT', 'AUDIO_DURATION', 'AUDIO_HASH', 'MEDIA_HASH', 'CLIP_DURATION', 'FINAL_DURATION', 'FINAL_SIZE'].includes(job.failureCode || '');
+    && !['PROMPT_VERSION', 'UNKNOWN_SUBMISSION', 'PROVIDER_RESULT', 'AUDIO_DURATION', 'AUDIO_HASH', 'MEDIA_HASH', 'CLIP_DURATION', 'FINAL_DURATION', 'FINAL_SIZE'].includes(job.failureCode || '');
 }
 function stage(job: ViralStoryJob): ViralStoryStage {
   if (job.final) return 'completed';
@@ -129,6 +153,7 @@ export function viralStoryJobView(job: ViralStoryJob, now = Date.now()): ViralSt
   const current = job.status === 'held' ? stage(job) : job.status;
   const progress = { audio: 8, clip1: 20, bridge: 48, clip2: 58, render: 88, completed: 100, held: 0 }[current];
   return { version: 1, id: job.id, trackId: job.trackId, category: job.input.category, inputFingerprint: job.inputFingerprint,
+    ...(job.promptVersion === 2 ? { promptVersion: 2 as const } : {}),
     prompt: job.input.prompt, allowDance: job.input.allowDance, cutCadenceSeconds: job.input.cutCadenceSeconds,
     status: job.status, progress, inFlight: !!job.lease && job.lease.until > now, canResume: retryable(job), updatedAt: job.updatedAt,
     ...(job.failureCode ? { failureCode: job.failureCode, failureMessage: FAILURE_MESSAGES[job.failureCode] || FAILURE_MESSAGES.TRANSIENT_IO } : {}),
@@ -147,9 +172,11 @@ export function readViralStoryJob(record: ViralStoryOwnedRecord): ViralStoryJob 
   const job = structuredClone(value) as unknown as ViralStoryJob;
   if (job.version !== 1 || !UUID.test(job.id || '') || job.trackId !== record.id || !STAGES.includes(job.status)
     || !mediaUrl(job.sourceAudioUrl) || !HASH.test(job.inputFingerprint || '') || !Number.isFinite(Date.parse(job.createdAt)) || !Number.isFinite(Date.parse(job.updatedAt))) return invalid();
-  let input: ViralStoryInput; let prompts: [string, string];
-  try { input = validateViralStoryInput(job.input); prompts = compileViralStoryPrompts(input); } catch { return invalid(); }
-  if (viralStoryInputFingerprint(job.trackId, job.sourceAudioUrl, input) !== job.inputFingerprint || JSON.stringify(prompts) !== JSON.stringify(job.prompts)
+  const supportedPromptVersion = job.promptVersion === undefined || job.promptVersion === 2;
+  let input: ViralStoryInput; let prompts: [string, string] | undefined;
+  try { input = validateViralStoryInput(job.input); if (supportedPromptVersion) prompts = compileViralStoryPrompts(input, job.promptVersion ?? 1); } catch { return invalid(); }
+  if ((supportedPromptVersion && (viralStoryInputFingerprint(job.trackId, job.sourceAudioUrl, input, job.promptVersion) !== job.inputFingerprint || JSON.stringify(prompts) !== JSON.stringify(job.prompts)))
+    || !Array.isArray(job.prompts) || job.prompts.length !== 2 || job.prompts.some(prompt => typeof prompt !== 'string' || !prompt.trim() || Buffer.byteLength(prompt, 'utf8') > 4096)
     || !Array.isArray(job.clips) || job.clips.length !== 2) return invalid();
   for (const clip of job.clips) {
     if (!object(clip) || !['empty', 'submitting', 'pending', 'generated', 'ready'].includes(clip.status)
@@ -166,6 +193,8 @@ export function readViralStoryJob(record: ViralStoryOwnedRecord): ViralStoryJob 
     || (job.status !== 'held' && stage(job) !== job.status)) return invalid();
   if (job.lease && (!UUID.test(job.lease.token || '') || !Number.isFinite(job.lease.until) || !validOperation(job.lease.operation))) return invalid();
   if (job.failedOperation !== undefined && !validOperation(job.failedOperation)) return invalid();
+  // An unknown revision cannot be recompiled safely. Hold the view without altering durable inputs or IDs.
+  if (!supportedPromptVersion) { job.status = 'held'; job.failureCode = 'PROMPT_VERSION'; }
   return job;
 }
 function validOperation(value: unknown): value is ViralStoryOperation {
@@ -217,7 +246,7 @@ export function createViralStoryPipeline(deps: ViralStoryDependencies) {
   return {
     async get(userId: string, trackId: string, jobId?: string) { const { job } = await load(userId, trackId, jobId); return job ? viralStoryJobView(job, now()) : null; },
     async create(userId: string, trackId: string, requestId: string, rawInput: unknown, expectedAudioUrl?: unknown) {
-      assertViralStoryUuid(requestId); const input = validateViralStoryInput(rawInput); const prompts = compileViralStoryPrompts(input);
+      assertViralStoryUuid(requestId); const input = validateViralStoryInput(rawInput);
       const { record, job: existing } = await load(userId, trackId);
       if (expectedAudioUrl !== undefined && expectedAudioUrl !== record.audioUrl) throw new ViralStoryError('선택한 음원이 저장된 음원과 다릅니다.', 'AUDIO_MISMATCH', 409);
       if (!mediaUrl(record.audioUrl)) throw new ViralStoryError('저장된 음원 주소를 확인해 주세요.', 'AUDIO_REQUIRED', 409);
@@ -227,13 +256,14 @@ export function createViralStoryPipeline(deps: ViralStoryDependencies) {
         || metadataCategories.some(id => typeof id === 'string' && VIRAL_STORY_CATEGORIES.some(category => category === id) && id !== input.category)) {
         throw new ViralStoryError('음원의 카테고리와 영상 제작 경로를 확인해 주세요.', 'TRACK_CATEGORY', 409);
       }
-      const inputFingerprint = viralStoryInputFingerprint(trackId, record.audioUrl!, input);
+      const inputFingerprint = viralStoryInputFingerprint(trackId, record.audioUrl!, input, existing ? existing.promptVersion : 2);
       const same = (job: ViralStoryJob | null) => job?.id === requestId && job.inputFingerprint === inputFingerprint;
       if (existing) {
         if (!same(existing)) throw new ViralStoryError('이 음원에 저장된 영상 작업이 있습니다. 기존 작업을 확인해 주세요.', existing.id === requestId ? 'INPUT_CHANGED' : 'JOB_EXISTS', 409);
         return viralStoryJobView(existing, now());
       }
-      const job: ViralStoryJob = { version: 1, id: requestId, trackId, input, inputFingerprint, prompts, sourceAudioUrl: record.audioUrl!,
+      const prompts = compileViralStoryPrompts(input, 2);
+      const job: ViralStoryJob = { version: 1, promptVersion: 2, id: requestId, trackId, input, inputFingerprint, prompts, sourceAudioUrl: record.audioUrl!,
         status: 'audio', clips: [{ status: 'empty' }, { status: 'empty' }], createdAt: timestamp(), updatedAt: timestamp() };
       const saved = await deps.store.compareAndSwap(record, job);
       if (saved) return viralStoryJobView(readViralStoryJob(saved)!, now());

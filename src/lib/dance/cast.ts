@@ -25,6 +25,11 @@ export const DANCE_ANATOMY_GUIDANCE: Record<DanceMovementAnatomy, string> = {
 
 function castError(): never { throw Object.assign(new Error('출연자 구성과 종별 동작을 확인해 주세요.'), { code: 'CREATIVE_CAST' }); }
 function text(value: unknown, limit: number): value is string { return typeof value === 'string' && value.trim().length > 0 && value.length <= limit && !/[\u0000-\u001f]/.test(value); }
+/** Render-only V3 coordinates; saved identity and layout positions stay authoritative. */
+export function danceGroupRelativePosition(position: string): string {
+  return `group-${position.replace(/^near-/, 'front-').replace(/^far-/, 'rear-')}`;
+}
+export const DANCE_V3_ENSEMBLE_COMPOSITION = 'Ensemble coordinates are relative to the group on one shared floor area, not frame edges; front/rear mean group rows, never camera proximity. From0s, frame every whole body and floor contact with room for the authored first movement; no opening camera pullback or isolated actor close-up.';
 export function validateDanceCastContract(raw: unknown): DanceCastContract {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return castError();
   const cast = raw as DanceCastContract;
@@ -50,9 +55,10 @@ export function buildDanceCastPrompt(raw: DanceCastContract, staging?: DancePerf
   const anatomy = [...new Set(cast.members.map(member => member.movementAnatomy))].map(id => `${id}: ${DANCE_ANATOMY_GUIDANCE[id]}`).join('; ');
   if (staging !== undefined) {
     if (staging !== 'initial' && staging !== 'layout-locked') return castError();
-    const placement = staging === 'initial' ? `Initial staging: ${cast.formation}. Opening stage anchors: ${roster}. Positions may change along approved continuous native paths.`
-      : `Explicit required relative formation: ${cast.formation}. Opening stage anchors: ${roster}. Preserve that relative formation while moving natively within its constraint; bodies are not static.`;
-    return `CAST CONTRACT: exactly ${cast.count} ${cast.kind} performers; ${cast.ensemble}. ${placement} Immutable IDs, species, appearance and native anatomy; no instant relocation, added, merged or missing bodies. Anatomy: ${anatomy}.`;
+    const openingRoster = cast.members.map(member => `${member.id}=${member.identity}@${danceGroupRelativePosition(member.position)}`).join('; ');
+    const placement = staging === 'initial' ? `Initial staging: ${cast.formation}. Opening stage anchors: ${openingRoster}. Positions may change along approved continuous native paths.`
+      : `Explicit required relative formation: ${cast.formation}. Opening stage anchors: ${openingRoster}. Preserve that relative formation while moving natively within its constraint; bodies are not static.`;
+    return `CAST CONTRACT: exactly ${cast.count} ${cast.kind} performers; ${cast.ensemble}. ${placement} ${DANCE_V3_ENSEMBLE_COMPOSITION} Immutable IDs, species, appearance and native anatomy; no instant relocation, added, merged or missing bodies. Anatomy: ${anatomy}.`;
   }
   return `CAST CONTRACT: exactly ${cast.count} ${cast.kind} performers; ${cast.ensemble}; ${cast.formation}. ${roster}. Stable IDs, species, appearance and slots; no added, merged or missing bodies. Anatomy: ${anatomy}.`;
 }

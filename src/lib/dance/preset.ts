@@ -2,6 +2,7 @@ import type { DanceCreativePreferences, DanceCreativeDirection, DanceCastContrac
 import type { DanceMusicSpec } from './musicProfiles';
 import type { DanceProposal, DanceIdeaValidationRule } from './ideas';
 import type { DancePerformanceStaging } from './cast';
+import type { DanceRecentPremiseV3 } from './premises';
 
 /** Versioned music-first workflow; legacy track and snapshot identities stay readable. */
 export const DANCE_CATEGORY_ID = 'dance_challenge' as const;
@@ -79,6 +80,8 @@ export type DanceVideoJob = {
   rhythm?: DanceRhythm;
   creativePreferences?: DanceCreativePreferences; direction?: DanceCreativeDirection; musicSpec?: DanceMusicSpec;
   planningVersion?: 3; productionSeed?: DanceProductionSeedV3; productionManifest?: DanceProductionManifestV3; productionLockedAt?: string;
+  /** Owner-scoped creative comparison snapshot captured only during fresh V3 preparation. */
+  recentPremises?: DanceRecentPremiseV3[];
   imageApprovedAt?: string; imageReviewRequired?: boolean;
   videoSpec?: { model: 'grok-imagine-video' | 'grok-imagine-video-1.5' | 'grok-imagine-video-1.5-lite'; resolution: '720p'; width: 720; height: 1280 };
   canResume?: boolean;
