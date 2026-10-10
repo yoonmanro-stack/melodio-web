@@ -36,8 +36,98 @@ export type DanceCreativeDirection = {
   };
 };
 export type DanceDirectionMusicSpec = { id: string; bpm: number; rhythmPurpose: string };
+/** Immutable identity facts, created directly rather than parsed from legacy styling prose. */
+export type DanceProductionAnchorV3 = {
+  id: DanceCastMember['id']; kind: DanceCastMember['kind']; species: DanceCastMember['species'];
+  gender: 'woman' | 'man' | 'unspecified' | 'none'; adult: boolean; ageBand: string | null;
+  face: string | null; hair: string | null; coat: string | null; surface: string | null;
+  movementAnatomy: DanceCastMember['movementAnatomy'];
+};
+export const DANCE_PRODUCTION_LAYOUTS = {
+  solo_center: { counts: [1], formation: 'centered solo', positions: ['center'] },
+  side_by_side: { counts: [2], formation: 'separated left/right pair', positions: ['left', 'right'] },
+  open_triangle: { counts: [3], formation: 'open triangle', positions: ['front-center', 'rear-left', 'rear-right'] },
+  staggered_rows: { counts: [4, 5, 6], formation: 'two staggered rows, every body visible', positions: POSITIONS_V3() },
+  loose_arc: { counts: [2, 3, 4, 5, 6], formation: 'open shallow arc, every body visible', positions: ['arc-left', 'arc-right', 'arc-center', 'arc-rear-left', 'arc-rear-right', 'arc-rear-center'] },
+  diagonal: { counts: [2, 3, 4, 5, 6], formation: 'spaced diagonal, every body visible', positions: ['near-left', 'middle-left', 'middle-right', 'far-right', 'far-left', 'near-right'] },
+} as const;
+function POSITIONS_V3() { return ['front-left', 'front-center', 'front-right', 'rear-left', 'rear-center', 'rear-right']; }
+export type DanceProductionManifestV3 = {
+  version: 3; locationId: Exclude<DanceCreativePreferences['location'], 'auto'>;
+  danceStyleId: Exclude<DanceCreativePreferences['danceStyle'], 'auto'>;
+  layoutId: keyof typeof DANCE_PRODUCTION_LAYOUTS; locationDetail: string;
+  wardrobes: { memberId: string; description: string }[];
+};
+export type DanceProductionSeedV3 = {
+  version: 3; seedId: string; count: number; kind: DanceCastContract['kind']; ensemble: DanceEnsemble;
+  anchors: DanceProductionAnchorV3[];
+  locks: { locationId: string | null; danceStyleId: string | null; layoutId: string | null;
+    visualStyle: DanceCreativePreferences['visualStyle']; difficulty: DanceCreativePreferences['difficulty']; wardrobeTerms: string[];
+    /** Absent on earlier saved V3 seeds; IDs bind clothing to immutable members, not changeable slots. */
+    wardrobeByMember?: { memberId: string; terms: string[] }[] };
+  hints: { locationId: string; danceStyleId: string; outfitId: string; paletteId: string; layoutId: keyof typeof DANCE_PRODUCTION_LAYOUTS };
+  /** Compact legacy axes only: never an approved production direction. */
+  variation: Pick<DanceCreativeDirection, 'castId' | 'appearanceId' | 'sources' | 'musicMatch'>;
+};
 export class DanceCreativeInputError extends Error {
   constructor(message: string, public code: 'CREATIVE_PREFERENCES' | 'CREATIVE_CONFLICT' | 'CREATIVE_VARIATION' = 'CREATIVE_PREFERENCES') { super(message); this.name = 'DanceCreativeInputError'; }
+}
+/** Stored V3 facts are validated before they can authorize a new planning or media action. */
+export function validateDanceProductionSeedV3(value: unknown, expectedSeedId?: string): DanceProductionSeedV3 {
+  const fail = (): never => { throw new DanceCreativeInputError('저장된 공연 정체성·선택을 확인해 주세요.', 'CREATIVE_CONFLICT'); };
+  const object = (input: unknown, required: string[], optional: string[] = []): input is Record<string, unknown> => Boolean(input && typeof input === 'object' && !Array.isArray(input)
+    && required.every(key => Object.hasOwn(input, key)) && Object.keys(input).every(key => required.includes(key) || optional.includes(key)));
+  const text = (input: unknown, limit: number): input is string => typeof input === 'string' && input.trim() === input && Boolean(input) && input.length <= limit && !/data:|base64|[\u0000-\u001f]/i.test(input);
+  const option = (key: keyof DanceCreativePreferences, input: unknown, auto = false) => (DANCE_CREATIVE_OPTIONS[key] as readonly { id: string }[]).some(item => item.id === input && (auto || item.id !== 'auto'));
+  if (!object(value, ['version', 'seedId', 'count', 'kind', 'ensemble', 'anchors', 'locks', 'hints', 'variation']) || value.version !== 3
+    || !text(value.seedId, 200) || (expectedSeedId !== undefined && value.seedId !== expectedSeedId)
+    || !Number.isInteger(value.count) || Number(value.count) < 1 || Number(value.count) > 6
+    || !['human', 'animal', 'robot', 'human_animal'].includes(String(value.kind))
+    || value.ensemble !== ensembleForCount(Number(value.count)) || !Array.isArray(value.anchors) || value.anchors.length !== value.count) return fail();
+  for (const [index, anchor] of value.anchors.entries()) {
+    if (!object(anchor, ['id', 'kind', 'species', 'gender', 'adult', 'ageBand', 'face', 'hair', 'coat', 'surface', 'movementAnatomy'])
+      || anchor.id !== `performer_${index + 1}` || !Object.hasOwn(DANCE_SPECIES_ANATOMY, String(anchor.species))
+      || anchor.movementAnatomy !== DANCE_SPECIES_ANATOMY[anchor.species as DanceCastMember['species']]
+      || anchor.kind !== (anchor.species === 'human' ? 'human' : anchor.species === 'robot' ? 'robot' : 'animal')) return fail();
+    const human = anchor.kind === 'human', robot = anchor.kind === 'robot';
+    if (anchor.adult !== human || !(human ? ['woman', 'man', 'unspecified'] : ['none']).includes(String(anchor.gender))
+      || (human ? !text(anchor.ageBand, 40) || !/^(?:[2-9]0s|(?:1[89]|[2-9]\d|10\d|11\d) years old)$/.test(anchor.ageBand) || !text(anchor.hair, 80) : anchor.ageBand !== null || anchor.hair !== null)
+      || (human || robot ? !text(anchor.face, 100) : anchor.face !== null)
+      || (anchor.kind === 'animal' ? !text(anchor.coat, 80) : anchor.coat !== null)
+      || (robot ? !text(anchor.surface, 80) : anchor.surface !== null)) return fail();
+  }
+  const kinds = new Set(value.anchors.map(anchor => anchor.kind));
+  if (value.kind === 'human_animal' ? kinds.size !== 2 || !kinds.has('human') || !kinds.has('animal') : kinds.size !== 1 || !kinds.has(value.kind)) return fail();
+  const locks = value.locks, hints = value.hints, variation = value.variation;
+  const wardrobeTerms = (terms: unknown): terms is string[] => Array.isArray(terms) && terms.length <= WARDROBE_TERMS.length && new Set(terms).size === terms.length && terms.every(term => WARDROBE_TERMS.some(([known]) => known === term));
+  if (!object(locks, ['locationId', 'danceStyleId', 'layoutId', 'visualStyle', 'difficulty', 'wardrobeTerms'], ['wardrobeByMember'])
+    || (locks.locationId !== null && !option('location', locks.locationId)) || (locks.danceStyleId !== null && !option('danceStyle', locks.danceStyleId))
+    || (locks.layoutId !== null && (typeof locks.layoutId !== 'string' || !Object.hasOwn(DANCE_PRODUCTION_LAYOUTS, locks.layoutId) || !(DANCE_PRODUCTION_LAYOUTS[locks.layoutId as keyof typeof DANCE_PRODUCTION_LAYOUTS].counts as readonly number[]).includes(Number(value.count))))
+    || !option('visualStyle', locks.visualStyle) || !option('difficulty', locks.difficulty) || !wardrobeTerms(locks.wardrobeTerms)) return fail();
+  if (locks.wardrobeByMember !== undefined) {
+    if (!Array.isArray(locks.wardrobeByMember) || locks.wardrobeByMember.length > value.count) return fail();
+    let lastIndex = -1;
+    for (const lock of locks.wardrobeByMember) {
+      if (!object(lock, ['memberId', 'terms']) || !wardrobeTerms(lock.terms) || !lock.terms.length || lock.terms.some(term => !(locks.wardrobeTerms as string[]).includes(term))) return fail();
+      const index = value.anchors.findIndex(anchor => anchor.id === lock.memberId);
+      if (index <= lastIndex) return fail();
+      lastIndex = index;
+    }
+  }
+  if (!object(hints, ['locationId', 'danceStyleId', 'outfitId', 'paletteId', 'layoutId']) || !option('location', hints.locationId) || !option('danceStyle', hints.danceStyleId)
+    || !OUTFIT.some(item => item.id === hints.outfitId) || !PALETTE.some(item => item.id === hints.paletteId) || typeof hints.layoutId !== 'string' || !Object.hasOwn(DANCE_PRODUCTION_LAYOUTS, hints.layoutId)
+    || !(DANCE_PRODUCTION_LAYOUTS[hints.layoutId as keyof typeof DANCE_PRODUCTION_LAYOUTS].counts as readonly number[]).includes(Number(value.count))
+    || !object(variation, ['castId', 'appearanceId', 'sources'], ['musicMatch']) || !CAST.some(item => item.id === variation.castId) || !APPEARANCE.some(item => item.id === variation.appearanceId)
+    || !object(variation.sources, ['cast', 'location', 'choreography']) || Object.values(variation.sources).some(source => !['explicit', 'brief', 'automatic'].includes(String(source)))) return fail();
+  if (variation.musicMatch !== undefined) {
+    const match = variation.musicMatch;
+    if (!object(match, ['profileId', 'rhythmPurpose', 'tempoTargetBpm', 'preferredStyles', 'recommendationTags', 'selection'])
+      || (match.profileId !== null && !text(match.profileId, 80)) || typeof match.rhythmPurpose !== 'string' || match.rhythmPurpose.length > 200
+      || (match.tempoTargetBpm !== null && (typeof match.tempoTargetBpm !== 'number' || !Number.isFinite(match.tempoTargetBpm) || match.tempoTargetBpm < 60 || match.tempoTargetBpm > 200))
+      || !Array.isArray(match.preferredStyles) || match.preferredStyles.some(style => !option('danceStyle', style))
+      || !Array.isArray(match.recommendationTags) || match.recommendationTags.some(tag => !text(tag, 80)) || !['preferred', 'adapted', 'user'].includes(String(match.selection))) return fail();
+  }
+  return value as DanceProductionSeedV3;
 }
 const DEFAULTS: DanceCreativePreferences = { performer: 'auto', ensemble: 'auto', species: 'auto', location: 'auto', danceStyle: 'auto', visualStyle: 'realistic', difficulty: 'easy' };
 export function validateDanceCreativePreferences(raw?: unknown): DanceCreativePreferences {
@@ -144,6 +234,10 @@ function briefCast(brief: string): BriefCast {
   const withoutAnimalDancers = foundSpecies.reduce((value, species) => value.replace(new RegExp(`(?:${SPECIES_HINTS[species]})\\s+dancers?\\b`, 'gi'), species), humanBrief).replace(/animals?\s+dancers?\b/gi, 'animals');
   const hasHuman = new RegExp(HUMAN_PATTERN, 'i').test(withoutAnimalDancers);
   result.humanCount = namedCount(humanBrief, HUMAN_PATTERN);
+  if (result.woman && result.man) {
+    const women = namedCount(humanBrief, '여성|여자|women\\b|woman\\b|female\\b'), men = namedCount(humanBrief, '남성|남자|men\\b|man\\b|male\\b');
+    if (women !== undefined && men !== undefined) result.humanCount = women + men;
+  }
   if (hasHuman && hasAnimal) {
     result.performer = 'human_animal';
     if (result.humanCount !== undefined || foundSpecies.some(species => namedCount(brief, SPECIES_HINTS[species]) !== undefined)) result.count = (result.humanCount || 1) + (result.species.length || 1);
@@ -318,4 +412,286 @@ export function resolveDanceCreativeDirection(raw: DanceCreativePreferences | un
       concreteEn };
   }
   throw new DanceCreativeInputError('최근 연출과 다른 조합을 만들지 못했습니다. 인물·장소·안무 중 하나를 바꿔 주세요.', 'CREATIVE_VARIATION');
+}
+
+const WARDROBE_TERMS: readonly [string, RegExp][] = [
+  ['red', /빨간|빨강|붉은|\bred\b/i], ['blue', /파란|파랑|푸른|\bblue\b/i], ['black', /검은|검정|블랙|\bblack\b/i],
+  ['white', /하얀|흰색|흰\s|화이트|\bwhite\b/i], ['yellow', /노란|노랑|\byellow\b/i], ['pink', /분홍|핑크|\bpink\b/i],
+  ['tracksuit', /트레이닝복|운동복|\btracksuits?\b/i], ['suit', /정장|\bsuits?\b/i], ['dress', /원피스|드레스|\bdress(?:es)?\b/i],
+  ['jacket', /재킷|자켓|\bjackets?\b/i], ['hoodie', /후드|\bhoodies?\b/i], ['hat', /모자|\bhats?\b/i],
+];
+const IDENTITY_COLORS: readonly [string, RegExp][] = [
+  ['blonde', /금발|\bblond(?:e)?\b/i], ['black', /흑발|검은|검정|\bblack\b/i], ['brown', /갈색|밤색|\bbrown\b/i],
+  ['silver', /은발|은색|\bsilver\b/i], ['grey', /회색|\bgr[ae]y\b/i], ['white', /백발|흰|하얀|\bwhite\b/i],
+  ['red', /적발|붉은|빨간|\bred\b|\bredhead\b/i], ['copper', /구리색|\bcopper\b/i], ['blue', /파란|푸른|\bblue\b/i],
+  ['pink', /분홍|\bpink\b/i], ['purple', /보라|\bpurple\b/i], ['green', /초록|\bgreen\b/i], ['dark', /어두운|\bdark\b/i],
+];
+type IdentityPatch = Partial<Pick<DanceProductionAnchorV3, 'gender' | 'ageBand' | 'hair' | 'face' | 'coat' | 'surface'>>;
+function briefAttributeClauses(brief: string): string[] {
+  return brief.split(/[.!?;,\n，]|\s+and\s+(?=[^.!?;,\n]{0,70}\b(?:wom[ae]n|m[ae]n|performer_[1-6]|left|right|cats?|dogs?|penguins?|otters?|bears?|rabbits?|fox(?:es)?|robots?|dancers?)\b)|그리고|반면|(?<=(?:명|마리|여성|여자|남성|남자))\s*(?:과|와|및)\s*|\s+(?=(?:여성|여자|남성|남자)(?:은|는|이|가)\s)/i).filter(value => value.trim());
+}
+function attributeTargets(clause: string, anchors: DanceProductionAnchorV3[], members: DanceCastMember[], intrinsic: boolean): number[] {
+  const specific = [...clause.matchAll(/\bperformer_([1-6])\b/gi)].map(match => Number(match[1]) - 1);
+  for (const [pattern, position] of [[/왼쪽|좌측|\bleft\b/i, 'left'], [/오른쪽|우측|\bright\b/i, 'right']] as const) {
+    if (pattern.test(clause)) {
+      const indices = members.flatMap((member, index) => member.position.includes(position) ? [index] : []);
+      if (indices.length !== 1) throw new DanceCreativeInputError('왼쪽·오른쪽 출연자 설정은 한 명을 분명하게 지정해 주세요.', 'CREATIVE_CONFLICT');
+      specific.push(indices[0]);
+    }
+  }
+  if (/주인공|리드|\blead\b/i.test(clause)) specific.push(0);
+  if (/파트너|\bpartner\b/i.test(clause)) specific.push(1);
+  if (specific.some(index => !anchors[index]) || new Set(specific).size > 1) throw new DanceCreativeInputError('출연자 ID·역할 설정이 서로 다릅니다.', 'CREATIVE_CONFLICT');
+  if (specific.length) return [specific[0]];
+  const woman = /여성|여자|\bwom[ae]n\b|\bfemale\b/i.test(clause), man = /남성|남자|\bm[ae]n\b|\bmale\b/i.test(clause);
+  const species = DANCE_ANIMAL_SPECIES.filter(species => new RegExp(SPECIES_HINTS[species], 'i').test(clause));
+  let candidates = anchors.flatMap((anchor, index) => species.length ? species.includes(anchor.species as DanceAnimalSpecies) ? [index] : []
+    : /로봇|\brobot\b/i.test(clause) ? anchor.kind === 'robot' ? [index] : []
+      : woman || man ? anchor.kind === 'human' && ((woman && man) || anchor.gender === (woman ? 'woman' : 'man')) ? [index] : []
+        : intrinsic ? anchor.kind === 'human' ? [index] : [] : [index]);
+  if (/모두|각각|모든|둘\s*다|\b(?:all|each|both|every)\b/i.test(clause)) {
+    if (woman || man) candidates = anchors.flatMap((anchor, index) => anchor.kind === 'human' ? [index] : []);
+    return candidates;
+  }
+  if (candidates.length > 1 && /중\s*한|\b(?:one of|among)\b/i.test(clause)) throw new DanceCreativeInputError('외모·의상 특징이 있는 출연자를 ID나 역할로 분명하게 지정해 주세요.', 'CREATIVE_CONFLICT');
+  if (candidates.length > 1 && (namedCount(clause, HUMAN_PATTERN) === candidates.length || /\b(?:women|men)\b/i.test(clause))) return candidates;
+  if (candidates.length > 1 && !intrinsic && !(woman || man || species.length)) return [];
+  if (candidates.length !== 1) throw new DanceCreativeInputError('나이·외모·의상은 출연자 ID나 성별·역할로 한 명을 분명하게 지정해 주세요.', 'CREATIVE_CONFLICT');
+  return candidates;
+}
+function identityPatch(clause: string): IdentityPatch {
+  const result: IdentityPatch = {};
+  const woman = /여성|여자|\bwoman\b|\bfemale\b/i.test(clause), man = /남성|남자|\bman\b|\bmale\b/i.test(clause);
+  if (woman !== man) result.gender = woman ? 'woman' : 'man';
+  if (/아동|아이(?:가|들|의|는)|어린이|미성년|소년|소녀|\b(?:child(?:ren)?|kids?|boy|girl|teen(?:ager)?)\b/i.test(clause)
+    && !/없이|없는|\b(?:no|without)\b/i.test(clause)) throw new DanceCreativeInputError('사람 출연자는 성인으로 설정해 주세요.', 'CREATIVE_CONFLICT');
+  const decades = [...clause.matchAll(/(\d{2})\s*대|\b(\d{2})s\b/gi)].map(match => Number(match[1] || match[2]));
+  const ages = [...clause.matchAll(/(\d{1,3})[-\s]*(?:세|살|years?[-\s]+old|y\/o)/gi)].map(match => Number(match[1]));
+  const wordAge = ([['20s', /\btwenties\b|청년|\byoung adult\b|\byoung\s+(?:woman|man|dancer)\b/i], ['30s', /\bthirties\b/i], ['40s', /\bforties\b|중년|\bmiddle[- ]aged\b/i], ['50s', /\bfifties\b/i], ['60s', /\bsixties\b|노년|\belderly\b/i], ['70s', /\bseventies\b/i]] as const).filter(([, pattern]) => pattern.test(clause));
+  const ageValues = [...decades.map(age => `${age}s`), ...ages.map(age => `${age} years old`), ...wordAge.map(([age]) => age)];
+  if (decades.some(age => age < 20 || age > 90 || age % 10) || ages.some(age => age < 18 || age > 119) || new Set(ageValues).size > 1) throw new DanceCreativeInputError('성인 출연자의 나이를 한 가지로 분명하게 지정해 주세요.', 'CREATIVE_CONFLICT');
+  if (ageValues.length) result.ageBand = ageValues[0];
+  const hairContext = clause.match(/(?:(?:short|long|dark|black|brown|blond(?:e)?|silver|gr[ae]y|white|red|copper|blue|pink|purple|green|curly|straight|wavy|side-part)\s+){0,5}(?:hair|hairstyle|ponytail|braids?|curls?|bob|crop|mohawk|dreadlocks|bun|fringe)\b|(?:(?:짧은|긴|금발|흑발|은발|백발|적발|검은|갈색|은색|회색|흰|하얀|붉은|빨간|파란|푸른|분홍|보라|초록|곱슬|땋은|생|웨이브)\s*){0,5}(?:머리|헤어|포니테일|단발|곱슬)|금발|흑발|은발|백발|적발|\b(?:blond(?:e)?|brunette|redhead|bald)\b|대머리/gi)?.join(' ') || '';
+  if (hairContext) {
+    const colors = IDENTITY_COLORS.filter(([, pattern]) => pattern.test(hairContext)).map(([color]) => color);
+    if (colors.length > 1 && colors.includes('dark')) colors.splice(colors.indexOf('dark'), 1);
+    if (/\bbrunette\b/i.test(hairContext)) colors.push('brown');
+    const length = /짧은|짧게|단발|\bshort\b/i.test(hairContext) ? 'short' : /긴|길게|\blong\b/i.test(hairContext) ? 'long' : '';
+    const styles = ([['ponytail', /포니테일|묶은|\bponytail\b/i], ['braids', /땋은|\bbraids?\b/i], ['curls', /곱슬|\bcurls?|curly\b/i], ['bob', /단발|\bbob\b/i], ['crop', /\bcrop\b/i], ['mohawk', /모호크|\bmohawk\b/i], ['bun', /번\s*헤어|\bbun\b/i], ['dreadlocks', /\bdreadlocks\b/i], ['straight hair', /생머리|\bstraight\b/i], ['wavy hair', /웨이브\s*머리|\bwavy\b/i], ['side-part hair', /\bside-part\b/i], ['fringe', /\bfringe\b/i]] as const).filter(([, pattern]) => pattern.test(hairContext)).map(([style]) => style);
+    if (new Set(colors).size > 1 || styles.length > 1) throw new DanceCreativeInputError('머리 색·모양을 한 가지로 분명하게 지정해 주세요.', 'CREATIVE_CONFLICT');
+    if (/대머리|\bbald\b/i.test(hairContext)) result.hair = 'bald';
+    else if (length || colors.length || styles.length) result.hair = [length, colors[0], styles[0] || 'hair'].filter(Boolean).join(' ');
+    else throw new DanceCreativeInputError('요청한 머리 특징을 안전하게 고정하지 못했습니다. 짧은 금발처럼 색·모양을 분명하게 지정해 주세요.', 'CREATIVE_CONFLICT');
+  }
+  const face: string[] = [];
+  const heritage = ([['Korean', /한국인|한국\s*(?:여성|남성)|\bKorean\b/i], ['East Asian', /동아시아|\bEast Asian\b/i], ['Black', /흑인|\bBlack\s+(?:woman|man|person|dancer)\b/i], ['White', /백인|\bWhite\s+(?:woman|man|person|dancer)\b/i], ['South Asian', /남아시아|\bSouth Asian\b/i], ['Latina', /\bLatin[ao]\b/i], ['Middle Eastern', /중동|\bMiddle Eastern\b/i]] as const).filter(([, pattern]) => pattern.test(clause));
+  if (heritage.length > 1) throw new DanceCreativeInputError('출연자의 외모 특징을 한 가지로 분명하게 지정해 주세요.', 'CREATIVE_CONFLICT');
+  if (heritage.length) face.push(`${heritage[0][0]} face`);
+  const eye = clause.match(/(?:blue|brown|green|grey|gray|black|hazel)\s+eyes\b|(?:파란|푸른|갈색|초록|회색|검은)\s*(?:눈동자|눈)/i);
+  if (eye) {
+    const color = IDENTITY_COLORS.find(([, pattern]) => pattern.test(eye[0]))?.[0] || 'hazel';
+    face.push(`${color} eyes`);
+  }
+  const shape = clause.match(/(?:round|oval|square|angular)\s+face\b|(?:둥근|계란형|각진)\s*얼굴/i);
+  if (shape) face.push(/round|둥근/i.test(shape[0]) ? 'round face' : /oval|계란형/i.test(shape[0]) ? 'oval face' : 'angular face');
+  if (/주근깨|\bfreckles\b/i.test(clause)) face.push('freckles');
+  const skin = clause.match(/(?:fair|pale|tan|dark|light|brown)\s+skin\b|(?:밝은|하얀|흰|어두운|갈색)\s*피부/i);
+  if (skin) face.push(/dark|어두운/i.test(skin[0]) ? 'dark skin' : /tan|brown|갈색/i.test(skin[0]) ? 'tan skin' : 'fair skin');
+  if (/수염|\bbeard\b/i.test(clause)) face.push('beard');
+  const build = clause.match(/\b(?:tall|slim|athletic|muscular)\b|키가\s*큰|날씬한|근육질/i);
+  if (build) face.push(/tall|키가/i.test(build[0]) ? 'tall build' : /muscular|근육질/i.test(build[0]) ? 'muscular build' : /athletic/i.test(build[0]) ? 'athletic build' : 'slim build');
+  if (face.length) result.face = face.join(', ');
+  const animal = DANCE_ANIMAL_SPECIES.find(species => new RegExp(SPECIES_HINTS[species], 'i').test(clause));
+  if (animal) {
+    const speciesIndex = clause.search(new RegExp(SPECIES_HINTS[animal], 'i'));
+    const coatContext = clause.slice(Math.max(0, speciesIndex - 35), speciesIndex) + (clause.match(/(?:black|brown|white|grey|gray|red|orange|cream|silver)\s+(?:fur|coat)\b|(?:검은|갈색|흰|회색|붉은)\s*털/i)?.[0] || '');
+    const color = IDENTITY_COLORS.find(([, pattern]) => pattern.test(coatContext))?.[0];
+    if (color) result.coat = `${color} ${animal}`;
+  }
+  if (/로봇|\brobot\b/i.test(clause)) {
+    const surface = clause.match(/(?:matte|metallic|chrome|copper|gold|silver|steel|wooden)\s+(?:shell|surface|robot)\b|(?:무광|금색|은색|구리|금속)\s*(?:로봇|표면|외장)/i);
+    if (surface) result.surface = `${/chrome/i.test(surface[0]) ? 'chrome' : /gold|금색/i.test(surface[0]) ? 'gold' : /silver|은색/i.test(surface[0]) ? 'silver' : /copper|구리/i.test(surface[0]) ? 'copper' : /matte|무광/i.test(surface[0]) ? 'matte' : 'metallic'} articulated shell`;
+  }
+  const unresolved = /(?:나이|\bage(?:d)?\b|\byears?[- ]old\b|(?:스무|서른|마흔|쉰|예순)\s*(?:세|살|대)|눈동자|\b(?:eye color|skin tone|ethnicity)\b)/i.test(clause) && !result.ageBand && !result.face
+    || /(?:얼굴|\bface\b)/i.test(clause) && !result.face && !/표정|웃|미소|\b(?:smil|expression|gaze|facing)/i.test(clause);
+  if (unresolved) throw new DanceCreativeInputError('요청한 정체성 특징을 안전하게 고정하지 못했습니다. 출연자와 특징을 분명하게 지정해 주세요.', 'CREATIVE_CONFLICT');
+  return result;
+}
+function applyBriefProductionLocks(brief: string, anchors: DanceProductionAnchorV3[], members: DanceCastMember[], prefs: DanceCreativePreferences) {
+  if (/\brespectively\b/i.test(brief) && /\bwom[ae]n\b|여성|여자/i.test(brief) && /\bm[ae]n\b|남성|남자/i.test(brief)
+    && WARDROBE_TERMS.some(([, pattern]) => pattern.test(brief))) throw new DanceCreativeInputError('각 출연자의 의상·색상을 별도 문장이나 ID로 분명하게 지정해 주세요.', 'CREATIVE_CONFLICT');
+  const assigned = new Map<string, Map<string, unknown>>(), wardrobe = new Map<string, Set<string>>(), globalTerms = new Set<string>();
+  for (const clause of briefAttributeClauses(brief)) {
+    const patch = identityPatch(clause);
+    // Unqualified gender-only roster wording already shaped the cast. It must not retarget animal members.
+    const inheritedGender = Object.keys(patch).length === 1 && patch.gender && !/performer_[1-6]|왼쪽|오른쪽|좌측|우측|주인공|파트너|\b(?:left|right|lead|partner)\b/i.test(clause)
+      && anchors.filter(anchor => anchor.kind === 'human').every(anchor => anchor.gender === patch.gender);
+    const hasIdentity = Object.keys(patch).length > 0 && !inheritedGender;
+    const wardrobeClause = clause.replace(/\b(?:short|long|blond(?:e)?|black|brown|silver|gr[ae]y|white|red|copper|blue|pink|purple|green|dark|curly|straight)(?:\s+(?:short|long|curly|straight|dark))*\s+(?:hair|eyes|skin|ponytail|braids?|curls?|bob|crop)\b|(?:짧은|긴|금발|흑발|은발|백발|적발|검은|갈색|은색|회색|흰|하얀|붉은|빨간|파란|푸른|분홍|보라|초록|곱슬)(?:\s*(?:짧은|긴|곱슬))*\s*(?:머리|눈동자|눈|피부)/gi, ' ');
+    const garment = WARDROBE_TERMS.filter(([term, pattern]) => !IDENTITY_COLORS.some(([color]) => color === term) && pattern.test(wardrobeClause));
+    const terms = garment.length || /의상|옷|입|\b(?:wear(?:ing)?|dressed|clothing|outfit)\b/i.test(wardrobeClause) ? WARDROBE_TERMS.filter(([, pattern]) => pattern.test(wardrobeClause)).map(([term]) => term) : [];
+    if ((hasIdentity || terms.length) && /또는|혹은|\bor\b|\bnot\b/i.test(clause)) throw new DanceCreativeInputError('대안·부정이 포함된 외모·의상은 한 가지로 분명하게 지정해 주세요.', 'CREATIVE_CONFLICT');
+    if (hasIdentity) {
+      for (const index of attributeTargets(clause, anchors, members, true)) {
+        const anchor = anchors[index], fields = assigned.get(anchor.id) || new Map<string, unknown>();
+        const woman = /여성|여자|\bwoman\b|\bfemale\b/i.test(clause), man = /남성|남자|\bman\b|\bmale\b/i.test(clause);
+        const resolved = { ...patch, ...(anchor.kind === 'human' && woman !== man ? { gender: woman ? 'woman' : 'man' } : {}) } as IdentityPatch;
+        if ((anchor.kind !== 'human' && (resolved.ageBand || resolved.hair || resolved.face)) || (resolved.coat && anchor.kind !== 'animal') || (resolved.surface && anchor.kind !== 'robot')
+          || (resolved.gender && ['woman', 'man'].includes(prefs.performer) && resolved.gender !== prefs.performer)) throw new DanceCreativeInputError('외모 특징과 선택한 출연자 유형이 다릅니다.', 'CREATIVE_CONFLICT');
+        for (const [key, value] of Object.entries(resolved)) {
+          if (key === 'face') {
+            if (!fields.has('face.default')) fields.set('face.default', anchor.face?.replace('distinct original ', ''));
+            for (const part of String(value).split(', ')) {
+              const category = /Korean|East Asian|Black|White|South Asian|Latin[ao]|Middle Eastern/i.test(part) ? 'heritage' : /eyes/i.test(part) ? 'eyes'
+                : /skin/i.test(part) ? 'skin' : /build/i.test(part) ? 'build' : /face/i.test(part) ? 'shape' : part;
+              const field = `face.${category}`;
+              if (fields.has(field) && fields.get(field) !== part) throw new DanceCreativeInputError('같은 출연자의 외모 특징이 서로 다릅니다.', 'CREATIVE_CONFLICT');
+              fields.set(field, part);
+            }
+            anchor.face = `distinct original ${[...(fields.has('face.heritage') ? [] : [fields.get('face.default')]), ...[...fields].filter(([field]) => field.startsWith('face.') && field !== 'face.default').map(([, part]) => part)].join(', ')}`;
+            continue;
+          }
+          if (fields.has(key) && fields.get(key) !== value) throw new DanceCreativeInputError('같은 출연자의 정체성 특징이 서로 다릅니다.', 'CREATIVE_CONFLICT');
+          fields.set(key, value);
+          Object.assign(anchor, { [key]: value });
+        }
+        assigned.set(anchor.id, fields);
+      }
+    }
+    for (const term of terms) globalTerms.add(term);
+    if (terms.length) for (const index of attributeTargets(clause, anchors, members, false)) {
+      const memberTerms = wardrobe.get(anchors[index].id) || new Set<string>(); terms.forEach(term => memberTerms.add(term)); wardrobe.set(anchors[index].id, memberTerms);
+    }
+  }
+  return { wardrobeTerms: [...globalTerms], wardrobeByMember: anchors.flatMap(anchor => wardrobe.has(anchor.id) ? [{ memberId: anchor.id, terms: [...wardrobe.get(anchor.id)!] }] : []) };
+}
+function briefLayout(brief: string): keyof typeof DANCE_PRODUCTION_LAYOUTS | null {
+  if (/또는|혹은|\bor\b|\bnot\b/i.test(brief)) return null;
+  const matches = ([['side_by_side', /나란히|좌우로|side.by.side/i], ['open_triangle', /삼각\s*(?:대형|배치)|triangle/i],
+    ['staggered_rows', /두\s*줄|two\s+rows/i], ['loose_arc', /반원|곡선\s*대형|shallow\s+arc/i], ['diagonal', /대각선|diagonal/i]] as const).filter(([, pattern]) => pattern.test(brief));
+  return matches.length === 1 ? matches[0][0] : null;
+}
+function defaultLayout(count: number): keyof typeof DANCE_PRODUCTION_LAYOUTS {
+  return count === 1 ? 'solo_center' : count === 2 ? 'side_by_side' : count === 3 ? 'open_triangle' : 'staggered_rows';
+}
+/** Resolve selection facts once, but expose automatic production choices only as overridable hints. */
+export function resolveDanceProductionSeedV3(raw: unknown, seed: string, brief = '', recent: readonly unknown[] = [], musicSpec?: DanceDirectionMusicSpec): DanceProductionSeedV3 {
+  const prefs = validateDanceCreativePreferences(raw);
+  for (const key of ['location', 'danceStyle'] as const) {
+    const requested = hint(key, brief);
+    if (prefs[key] !== 'auto' && requested && prefs[key] !== requested && !/또는|혹은|\bor\b|\bnot\b/i.test(brief)) throw new DanceCreativeInputError('선택한 장소·안무와 상황 설정이 다릅니다.', 'CREATIVE_CONFLICT');
+  }
+  const draft = resolveDanceCreativeDirection(prefs, seed, brief, recent, musicSpec);
+  const cast = validateDanceCastContract(draft.cast), details = briefCast(brief);
+  const offset = Math.max(0, APPEARANCE.findIndex(option => option.id === draft.appearanceId));
+  const anchors = cast.members.map((member, index): DanceProductionAnchorV3 => {
+    const human = member.kind === 'human', detailIndex = (offset + index) % HAIR.length;
+    const gender = !human ? 'none' : draft.castId === 'woman' ? 'woman' : draft.castId === 'man' ? 'man'
+      : details.woman && details.man ? index % 2 === 0 ? 'woman' : 'man' : details.woman ? 'woman' : details.man ? 'man'
+        : cast.kind === 'human_animal' && index === 0 && offset % 2 === 0 ? 'woman' : 'unspecified';
+    return { id: member.id, kind: member.kind, species: member.species, gender, adult: human,
+      ageBand: human ? `${[20, 30, 40, 50][detailIndex % 4]}s` : null,
+      face: human ? `distinct original ${HUMAN_LOOKS[detailIndex]} face` : member.kind === 'robot' ? `${['round', 'oval', 'square'][index % 3]} lens face` : null,
+      hair: human ? HAIR[detailIndex] : null, coat: member.kind === 'animal' ? ANIMAL_COATS[member.species as DanceAnimalSpecies] : null,
+      surface: member.kind === 'robot' ? 'articulated matte shell' : null, movementAnatomy: member.movementAnatomy };
+  });
+  const layoutId = briefLayout(brief) || (cast.count === 2 && /왼쪽|오른쪽|\b(?:left|right)\s+(?:dancer|performer|woman|man)\b|\b(?:dancer|performer|woman|man)\s+on\s+the\s+(?:left|right)\b/i.test(brief) ? 'side_by_side' : null);
+  if (layoutId && !(DANCE_PRODUCTION_LAYOUTS[layoutId].counts as readonly number[]).includes(cast.count)) throw new DanceCreativeInputError('상황 설정의 배치와 출연자 수가 다릅니다.', 'CREATIVE_CONFLICT');
+  // Resolve explicit intrinsic details before any model call; automatic details retain seeded variety.
+  const wardrobeLocks = applyBriefProductionLocks(brief, anchors, cast.members, prefs);
+  return { version: 3, seedId: seed, count: cast.count, kind: cast.kind, ensemble: cast.ensemble, anchors,
+    locks: { locationId: draft.sources.location === 'automatic' ? null : draft.locationId,
+      danceStyleId: draft.sources.choreography === 'automatic' ? null : draft.choreographyId, layoutId,
+      visualStyle: prefs.visualStyle, difficulty: prefs.difficulty, ...wardrobeLocks },
+    hints: { locationId: draft.locationId, danceStyleId: draft.choreographyId, outfitId: draft.outfitId, paletteId: draft.paletteId, layoutId: layoutId || defaultLayout(cast.count) },
+    variation: { castId: draft.castId, appearanceId: draft.appearanceId, sources: draft.sources, musicMatch: draft.musicMatch } };
+}
+function productionText(value: unknown, limit: number): string {
+  if (typeof value !== 'string' || !value.trim() || value !== value.trim() || value.length > limit || !/^[ -~]+$/.test(value)
+    || /data:|base64/i.test(value)) throw new DanceCreativeInputError('공연 제작 세부 설정을 확인해 주세요.');
+  return value;
+}
+/** Provider scene prose cannot override typed facts. Absence phrases describe genuine empty locations. */
+export function assertDanceProductionSceneTextV3(value: string, environmentOnly = false, seed?: DanceProductionSeedV3): void {
+  const positive = value.replace(/\b(?:no|without)\s+(?:(?:any|a|an|additional|extra|other|background)\s+){0,3}(?:human\s+(?:dancers?|performers?)|people|humans?|persons?|dancers?|performers?|child(?:ren)?|kids?|men|women|crowds?|bystanders|onlookers)\b/gi, ' ')
+    .replace(/(?:사람|인간|출연자|무용수|아이들|어린이|관중)\s*(?:없이|없는)/g, ' ')
+    .replace(/\b(?:dancer|performer|human|woman|man|animal|robot|dog|cat)\s+(?:statue|sculpture|mural|painting|portrait|mannequin|toy)\b/gi, 'scene object')
+    .replace(/\bhuman[- ]scale\b/gi, 'ordinary scale').replace(/\bchildren(?:'s)?\s+playground\b|\bchild[- ]friendly\b/gi, 'play area');
+  const actor = '(?:performer_[1-6]|cast|dancers?|performers?|humans?|people|persons?|child(?:ren)?|kids?|teenagers?|adults?|wom[ae]n|m[ae]n|boys?|girls?|animals?|robots?|cats?|dogs?|penguins?|otters?|bears?|rabbits?|fox(?:es)?)';
+  const intrinsic = '(?:identity|identities|faces?|hair|hairstyle|eyes?|skin|ethnicity|age|gender|species|anatomy|wardrobe|clothing|outfits?|dress|suit|jacket|hoodie|hat|coat|fur|shell|surface)';
+  const qualifiers = '(?:(?:a|an|the|all|one|two|three|four|five|six|[1-6]|new|additional|extra|saved|original|adult)\\s+){0,5}';
+  if (new RegExp(`\\b(?:replace|swap|recast|add|remove|omit|substitute)\\s+${qualifiers}(?:${actor}|${intrinsic})\\b`, 'i').test(positive)
+    || new RegExp(`\\b(?:change|transform|convert|redesign)\\s+${qualifiers}(?:${actor}(?:'s)?\\s+)?${intrinsic}\\b`, 'i').test(positive)
+    || new RegExp(`\\b(?:turn|make|change)\\b[^.!?;]{0,50}\\b${actor}\\b[^.!?;]{0,30}\\b(?:into|younger|older|male|female|wear)\\b`, 'i').test(positive)
+    || new RegExp(`\\b${actor}\\b[^.!?;]{0,70}\\b(?:becomes?|turns? into|transforms? into|is now|are now)\\s+${qualifiers}(?:${actor}|${intrinsic}|younger|older|male|female)\\b`, 'i').test(positive)
+    || /\b(?:blonde|brunette|redhead|hairstyle|hair|eye color|skin tone|ethnicity|years old|beard|new face|different face|child(?:ren)?|kids?|teenagers?|boys?|girls?)\b|\b\d{2}s\b/i.test(positive)
+    || /\b(?:blue|brown|green|gr[ae]y|black|hazel)\s+eyes\b|\b(?:round|oval|square|angular)\s+face\b|\b(?:fair|pale|tan|dark|light|brown)\s+skin\b/i.test(positive)
+    || /\b(?:black|brown|white|gr[ae]y|red|orange|cream|silver|gold|copper)\s+(?:fur|shell|cat|dog|penguin|otter|bear|rabbit|fox|robot)\b|\b(?:young|elderly|middle-aged|teenage|younger|older)\s+(?:adult\s+)?(?:dancer|performer|woman|man)\b/i.test(positive)
+    || /출연자.*(?:교체|바꾸|변경|추가)|어린이|미성년|머리\s*색|성별\s*변경/i.test(positive)
+    || (environmentOnly && (new RegExp(`\\b${actor}\\b`, 'i').test(positive) || /\b(?:wardrobe|clothing|outfit|dress|suit|jacket|hoodie|hat|gender|species|identity|anatomy)\b/i.test(positive)))) {
+    throw new DanceCreativeInputError('장소·연출 설명으로 저장된 출연자·정체성·의상을 바꿀 수 없습니다.', 'CREATIVE_CONFLICT');
+  }
+  if (seed && !environmentOnly) {
+    const speciesMentions = DANCE_ANIMAL_SPECIES.filter(species => new RegExp(SPECIES_HINTS[species], 'i').test(positive));
+    const genderConflict = /\bwom[ae]n\b|\bfemale\b/i.test(positive) && !seed.anchors.some(anchor => anchor.gender === 'woman')
+      || /\bm[ae]n\b|\bmale\b/i.test(positive) && !seed.anchors.some(anchor => anchor.gender === 'man');
+    const kindConflict = /\bhumans?|people|persons?\b/i.test(positive) && !seed.anchors.some(anchor => anchor.kind === 'human')
+      || /\brobots?\b/i.test(positive) && !seed.anchors.some(anchor => anchor.kind === 'robot');
+    const numbers: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+    const counts = [...positive.matchAll(new RegExp(`(?:^|[.!?;]\\s*|\\b(?:exactly|only|cast of|show|featuring)\\s+)(one|two|three|four|five|six|\\d+)\\s+(?:(?:original|distinct|adult|human|nonhuman|animal|articulated)\\s+){0,4}${actor}\\b`, 'gi'))];
+    if (genderConflict || kindConflict || speciesMentions.some(species => !seed.anchors.some(anchor => anchor.species === species))
+      || counts.some(match => { const count = numbers[match[1].toLowerCase()] || Number(match[1]); return count > seed.count || count !== seed.count && /\b(?:exactly|only|cast of|show|featuring)\b/i.test(match[0]); })) throw new DanceCreativeInputError('공연 설명의 인원·성별·종이 저장된 출연자와 다릅니다.', 'CREATIVE_CONFLICT');
+  }
+}
+export function validateDanceProductionManifestV3(value: unknown, seed: DanceProductionSeedV3): DanceProductionManifestV3 {
+  validateDanceProductionSeedV3(seed);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new DanceCreativeInputError('공연 제작 설정이 필요합니다.');
+  const item = value as Record<string, unknown>, keys = ['version', 'locationId', 'danceStyleId', 'layoutId', 'locationDetail', 'wardrobes'];
+  if (Object.keys(item).length !== keys.length || keys.some(key => !Object.hasOwn(item, key)) || item.version !== 3
+    || !LOCATION.some(option => option.id === item.locationId) || !CHOREOGRAPHY.some(option => option.id === item.danceStyleId)
+    || typeof item.layoutId !== 'string' || !Object.hasOwn(DANCE_PRODUCTION_LAYOUTS, item.layoutId)) throw new DanceCreativeInputError('공연 제작 설정의 필수 항목을 확인해 주세요.');
+  const layoutId = item.layoutId as keyof typeof DANCE_PRODUCTION_LAYOUTS;
+  if (!(DANCE_PRODUCTION_LAYOUTS[layoutId].counts as readonly number[]).includes(seed.count)
+    || (seed.locks.locationId && item.locationId !== seed.locks.locationId)
+    || (seed.locks.danceStyleId && item.danceStyleId !== seed.locks.danceStyleId)
+    || (seed.locks.layoutId && layoutId !== seed.locks.layoutId)) throw new DanceCreativeInputError('공연 제작 설정이 저장된 선택과 다릅니다.', 'CREATIVE_CONFLICT');
+  const locationDetail = productionText(item.locationDetail, 240);
+  assertDanceProductionSceneTextV3(locationDetail, true);
+  if (!Array.isArray(item.wardrobes) || item.wardrobes.length !== seed.count) throw new DanceCreativeInputError('모든 출연자의 의상 설정이 필요합니다.');
+  const wardrobes = item.wardrobes.map((raw, index) => {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw) || Object.keys(raw).length !== 2 || raw.memberId !== seed.anchors[index].id) throw new DanceCreativeInputError('출연자 의상의 순서와 ID가 다릅니다.', 'CREATIVE_CONFLICT');
+    const description = productionText(raw.description, 60);
+    if (/\b(?:face|hair|eye color|skin tone|ethnicity|years old|beard|identity|gender|species|child(?:ren)?|kids?|teenagers?|boys?|girls?|wom[ae]n|m[ae]n|adult|human|robot|animal|cat|dog|penguin)\b|\b\d{2}s\b/i.test(description)) throw new DanceCreativeInputError('의상으로 저장된 얼굴·나이·머리 정체성을 바꿀 수 없습니다.', 'CREATIVE_CONFLICT');
+    return { memberId: raw.memberId as string, description };
+  });
+  const wardrobeText = wardrobes.map(item => item.description).join(' ');
+  if (seed.locks.wardrobeTerms.some(term => !new RegExp(`\\b${term}\\b`, 'i').test(wardrobeText))) throw new DanceCreativeInputError('상황 설정에서 지정한 의상·색상을 유지해 주세요.', 'CREATIVE_CONFLICT');
+  for (const lock of seed.locks.wardrobeByMember || []) {
+    const wardrobe = wardrobes.find(item => item.memberId === lock.memberId)!;
+    if (lock.terms.some(term => !new RegExp(`\\b${term}\\b`, 'i').test(wardrobe.description))) throw new DanceCreativeInputError('각 출연자에게 지정한 의상·색상을 유지해 주세요.', 'CREATIVE_CONFLICT');
+  }
+  return { version: 3, locationId: item.locationId as DanceProductionManifestV3['locationId'], danceStyleId: item.danceStyleId as DanceProductionManifestV3['danceStyleId'], layoutId, locationDetail, wardrobes };
+}
+/** Stable identity is reconstructed from frozen fields; only wardrobe and placement can be resolved. */
+export function resolveDanceProductionDirectionV3(seed: DanceProductionSeedV3, raw: unknown): DanceCreativeDirection {
+  const manifest = validateDanceProductionManifestV3(raw, seed), layout = DANCE_PRODUCTION_LAYOUTS[manifest.layoutId];
+  const members = seed.anchors.map((anchor, index): DanceCastMember => {
+    const original = anchor.kind === 'human' ? `adult ${anchor.gender === 'unspecified' ? 'dancer' : anchor.gender} ${anchor.ageBand}, ${anchor.face?.replace('distinct original ', '')}, ${anchor.hair}`
+      : anchor.kind === 'robot' ? `${anchor.surface}, ${anchor.face}` : anchor.coat;
+    return { id: anchor.id, kind: anchor.kind, species: anchor.species, role: index === 0 ? 'lead' : index === 1 ? 'partner' : 'ensemble',
+      position: layout.positions[index], identity: `${original}; ${manifest.wardrobes[index].description}`, movementAnatomy: anchor.movementAnatomy };
+  });
+  const cast = validateDanceCastContract({ version: 1, kind: seed.kind, ensemble: seed.ensemble, count: seed.count, formation: layout.formation, members });
+  const axes = { castId: seed.variation.castId, appearanceId: seed.variation.appearanceId, outfitId: `performance_${hash(JSON.stringify(manifest.wardrobes)).toString(16)}`, paletteId: 'performance',
+    locationId: manifest.locationId, choreographyId: manifest.danceStyleId };
+  const lockedAxes: DanceCreativeDirection['lockedAxes'] = ['castId', 'visualStyle'];
+  if (seed.locks.locationId) lockedAxes.push('locationId');
+  if (seed.locks.danceStyleId) lockedAxes.push('choreographyId');
+  const musicMatch = seed.variation.musicMatch;
+  const concreteEn = `${buildDanceCastPrompt(cast)} Place (${manifest.locationId}): ${manifest.locationDetail}. Style: ${manifest.danceStyleId}, native movement. Visual: ${VISUAL[seed.locks.visualStyle]}. Difficulty: ${seed.locks.difficulty}.`;
+  if (concreteEn.length > 1600) throw new DanceCreativeInputError('출연자 연출 설명이 너무 깁니다.', 'CREATIVE_VARIATION');
+  return { version: 2, ...axes, cast, signature: `dance-v2-${hash(JSON.stringify({ anchors: seed.anchors, manifest, visualStyle: seed.locks.visualStyle, difficulty: seed.locks.difficulty })).toString(16).padStart(8, '0')}`,
+    castLabel: `${label('performer', axes.castId)} · ${seed.count}명`, locationLabel: label('location', manifest.locationId), danceStyleLabel: label('danceStyle', manifest.danceStyleId),
+    sources: seed.variation.sources, lockedAxes, concreteEn,
+    ...(musicMatch ? { musicMatch: { ...musicMatch, selection: seed.locks.danceStyleId ? 'user' : musicMatch.preferredStyles.includes(manifest.danceStyleId) ? 'preferred' : 'adapted' } } : {}) };
 }

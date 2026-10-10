@@ -195,9 +195,17 @@ function serverFixture(options = {}, savedJob) {
       renderDanceVideo: async () => stored('final.mp4'),
     },
     './videoPlan': { createDancePlan: async () => { work.push('plan'); return structuredClone(plan); } },
-    // Model routing uses injected idea data; semantic idea checks have their own suite.
+    // Model routing uses legacy idea data; V3 validation remains in the actual service guards.
     './ideas': { createDanceIdeas: async () => { work.push('ideas'); return [structuredClone(idea)]; },
-      validateDanceIdeas: value => structuredClone(value), compactDanceCastPrompt: cast => `CAST: ${cast.count} ${cast.kind} performers; ${cast.members.map(member => member.id).join(',')}` },
+      validateDanceIdeas: value => structuredClone(value),
+      validateDanceProposals: (value, planningVersion) => {
+        assert.equal(planningVersion, undefined, 'these model-routing fixtures must use the genuine legacy workflow');
+        assert.ok(Array.isArray(value) && value.length === 1);
+        assert.ok(value.every(item => item && item.id === idea.id && !Object.hasOwn(item, 'version')
+          && ['firstTwoSeconds', 'signatureMove', 'visualPayoff'].every(key => typeof item[key] === 'string' && item[key].trim())));
+        return structuredClone(value);
+      },
+      compactDanceCastPrompt: cast => `CAST: ${cast.count} ${cast.kind} performers; ${cast.members.map(member => member.id).join(',')}` },
     '../video/petProvider': { createPetXaiProvider: (_fetch, config = {}) => ({
       generateImage: async () => ({ url: 'https://images.x.ai/offline-opening.jpg' }),
       startVideo: async (prompt, duration, keyframe) => {

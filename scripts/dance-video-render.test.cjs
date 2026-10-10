@@ -17,13 +17,17 @@ const storage = 'https://dance-fixture.supabase.co';
 const prefix = `${storage}/storage/v1/object/public/melodio-assets/dance_challenge/user/track/job/`;
 const hash = buffer => createHash('sha256').update(buffer).digest('hex');
 
-function load(relative, overrides = {}) {
-  const source = ts.transpileModule(syncFs.readFileSync(path.join(root, relative), 'utf8'), {
+function load(relative, overrides = {}, cache = new Map()) {
+  const filename = path.resolve(root, relative);
+  if (cache.has(filename)) return cache.get(filename).exports;
+  const mod = { exports: {} };
+  // Match Node's module cache when the service and planner reference each other.
+  cache.set(filename, mod);
+  const source = ts.transpileModule(syncFs.readFileSync(filename, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true },
   }).outputText;
-  const mod = { exports: {} };
   new Function('require', 'module', 'exports', 'process', 'fetch', source)(
-    name => name in overrides ? overrides[name] : name.startsWith('.') ? load(path.join(path.dirname(relative), `${name}.ts`), overrides) : require(name), mod, mod.exports,
+    name => name in overrides ? overrides[name] : name.startsWith('.') ? load(path.join(path.dirname(relative), `${name}.ts`), overrides, cache) : require(name), mod, mod.exports,
     { env: { NEXT_PUBLIC_SUPABASE_URL: storage } }, () => { throw Error('NETWORK_FORBIDDEN'); },
   );
   return mod.exports;

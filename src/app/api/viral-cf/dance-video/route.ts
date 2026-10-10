@@ -51,8 +51,10 @@ export async function POST(request: NextRequest) {
     }
     let job;
     if (body.action === 'prepare') {
-      if (Object.keys(body).some(key => !['action', 'trackId', 'startSeconds', 'visualBrief', 'creativePreferences'].includes(key))) throw new DanceVideoError('지원하지 않는 영상 기획 입력입니다.', 'PREPARE_INPUT');
-      job = await service.prepare(userId, body.trackId, body.startSeconds, body.visualBrief, body.creativePreferences);
+      if (Object.keys(body).some(key => !['action', 'trackId', 'startSeconds', 'visualBrief', 'creativePreferences', 'planningVersion'].includes(key))) throw new DanceVideoError('지원하지 않는 영상 기획 입력입니다.', 'PREPARE_INPUT');
+      job = body.planningVersion === undefined
+        ? await service.prepare(userId, body.trackId, body.startSeconds, body.visualBrief, body.creativePreferences)
+        : await service.prepare(userId, body.trackId, body.startSeconds, body.visualBrief, body.creativePreferences, body.planningVersion);
     }
     else if (body.action === 'select-idea') {
       if (Object.keys(body).some(key => !['action', 'trackId', 'jobId', 'ideaId'].includes(key))) throw new DanceVideoError('저장된 아이디어 목록에서 선택해 주세요.', 'IDEA_INPUT');

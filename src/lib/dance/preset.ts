@@ -1,6 +1,6 @@
-import type { DanceCreativePreferences, DanceCreativeDirection, DanceCastContract } from './creativeDirection';
+import type { DanceCreativePreferences, DanceCreativeDirection, DanceCastContract, DanceProductionSeedV3, DanceProductionManifestV3 } from './creativeDirection';
 import type { DanceMusicSpec } from './musicProfiles';
-import type { DanceIdea, DanceIdeaValidationRule } from './ideas';
+import type { DanceProposal, DanceIdeaValidationRule } from './ideas';
 
 /** Versioned music-first workflow; legacy track and snapshot identities stay readable. */
 export const DANCE_CATEGORY_ID = 'dance_challenge' as const;
@@ -58,7 +58,8 @@ export type DanceChoreography = {
   segments: Array<{ startSeconds: number; endSeconds: number; action: string; repeatHook: boolean; phase?: 'opening' | 'development' | 'payoff' | 'restart' }>;
   firstPose: string; endPose: string;
 };
-export type DancePlan = { title: string; summary: string; identity: string; imagePrompt: string; clips: [string, string]; previewPrompt?: string; version?: 2; choreography?: DanceChoreography; cast?: DanceCastContract };
+export type DancePlan = { title: string; summary: string; identity: string; imagePrompt: string; clips: [string, string]; previewPrompt?: string; version?: 2; choreography?: DanceChoreography; cast?: DanceCastContract;
+  performanceVersion?: 3; productionManifest?: DanceProductionManifestV3 };
 export type DanceActorFailure = {
   category: 'actors_shape' | 'actor_shape' | 'member_order' | 'action_format' | 'missing_anatomy' | 'nonphysical_action' | 'vague_action' | 'unrecognized_motion' | 'animal_anatomy' | 'sequence_motion' | 'sequence_lower_body';
   memberId?: string; ideaIndex?: number; stepIndex?: number;
@@ -76,13 +77,14 @@ export type DanceVideoJob = {
   bpm?: number; onsetSeconds?: number[]; plan?: DancePlan; imageUrl?: string; bridgeUrl?: string;
   rhythm?: DanceRhythm;
   creativePreferences?: DanceCreativePreferences; direction?: DanceCreativeDirection; musicSpec?: DanceMusicSpec;
+  planningVersion?: 3; productionSeed?: DanceProductionSeedV3; productionManifest?: DanceProductionManifestV3; productionLockedAt?: string;
   imageApprovedAt?: string; imageReviewRequired?: boolean;
   videoSpec?: { model: 'grok-imagine-video' | 'grok-imagine-video-1.5' | 'grok-imagine-video-1.5-lite'; resolution: '720p'; width: 720; height: 1280 };
   canResume?: boolean;
   canReuseAudio?: boolean;
   failedStage?: 'image' | 'preview' | 'clip1' | 'bridge' | 'clip2' | 'render';
   failureCode?: string;
-  ideas?: DanceIdea[]; selectedIdea?: DanceIdea; conceptPlanAttempts?: number; ideaReviewRequired?: boolean;
+  ideas?: DanceProposal[]; selectedIdea?: DanceProposal; conceptPlanAttempts?: number; ideaReviewRequired?: boolean;
   qualityPreviewRequired?: boolean; previewSeconds?: 5; previewRequestId?: string; previewSourceUrl?: string; previewClipUrl?: string; previewUrl?: string; previewApprovedAt?: string;
   clip1RequestId?: string; clip2RequestId?: string; clip1Url?: string; clip2Url?: string; videoUrl?: string;
   planningSubmitted?: boolean;

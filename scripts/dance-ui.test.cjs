@@ -24,6 +24,7 @@ const danceModule = filename => {
 };
 const musicProfiles = danceModule('musicProfiles.ts');
 const creativeDirection = danceModule('creativeDirection.ts');
+const performancePremises = danceModule('premises.ts');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const sameDeps = (left, right) => left && right && left.length === right.length && right.every((value, i) => Object.is(value, left[i]));
 function deferred() { let resolve; const promise = new Promise(done => { resolve = done; }); return { promise, resolve }; }
@@ -96,6 +97,7 @@ function harness({ props: initialProps = {}, reply = () => ({ tracks: [] }) } = 
       if (name === '@/lib/dance/preset') return presetModule.exports;
       if (name === '@/lib/dance/musicProfiles') return musicProfiles;
       if (name === '@/lib/dance/creativeDirection') return creativeDirection;
+      if (name === '@/lib/dance/premises') return performancePremises;
       if (name === '@/lib/globalAudio') return audioModule.exports;
       return require(name);
     },
@@ -349,6 +351,7 @@ for (const brief of ['', '로봇이 박자에 맞춰 춤추고 마지막에 윙�
     assert.deepEqual(posts.map(r => r.body.action), ['reuse', 'prepare']);
     assert.equal(posts[0].body.trackId, 'song'); assert.equal(posts[0].body.jobId, 'failed-job');
     assert.equal(posts[1].body.trackId, 'retry-track'); assert.equal(posts[1].body.startSeconds, 22);
+    assert.equal(posts[1].body.planningVersion, 3);
     assert.equal(posts[1].body.visualBrief, brief);
     assert.equal(selectedTrack(ui.tree).props.value, 'retry-track');
     assert.equal(element(ui.tree, 'textarea').props.value, brief);
@@ -732,6 +735,76 @@ function ideasJob(overrides = {}) {
       seriesPotential: `${title} 다음 편`, productionRisk: `${title} 제작 주의`, conceptFamily: `internal-family-${index + 1}`,
     })), ...overrides };
 }
+
+function premisesJob(overrides = {}) {
+  return ideasJob({ planningVersion: 3, qualityPreviewRequired: true,
+    creativePreferences: { performer: 'woman', ensemble: 'duo', species: 'auto', location: 'auto', danceStyle: 'auto', visualStyle: 'realistic', difficulty: 'easy' },
+    planningSeed: { automaticHints: { locationLabel: '임시 자동 장소 표식', wardrobe: '임시 자동 의상 표식' } },
+    ideas: ['첫 눈길', '뜻밖의 반응', '마지막 표정'].map((title, index) => ({
+      version: 3, id: `premise-${index + 1}`, title, conceptFamily: ['interaction', 'contrast', 'rhythm_reveal'][index],
+      visibleHook: `${title} 눈에 보이는 첫 장면`, characterGoal: `${title} 출연자의 구체적인 목표`, emotionalReaction: `${title} 알아볼 수 있는 감정과 반응`,
+      turn: `${title} 상황을 바꾸는 전개`, payoff: `${title} 기대를 해소하는 마지막 변화`, participation: `${title} 관객이 참여할 부분`,
+      productionRisk: `${title} 제작할 때 확인할 위험`, musicConnection: `${title} 음악의 리듬과 연결되는 부분`,
+    })), ...overrides });
+}
+
+test('V3 preparation preserves fixed preferences and renders three truthful premise cards without provisional production or invented choreography', async () => {
+  const saved = premisesJob();
+  assert.ok(saved.ideas.every(performancePremises.isDancePerformancePremiseV3));
+  const ui = harness({ props: { initialTrackId: 'song' }, reply: request => {
+    if (request.body) { assert.equal(request.body.action, 'prepare'); return { job: saved }; }
+    return request.url.includes('dance-video') ? { job: null } : { tracks: [track('song')] };
+  } });
+  await ui.settle();
+  const fixed = select(ui.tree, '영상 표현');
+  assert.equal(fixed.props.value, 'realistic');
+  assert.ok(walk(fixed, node => node.type === 'option').every(option => option.props.value !== 'auto'));
+  assert.equal(select(ui.tree, '따라 추기 난이도').props.value, 'easy');
+  select(ui.tree, '출연자').props.onChange({ target: { value: 'woman' } });
+  select(ui.tree, '출연 규모').props.onChange({ target: { value: 'duo' } }); await ui.settle();
+  button(ui.tree, '아이디어 3개 받기').props.onClick(); await ui.settle(); await ui.runTimers();
+  const posts = ui.requests.filter(request => request.body);
+  assert.equal(posts.length, 1); assert.equal(posts[0].body.planningVersion, 3);
+  assert.deepEqual(posts[0].body.creativePreferences, saved.creativePreferences);
+  const cards = walk(ui.tree, node => node.type === 'article'); assert.equal(cards.length, 3);
+  for (const [index, card] of cards.entries()) {
+    for (const key of ['title', 'visibleHook', 'characterGoal', 'emotionalReaction', 'turn', 'payoff', 'participation', 'productionRisk', 'musicConnection']) assert.ok(label(card).includes(saved.ideas[index][key]), key);
+    assert.doesNotMatch(label(card), /8카운트|따라 할 동작|반복 훅|대기 중/);
+  }
+  assert.doesNotMatch(label(ui.tree), /임시 자동 장소 표식|임시 자동 의상 표식|8카운트 따라 추기/);
+  assert.equal(ideaChoices(ui.tree).length, 3); assert.ok(ideaChoices(ui.tree).every(choice => !choice.props.disabled));
+  assert.equal(element(ui.tree, 'img'), undefined); assert.equal(element(ui.tree, 'video'), undefined);
+  assert.equal(button(ui.tree, '첫 장면 만들기'), undefined); assert.equal(ui.timers.size, 0);
+});
+
+test('V3 selection sends only stored IDs and exposes production and counted choreography only from the returned plan', async () => {
+  const saved = premisesJob(), chosen = saved.ideas[1], late = deferred();
+  const finalDirection = { castLabel: '확정된 여성 듀오', locationLabel: '확정된 장소 표식', danceStyleLabel: '확정된 안무 표식' };
+  const choreography = { hookName: '확정된 실전 훅', steps: [{ count: 4, action: '발 옆 딛기·발 앞뒤 딛기', focus: 'feet' }, { count: 4, action: '몸통 돌리기·무릎 튕기기', focus: 'body' }],
+    segments: [{ startSeconds: 0, endSeconds: 2, action: '발을 딛고 몸통을 틀기', repeatHook: true, phase: 'opening' },
+      { startSeconds: 2, endSeconds: 22, action: '발을 교대하며 몸통을 기울이기', repeatHook: true, phase: 'development' },
+      { startSeconds: 22, endSeconds: 28, action: '발을 중앙에 딛고 몸통을 펴기', repeatHook: true, phase: 'payoff' },
+      { startSeconds: 28, endSeconds: 30, action: '발을 옆에 딛고 몸통을 낮추기', repeatHook: true, phase: 'restart' }],
+    firstPose: '몸통을 기울이고 발을 딛은 자세', endPose: '몸통을 펴고 발을 중앙에 딛은 자세' };
+  const ui = harness({ props: { initialTrackId: 'song' }, reply: request => {
+    if (request.body) return late.promise;
+    return request.url.includes('dance-video') ? { job: saved } : { tracks: [track('song')] };
+  } });
+  await ui.settle(); const choose = ideaChoices(ui.tree)[1]; choose.props.onClick(); choose.props.onClick(); await ui.settle();
+  assert.ok(ideaChoices(ui.tree).every(choice => choice.props.disabled));
+  assert.doesNotMatch(label(ui.tree), /확정된 장소 표식|확정된 안무 표식|확정된 실전 훅|8카운트 따라 추기/);
+  late.resolve({ job: { ...saved, status: 'ready', selectedIdea: chosen, direction: finalDirection,
+    plan: { title: '선택한 공연 설계', summary: '확인된 출연자의 동작과 흐름', identity: 'two original adult women', imagePrompt: 'saved action still', clips: ['first motion', 'second motion'], choreography } } });
+  await ui.settle(); await ui.runTimers(); choose.props.onClick(); await ui.settle();
+  assert.deepEqual(ui.requests.filter(request => request.body).map(request => request.body), [{ action: 'select-idea', trackId: 'song', jobId: saved.id, ideaId: chosen.id }]);
+  for (const key of ['title', 'visibleHook', 'characterGoal', 'emotionalReaction', 'turn', 'payoff', 'participation']) assert.ok(label(ui.tree).includes(chosen[key]), key);
+  assert.match(label(ui.tree), /확정된 장소 표식|확정된 안무 표식/);
+  assert.match(label(ui.tree), /8카운트 따라 추기/);
+  for (const step of choreography.steps) assert.ok(label(ui.tree).includes(`${step.count} · ${step.action}`));
+  assert.doesNotMatch(label(ui.tree), /임시 자동 장소 표식|임시 자동 의상 표식|따라 할 동작 ·/);
+  assert.equal(button(ui.tree, '첫 장면 만들기').props.disabled, false);
+  assert.equal(element(ui.tree, 'img'), undefined); assert.equal(element(ui.tree, 'video'), undefined); assert.equal(ui.timers.size, 0);
+});
 
 test('prepare saves three text ideas and stays idle without choosing a concept or creating paid media', async () => {
   const saved = ideasJob();
