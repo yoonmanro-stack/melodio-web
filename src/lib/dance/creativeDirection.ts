@@ -611,6 +611,34 @@ function productionText(value: unknown, limit: number): string {
     || /data:|base64/i.test(value)) throw new DanceCreativeInputError('공연 제작 세부 설정을 확인해 주세요.');
   return value;
 }
+/** Classify seconds by media grammar; age cues stay visible even beside valid timing. */
+function hasDanceSceneAgeOverride(value: string): boolean {
+  if (/\b(?:age(?:d)?\s*[:=]?|in\s*(?:her|his|their|the|early|mid|late))\s*(?:(?:early|mid|late)[- ]?)?\d+(?:\.\d+)?\s*s\b/i.test(value)
+    || /\b(?:woman|man|dancer|performer|performer_[1-6])\s+in\s*(?:(?:her|his|their|the)\s*)?(?:(?:early|mid|late)[- ]?)?\d+\s*s\b/i.test(value)
+    || /(?:^|\b(?:a|an|the|adult|original)\s+)[1-9]0s\s*(?:[-–—~]|to)\s*[1-9]0s\s+(?:adult\s+)?(?:woman|man|dancer|performer|person|human)\b/i.test(value)
+    || /\b\d{1,3}\s*(?:years?\s*old|year[- ]old|y\/o)\b/i.test(value)) return true;
+  const number = '\\d+(?:\\.\\d+)?', seconds = `${number}\\s*s\\b`;
+  const grammars = [
+    `\\b(?:from\\s*)?${number}\\s*s?\\s*(?:[-–—~]|to|until|till|through)\\s*${seconds}`,
+    `\\bbetween\\s*${number}\\s*s?\\s*and\\s*${seconds}`,
+    `\\b(?:first|second|next|last|remaining|initial|final|local|elapsed|total)\\s*${seconds}`,
+    `\\b(?:t|time)\\s*[:=]\\s*${seconds}`,
+    `(?:^|[\\s;(.])${seconds}(?=\\s*:)`,
+    `\\b(?:for|over|during|lasting|after|before|at|by|within|throughout|in)\\s*(?:the\\s*)?(?:full\\s*)?${seconds}`,
+    `\\b(?:duration|length)\\s*(?::|=|of|is)?\\s*${seconds}`,
+    `\\b(?:by\\s*the\\s*end\\s*of|(?:ends?|finish(?:es)?|stops?|complete(?:s)?)\\s*(?:at|by|in|within))\\s*(?:local\\s*)?${seconds}`,
+    `\\bfull\\s*${seconds}`,
+    `${seconds}(?=\\s+(?:dance\\s+)?(?:sequence|clip|video|performance|preview|scene|segment|window|duration|test|take|animation|mark|timestamp)\\b|[- ]+long\\b|\\s+in\\s+duration\\b)`,
+  ];
+  const timeSpans = grammars.flatMap(pattern => [...value.matchAll(new RegExp(pattern, 'gi'))]
+    .map(match => [match.index!, match.index! + match[0].length]));
+  return [...value.matchAll(new RegExp(seconds, 'gi'))].some(match => {
+    // 15s is seconds, not a decade. Bare 20s/30s/etc. remain ambiguous identity data.
+    if (!/^[1-9]0s$/i.test(match[0].replace(/\s/g, ''))) return false;
+    const start = match.index!, end = start + match[0].length;
+    return !timeSpans.some(([from, to]) => start >= from && end <= to);
+  });
+}
 /** Provider scene prose cannot override typed facts. Absence phrases describe genuine empty locations. */
 export function assertDanceProductionSceneTextV3(value: string, environmentOnly = false, seed?: DanceProductionSeedV3): void {
   const positive = value.replace(/\b(?:no|without)\s+(?:(?:any|a|an|additional|extra|other|background)\s+){0,3}(?:human\s+(?:dancers?|performers?)|people|humans?|persons?|dancers?|performers?|child(?:ren)?|kids?|men|women|crowds?|bystanders|onlookers)\b/gi, ' ')
@@ -620,13 +648,7 @@ export function assertDanceProductionSceneTextV3(value: string, environmentOnly 
   const actor = '(?:performer_[1-6]|cast|dancers?|performers?|humans?|people|persons?|child(?:ren)?|kids?|teenagers?|adults?|wom[ae]n|m[ae]n|boys?|girls?|animals?|robots?|cats?|dogs?|penguins?|otters?|bears?|rabbits?|fox(?:es)?)';
   const intrinsic = '(?:identity|identities|faces?|hair|hairstyle|eyes?|skin|ethnicity|age|gender|species|anatomy|wardrobe|clothing|outfits?|dress|suit|jacket|hoodie|hat|coat|fur|shell|surface)';
   const qualifiers = '(?:(?:a|an|the|all|one|two|three|four|five|six|[1-6]|new|additional|extra|saved|original|adult)\\s+){0,5}';
-  // Seconds in explicit windows/durations are timing data; unqualified decades remain identity data.
-  const ageText = positive
-    .replace(/\b\d+(?:\.\d+)?\s*[-–~]\s*\d+(?:\.\d+)?\s*s\b/gi, 'time window')
-    .replace(/\b(?:for|over|during|lasting|after|before|at|by|within|throughout|first|next|last|remaining)\s+(?:the\s+)?\d+(?:\.\d+)?\s*s\b/gi, 'duration')
-    .replace(/\b(?:duration|length)\s*(?::|=|of)\s*\d+(?:\.\d+)?\s*s\b/gi, 'duration')
-    .replace(/\b\d+(?:\.\d+)?\s*s\b(?=\s+(?:dance\s+)?(?:sequence|clip|video|performance|preview|scene|segment|window|duration|test|take|animation)\b|\s+long\b)/gi, 'duration');
-  if (/\b\d{2}s\b/i.test(ageText) || /\b(?:age(?:d)?\s*[:=]?|in\s+(?:her|his|their|the))\s+(?:(?:early|mid|late)[- ]?)?\d{2}s\b/i.test(positive)) {
+  if (hasDanceSceneAgeOverride(positive)) {
     throw new DanceCreativeInputError('공연 설명으로 저장된 출연자의 나이를 바꿀 수 없습니다.', 'CREATIVE_CONFLICT');
   }
   if (new RegExp(`\\b(?:replace|swap|recast|add|remove|omit|substitute)\\s+${qualifiers}(?:${actor}|${intrinsic})\\b`, 'i').test(positive)

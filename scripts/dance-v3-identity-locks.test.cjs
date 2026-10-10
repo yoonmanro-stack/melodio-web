@@ -15,7 +15,7 @@ function load(relative) {
   new Function('require', 'module', 'exports', 'process', 'fetch', js)(local, mod, mod.exports, { env: { OPENAI_API_KEY: 'offline-only' } }, () => { throw Error('NETWORK_FORBIDDEN'); });
   return mod.exports;
 }
-const { resolveDanceProductionSeedV3: seedFor, validateDanceProductionSeedV3, resolveDanceProductionDirectionV3: directionFor, validateDanceProductionManifestV3: validateManifest, resolveDanceCreativeDirection } = load('src/lib/dance/creativeDirection.ts');
+const { resolveDanceProductionSeedV3: seedFor, validateDanceProductionSeedV3, resolveDanceProductionDirectionV3: directionFor, validateDanceProductionManifestV3: validateManifest, assertDanceProductionSceneTextV3: guardScene, resolveDanceCreativeDirection } = load('src/lib/dance/creativeDirection.ts');
 const { validateDancePerformancePlanV3: validatePlan, validateDancePlan, createDancePlan } = load('src/lib/dance/videoPlan.ts');
 const prefs = (overrides = {}) => ({ performer: 'woman', ensemble: 'solo', species: 'auto', location: 'auto', danceStyle: 'auto', visualStyle: 'realistic', difficulty: 'easy', ...overrides });
 function manifest(seed, override = {}) {
@@ -148,6 +148,45 @@ test('actual V3 plan compilation accepts clip time windows and scene durations w
   for (const imagePrompt of ['For 30s the saved cast keeps continuous native movement.', 'The scene is 30s long with continuous native movement.',
     'A 30s performance with continuous native movement.', 'Duration: 30s. Continuous native movement.', 'A sequence with a length of 30s and continuous native movement.']) {
     assert.doesNotThrow(() => validatePlan(planFor(seed, { imagePrompt, clips }), seed, 138));
+  }
+});
+
+test('media timing grammar passes the real scene guard and actual second-clip compiler without deleting text', () => {
+  const seed = seedFor(prefs({ performer: 'human_animal', ensemble: 'trio', species: 'penguin' }), 'timing-grammar', '성인 여성 한 명과 펭귄 두 마리가 함께 공연한다.');
+  const timings = ['0s-15s', '0s - 15s', '15s-30s', '15s to30s', '15s to 30s', 'from15s until30s', 'from 15s until 30s',
+    '0s–15s', '15s–30s', '15s—30s', 'between15s and30s', 'between 15s and 30s', '15s through30s', 'from15s till30s',
+    'Second15s', 'Second 15s', 'local15s', 'local 15s', 'elapsed30s', 'total 30s', 't=30s', 'time:30s',
+    'bytheendof30s', 'by the end of 30s', 'endat30s', 'end at30s', 'end at 30s', 'full30s duration', 'full 30s duration',
+    'finish in 30s', 'complete within30s', 'ends at local15s', 'ends at local 15s', 'ends atlocal30s',
+    'Duration: 30s', 'a 30s dance sequence', 'a 30s-long sequence', '30s long', 'over the full30s', '30s mark', '30s'];
+  for (const timing of timings) {
+    const clip = `${timing}: performer_1 steps around the pair while performer_2 and performer_3 close the gap.`;
+    assert.doesNotThrow(() => guardScene(clip, false, seed), timing);
+    const input = planFor(seed, { clips: ['Continue native movement toward the cue.', clip] });
+    const plan = validatePlan(input, seed, 138);
+    assert.ok(plan.clips[1].includes(clip), timing);
+    assert.deepEqual(plan.cast.members.map(member => [member.id, member.species]), seed.anchors.map(anchor => [anchor.id, anchor.species]));
+    assert.ok([plan.imagePrompt, ...plan.clips].every(prompt => Buffer.byteLength(prompt) <= 4096));
+  }
+  assert.doesNotThrow(() => guardScene('15s', false, seed), '15s is seconds, not an age decade');
+  assert.doesNotThrow(() => validatePlan(planFor(seed, { clips: ['Continue native movement.', '15s'] }), seed, 138));
+});
+
+test('timing classification never hides explicit age decades or other frozen-identity overrides in clip2', () => {
+  const seed = seedFor(prefs(), 'timing-age-guard');
+  const ageScenes = ['0s-15s: performer_1 is in her30s and steps back.', '15s-30s: performer_1 aged30s moves forward.',
+    'Second15s: A 30s woman moves toward the cue.', 'local15s: The woman in early30s responds.',
+    't=30s: The performer is 30yearsold.', 'time:30s: performer_1 age: 30s steps back.',
+    'The woman in30s responds.', 'A 20s-30s woman moves toward the cue.', '30s'];
+  for (const clip of ageScenes) {
+    assert.throws(() => guardScene(clip, false, seed), { code: 'CREATIVE_CONFLICT' }, clip);
+    assert.throws(() => validatePlan(planFor(seed, { clips: ['Continue native movement.', clip] }), seed, 138),
+      error => error.code === 'PLAN_INVALID' && error.message.startsWith('클립 2 연출:') && error.message.includes('나이'), clip);
+  }
+  for (const clip of ['15s-30s: replace performer_1 with a robot.', 'Second15s: The dancer has blonde hair.',
+    'local15s: A man moves toward the cue.', 'time:30s: The woman has an oval face and green eyes.']) {
+    assert.throws(() => guardScene(clip, false, seed), { code: 'CREATIVE_CONFLICT' }, clip);
+    assert.throws(() => validatePlan(planFor(seed, { clips: ['Continue native movement.', clip] }), seed, 138), { code: 'PLAN_INVALID' }, clip);
   }
 });
 
