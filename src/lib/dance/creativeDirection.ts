@@ -47,6 +47,8 @@ export const DANCE_PRODUCTION_LAYOUTS = {
   solo_center: { counts: [1], formation: 'centered solo', positions: ['center'] },
   side_by_side: { counts: [2], formation: 'separated left/right pair', positions: ['left', 'right'] },
   open_triangle: { counts: [3], formation: 'open triangle', positions: ['front-center', 'rear-left', 'rear-right'] },
+  reverse_triangle: { counts: [3], formation: 'reverse triangle, lead behind the separated front pair', positions: ['rear-center', 'front-left', 'front-right'] },
+  centered_trio: { counts: [3], formation: 'centered trio, lead between a separated left/right pair', positions: ['center', 'left', 'right'] },
   staggered_rows: { counts: [4, 5, 6], formation: 'two staggered rows, every body visible', positions: POSITIONS_V3() },
   loose_arc: { counts: [2, 3, 4, 5, 6], formation: 'open shallow arc, every body visible', positions: ['arc-left', 'arc-right', 'arc-center', 'arc-rear-left', 'arc-rear-right', 'arc-rear-center'] },
   diagonal: { counts: [2, 3, 4, 5, 6], formation: 'spaced diagonal, every body visible', positions: ['near-left', 'middle-left', 'middle-right', 'far-right', 'far-left', 'near-right'] },
@@ -269,6 +271,40 @@ const HAIR = ['dark side-part', 'copper curls', 'silver crop', 'dark braids', 'b
 const HUMAN_LOOKS = ['East Asian', 'Black', 'Latina', 'South Asian', 'White', 'Middle Eastern'];
 const EXPRESSIONS = ['bright smile', 'playful gaze', 'warm smile', 'confident gaze', 'soft smile', 'lively grin'];
 const ANIMAL_COATS: Record<DanceAnimalSpecies, string> = { cat: 'grey cat, white paws', dog: 'black-white dog', penguin: 'penguin, yellow cheeks', otter: 'brown otter, cream muzzle', bear: 'brown bear, cream muzzle', rabbit: 'cream rabbit, short ears', fox: 'orange fox, white muzzle' };
+const ANIMAL_BODY_MARKERS = ['large broad body', 'small slender body', 'long lean body', 'short stocky body', 'medium sturdy body', 'medium narrow body'] as const;
+const PENGUIN_BODY_MARKERS = ['tall broad body', 'short slim body', 'tall slender body', 'short broad body', 'medium stocky body', 'medium narrow body'] as const;
+const ANIMAL_COAT_MARKERS: Record<DanceAnimalSpecies, readonly string[]> = {
+  cat: ['dark grey coat, wide pale chest', 'white coat, large grey back patches', 'grey tabby coat, dark side stripes', 'cream coat, dark back patches', 'grey coat, broad pale side patches', 'brown tabby coat, narrow pale chest'],
+  dog: ['black coat, wide white chest', 'white coat, large black back patch', 'brown coat, pale flanks', 'cream coat, dark saddle', 'grey coat, broad white chest', 'tan coat, dark back stripe'],
+  penguin: ['wide white chest, yellow cheeks', 'narrow white chest, pale cheeks', 'long white chest, gold throat', 'round white belly, dark cheeks', 'wide white belly, pale throat', 'small white belly, yellow throat'],
+  otter: ['dark brown coat, wide cream throat', 'light brown coat, narrow pale chest', 'brown coat, long cream belly', 'dark brown coat, pale flanks', 'brown coat, broad cream chest', 'light brown coat, pale underside'],
+  bear: ['dark brown coat, broad pale muzzle', 'light brown coat, dark flanks', 'brown coat, pale throat patch', 'dark brown coat, pale muzzle', 'brown coat, broad pale chest', 'light brown coat, dark back'],
+  rabbit: ['cream coat, wide grey back patches', 'white coat, large brown back patch', 'brown coat, pale flanks', 'grey coat, broad white belly', 'cream coat, dark side patches', 'white coat, narrow grey back stripe'],
+  fox: ['deep orange coat, wide white chest', 'pale orange coat, narrow pale chest', 'orange coat, broad white belly', 'dark red coat, pale flanks', 'orange coat, broad pale chest', 'pale orange coat, dark back'],
+};
+function identicalAnimalRequest(brief: string, species: DanceAnimalSpecies): boolean {
+  const noun = `(?:${SPECIES_HINTS[species]}|animals?\\b|동물)`;
+  if (new RegExp(`${noun}\\s*,\\s*identical\\s+in\\s+(?:appearance|body|silhouette|coat|fur|markings)\\b`, 'i').test(brief)) return true;
+  return briefAttributeClauses(brief).some(clause => new RegExp(noun, 'i').test(clause) && (
+    new RegExp(`\\b(?:identical|twin)\\s+(?:adult\\s+)?${noun}`, 'i').test(clause)
+    || new RegExp(`(?:똑같은|동일한)\\s*${noun}`, 'i').test(clause)
+    || new RegExp(`${noun}\\s+twins?\\b`, 'i').test(clause)
+    || /\b(?:are|look)\s+(?:(?:exactly|identical)\s+)?(?:identical|the same|twins?)\b|\bwith\s+(?:identical|the same)\s+(?:appearances?|bodies|silhouettes?|coats?|fur|markings?)\b/i.test(clause)
+    || /쌍둥|똑같(?:이)?\s*생긴|동일하게\s*생긴|동일한\s*(?:외모|모습|체형|털)|같은\s*(?:외모|모습|체형|털)/i.test(clause)));
+}
+/** New V3 groups use adult animal body/coat cues; saved facts and singletons are never adapted. */
+function distinguishAnimalAnchors(anchors: DanceProductionAnchorV3[], seed: string, brief: string): void {
+  for (const species of DANCE_ANIMAL_SPECIES) {
+    const group = anchors.filter(anchor => anchor.kind === 'animal' && anchor.species === species);
+    if (group.length < 2 || identicalAnimalRequest(brief, species)) continue;
+    const offset = hash(`${seed}:animal-body:${species}`) % ANIMAL_BODY_MARKERS.length;
+    group.forEach((anchor, index) => {
+      const marker = (offset + index) % ANIMAL_BODY_MARKERS.length;
+      const body = (species === 'penguin' ? PENGUIN_BODY_MARKERS : ANIMAL_BODY_MARKERS)[marker];
+      anchor.coat = `adult ${species}, ${body}, ${ANIMAL_COAT_MARKERS[species][marker]}`;
+    });
+  }
+}
 const POSITIONS: Record<DanceEnsemble, string[]> = {
   solo: ['center'], duo: ['left', 'right'], trio: ['front-center', 'rear-left', 'rear-right'],
   crowd: ['front-left', 'front-center', 'front-right', 'rear-left', 'rear-center', 'rear-right'],
@@ -598,6 +634,7 @@ export function resolveDanceProductionSeedV3(raw: unknown, seed: string, brief =
   const layoutId = briefLayout(brief) || (cast.count === 2 && /왼쪽|오른쪽|\b(?:left|right)\s+(?:dancer|performer|woman|man)\b|\b(?:dancer|performer|woman|man)\s+on\s+the\s+(?:left|right)\b/i.test(brief) ? 'side_by_side' : null);
   if (layoutId && !(DANCE_PRODUCTION_LAYOUTS[layoutId].counts as readonly number[]).includes(cast.count)) throw new DanceCreativeInputError('상황 설정의 배치와 출연자 수가 다릅니다.', 'CREATIVE_CONFLICT');
   // Resolve explicit intrinsic details before any model call; automatic details retain seeded variety.
+  distinguishAnimalAnchors(anchors, seed, brief);
   const wardrobeLocks = applyBriefProductionLocks(brief, anchors, cast.members, prefs);
   return { version: 3, seedId: seed, count: cast.count, kind: cast.kind, ensemble: cast.ensemble, anchors,
     locks: { locationId: draft.sources.location === 'automatic' ? null : draft.locationId,
