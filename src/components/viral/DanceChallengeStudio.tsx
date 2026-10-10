@@ -113,7 +113,9 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
   currentJob.current = job;
   const track = tracks.find(t => t.id === trackId);
   const premiseMemberLabels = new Map<string, string>(job?.productionSeed?.anchors.map((anchor, index) => [anchor.id, `출연자 ${index + 1}`] as const));
-  const premiseText = (value: string) => value.replace(/[A-Za-z0-9_]+/g, token => premiseMemberLabels.get(token) || token);
+  const premiseText = (value?: string) => value?.replace(/[A-Za-z0-9_]+/g, token => premiseMemberLabels.get(token) || token) || '';
+  const selectedPremise = job?.selectedIdea;
+  const selectedScenePlace = isDancePerformancePremiseV3(selectedPremise) ? selectedPremise.sceneContext?.place : undefined;
   const conceptContextForIdeas = track?.id === trackId && track.musicMode === 'concept' && !track.reused ? track.coreContext || '' : '';
   const musicProfile = DANCE_MUSIC_PROFILES.find(profile => profile.id === musicProfileId);
   const musicPending = Boolean(track && ['generating', 'pending'].includes(track.status));
@@ -551,31 +553,31 @@ export default function DanceChallengeStudio({ userId, initialTrackId = '', onBu
       {job?.selectedIdea ? <div className="rounded-xl border border-fuchsia-400/30 bg-fuchsia-950/30 p-4 space-y-2">
         <p className="font-bold text-fuchsia-100">선택한 아이디어 · {premiseText(job.selectedIdea.title)}</p>
         {isDancePerformancePremiseV3(job.selectedIdea) ? premiseDetails(job.selectedIdea, premiseText) : <>
-        <p className="text-sm text-zinc-200">첫 2초 · {job.selectedIdea.firstTwoSeconds}</p>
-        <p className="text-sm text-zinc-200">따라 할 동작 · {job.selectedIdea.signatureMove}</p>
-        {job.selectedIdea.hookStory ? <p className="text-sm text-zinc-200">계속 볼 이유 · {job.selectedIdea.hookStory.watchReason}</p> : null}
+        <p className="text-sm text-zinc-200">첫 2초 · {premiseText(job.selectedIdea.firstTwoSeconds)}</p>
+        <p className="text-sm text-zinc-200">따라 할 동작 · {premiseText(job.selectedIdea.signatureMove)}</p>
+        {job.selectedIdea.hookStory ? <p className="text-sm text-zinc-200">계속 볼 이유 · {premiseText(job.selectedIdea.hookStory.watchReason)}</p> : null}
         </>}
       </div> : null}
       {job?.plan ? <div className="rounded-xl border border-white/15 bg-black/30 p-4 space-y-3">
-        <p className="font-bold text-white">{job.plan.title}</p><p className="text-sm leading-relaxed text-zinc-200">{job.plan.summary}</p>
+        <p className="font-bold text-white">{premiseText(job.plan.title)}</p><p className="text-sm leading-relaxed text-zinc-200">{premiseText(job.plan.summary)}</p>
         {job.direction ? <dl className="grid gap-2 text-sm sm:grid-cols-3">
-          <div><dt className="text-zinc-400">출연자</dt><dd className="text-zinc-100">{job.direction.castLabel}</dd></div>
-          <div><dt className="text-zinc-400">장소</dt><dd className="text-zinc-100">{job.direction.locationLabel}</dd></div>
-          <div><dt className="text-zinc-400">안무</dt><dd className="text-zinc-100">{job.direction.danceStyleLabel}</dd></div>
+          <div><dt className="text-zinc-400">출연자</dt><dd className="text-zinc-100">{premiseText(job.direction.castLabel)}</dd></div>
+          <div><dt className="text-zinc-400">장소</dt><dd className="text-zinc-100">{premiseText(selectedScenePlace || job.direction.locationLabel)}</dd></div>
+          <div><dt className="text-zinc-400">안무</dt><dd className="text-zinc-100">{premiseText(job.direction.danceStyleLabel)}</dd></div>
         </dl> : null}
         {job.direction?.cast ? <div className="space-y-2 border-t border-white/15 pt-3">
           <p className="text-sm font-bold text-white">출연 구성 · {job.direction.cast.count}{job.direction.cast.kind === 'animal' ? '마리' : '명/마리'}</p>
-          <ul className="space-y-1 text-xs leading-relaxed text-zinc-300">{job.direction.cast.members.map(member => <li key={member.id}>{member.position} · {member.identity}</li>)}</ul>
+          <ul className="space-y-1 text-xs leading-relaxed text-zinc-300">{job.direction.cast.members.map(member => <li key={member.id}>{premiseText(member.position)} · {premiseText(member.identity)}</li>)}</ul>
         </div> : null}
         {job.plan.choreography ? <div className="space-y-3 border-t border-white/15 pt-3">
-          <p className="font-bold text-fuchsia-100">반복 훅 · {job.plan.choreography.hookName}</p>
+          <p className="font-bold text-fuchsia-100">반복 훅 · {premiseText(job.plan.choreography.hookName)}</p>
           <div className="space-y-2"><p className="text-sm font-bold text-white">8카운트 따라 추기</p><ol className="space-y-1 text-sm text-zinc-200">
-            {job.plan.choreography.steps.map((step, index) => <li key={index}><span className="font-bold text-fuchsia-200">{step.count}</span> · {step.action}</li>)}
+            {job.plan.choreography.steps.map((step, index) => <li key={index}><span className="font-bold text-fuchsia-200">{step.count}</span> · {premiseText(step.action)}</li>)}
           </ol></div>
           <div className="space-y-2"><p className="text-sm font-bold text-white">30초 흐름</p><ol className="space-y-1 text-sm text-zinc-200">
-            {job.plan.choreography.segments.map((segment, index) => <li key={index}><span className="font-bold text-fuchsia-200">{segment.startSeconds}–{segment.endSeconds}초</span> · {segment.action}{segment.repeatHook ? ' · 훅 반복' : ''}</li>)}
+            {job.plan.choreography.segments.map((segment, index) => <li key={index}><span className="font-bold text-fuchsia-200">{segment.startSeconds}–{segment.endSeconds}초</span> · {premiseText(segment.action)}{segment.repeatHook ? ' · 훅 반복' : ''}</li>)}
           </ol></div>
-          <p className="text-xs text-zinc-300">시작 포즈 · {job.plan.choreography.firstPose}</p><p className="text-xs text-zinc-300">마지막 포즈 · {job.plan.choreography.endPose}</p>
+          <p className="text-xs text-zinc-300">시작 포즈 · {premiseText(job.plan.choreography.firstPose)}</p><p className="text-xs text-zinc-300">마지막 포즈 · {premiseText(job.plan.choreography.endPose)}</p>
         </div> : null}
       </div> : null}
     </div> : null}

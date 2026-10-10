@@ -260,3 +260,34 @@ test('idea cards render exact stored anchor IDs as readable cast labels without 
   assert.ok(label(ui.tree).includes('선택한 아이디어 · 출연자 1의 첫 인사')); assert.equal(JSON.stringify(job), original);
   assert.equal(seed.anchors[0].id, 'performer_1'); assert.equal(idea.visibleHook, 'performer_1이 performer_2를 바라보고 손을 든다.');
 });
+
+test('saved V3 scene place overrides a conflicting direction label and all rendered plan actions use aliases without changing source data', async () => {
+  const preferences = { performer: 'duo', ensemble: 'duo', species: 'auto', location: 'auto', danceStyle: 'auto', visualStyle: 'realistic', difficulty: 'easy' };
+  const idea = { version: 3, id: 'saved-scene', conceptFamily: 'interaction', title: '두 사람의 기다림',
+    visibleHook: 'performer_1이 performer_2를 바라본다.', characterGoal: 'performer_2가 손을 들기를 기다린다.', emotionalReaction: 'performer_1이 고개를 기울인다.',
+    turn: 'performer_2가 먼저 발을 옮긴다.', payoff: 'performer_1과 performer_2가 함께 웃는다.', participation: '둘의 반응을 따라 한다.',
+    productionRisk: '두 출연자 사이의 간격을 유지한다.', musicConnection: 'performer_1이 짧은 박자에 반응한다.',
+    sceneContext: { place: '심야 빨래방', ongoingActivity: '두 사람이 세탁이 끝나기를 기다린다.', immediateTrigger: '세탁 완료 신호등이 켜진다.' } };
+  const job = { id: 'saved-scene-job', trackId: 'song', status: 'ready', startSeconds: 0, durationSeconds: 30, visualBrief: '', creativePreferences: preferences,
+    productionSeed: creativeDirection.resolveDanceProductionSeedV3(preferences, 'saved-scene-seed'), selectedIdea: idea,
+    direction: { castLabel: 'performer_1과 performer_2', locationLabel: '레트로 아케이드', danceStyleLabel: 'performer_2의 작은 스텝',
+      cast: { count: 2, kind: 'human', members: [{ id: 'performer_1', position: '왼쪽', identity: 'performer_1의 고유 외형' }] } },
+    plan: { title: 'performer_1의 기다림', summary: 'performer_1과 performer_2가 박자를 주고받는다.', identity: 'performer_1 raw identity',
+      imagePrompt: 'performer_1 raw image prompt', clips: ['performer_1 raw clip', 'performer_2 raw clip'], choreography: {
+        hookName: 'performer_1의 손 신호', steps: [{ count: 1, action: 'performer_1이 손을 들고 performer_2가 발을 옮긴다.', focus: 'combined' }],
+        segments: [{ startSeconds: 0, endSeconds: 30, action: 'performer_2가 performer_1에게 손을 내민다.', repeatHook: true }],
+        firstPose: 'performer_1이 손을 모은다.', endPose: 'performer_2가 고개를 끄덕인다.' } } };
+  const original = JSON.stringify(job);
+  const ui = harness({ props: { initialTrackId: 'song' }, reply: request => request.url.includes('dance-video') ? { job } : { tracks: [track('song')] } });
+  await ui.settle();
+  const sceneRow = walk(ui.tree, node => node.type === 'div' && Array.isArray(node.props.children)
+    && node.props.children.some(child => child?.type === 'dt' && label(child) === '장소'))[0];
+  assert.equal(label(sceneRow), '장소심야 빨래방'); assert.doesNotMatch(label(ui.tree), /performer_[12]\b/);
+  for (const text of ['출연자 1과 출연자 2가 박자를 주고받는다.', '출연자 1이 손을 들고 출연자 2가 발을 옮긴다.',
+    '출연자 2가 출연자 1에게 손을 내민다.', '시작 포즈 · 출연자 1이 손을 모은다.', '마지막 포즈 · 출연자 2가 고개를 끄덕인다.']) assert.ok(label(ui.tree).includes(text));
+  assert.equal(JSON.stringify(job), original); await ui.runTimers(); assert.equal(posts(ui).length, 0);
+  const legacyIdea = { ...idea }; delete legacyIdea.sceneContext;
+  const fallback = harness({ props: { initialTrackId: 'song' }, reply: request => request.url.includes('dance-video')
+    ? { job: { ...job, selectedIdea: legacyIdea } } : { tracks: [track('song')] } });
+  await fallback.settle(); assert.ok(label(fallback.tree).includes('장소레트로 아케이드')); assert.equal(JSON.stringify(job), original);
+});
