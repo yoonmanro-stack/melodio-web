@@ -104,12 +104,12 @@ function libraryHarness(rows, overrides = {}) {
 }
 
 for (const category of categories) {
-  test(`public ${category} card preserves playback and applies creation availability`, async () => {
+  test(`public ${category} card applies studio availability`, async () => {
     const harness = libraryHarness([row(category)]);
     const tree = await harness.mount();
     const actions = createActions(tree);
     assert.equal(actions.length, availability().isActiveViralCategory(category) ? 1 : 0);
-    assert.equal(walk(tree, node => node.type === 'video').length, 1, 'Archived playback stays available');
+    assert.equal(walk(tree, node => node.type === 'video').length, availability().isActiveViralCategory(category) ? 1 : 0, 'Excluded categories are absent from the studio showcase');
     if (!availability().isActiveViralCategory(category)) {
       assert.deepEqual(harness.created, []);
       return;
@@ -129,10 +129,11 @@ test('category resolution skips invalid early values and preserves valid metadat
     [row('four', { metadata: JSON.stringify({ sourceMenu: 'viral', presetId: 'invalid' }), license_hash: JSON.stringify({ genCategory: 'food_diet' }) }), 'food_diet'],
     [row('five', { title: '고양이의 하루', metadata: { sourceMenu: 'viral', presetId: 'invalid' }, category: 'invalid' }), 'pet'],
     [row('six', { title: 'A neutral moment', metadata: { sourceMenu: 'viral', presetId: 'invalid' } }), 'trend'],
+    [row('seven', { metadata: { sourceMenu: 'viral', presetId: 'dance' } }), 'dance_challenge'],
   ];
   const harness = libraryHarness(cases.map(([item]) => item));
   const tree = await harness.mount();
-  assert.deepEqual(Array.from(harness.loaded[0], item => item.category), cases.map(([, category]) => category));
+  assert.deepEqual(Array.from(harness.loaded[0], item => item.category), cases.map(([, category]) => category).filter(availability().isActiveViralCategory));
   for (const action of createActions(tree)) action.props.onClick({ preventDefault() {} });
   assert.deepEqual(harness.created, cases.map(([, category]) => category).filter(availability().isActiveViralCategory));
 });
@@ -156,9 +157,9 @@ test('public library continues to exclude unfinished, private, non-viral, missin
     row('challenge', { video_url: '' }), row('parenting', { metadata: { sourceMenu: 'viral', isPublic: false } }),
   ]);
   const tree = await harness.mount();
-  assert.deepEqual(Array.from(harness.loaded[0], item => item.id), ['public-pet', 'public-second']);
+  assert.deepEqual(Array.from(harness.loaded[0], item => item.id), ['public-pet']);
   assert.equal(createActions(tree).length, 1);
-  assert.equal(walk(tree, node => node.type === 'video').length, 2, 'Legacy public video is preserved');
+  assert.equal(walk(tree, node => node.type === 'video').length, 1, 'Other categories remain outside the studio showcase');
 });
 
 // Extract production handlers/effects structurally; no parallel implementation of selection logic.

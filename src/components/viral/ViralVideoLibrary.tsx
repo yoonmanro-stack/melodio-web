@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Film, Pause, Play, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { registerActiveAudio } from '@/lib/globalAudio'
-import { isActiveViralCategory } from '@/lib/vle/viralCategoryAvailability'
+import { isActiveViralCategory, normalizeActiveViralCategory } from '@/lib/vle/viralCategoryAvailability'
 
 export type ViralCategory = 'drama' | 'pet' | 'relationship' | 'human' | 'trend' | 'challenge' | 'brand' | 'history' | 'parenting' | 'food_diet' | 'horror_mystery' | 'ai_future' | 'dance_challenge'
 
@@ -79,7 +79,7 @@ function readNumber(...values: unknown[]): number {
 
 function resolveCategory(item: Record<string, unknown>, meta: Record<string, unknown>): ViralCategory {
   const rawCategory = [meta.presetId, meta.tab_type, meta.genCategory, item.preset_id, item.category]
-    .map((value) => readString(value))
+    .map((value) => normalizeActiveViralCategory(readString(value)) || readString(value))
     .find((value) => CATEGORIES.some((category) => category.id === value))
   if (rawCategory) return rawCategory as ViralCategory
 
@@ -151,7 +151,7 @@ export default function ViralVideoLibrary({ onVideosLoaded, onCreateFormat, crea
       const nextVideos = (Array.isArray(payload.generations) ? payload.generations : [])
         .map((item) => item && typeof item === 'object' ? toViralVideo(item as Record<string, unknown>) : null)
         .filter((item: ViralVideo | null): item is ViralVideo => {
-          if (!item || seenVideos.has(item.videoUrl)) return false
+          if (!item || !isActiveViralCategory(item.category) || seenVideos.has(item.videoUrl)) return false
           seenVideos.add(item.videoUrl)
           return true
         })

@@ -194,8 +194,8 @@ test('rank-down and date-boundary cards return when current TOP exclusion sets c
 });
 
 test('search and category changes cannot reintroduce excluded TOP IDs or URLs', async () => {
-  const topPet = row('top-pet', 'Needle TOP pet'), topDrama = row('top-drama', 'Needle TOP drama', 'drama');
-  const pet = row('ordinary-pet', 'Needle ordinary pet'), drama = row('ordinary-drama', 'Needle ordinary drama', 'drama');
+  const topPet = row('top-pet', 'Needle TOP pet'), topDrama = row('top-drama', 'Needle TOP drama', 'dance_challenge');
+  const pet = row('ordinary-pet', 'Needle ordinary pet'), drama = row('ordinary-dance', 'Needle ordinary drama', 'dance_challenge');
   const other = row('other-pet', 'Different ordinary pet');
   const host = harness([reply([topPet, topDrama, pet, drama, other])], {
     excludedVideoIds: new Set([topPet.id]), excludedVideoUrls: new Set([topDrama.video_url]),
