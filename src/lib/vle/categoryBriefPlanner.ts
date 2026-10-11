@@ -6,7 +6,8 @@ import { countSyllables, formatLyricsToSuno, validateStructure, VIRAL_PART_SPECS
 import { readPetBoundedBody } from '../video/petMedia';
 
 export const CATEGORY_BRIEF_MODEL = 'gpt-5.6-sol';
-export const CATEGORY_BRIEF_TIMEOUT_MS = 90_000;
+// Leave processing time within the producer route's 300-second duration.
+export const CATEGORY_BRIEF_TIMEOUT_MS = 240_000;
 export const CATEGORY_BRIEF_RESPONSE_BYTES = 96 * 1024;
 export const CATEGORY_BRIEF_CATEGORIES = VIRAL_QUALITY_CATEGORY_IDS.filter(category => category !== 'pet');
 export type CategoryBriefCategory = Exclude<ViralQualityCategoryId, 'pet'>;
@@ -172,6 +173,20 @@ function instructions(input: CategoryBriefInput, instrumental: boolean | undefin
 /** One bounded call. No retries, model substitution, fixed templates or provider body retention. */
 export async function createCategoryBrief(raw: unknown, dependencies: Dependencies = {}): Promise<CategoryFreshBrief> {
   const input = validateCategoryBriefInput(raw);
+  const startedAt = Date.now();
+  try {
+    return await requestCategoryBrief(input, dependencies);
+  } catch (error) {
+    console.warn('[category-brief:failed]', {
+      code: error instanceof CategoryBriefPlannerError ? error.code : 'CATEGORY_BRIEF_INTERNAL',
+      category: input.category,
+      elapsedMs: Math.max(0, Date.now() - startedAt),
+    });
+    throw error;
+  }
+}
+
+async function requestCategoryBrief(input: CategoryBriefInput, dependencies: Dependencies): Promise<CategoryFreshBrief> {
   const direction = getCategoryQualityDirection(input.category)!;
   const timeoutMs = dependencies.timeoutMs ?? CATEGORY_BRIEF_TIMEOUT_MS;
   const apiKey = (dependencies.apiKey ?? process.env.OPENAI_API_KEY ?? '').trim();
@@ -191,13 +206,16 @@ export async function createCategoryBrief(raw: unknown, dependencies: Dependenci
     response_format: { type: 'json_schema', json_schema: { name: 'category_fresh_brief', strict: true, schema: CATEGORY_BRIEF_SCHEMA } },
   });
   if (Buffer.byteLength(body, 'utf8') > 32 * 1024) throw new CategoryBriefPlannerError('기획 요청이 너무 큽니다.', 'CATEGORY_BRIEF_INPUT', 400);
+  const signal = AbortSignal.timeout(timeoutMs);
+  const timeoutError = () => new CategoryBriefPlannerError('새 기획 응답 대기 시간이 지나 중단되었습니다. 자동 재호출하지 않습니다.', 'CATEGORY_BRIEF_TIMEOUT', 504);
   let response: Response;
   try {
     response = await (dependencies.fetchImpl ?? fetch)('https://api.openai.com/v1/chat/completions', {
-      method: 'POST', redirect: 'error', signal: AbortSignal.timeout(timeoutMs),
+      method: 'POST', redirect: 'error', signal,
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` }, body,
     });
   } catch {
+    if (signal.aborted) throw timeoutError();
     throw new CategoryBriefPlannerError('새 기획 연결이 지연되거나 중단되었습니다. 자동 재호출하지 않습니다.', 'CATEGORY_BRIEF_TRANSPORT', 504);
   }
   if (!response.ok) {
@@ -206,7 +224,10 @@ export async function createCategoryBrief(raw: unknown, dependencies: Dependenci
   }
   let payload: Record<string, unknown> | null;
   try { payload = object(JSON.parse((await readPetBoundedBody(response, CATEGORY_BRIEF_RESPONSE_BYTES)).toString('utf8'))); }
-  catch { throw new CategoryBriefPlannerError('기획 응답 형식이나 크기를 확인하지 못했습니다.', 'CATEGORY_BRIEF_RESPONSE', 502); }
+  catch {
+    if (signal.aborted) throw timeoutError();
+    throw new CategoryBriefPlannerError('기획 응답 형식이나 크기를 확인하지 못했습니다.', 'CATEGORY_BRIEF_RESPONSE', 502);
+  }
   const choices = payload?.choices;
   const usage = object(payload?.usage);
   if (!payload || typeof payload.model !== 'string' || !(payload.model === CATEGORY_BRIEF_MODEL || payload.model.startsWith(`${CATEGORY_BRIEF_MODEL}-`))

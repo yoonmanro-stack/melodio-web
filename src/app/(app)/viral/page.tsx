@@ -2316,6 +2316,7 @@ function ViralTrendZoneStudio() {
                         </>
                       )}
                     </button>
+                    {isOptimizing ? <p role="status" className="text-xs text-zinc-300 leading-relaxed">이야기·가사·음악을 함께 기획하고 있습니다. 완료까지 몇 분 걸릴 수 있어요.</p> : null}
                   </div>
                 );
               })()}

@@ -8,6 +8,8 @@ const root = path.resolve(__dirname, '..');
 const baseline = process.env.CATEGORY_BRIEF_BASELINE_ROOT || root;
 const authored = new Set(['src/lib/vle/categoryBriefPlanner.ts', 'src/lib/vle/categoryQualityDirection.ts', 'src/lib/vle/categoryCreativePlan.ts', 'src/lib/vle/categoryObservableAction.ts', 'src/lib/vle/conceptContextDirection.ts']);
 const cache = new Map();
+const failureLogs = [];
+const fixtureConsole = { warn: (...args) => failureLogs.push(args), info() {}, log() {}, error() {} };
 function load(relative) {
   if (cache.has(relative)) return cache.get(relative).exports;
   const filename = path.join(authored.has(relative) ? root : baseline, relative);
@@ -26,8 +28,8 @@ function load(relative) {
     return require(name);
   };
   const denied = () => { throw Error('REAL_PROVIDER_ACCESS_FORBIDDEN'); };
-  new Function('require', 'module', 'exports', 'process', 'fetch', compiled)(localRequire, mod, mod.exports,
-    { env: { OPENAI_API_KEY: 'offline-contract-fixture' } }, denied);
+  new Function('require', 'module', 'exports', 'process', 'fetch', 'console', compiled)(localRequire, mod, mod.exports,
+    { env: { OPENAI_API_KEY: 'offline-contract-fixture' } }, denied, fixtureConsole);
   return mod.exports;
 }
 const api = load('src/lib/vle/categoryBriefPlanner.ts');
@@ -278,6 +280,33 @@ test('provider errors and transport ambiguity expose safe codes and never raw bo
   assert.equal(calls, 1);
 });
 
+test('failure diagnostics contain only safe code, category and elapsed time and successful calls stay quiet', async () => {
+  const before = failureLogs.length;
+  const success = fixture(); await create(input, options(success));
+  assert.equal(failureLogs.length, before);
+  const failed = fixture(() => new Response('PRIVATE_PROVIDER_MARKER', { status: 429 }));
+  await assert.rejects(create({ category: 'history', topic: 'PRIVATE_TOPIC_MARKER' }, options(failed)), { code: 'CATEGORY_BRIEF_PROVIDER' });
+  assert.equal(failed.calls.length, 1); assert.equal(failureLogs.length, before + 1);
+  const [label, details] = failureLogs[before];
+  assert.equal(label, '[category-brief:failed]');
+  assert.deepEqual(Object.keys(details).sort(), ['category', 'code', 'elapsedMs']);
+  assert.equal(details.code, 'CATEGORY_BRIEF_PROVIDER'); assert.equal(details.category, 'history');
+  assert.ok(Number.isInteger(details.elapsedMs) && details.elapsedMs >= 0);
+  assert.doesNotMatch(JSON.stringify(failureLogs[before]), /PRIVATE_|offline-contract-fixture|https?:\/\//);
+});
+
+test('one request can use a 240-second deadline within the 300-second route budget, with no unbounded override', async () => {
+  assert.equal(api.CATEGORY_BRIEF_TIMEOUT_MS, 240_000);
+  assert.ok(api.CATEGORY_BRIEF_TIMEOUT_MS < 300_000);
+  for (const timeoutMs of [90_001, 240_000]) {
+    const c = fixture(); await create(input, { ...options(c), timeoutMs }); assert.equal(c.calls.length, 1);
+  }
+  for (const timeoutMs of [99, 240_001, Infinity, NaN, 100.5]) {
+    const c = fixture(); await assert.rejects(create(input, { ...options(c), timeoutMs }), { code: 'CATEGORY_BRIEF_CONFIG' });
+    assert.equal(c.calls.length, 0);
+  }
+});
+
 test('both declared and streamed provider bytes are bounded before parsing or returning content', async () => {
   const declared = fixture(() => new Response('bounded', { headers: { 'content-length': String(api.CATEGORY_BRIEF_RESPONSE_BYTES + 1) } }));
   await assert.rejects(create(input, options(declared)), { code: 'CATEGORY_BRIEF_RESPONSE' }); assert.equal(declared.calls.length, 1);
@@ -298,7 +327,21 @@ test('each request has a new nonce and the configured abort signal bounds an int
     calls++; return new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(Error('private timeout marker')), { once: true }));
   } });
   const keepAlive = setTimeout(() => {}, 300);
-  try { await assert.rejects(interrupted, { code: 'CATEGORY_BRIEF_TRANSPORT', status: 504 }); }
+  try { await assert.rejects(interrupted, { code: 'CATEGORY_BRIEF_TIMEOUT', status: 504 }); }
+  finally { clearTimeout(keepAlive); }
+  assert.equal(calls, 1);
+});
+
+test('the same deadline classifies an interrupted bounded response body without retrying', async () => {
+  let calls = 0;
+  const interrupted = create(input, { apiKey: 'offline-contract-fixture', timeoutMs: 100, fetchImpl: async (_url, init) => {
+    calls++;
+    return new Response(new ReadableStream({ start(controller) {
+      init.signal.addEventListener('abort', () => controller.error(Error('PRIVATE_BODY_TIMEOUT_MARKER')), { once: true });
+    } }));
+  } });
+  const keepAlive = setTimeout(() => {}, 300);
+  try { await assert.rejects(interrupted, { code: 'CATEGORY_BRIEF_TIMEOUT', status: 504 }); }
   finally { clearTimeout(keepAlive); }
   assert.equal(calls, 1);
 });
