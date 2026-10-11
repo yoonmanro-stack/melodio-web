@@ -30,6 +30,12 @@ function label(node) {
   return typeof node === 'object' ? label(node.props?.children) : String(node);
 }
 const createActions = tree => walk(tree, node => ['button', 'a'].includes(node.type) && label(node).trim() === '이 포맷으로 만들기');
+function availability() {
+  const file = path.join(root, 'src/lib/vle/viralCategoryAvailability.ts');
+  const module = { exports: {} };
+  vm.runInNewContext(compile(fs.readFileSync(file, 'utf8'), file), { module, exports: module.exports, require });
+  return module.exports;
+}
 const sameDependencies = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
 const tick = () => new Promise(resolve => setImmediate(resolve));
 function row(category, overrides = {}) {
@@ -74,6 +80,7 @@ function libraryHarness(rows, overrides = {}) {
     require(name) {
       if (name === 'react') return react;
       if (name === '@/lib/globalAudio') return { registerActiveAudio() {} };
+      if (name === '@/lib/vle/viralCategoryAvailability') return availability();
       return require(name);
     },
     window: {},
@@ -97,11 +104,16 @@ function libraryHarness(rows, overrides = {}) {
 }
 
 for (const category of categories) {
-  test(`public ${category} card sends its resolved category through the real CTA`, async () => {
+  test(`public ${category} card preserves playback and applies creation availability`, async () => {
     const harness = libraryHarness([row(category)]);
     const tree = await harness.mount();
     const actions = createActions(tree);
-    assert.equal(actions.length, 1);
+    assert.equal(actions.length, availability().isActiveViralCategory(category) ? 1 : 0);
+    assert.equal(walk(tree, node => node.type === 'video').length, 1, 'Archived playback stays available');
+    if (!availability().isActiveViralCategory(category)) {
+      assert.deepEqual(harness.created, []);
+      return;
+    }
     assert.equal(typeof actions[0].props.onClick, 'function', 'A scroll-only link does not select a studio category');
     actions[0].props.onClick({ preventDefault() {} });
     assert.deepEqual(harness.created, [category]);
@@ -122,11 +134,11 @@ test('category resolution skips invalid early values and preserves valid metadat
   const tree = await harness.mount();
   assert.deepEqual(Array.from(harness.loaded[0], item => item.category), cases.map(([, category]) => category));
   for (const action of createActions(tree)) action.props.onClick({ preventDefault() {} });
-  assert.deepEqual(harness.created, cases.map(([, category]) => category));
+  assert.deepEqual(harness.created, cases.map(([, category]) => category).filter(availability().isActiveViralCategory));
 });
 
 test('creation lock prevents category callbacks, including an explicitly invoked event handler', async () => {
-  const harness = libraryHarness([row('brand')], { props: { creationDisabled: true } });
+  const harness = libraryHarness([row('pet')], { props: { creationDisabled: true } });
   const tree = await harness.mount();
   const action = createActions(tree)[0];
   assert.ok(action);
@@ -145,7 +157,8 @@ test('public library continues to exclude unfinished, private, non-viral, missin
   ]);
   const tree = await harness.mount();
   assert.deepEqual(Array.from(harness.loaded[0], item => item.id), ['public-pet', 'public-second']);
-  assert.equal(createActions(tree).length, 2);
+  assert.equal(createActions(tree).length, 1);
+  assert.equal(walk(tree, node => node.type === 'video').length, 2, 'Legacy public video is preserved');
 });
 
 // Extract production handlers/effects structurally; no parallel implementation of selection logic.
@@ -179,11 +192,11 @@ function pageHarness(overrides = {}) {
     petOwnedTracksOwner: 'owner-A', petOwnedTracksStatus: 'ready', petTrackId: null, generatedResult: null,
     petCompletedRefreshKey: null,
     topVideoIds: new Set(), topVideoUrls: new Set(),
-    danceBusy: false, isOptimizing: false, isGenerating: false, isGeneratingGrokVideo: false,
+    danceBusy: false, studioBusy: false, planningAccount: { userId: 'owner-A' }, isOptimizing: false, isGenerating: false, isGeneratingGrokVideo: false,
     ...overrides,
   };
   const refs = {
-    explicitCategorySelection: { current: null }, petPlanningRequest: { current: 7 },
+    planningAccountRef: { current: state.planningAccount }, explicitCategorySelection: { current: null }, explicitGrokSelectionRef: { current: null }, petPlanningRequest: { current: 7 },
     grokPromptRequest: { current: 0 },
     petAccountRef: { current: 'owner-A' }, petCategoryRef: { current: state.genCategory },
     petTopicDraft: { current: state.customTopic }, petOpeningTrackRequest: { current: null },
@@ -204,7 +217,7 @@ function pageHarness(overrides = {}) {
   }
   collect(source);
   function bindings() {
-    return { ...state, ...refs, ...setters, requestedPetTrackId,
+    return { ...state, ...refs, ...setters, ...availability(), requestedPetTrackId,
       searchParams: { get(key) { assert.equal(key, 'petTrack'); return requestedPetTrackId; } },
       // Parsing has separate contract regressions; these fixtures isolate page selection and restoration guards.
       readPetEpisode: value => value?.petEpisode || null,
@@ -219,20 +232,20 @@ function pageHarness(overrides = {}) {
   return { state, refs, changes, loads, storageReads, track, bindings, select, restoreUrl, resetOwner, setUrl(id) { requestedPetTrackId = id; } };
 }
 
-test('page wiring sends the public history CTA to the same reset handler as manual category selection', async () => {
+test('page wiring sends the public dance CTA to the same reset handler as manual category selection', async () => {
   const page = pageHarness();
   const source = pageAst();
   const node = findNode(source, node => ts.isJsxSelfClosingElement(node) && node.tagName.getText(source) === 'ViralVideoLibrary');
   const libraryElement = execute({ source, node }, {
     ...page.bindings(), ViralVideoLibrary() {}, setViralVideos() {}, handleSelectGenerationCategory: page.select,
   });
-  const harness = libraryHarness([row('history')], { props: libraryElement.props });
+  const harness = libraryHarness([row('dance_challenge')], { props: libraryElement.props });
   const action = createActions(await harness.mount())[0];
   assert.equal(action.props.href, '#viral-studio', 'Successful selection retains native studio navigation');
   let prevented = false;
   action.props.onClick({ preventDefault() { prevented = true; } });
   assert.equal(prevented, false);
-  assert.equal(page.state.genCategory, 'history');
+  assert.equal(page.state.genCategory, 'dance_challenge');
   assert.equal(page.state.customTopic, '');
   assert.equal(page.state.customLyrics, '');
   assert.equal(page.state.optimizedPrompt, '');
@@ -242,7 +255,7 @@ test('page wiring sends the public history CTA to the same reset handler as manu
   const manualPage = pageHarness();
   const click = findNode(source, node => ts.isJsxAttribute(node) && node.name.getText(source) === 'onClick'
     && node.initializer?.getText(source).includes('handleSelectGenerationCategory(cat.id'));
-  execute({ source, node: click.initializer.expression }, { cat: { id: 'history' }, handleSelectGenerationCategory: manualPage.select })();
+  execute({ source, node: click.initializer.expression }, { cat: { id: 'dance_challenge' }, handleSelectGenerationCategory: manualPage.select })();
   assert.equal(manualPage.state.genCategory, page.state.genCategory);
   assert.deepEqual(manualPage.changes, page.changes);
 });
@@ -250,7 +263,7 @@ test('page wiring sends the public history CTA to the same reset handler as manu
 for (const busyFlag of ['danceBusy', 'isOptimizing', 'isGenerating', 'isGeneratingGrokVideo']) {
   test(`page ${busyFlag} guard retains the category and current work`, () => {
     const harness = pageHarness({ [busyFlag]: true });
-    harness.select('history');
+    harness.select('dance_challenge');
     assert.equal(harness.state.genCategory, 'pet');
     assert.equal(harness.state.customLyrics, 'Current lyrics');
     assert.equal(harness.refs.explicitCategorySelection.current, null);
@@ -267,13 +280,13 @@ test('same-category explicit selection retains current work and prevents stale U
   assert.deepEqual(harness.loads, []);
 });
 
-test('owner reset cannot fill an explicit history selection from an old active pet draft', () => {
+test('owner reset cannot fill an explicit dance selection from an old active pet draft', () => {
   const harness = pageHarness();
-  harness.select('history');
+  harness.select('dance_challenge');
   harness.refs.petAccountRef.current = null;
-  harness.refs.petCategoryRef.current = 'history';
+  harness.refs.petCategoryRef.current = 'dance_challenge';
   harness.resetOwner();
-  assert.equal(harness.state.genCategory, 'history');
+  assert.equal(harness.state.genCategory, 'dance_challenge');
   assert.equal(harness.state.customTopic, '');
   assert.equal(harness.state.customLyrics, '');
   assert.equal(harness.state.petEpisode, null);
@@ -297,9 +310,9 @@ test('normal owner initialization stays fresh despite an old active pet draft', 
 
 test('existing petTrack URL is ignored after explicit selection, while a different owned URL can open', async () => {
   const harness = pageHarness();
-  harness.select('history');
+  harness.select('dance_challenge');
   harness.restoreUrl();
-  assert.equal(harness.state.genCategory, 'history');
+  assert.equal(harness.state.genCategory, 'dance_challenge');
   assert.deepEqual(harness.loads, []);
   harness.state.petOwnedTracks.push({ ...harness.track, id: 'new-track' });
   harness.setUrl('new-track');
@@ -316,10 +329,10 @@ test('an in-flight pet-track response cannot restore old work after explicit cat
   const reply = new Promise(resolve => { releaseReply = resolve; });
   const loader = execute(handlerNode('handleLoadPetTrack'), { ...harness.bindings(), fetch: async () => reply });
   const pending = loader('url-track');
-  harness.select('history');
+  harness.select('dance_challenge');
   releaseReply({ ok: true, json: async () => ({ generation: harness.track }) });
   await pending;
-  assert.equal(harness.state.genCategory, 'history');
+  assert.equal(harness.state.genCategory, 'dance_challenge');
   assert.equal(harness.state.customLyrics, '');
   assert.equal(harness.state.petEpisode, null);
   assert.equal(harness.state.generatedResult, null);
@@ -327,7 +340,7 @@ test('an in-flight pet-track response cannot restore old work after explicit cat
 
 test('petTrack navigation A to B to A permits Back to reopen A after its earlier dismissal', async () => {
   const harness = pageHarness();
-  harness.select('history');
+  harness.select('dance_challenge');
   harness.restoreUrl();
   assert.deepEqual(harness.loads, [], 'Explicit category selection dismisses the current A URL');
   harness.state.petOwnedTracks.push({ ...harness.track, id: 'new-track' });
@@ -350,4 +363,21 @@ test('persisted public caches are ignored before the fresh public list arrives',
   } });
   assert.equal(createActions(harness.render()).length, 0);
   assert.deepEqual(harness.storageReads, []);
+});
+
+for (const category of categories.filter(value => !['pet', 'dance_challenge'].includes(value))) {
+  test(`page rejects disabled ${category} selection without discarding current work`, () => {
+    const harness = pageHarness();
+    harness.select(category);
+    assert.equal(harness.state.genCategory, 'pet');
+    assert.equal(harness.state.customLyrics, 'Current lyrics');
+    assert.deepEqual(harness.changes, []);
+  });
+}
+
+test('public library exposes only the two active category filters', async () => {
+  const harness = libraryHarness(categories.map(category => row(category)));
+  const tree = await harness.mount();
+  const filters = walk(tree, node => node.props?.['aria-label'] === '영상 카테고리')[0];
+  assert.deepEqual(walk(filters, node => node.type === 'button').map(label), ['전체', '댕냥이 집사속마음', '댄스 챌린지']);
 });

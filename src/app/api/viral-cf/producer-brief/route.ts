@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { readPetBoundedBody } from '@/lib/video/petMedia';
-import { getCategoryQualityDirection } from '@/lib/vle/categoryQualityDirection';
+import { normalizeActiveViralCategory, VIRAL_CATEGORY_DISABLED_CODE, VIRAL_CATEGORY_DISABLED_MESSAGE } from '@/lib/vle/viralCategoryAvailability';
 import { createCategoryBrief, CATEGORY_BRIEF_CATEGORIES, CategoryBriefPlannerError } from '@/lib/vle/categoryBriefPlanner';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
@@ -431,8 +431,9 @@ export async function POST(request: NextRequest) {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return NextResponse.json({ success: false, error: '기획 입력을 확인해 주세요.' }, { status: 400 });
     const body = raw as { category?: string; seed?: number; topic?: string; species?: 'cat' | 'dog'; pov?: 'owner_inner_voice' | 'pet_inner_voice'; vocalEn?: string; genreEn?: string; moodEn?: string };
     if (Object.keys(body).some(key => !['category', 'seed', 'topic', 'species', 'pov', 'vocalEn', 'genreEn', 'moodEn'].includes(key))) return NextResponse.json({ success: false, error: '지원하지 않는 기획 입력입니다.' }, { status: 400 });
-    const category = body.category || 'trend';
-    if (!getCategoryQualityDirection(category) && !['dance', 'ai_future'].includes(category)) return NextResponse.json({ success: false, error: '카테고리를 확인해 주세요.' }, { status: 400 });
+    const category = normalizeActiveViralCategory(body.category);
+    if (!category) return NextResponse.json({ success: false, error: VIRAL_CATEGORY_DISABLED_MESSAGE, code: VIRAL_CATEGORY_DISABLED_CODE }, { status: 400 });
+    if (category === 'dance_challenge') return NextResponse.json({ success: false, error: '댄스 챌린지 화면에서 전용 음악 기획을 시작해 주세요.', code: 'CATEGORY_WORKFLOW_REQUIRED' }, { status: 409 });
     const overrides: StyleOverrides = { vocalEn: body.vocalEn, genreEn: body.genreEn, moodEn: body.moodEn };
 
     // The pet pilot owns a separate story contract. Other categories retain their existing handlers.

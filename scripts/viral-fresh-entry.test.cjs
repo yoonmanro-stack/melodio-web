@@ -238,3 +238,9 @@ test('viral route template passes each new studio child through a fragment', () 
   assert.equal(initialTree.props.children, first);
   assert.equal(nextTree.props.children, second);
 });
+
+test('fresh studio defaults to pet and preserves the dedicated danceTrack entry', () => {
+  for (const [danceTrack, category] of [[null, 'pet'], ['owned-dance-id', 'dance_challenge']]) {
+    assert.equal(execute(stateInitializer('genCategory'), { DANCE_CATEGORY_ID: 'dance_challenge', searchParams: { get(key) { assert.equal(key, 'danceTrack'); return danceTrack; } } })[0], category);
+  }
+});

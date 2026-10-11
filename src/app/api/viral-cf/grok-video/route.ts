@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient as createAuthClient } from '@/lib/supabase/server';
 import { getCategoryQualityDirection } from '@/lib/vle/categoryQualityDirection';
+import { normalizeActiveViralCategory, VIRAL_CATEGORY_DISABLED_CODE, VIRAL_CATEGORY_DISABLED_MESSAGE } from '@/lib/vle/viralCategoryAvailability';
+import { isActiveViralTrackCategory } from '@/lib/vle/viralGenerationAvailability';
 import { readPetBoundedBody } from '@/lib/video/petMedia';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -298,14 +300,6 @@ export async function POST(req: NextRequest) {
     const { data, error: authError } = await auth.auth.getUser();
     if (authError || !data.user) return NextResponse.json({ success: false, error: '로그인이 필요합니다.' }, { status: 401 });
     if (!req.headers.get('content-type')?.includes('application/json')) return NextResponse.json({ success: false, error: 'JSON 요청이 필요합니다.' }, { status: 415 });
-    const xaiApiKey = process.env.XAI_API_KEY;
-    if (!xaiApiKey || xaiApiKey.includes('여기에') || xaiApiKey.trim() === '') {
-      return NextResponse.json(
-        { success: false, error: 'XAI_API_KEY가 설정되지 않았습니다. .env.local을 확인해 주세요.' },
-        { status: 400 }
-      );
-    }
-
     let body;
     try { body = JSON.parse((await readPetBoundedBody(new Response(req.body), 16 * 1024)).toString('utf8')); }
     catch { return NextResponse.json({ success: false, error: '요청 본문이 올바르지 않거나 너무 큽니다.' }, { status: 400 }); }
@@ -316,7 +310,7 @@ export async function POST(req: NextRequest) {
       generate30SecFull = true,
       // 카테고리를 받아 연출을 결정한다. 기존에는 이 값이 없어서 모든 카테고리에
       // 'butler / pet reaction' 연출이 하드코딩으로 주입됐다.
-      category = 'trend',
+      category,
       allowDance = false,
       cutCadenceSeconds = 1.5,
     } = body as {
@@ -328,7 +322,9 @@ export async function POST(req: NextRequest) {
       cutCadenceSeconds?: number;
     };
 
-    if (typeof category !== 'string' || (!getCategoryQualityDirection(category) && !['dance', 'ai_future'].includes(category))) return NextResponse.json({ success: false, error: '카테고리를 확인해 주세요.' }, { status: 400 });
+    const activeCategory = normalizeActiveViralCategory(category);
+    if (!activeCategory) return NextResponse.json({ success: false, error: VIRAL_CATEGORY_DISABLED_MESSAGE, code: VIRAL_CATEGORY_DISABLED_CODE }, { status: 400 });
+    if (activeCategory === 'dance_challenge') return NextResponse.json({ success: false, error: '댄스 챌린지 화면에서 전용 영상 제작을 시작해 주세요.', code: 'CATEGORY_WORKFLOW_REQUIRED' }, { status: 409 });
     if (typeof allowDance !== 'boolean' || typeof generate30SecFull !== 'boolean' || typeof cutCadenceSeconds !== 'number' || !Number.isFinite(cutCadenceSeconds) || cutCadenceSeconds < 0.5 || cutCadenceSeconds > 8) return NextResponse.json({ success: false, error: '영상 연출 선택을 확인해 주세요.' }, { status: 400 });
     if (typeof prompt !== 'string' || !prompt.trim() || prompt.length > 2400) {
       return NextResponse.json(
@@ -338,6 +334,20 @@ export async function POST(req: NextRequest) {
     }
     if (typeof audioUrl !== 'string' || !audioUrl.trim()) {
       throw new LegacyShortExportError('완성된 음원이 필요합니다. 음원 없는 영상은 제공하지 않습니다.', 'AUDIO_REQUIRED');
+    }
+
+    // A category string cannot relabel an archived disabled song as an active one.
+    const { data: tracks, error: trackError } = await auth.from('generations').select('license_hash')
+      .eq('user_id', data.user.id).eq('status', 'completed').eq('audio_url', audioUrl).limit(2);
+    const categoryMatches = tracks?.length && tracks.every(track => {
+      try { return isActiveViralTrackCategory(JSON.parse(track.license_hash || '{}'), activeCategory); }
+      catch { return false; }
+    });
+    if (trackError || !categoryMatches) return NextResponse.json({ success: false, error: '선택한 완성 음원과 카테고리를 확인해 주세요.', code: 'TRACK_CATEGORY' }, { status: 409 });
+
+    const xaiApiKey = process.env.XAI_API_KEY;
+    if (!xaiApiKey || xaiApiKey.includes('여기에') || xaiApiKey.trim() === '') {
+      return NextResponse.json({ success: false, error: '영상 생성 설정을 확인해 주세요.' }, { status: 400 });
     }
 
     const apiBase = process.env.XAI_API_BASE || 'https://api.x.ai/v1';

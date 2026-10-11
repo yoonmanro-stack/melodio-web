@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import DanceChallengeStudio from "@/components/viral/DanceChallengeStudio";
 import { DANCE_CATEGORY_ID } from "@/lib/dance/preset";
+import { isActiveViralCategory } from "@/lib/vle/viralCategoryAvailability";
 import { getConceptContextPurpose } from "@/lib/vle/conceptContextDirection";
 import { readCategoryBriefExtras, type CategoryBriefExtras, type CategoryCreativePlan } from "@/lib/vle/categoryCreativePlan";
 import { registerActiveAudio } from "@/lib/globalAudio";
@@ -349,7 +350,7 @@ function ViralTrendZoneStudio() {
     new Set(concepts.map((c: any) => c.created_date).filter(Boolean))
   ).sort((a: any, b: any) => b.localeCompare(a)) as string[];
 
-  const [genCategory, setGenCategory] = useState<string>(() => searchParams.get('danceTrack') ? DANCE_CATEGORY_ID : 'challenge');
+  const [genCategory, setGenCategory] = useState<string>(() => searchParams.get('danceTrack') ? DANCE_CATEGORY_ID : 'pet');
   const [danceBusy, setDanceBusy] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
@@ -1956,6 +1957,7 @@ function ViralTrendZoneStudio() {
   }, [libraryTracks, searchTerm, activeCategory]);
 
   const handleSelectGenerationCategory = (category: ViralCategory) => {
+    if (!isActiveViralCategory(category)) return;
     if (danceBusy || isOptimizing || isGenerating || isGeneratingGrokVideo) return;
     explicitCategorySelection.current = { petTrackId: searchParams.get('petTrack') };
     if (category === genCategory) return;
@@ -1985,8 +1987,8 @@ function ViralTrendZoneStudio() {
 
       {/* ── 헤더 (통일된 표준 브랜드 헤더) ─────────────────────────────────────────────────────── */}
       <header className="mb-4 border-b border-white/10 pb-4">
-        <h1 className="text-3xl font-bold text-white mb-1.5">Viral & Trend Zone</h1>
-        <p className="text-xs text-zinc-300">지금 가장 뜨거운 도파민 이슈, 역사 인물 환생 디스전, 그리고 인간 군상 뼈 분쇄기 테마를 기반으로 한 1분 이내 숏폼 전용 고중독성 음원 기획 조종석입니다.</p>
+        <h1 className="text-3xl font-bold text-white mb-1.5">바이럴 숏폼 스튜디오</h1>
+        <p className="text-xs text-zinc-300">댕냥이의 일상과 댄스 챌린지를 음악이 담긴 30초 영상으로 만듭니다.</p>
       </header>
 
       {/* ─── Premium Viral Shorts Showcase Section ─── */}
@@ -2348,20 +2350,10 @@ function ViralTrendZoneStudio() {
                 카테고리 선택
               </h3>
               
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+              <div className="grid grid-cols-2 gap-2.5">
                 {[
-                  { id: 'drama', label: 'K-드라마 명대사', icon: <Film className="w-4 h-4" /> },
                   { id: 'pet', label: '댕냥이 집사속마음', icon: <Dog className="w-4 h-4" /> },
-                  { id: 'relationship', label: '연애·남녀심리', icon: <Heart className="w-4 h-4" /> },
-                  { id: 'human', label: '현대인·직장인', icon: <Users className="w-4 h-4" /> },
-                  { id: 'trend', label: '트렌드·이슈', icon: <TrendingUp className="w-4 h-4" /> },
-                  { id: 'challenge', label: '도파민 응원', icon: <Flame className="w-4 h-4" /> },
-                  { id: 'brand', label: 'B급 광고', icon: <Tv className="w-4 h-4" /> },
-                  { id: 'history', label: '역사 부캐', icon: <History className="w-4 h-4" /> },
-                  { id: 'parenting', label: '육아·잼민이 월드', icon: <Baby className="w-4 h-4" /> },
-                  { id: 'food_diet', label: '야식·다이어트', icon: <Utensils className="w-4 h-4" /> },
-                  { id: 'horror_mystery', label: '이불킥·흑역사', icon: <Ghost className="w-4 h-4" /> },
-                  { id: DANCE_CATEGORY_ID, label: '댄스·챌린지', icon: <Music4 className="w-4 h-4" /> },
+                  { id: DANCE_CATEGORY_ID, label: '댄스 챌린지', icon: <Music4 className="w-4 h-4" /> },
                 ].map((cat) => {
                   const isCatSelected = genCategory === cat.id;
                   return (

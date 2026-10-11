@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { getCategoryQualityDirection, VIRAL_QUALITY_CATEGORY_IDS } from '../vle/categoryQualityDirection';
 import { LEGACY_NO_TEXT_RULE } from './legacyShortExport';
+import { normalizeActiveViralCategory, VIRAL_CATEGORY_DISABLED_CODE, VIRAL_CATEGORY_DISABLED_MESSAGE } from '../vle/viralCategoryAvailability';
 
 export const VIRAL_STORY_CATEGORIES = VIRAL_QUALITY_CATEGORY_IDS.filter(id => id !== 'pet');
 export const VIRAL_STORY_REQUEST_BYTES = 16 * 1024;
@@ -155,7 +156,8 @@ export function viralStoryJobView(job: ViralStoryJob, now = Date.now()): ViralSt
   return { version: 1, id: job.id, trackId: job.trackId, category: job.input.category, inputFingerprint: job.inputFingerprint,
     ...(job.promptVersion === 2 ? { promptVersion: 2 as const } : {}),
     prompt: job.input.prompt, allowDance: job.input.allowDance, cutCadenceSeconds: job.input.cutCadenceSeconds,
-    status: job.status, progress, inFlight: !!job.lease && job.lease.until > now, canResume: retryable(job), updatedAt: job.updatedAt,
+    status: job.status, progress, inFlight: !!job.lease && job.lease.until > now,
+    canResume: normalizeActiveViralCategory(job.input.category) !== null && retryable(job), updatedAt: job.updatedAt,
     ...(job.failureCode ? { failureCode: job.failureCode, failureMessage: FAILURE_MESSAGES[job.failureCode] || FAILURE_MESSAGES.TRANSIENT_IO } : {}),
     ...(job.status === 'completed' && job.final ? { videoUrl: job.final.url, durationSeconds: job.final.durationSeconds,
       clips: job.clips.map(clip => clip.asset!.url), is30SecFull: true as const } : {}) };
@@ -247,6 +249,7 @@ export function createViralStoryPipeline(deps: ViralStoryDependencies) {
     async get(userId: string, trackId: string, jobId?: string) { const { job } = await load(userId, trackId, jobId); return job ? viralStoryJobView(job, now()) : null; },
     async create(userId: string, trackId: string, requestId: string, rawInput: unknown, expectedAudioUrl?: unknown) {
       assertViralStoryUuid(requestId); const input = validateViralStoryInput(rawInput);
+      if (!normalizeActiveViralCategory(input.category)) throw new ViralStoryError(VIRAL_CATEGORY_DISABLED_MESSAGE, VIRAL_CATEGORY_DISABLED_CODE);
       const { record, job: existing } = await load(userId, trackId);
       if (expectedAudioUrl !== undefined && expectedAudioUrl !== record.audioUrl) throw new ViralStoryError('선택한 음원이 저장된 음원과 다릅니다.', 'AUDIO_MISMATCH', 409);
       if (!mediaUrl(record.audioUrl)) throw new ViralStoryError('저장된 음원 주소를 확인해 주세요.', 'AUDIO_REQUIRED', 409);
@@ -273,6 +276,8 @@ export function createViralStoryPipeline(deps: ViralStoryDependencies) {
     },
     async resume(userId: string, trackId: string, jobId: string) {
       const { record, job } = await load(userId, trackId, jobId);
+      if (job!.status === 'completed') return viralStoryJobView(job!, now());
+      if (!normalizeActiveViralCategory(job!.input.category)) throw new ViralStoryError(VIRAL_CATEGORY_DISABLED_MESSAGE, VIRAL_CATEGORY_DISABLED_CODE);
       if (job!.status !== 'held') return viralStoryJobView(job!, now());
       if (!retryable(job!) || job!.lease) throw new ViralStoryError('이 작업은 안전한 자동 재시도가 불가능합니다. 저장된 요청을 운영자가 확인해야 합니다.', 'RESUME_UNSAFE', 409);
       const resumed = { ...job!, status: stage(job!), updatedAt: timestamp() };
@@ -287,7 +292,9 @@ export function createViralStoryPipeline(deps: ViralStoryDependencies) {
     },
     async advance(userId: string, trackId: string, jobId: string) {
       const loaded = await load(userId, trackId, jobId); let { record } = loaded; let job = loaded.job!;
-      if (job.status === 'completed' || job.status === 'held') return viralStoryJobView(job, now());
+      if (job.status === 'completed') return viralStoryJobView(job, now());
+      if (!normalizeActiveViralCategory(job.input.category)) throw new ViralStoryError(VIRAL_CATEGORY_DISABLED_MESSAGE, VIRAL_CATEGORY_DISABLED_CODE);
+      if (job.status === 'held') return viralStoryJobView(job, now());
       if (job.lease && job.lease.until > now()) return viralStoryJobView(job, now());
       // Lost submit response, or a saved marker without an ID, cannot prove a paid request failed.
       const uncertain = job.clips.findIndex(clip => clip.status === 'submitting' && !clip.requestId && !clip.sourceUrl);

@@ -6,6 +6,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { generateLyrics } from '@/lib/engines/lyrics-generator'
 import { isPresetStudioSource } from '@/lib/preset-studio-profile'
+import { isViralGenerationAvailable } from '@/lib/vle/viralGenerationAvailability'
+import { VIRAL_CATEGORY_DISABLED_CODE, VIRAL_CATEGORY_DISABLED_MESSAGE } from '@/lib/vle/viralCategoryAvailability'
 
 export const dynamic = 'force-dynamic'
 /** Leave room beyond the 180-second Sol provider deadline for prompt preparation. */
@@ -13,7 +15,11 @@ export const maxDuration = 240
 
 export async function POST(request: NextRequest) {
   try {
-    const { stylePrompt, topic, language, isPlaylistMode, trackCount, vocalGender, presetId, durationSeconds, viralMode, sourceMenu, vocalProfileSpecified } = await request.json()
+    const body = await request.json()
+    if (!isViralGenerationAvailable(body)) {
+      return NextResponse.json({ success: false, error: VIRAL_CATEGORY_DISABLED_MESSAGE, code: VIRAL_CATEGORY_DISABLED_CODE }, { status: 400 })
+    }
+    const { stylePrompt, topic, language, isPlaylistMode, trackCount, vocalGender, presetId, durationSeconds, viralMode, sourceMenu, vocalProfileSpecified } = body
 
     if (typeof stylePrompt !== 'string' || !stylePrompt.trim()) {
       return NextResponse.json({ error: '음악 스타일을 입력하거나 프리셋을 선택해 주세요.' }, { status: 400 })

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createClient as createSupabaseClient } from '@supabase/supabase-js';
+import { normalizeActiveViralCategory } from '@/lib/vle/viralCategoryAvailability';
 
 export const dynamic = 'force-dynamic';
 
@@ -288,14 +289,16 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       console.warn('[API/viral-cf/presets] DB 조회 실패, Seed 폴백 사용:', error.message);
-      const seeds = SEED_VIRAL_CONCEPTS.map(c => ({ ...c, created_date: "2026-07-21" }));
+      const seeds = SEED_VIRAL_CONCEPTS.filter(c => normalizeActiveViralCategory(c.tab_type)).map(c => ({ ...c, created_date: "2026-07-21" }));
       return NextResponse.json({ success: true, presets: seeds });
     }
 
     // 2. DB에 데이터가 있으면 포맷 변환하여 리턴
     if (playbooks && playbooks.length > 0) {
-      const formatted = playbooks.map((pb: any, idx: number) => {
+      const formatted = playbooks.flatMap((pb: any) => {
         const metadata = pb.metadata || {};
+        const category = normalizeActiveViralCategory(metadata.tab_type);
+        if (!category) return [];
         let dateStr = metadata.created_date;
         if (!dateStr && pb.created_at) {
           dateStr = new Date(pb.created_at).toISOString().split('T')[0];
@@ -303,7 +306,7 @@ export async function GET(request: NextRequest) {
         if (!dateStr) {
           dateStr = "2026-07-21";
         }
-        return {
+        return [{
           id: pb.id,
           title: pb.title,
           genre: metadata.genre || "기타",
@@ -311,19 +314,19 @@ export async function GET(request: NextRequest) {
           source: metadata.description || pb.content.slice(0, 100),
           visual: metadata.visual || "기본 9:16 비주얼",
           suggestedTags: metadata.suggestedTags || ["#바이럴", "#숏폼"],
-          tab_type: metadata.tab_type || (['drama', 'pet', 'relationship', 'human', 'trend', 'challenge', 'brand', 'history'][idx % 8]),
+          tab_type: category,
           created_date: dateStr
-        };
+        }];
       });
       return NextResponse.json({ success: true, presets: formatted });
     }
 
     // 3. 데이터가 비어있으면 Seed 폴백 리턴
-    const seeds = SEED_VIRAL_CONCEPTS.map(c => ({ ...c, created_date: "2026-07-21" }));
+    const seeds = SEED_VIRAL_CONCEPTS.filter(c => normalizeActiveViralCategory(c.tab_type)).map(c => ({ ...c, created_date: "2026-07-21" }));
     return NextResponse.json({ success: true, presets: seeds });
   } catch (error) {
     console.error('[API/viral-cf/presets] 에러 발생:', error);
-    const seeds = SEED_VIRAL_CONCEPTS.map(c => ({ ...c, created_date: "2026-07-21" }));
+    const seeds = SEED_VIRAL_CONCEPTS.filter(c => normalizeActiveViralCategory(c.tab_type)).map(c => ({ ...c, created_date: "2026-07-21" }));
     return NextResponse.json({ success: true, presets: seeds });
   }
 }

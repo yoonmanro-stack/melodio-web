@@ -68,6 +68,13 @@ function harness(replies, initialProps = {}) {
     require(name) {
       if (name === 'react') return react;
       if (name === '@/lib/globalAudio') return { registerActiveAudio() {} };
+      if (name === '@/lib/vle/viralCategoryAvailability') {
+        const policyModule = { exports: {} };
+        const policy = path.resolve(__dirname, '../src/lib/vle/viralCategoryAvailability.ts');
+        const code = ts.transpileModule(fs.readFileSync(policy, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 } }).outputText;
+        vm.runInNewContext(code, { module: policyModule, exports: policyModule.exports, require });
+        return policyModule.exports;
+      }
       return require(name);
     },
     localStorage: {

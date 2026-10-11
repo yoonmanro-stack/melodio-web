@@ -1,4 +1,6 @@
 import { readCategoryBriefExtras, type CategoryBriefExtras } from '@/lib/vle/categoryCreativePlan'
+import { isViralGenerationAvailable } from '@/lib/vle/viralGenerationAvailability'
+import { VIRAL_CATEGORY_DISABLED_CODE, VIRAL_CATEGORY_DISABLED_MESSAGE } from '@/lib/vle/viralCategoryAvailability'
 import { isPresetStudioSource, resolvePresetStudioStyle, fitPresetStudioStyleBudget, preservePresetStudioMusicWhileScrubbing } from '@/lib/preset-studio-profile'
 import { sealSunoRetryIdentity } from '../../../../worker/suno-retry-identity'
 import { ensureGenerationBatch } from '@/lib/generation-batches/server'
@@ -376,6 +378,9 @@ export async function POST(request: NextRequest) {
   let sunoTaskAccepted = false
   try {
     const rawBody = await request.json()
+    if (!isViralGenerationAvailable(rawBody)) {
+      return NextResponse.json({ error: VIRAL_CATEGORY_DISABLED_MESSAGE, code: VIRAL_CATEGORY_DISABLED_CODE }, { status: 400 })
+    }
     const generationBatch = parseGenerationBatchInput(rawBody.generationBatch)
     let generationBatchFields: Awaited<ReturnType<typeof ensureGenerationBatch>> | undefined
     if (generationBatch) {

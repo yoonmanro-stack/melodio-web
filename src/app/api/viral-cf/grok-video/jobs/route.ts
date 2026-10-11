@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { readPetBoundedBody } from '@/lib/video/petMedia';
 import { createViralStoryServerService } from '@/lib/video/viralStoryServer';
 import { assertViralStoryUuid, completedViralStoryResponse, VIRAL_STORY_REQUEST_BYTES, ViralStoryError } from '@/lib/video/viralStoryPipeline';
+import { normalizeActiveViralCategory, VIRAL_CATEGORY_DISABLED_CODE, VIRAL_CATEGORY_DISABLED_MESSAGE } from '@/lib/vle/viralCategoryAvailability';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -44,6 +45,7 @@ export async function POST(request: NextRequest) {
       if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('body'); body = value as Record<string, unknown>;
     } catch { throw new ViralStoryError('요청 본문이 올바르지 않거나 너무 큽니다.', 'BODY'); }
     assertViralStoryUuid(body.trackId);
+    if (body.action === 'create' && !normalizeActiveViralCategory(body.category)) throw new ViralStoryError(VIRAL_CATEGORY_DISABLED_MESSAGE, VIRAL_CATEGORY_DISABLED_CODE);
     const { userId, service } = await context(); let job;
     if (body.action === 'create') {
       if (Object.keys(body).some(key => !['action', 'trackId', 'requestId', 'prompt', 'category', 'allowDance', 'cutCadenceSeconds', 'audioUrl'].includes(key))) throw new ViralStoryError('지원하지 않는 영상 입력입니다.', 'INPUT');

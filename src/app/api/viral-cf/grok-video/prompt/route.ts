@@ -1,7 +1,8 @@
 import { validateCategoryCreativePlan } from '@/lib/vle/categoryCreativePlan';
 import { NextRequest, NextResponse } from 'next/server';
+import { normalizeActiveViralCategory, VIRAL_CATEGORY_DISABLED_CODE, VIRAL_CATEGORY_DISABLED_MESSAGE } from '@/lib/vle/viralCategoryAvailability';
 import { getCategoryMatrix, pickProtagonist } from '@/lib/vle/viralCategoryMatrix';
-import { buildCategoryQualityInstructions, getCategoryQualityDirection } from '@/lib/vle/categoryQualityDirection';
+import { buildCategoryQualityInstructions } from '@/lib/vle/categoryQualityDirection';
 import { createClient } from '@/lib/supabase/server';
 import { readPetBoundedBody } from '@/lib/video/petMedia';
 import { compileViralStoryPrompts, VIRAL_STORY_CATEGORIES } from '@/lib/video/viralStoryPipeline';
@@ -175,9 +176,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: '가사 또는 주제를 입력해주세요.' }, { status: 400 });
     }
 
-    const targetCategory = category || 'trend';
-    if (!getCategoryQualityDirection(targetCategory) && !['ai_future', 'dance'].includes(targetCategory)) return NextResponse.json({ error: '카테고리를 확인해 주세요.' }, { status: 400 });
-    const storyCategory = VIRAL_STORY_CATEGORIES.some(id => id === targetCategory);
+    const targetCategory = normalizeActiveViralCategory(category);
+    if (!targetCategory) return NextResponse.json({ error: VIRAL_CATEGORY_DISABLED_MESSAGE, code: VIRAL_CATEGORY_DISABLED_CODE }, { status: 400 });
+    if (targetCategory === 'dance_challenge') return NextResponse.json({ error: '댄스 챌린지 화면에서 전용 영상 기획을 시작해 주세요.', code: 'CATEGORY_WORKFLOW_REQUIRED' }, { status: 409 });
+    const storyCategory = VIRAL_STORY_CATEGORIES.includes(targetCategory as never);
     const cleanTitle = (title || 'Viral Short Track').replace(/^\[Viral\]\s*/i, '').trim();
     const cleanGenre = genre || 'K-Pop Parody';
 

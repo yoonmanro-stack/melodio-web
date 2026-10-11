@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Check, ChevronLeft, ChevronRight, Film, Pause, Play, RefreshCw, Search, Sparkles } from 'lucide-react'
 import { registerActiveAudio } from '@/lib/globalAudio'
+import { isActiveViralCategory } from '@/lib/vle/viralCategoryAvailability'
 
 export type ViralCategory = 'drama' | 'pet' | 'relationship' | 'human' | 'trend' | 'challenge' | 'brand' | 'history' | 'parenting' | 'food_diet' | 'horror_mystery' | 'ai_future' | 'dance_challenge'
 
@@ -30,7 +31,7 @@ const CATEGORIES: Array<{ id: ViralCategory; label: string }> = [
   { id: 'parenting', label: '육아·잼민이 월드' },
   { id: 'food_diet', label: '야식·다이어트' },
   { id: 'horror_mystery', label: '이불킥·흑역사' },
-  { id: 'dance_challenge', label: '댄스·챌린지' },
+  { id: 'dance_challenge', label: '댄스 챌린지' },
   { id: 'ai_future', label: 'AI·미래 판타지' },
 ]
 
@@ -255,12 +256,12 @@ export default function ViralVideoLibrary({ onVideosLoaded, onCreateFormat, crea
           </button>
         </div>
 
-        <div className="grid grid-cols-3 gap-2" aria-label="영상 카테고리">
+        <div className="grid grid-cols-2 gap-2" aria-label="영상 카테고리">
           <button
             type="button"
             onClick={() => setSelectedCategory('all')}
             aria-pressed={selectedCategory === 'all'}
-            className={`col-span-3 min-h-10 rounded-xl px-2.5 py-2 text-[11px] font-extrabold leading-tight transition ${
+            className={`col-span-2 min-h-10 rounded-xl px-2.5 py-2 text-[11px] font-extrabold leading-tight transition ${
               selectedCategory === 'all'
                 ? 'bg-fuchsia-500 text-white shadow-lg shadow-fuchsia-950/50'
                 : 'border border-white/10 bg-black/40 text-zinc-300 hover:text-white'
@@ -268,7 +269,7 @@ export default function ViralVideoLibrary({ onVideosLoaded, onCreateFormat, crea
           >
             전체
           </button>
-          {CATEGORIES.map((category) => (
+          {CATEGORIES.filter((category) => isActiveViralCategory(category.id)).map((category) => (
             <button
               key={category.id}
               type="button"
@@ -352,12 +353,12 @@ export default function ViralVideoLibrary({ onVideosLoaded, onCreateFormat, crea
                     <h3 className="line-clamp-2 text-sm font-black leading-snug text-white">{video.title}</h3>
                     <p className="mt-1 text-[10px] font-bold text-zinc-300">{video.creator} · {video.genre}</p>
                   </div>
-                  <a href="#viral-studio" tabIndex={isActive || creationDisabled ? -1 : 0} aria-disabled={isActive || creationDisabled} onClick={(event) => {
-                    if (isActive || creationDisabled) { event.preventDefault(); return }
+                  {isActiveViralCategory(video.category) ? <a href="#viral-studio" tabIndex={isActive || creationDisabled ? -1 : 0} aria-disabled={isActive || creationDisabled} onClick={(event) => {
+                    if (isActive || creationDisabled || !isActiveViralCategory(video.category)) { event.preventDefault(); return }
                     onCreateFormat(video.category)
                   }} className={`flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/80 bg-white/88 px-3 py-2 text-[11px] font-black text-fuchsia-700 shadow-md backdrop-blur-sm transition hover:bg-white ${isActive ? 'pointer-events-none' : 'pointer-events-auto'}`}>
                     <Sparkles className="h-3.5 w-3.5" /> 이 포맷으로 만들기
-                  </a>
+                  </a> : null}
                   </div>
                 </div>
               </article>

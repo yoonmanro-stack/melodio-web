@@ -9,6 +9,7 @@ import {
   Volume2, VolumeX, ThumbsUp, ThumbsDown, Link as LinkIcon, ListPlus
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
+import { normalizeActiveViralCategory } from "@/lib/vle/viralCategoryAvailability";
 import { getTrackCoverFallback, resolveTrackCoverUrl } from "@/lib/track-cover";
 import { trackEngineLabel } from "@/lib/track-engine-label";
 import { getAudioPlaybackError, getExpiredAudioPlaybackError, getStoredTrackDuration } from "@/lib/audio-playback";
@@ -2438,6 +2439,18 @@ export default function Home() {
                       if (!exists) {
                         isDeleted = true;
                       }
+                    }
+
+                    const isViralPreset = resolvedMenu === 'viral-cf' || resolvedMenu === 'viral';
+                    const viralCategory = meta.petEpisode ? 'pet' : meta.viralBrief?.categoryId || meta.tab_type || meta.genCategory || displayPresetId;
+                    if (isViralPreset && !normalizeActiveViralCategory(viralCategory)) {
+                      return (
+                        <div className="bg-white/5 rounded-xl p-3.5 border border-white/5">
+                          <div className="text-violet-400 text-[10px] font-bold uppercase tracking-wider mb-1">Applied Preset</div>
+                          <div className="text-white text-sm font-semibold truncate">{displayPresetName || displayPresetId}</div>
+                          <div className="text-zinc-500 text-[10px] mt-0.5">현재 신규 제작이 중단된 분류입니다.</div>
+                        </div>
+                      );
                     }
 
                     // A. 프리셋이 정상 존재하고 사용 가능한 상태
