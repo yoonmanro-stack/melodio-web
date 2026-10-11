@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 import { registerActiveAudio } from "@/lib/globalAudio";
 import { normalizeActiveViralCategory } from "@/lib/vle/viralCategoryAvailability";
-import { getTrackCoverFallback, resolveTrackCoverUrl } from "@/lib/track-cover";
+import { getTrackCoverFallback, resolveTrackCoverUrl, resolveTrackVideoPosterUrl } from "@/lib/track-cover";
 import { trackEngineLabel } from "@/lib/track-engine-label";
 import { getAudioPlaybackError, getExpiredAudioPlaybackError, getStoredTrackDuration } from "@/lib/audio-playback";
 import DashboardViralCarousel, { type DashboardViralVideo } from "@/components/dashboard/DashboardViralCarousel";
@@ -85,6 +85,7 @@ type Generation = {
   clipping_count?: number;
   cover_art_url?: string | null;
   video_url?: string | null;
+  video_poster_url?: string | null;
   dissonance_score?: number;
   retry_count?: number;
 };
@@ -1298,7 +1299,7 @@ export default function Home() {
         id: item.id,
         title: item.title || 'Untitled Viral Short',
         videoUrl: item.video_url || meta.video_url || meta.grok_video_url || meta.videoUrl || '',
-        posterUrl: resolveTrackCoverUrl(item, getFallbackCoverArt(item)),
+        posterUrl: resolveTrackVideoPosterUrl(item, getFallbackCoverArt(item)),
         createdAt: item.created_at,
         isPublic: meta.isPublic !== false,
       };

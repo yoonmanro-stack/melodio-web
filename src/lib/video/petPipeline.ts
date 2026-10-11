@@ -6,6 +6,7 @@ import type { AudioRhythmAnalysis } from './audioRhythm';
 import { fallbackPetAudioAlignment, measurePetAudioAlignment, plannedPetAudioAlignment, type PetAudioAlignment } from './petAudioAlignment';
 import { PET_OBSOLETE_OPENING_IMAGE_POLICY_VERSIONS, PET_QUALITY_POLICY_VERSION } from './petQualityPolicy';
 import { PET_CONTENT_REVIEW_POLICY, summarizePetContentReadiness } from './petContentReadiness';
+import { DEFAULT_VIRAL_VIDEO_MODEL, LEGACY_VIRAL_VIDEO_MODEL, isViralVideoModel, type ViralVideoModel } from './viralVideoModel';
 
 export type PetAssetStatus = 'empty' | 'submitting' | 'pending' | 'generated' | 'ready' | 'held';
 export interface PetAssetQualityReview { status: 'passed' | 'review' | 'advisory'; issues: string[]; [key: string]: unknown }
@@ -27,6 +28,7 @@ export interface PetVideoRetrieval {
   lastErrorCode?: string;
 }
 export interface PetJobState {
+  videoModel?: ViralVideoModel;
   audio: { trackId: string; sourceUrl: string; stableUrl?: string; durationSeconds?: number; rhythm?: AudioRhythmAnalysis; alignment?: PetAudioAlignment };
   shots: Array<{ id: string; imageStatus: PetAssetStatus; videoStatus: PetAssetStatus; imageSourceUrl?: string; keyframeUrl?: string; videoSourceUrl?: string; videoUrl?: string; requestId?: string; error?: string; nextPollAt?: number; retrieval?: PetVideoRetrieval; quality?: { image?: PetAssetQualityReview; video?: PetAssetQualityReview }; imageQualityRecheck?: PetImageQualityRecheck; videoQualityRecheck?: PetVideoQualityRecheck }>;
   productionMotionPrompts?: string[];
@@ -59,7 +61,7 @@ export interface PetPipelineDependencies {
   now?: () => number;
   snapshotAudio(job: PetJobRecord): Promise<{ url: string; durationSeconds: number; rhythm?: AudioRhythmAnalysis }>;
   generateImage(prompt: string, masterUrl?: string): Promise<{ url: string }>;
-  startVideo(prompt: string, duration: number, keyframeUrl: string): Promise<{ requestId: string }>;
+  startVideo(prompt: string, duration: number, keyframeUrl: string, model: ViralVideoModel): Promise<{ requestId: string }>;
   pollVideo(requestId: string): Promise<{ status: 'pending' | 'done' | 'failed' | 'expired'; url?: string }>;
   copyAsset(job: PetJobRecord, shotIndex: number, kind: 'image' | 'video', url: string): Promise<string>;
   extractBridgeFrame?(job: PetJobRecord, shotIndex: number): Promise<{ url: string }>;
@@ -280,7 +282,7 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
       const productionMode = hasPetTwoClipProduction(episode) ? 'two-clips' : 'legacy-six-clips';
       const job: PetJobRecord = {
         id: randomUUID(), user_id: userId, episode: structuredClone(episode), status: 'draft', revision: 0, created_at: timestamp, updated_at: timestamp,
-        state: { contentPolicyVersion: PET_CONTENT_REVIEW_POLICY, audio: { trackId, sourceUrl: audio.sourceUrl, ...(episode.version === 'pet-v3' ? { alignment: plannedPetAudioAlignment(episode) } : {}) }, shots: productionShots.map(s => ({ id: s.id, imageStatus: 'empty', videoStatus: 'empty' })), productionMode, message: '승인한 콘티가 저장되었습니다. 음원 길이를 확인합니다.' },
+        state: { videoModel: DEFAULT_VIRAL_VIDEO_MODEL, contentPolicyVersion: PET_CONTENT_REVIEW_POLICY, audio: { trackId, sourceUrl: audio.sourceUrl, ...(episode.version === 'pet-v3' ? { alignment: plannedPetAudioAlignment(episode) } : {}) }, shots: productionShots.map(s => ({ id: s.id, imageStatus: 'empty', videoStatus: 'empty' })), productionMode, message: '승인한 콘티가 저장되었습니다. 음원 길이를 확인합니다.' },
       };
       return petJobView(await store.insert(job));
     },
@@ -494,7 +496,9 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
           }
         } else if (operation === 'video_submit') {
           const motionPrompt = job.state.approvedMotionPrompts?.[shotIndex] ?? job.state.productionMotionPrompts?.[shotIndex] ?? productionShots[shotIndex].videoPrompt;
-          const result = await deps.startVideo(motionPrompt, productionShots[shotIndex].durationSeconds, current!.keyframeUrl!);
+          const model = job.state.videoModel === undefined ? LEGACY_VIRAL_VIDEO_MODEL : job.state.videoModel;
+          if (!isViralVideoModel(model)) throw new PetPipelineError('저장된 영상 모델 설정을 확인해 주세요.', 'PROVIDER_CONFIG', 503);
+          const result = await deps.startVideo(motionPrompt, productionShots[shotIndex].durationSeconds, current!.keyframeUrl!, model);
           current!.requestId = result.requestId; current!.videoStatus = 'pending'; current!.nextPollAt = now() + 5000;
           current!.retrieval = newRetrieval();
           job.state.message = `${current!.id} 영상 요청을 저장했습니다. 결과를 기다립니다.`;

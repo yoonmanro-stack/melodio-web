@@ -255,10 +255,10 @@ async function completeServerJob(c, service, current) {
   return current;
 }
 
-test('real server factory reserves Full 1.5 for new jobs and uses the saved model for the 5/15/15 second sequence', async () => {
+test('real server factory reserves Lite for new jobs and uses the saved model for the 5/15/15 second sequence', async () => {
   const c = serverFixture();
   const prepared = await c.service.prepare(USER, TRACK, 10, '원래 기획');
-  const expected = { model: 'grok-imagine-video-1.5', resolution: '720p', width: 720, height: 1280 };
+  const expected = { model: 'grok-imagine-video-1.5-lite', resolution: '720p', width: 720, height: 1280 };
   assert.equal(prepared.status, 'ideas'); assert.deepEqual(prepared.videoSpec, expected);
   assert.deepEqual(c.writes[0].videoSpec, expected); assert.deepEqual(c.row().metadata.danceVideo.videoSpec, expected);
   assert.deepEqual(c.work, ['snapshot', 'ideas']); assert.equal(c.submissions.length, 0);
@@ -269,7 +269,7 @@ test('real server factory reserves Full 1.5 for new jobs and uses the saved mode
     assert.equal(call.model, expected.model); assert.equal(call.resolution, expected.resolution);
     assert.deepEqual(call.savedVideoSpec, expected);
     assert.equal(call.generateAudio, false);
-    assert.equal(call.referenceImageUrl, c.row().metadata.danceVideo.imageUrl);
+    assert.equal(call.referenceImageUrl, undefined);
   }
   assert.ok(c.writes.every(next => JSON.stringify(next.videoSpec) === JSON.stringify(expected)));
 });
@@ -285,8 +285,8 @@ test('real server factory persists and submits each explicit model override', as
   }
 });
 
-test('new Full 1.5 server default preserves saved Classic jobs and old jobs without videoSpec', async () => {
-  for (const videoSpec of [{ model: 'grok-imagine-video', resolution: '720p', width: 720, height: 1280 }, undefined]) {
+test('new Lite server default preserves saved Classic and Full 1.5 jobs and old jobs without videoSpec', async () => {
+  for (const videoSpec of [{ model: 'grok-imagine-video', resolution: '720p', width: 720, height: 1280 }, { model: 'grok-imagine-video-1.5', resolution: '720p', width: 720, height: 1280 }, undefined]) {
     const setup = serverFixture();
     const saved = job({ status: 'ready', imageReviewRequired: true, qualityPreviewRequired: true, ideaReviewRequired: true,
       ideas: [setup.idea], selectedIdea: setup.idea, plan: setup.plan, ...setup.snapshot, ...(videoSpec ? { videoSpec } : {}) });
@@ -295,16 +295,16 @@ test('new Full 1.5 server default preserves saved Classic jobs and old jobs with
     assert.equal(current.id, saved.id); assert.deepEqual(c.row(), before); assert.equal(c.writes.length, 0);
     await completeServerJob(c, c.service, current);
     assert.deepEqual(c.work, [], 'saved jobs do not regenerate audio, ideas or planning');
-    assert.ok(c.submissions.every(call => call.model === 'grok-imagine-video' && call.resolution === (videoSpec ? '720p' : '480p')));
+    assert.ok(c.submissions.every(call => call.model === (videoSpec?.model ?? 'grok-imagine-video') && call.resolution === (videoSpec ? '720p' : '480p')));
     for (const call of c.submissions) assert.deepEqual(call.savedVideoSpec, videoSpec);
     assert.deepEqual(c.row().metadata.danceVideo.videoSpec, videoSpec);
     assert.ok(c.writes.every(next => JSON.stringify(next.videoSpec) === JSON.stringify(videoSpec)));
   }
 });
 
-test('generic dance service keeps its Classic default when no server model is supplied', async () => {
+test('generic dance service reserves Lite when no server model is supplied', async () => {
   const c = serverFixture();
   const prepared = await c.genericService().prepare(USER, TRACK, 10, '원래 기획');
-  assert.equal(prepared.status, 'ideas'); assert.equal(prepared.videoSpec.model, 'grok-imagine-video');
-  assert.equal(c.writes[0].videoSpec.model, 'grok-imagine-video'); assert.equal(c.submissions.length, 0);
+  assert.equal(prepared.status, 'ideas'); assert.equal(prepared.videoSpec.model, 'grok-imagine-video-1.5-lite');
+  assert.equal(c.writes[0].videoSpec.model, 'grok-imagine-video-1.5-lite'); assert.equal(c.submissions.length, 0);
 });

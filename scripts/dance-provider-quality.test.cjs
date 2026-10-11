@@ -63,22 +63,22 @@ test('unsupported reference model, unsafe reference URL and reference prompt byt
   assert.equal(f.calls.length, 0);
 });
 
-test('720p option reaches the classic video request with its exact prompt, duration and keyframe', async () => {
+test('720p option reaches the Lite video request with its exact prompt, duration and keyframe', async () => {
   const f = fixture();
   assert.deepEqual(await createPetXaiProvider(f.fetch, { resolution: '720p' }).startVideo('approved dance motion', 15, keyframe), { requestId: 'offline-video-1' });
   assert.deepEqual(f.calls, [{ url: 'https://api.x.ai/v1/videos/generations', method: 'POST', redirect: 'error', body: {
-    model: 'grok-imagine-video', prompt: 'approved dance motion', duration: 15, aspect_ratio: '9:16', resolution: '720p', image: { url: keyframe },
+    model: 'grok-imagine-video-1.5-lite', prompt: 'approved dance motion', duration: 15, aspect_ratio: '9:16', resolution: '720p', image: { url: keyframe }, generate_audio: false,
   } }]);
 });
 
-test('existing pet calls and empty options retain the classic 480p video default', async () => {
+test('fresh pet calls and empty options use Lite with the existing 480p resolution', async () => {
   const f = fixture();
   for (const options of [undefined, {}, { resolution: '480p' }]) {
     await createPetXaiProvider(f.fetch, options).startVideo('approved pet motion', 15, keyframe);
   }
   assert.equal(f.calls.length, 3);
   for (const call of f.calls) assert.deepEqual(call.body, {
-    model: 'grok-imagine-video', prompt: 'approved pet motion', duration: 15, aspect_ratio: '9:16', resolution: '480p', image: { url: keyframe },
+    model: 'grok-imagine-video-1.5-lite', prompt: 'approved pet motion', duration: 15, aspect_ratio: '9:16', resolution: '480p', image: { url: keyframe }, generate_audio: false,
   });
 });
 
@@ -87,7 +87,7 @@ test('each explicit model uses the same approved image-to-video shape at 720p', 
   for (const model of ['grok-imagine-video', 'grok-imagine-video-1.5', 'grok-imagine-video-1.5-lite']) {
     assert.deepEqual(await createPetXaiProvider(f.fetch, { model, resolution: '720p' }).startVideo('approved dance motion', 15, keyframe), { requestId: 'offline-video-1' });
     assert.deepEqual(f.calls.at(-1), { url: 'https://api.x.ai/v1/videos/generations', method: 'POST', redirect: 'error', body: {
-      model, prompt: 'approved dance motion', duration: 15, aspect_ratio: '9:16', resolution: '720p', image: { url: keyframe },
+      model, prompt: 'approved dance motion', duration: 15, aspect_ratio: '9:16', resolution: '720p', image: { url: keyframe }, generate_audio: false,
     } });
   }
   assert.equal(f.calls.length, 3);
@@ -99,7 +99,7 @@ test('choosing a new model alone retains the 480p resolution default', async () 
   for (const model of ['grok-imagine-video-1.5', 'grok-imagine-video-1.5-lite']) {
     await createPetXaiProvider(f.fetch, { model }).startVideo('approved dance motion', 15, keyframe);
     assert.deepEqual(f.calls.at(-1).body, {
-      model, prompt: 'approved dance motion', duration: 15, aspect_ratio: '9:16', resolution: '480p', image: { url: keyframe },
+      model, prompt: 'approved dance motion', duration: 15, aspect_ratio: '9:16', resolution: '480p', image: { url: keyframe }, generate_audio: false,
     });
   }
 });

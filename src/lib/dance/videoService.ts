@@ -6,6 +6,7 @@ import { validateDanceProposals, compactDanceCastPrompt, validateDanceActorActio
 import { isDancePerformancePremiseV3, matchesDanceExactFacts, boundDanceRecentPremisesV3, type DanceRecentPremiseV3 } from './premises';
 import { validateDanceChoreography } from './videoPlan';
 import { danceGroupRelativePosition, DANCE_V3_ENSEMBLE_COMPOSITION } from './cast';
+import { DEFAULT_VIRAL_VIDEO_MODEL } from '../video/viralVideoModel';
 
 export class DanceVideoError extends Error {
   constructor(message: string, public code = 'DANCE_VIDEO', public status = 400, public planFailure?: DancePlanFailure) { super(message); }
@@ -309,7 +310,7 @@ export function createDanceVideoService(deps: DanceVideoDependencies) {
       ...(recentPremises ? { recentPremises } : {}),
       ideaReviewRequired: Boolean(deps.ideas),
       qualityPreviewRequired: Boolean(deps.ideas && deps.preview),
-      videoSpec: { model: deps.videoModel || 'grok-imagine-video', resolution: '720p', width: 720, height: 1280 },
+      videoSpec: { model: deps.videoModel || DEFAULT_VIRAL_VIDEO_MODEL, resolution: '720p', width: 720, height: 1280 },
       visualBrief: normalizedBrief, createdAt: timestamp(), updatedAt: timestamp(), inFlight: { action: 'prepare', token, at: timestamp() } };
     const reserved = await deps.store.compareAndSwap(record, job);
     if (!reserved) return get(userId, trackId);

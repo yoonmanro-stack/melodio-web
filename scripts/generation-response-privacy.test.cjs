@@ -8,6 +8,10 @@ const assert = require('node:assert/strict');
 const root = path.resolve(__dirname, '..');
 const source = fs.readFileSync(path.join(root, 'src/app/api/generations/route.ts'), 'utf8');
 const js = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+const covers = { exports: {} };
+new Function('module', 'exports', ts.transpileModule(fs.readFileSync(path.join(root, 'src/lib/track-cover.ts'), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText)(covers, covers.exports);
 const privateB = 'https://fixtures.invalid/private-clip-b.mp3';
 const privateTask = 'fixture-task-provenance';
 const manifest = { schemaVersion: 1, provider: 'kie', generationId: 'primary', taskId: privateTask, status: 'ready', taskReference: `suno:kie:${privateTask}`, selectedClipKey: 'a', clips: [{ clipKey: 'a', durableUrl: 'https://fixtures.invalid/public-clip-a.mp3' }, { clipKey: 'b', durableUrl: privateB }] };
@@ -156,14 +160,20 @@ async function test(name, run) {
       { user_id: 'other', status: 'completed', state: { audio: { trackId: 'primary' }, videoUrl: 'https://fixtures.invalid/other.mp4' } },
       { user_id: 'owner', status: 'review', state: { audio: { trackId: 'primary' }, videoUrl: url } },
     ];
-    const result = await handler('owner', fixtures, jobs)('?scope=dashboard');
+    const ownedRows = fixtures.map(item => item.id === 'sibling' ? { ...item, cover_art_url: null,
+      license_hash: JSON.stringify({ ...JSON.parse(item.license_hash), coverArt: { requestedStyle: 'photoreal', status: 'pending' } }) } : item);
+    const result = await handler('owner', ownedRows, jobs)('?scope=dashboard');
     const row = result.body.generations.find(row => row.id === 'sibling');
     assert.equal(row.video_url, url);
-    assert.equal(row.cover_art_url, 'https://fixtures.invalid/actual-first-scene.jpg');
-    assert.equal(row.thumbnail_url, row.cover_art_url);
+    assert.equal(row.video_poster_url, 'https://fixtures.invalid/actual-first-scene.jpg');
+    assert.equal(row.cover_art_url, null);
+    assert.equal(row.thumbnail_url, undefined);
+    assert.equal(covers.exports.resolveTrackVideoPosterUrl(row, '/fallback.png'), row.video_poster_url);
+    assert.equal(covers.exports.resolveTrackCoverUrl(row, '/fallback.png'), covers.exports.TRACK_COVER_PENDING);
     assert.equal(JSON.parse(row.license_hash).sourceMenu, 'viral-cf');
     assert.equal(JSON.parse(row.license_hash).isPublic, false);
     assert.equal(result.body.generations.find(row => row.id === 'primary').video_url, undefined);
+    assert.equal(result.body.generations.find(row => row.id === 'primary').video_poster_url, undefined);
     const publicResult = await handler('other', fixtures, jobs)('?scope=public');
     assert.equal(JSON.stringify(publicResult.body).includes(url), false);
   });

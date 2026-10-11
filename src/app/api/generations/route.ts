@@ -378,7 +378,7 @@ export async function GET(request: NextRequest) {
         if (petVideo) {
           let metadata: Record<string, unknown> = {}
           try { metadata = JSON.parse(item.license_hash || '{}') } catch { /* Preserve the audio row below. */ }
-          return { ...item, video_url: petVideo, ...(petPosters.has(item.id) ? { cover_art_url: petPosters.get(item.id), thumbnail_url: petPosters.get(item.id) } : {}), license_hash: JSON.stringify({ ...metadata, sourceMenu: 'viral-cf', video_url: petVideo }) }
+          return { ...item, video_url: petVideo, ...(petPosters.has(item.id) ? { video_poster_url: petPosters.get(item.id) } : {}), license_hash: JSON.stringify({ ...metadata, sourceMenu: 'viral-cf', video_url: petVideo }) }
         }
         return item
       })

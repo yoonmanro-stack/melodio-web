@@ -63,7 +63,7 @@ export function createPetVideoServerService(admin: SupabaseClient) {
     store: createPetJobStore(admin),
     snapshotAudio: job => snapshotPetAudio(job, upload),
     generateImage: (prompt, master) => createPetXaiProvider().generateImage(prompt, master),
-    startVideo: (prompt, duration, keyframe) => createPetXaiProvider().startVideo(prompt, duration, keyframe),
+    startVideo: (prompt, duration, keyframe, model) => createPetXaiProvider(undefined, { model, generateAudio: false }).startVideo(prompt, duration, keyframe),
     pollVideo: requestId => createPetXaiProvider().pollVideo(requestId),
     async copyAsset(job, index, kind, url) {
       const media = await downloadPetMedia(url, kind);

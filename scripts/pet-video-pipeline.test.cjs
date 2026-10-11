@@ -668,7 +668,7 @@ test('stream body limit aborts oversized provider response without exposing it',
   await assert.rejects(readPetBoundedBody(new Response('x'.repeat(100)),20),error=>error.code==='MEDIA_SIZE');
   assert.equal((await readPetBoundedBody(new Response('ok'),20)).toString(),'ok');
 });
-test('provider payloads use exact prompts, classic models, single reference and bounded request ID',async()=>{
+test('provider payloads use exact prompts, Lite video and unchanged image models, single reference and bounded request ID',async()=>{
   const priorKey=process.env.XAI_API_KEY;const priorBase=process.env.XAI_API_BASE;
   process.env.XAI_API_KEY='stub';process.env.XAI_API_BASE='https://api.x.ai/v1';
   try {
@@ -676,7 +676,7 @@ test('provider payloads use exact prompts, classic models, single reference and 
     await provider.generateImage('exact image');await provider.generateImage('exact edit','https://imgen.x.ai/master.jpg');await provider.startVideo('exact approved motion',4,'https://imgen.x.ai/still.jpg');await provider.pollVideo('saved-id');
     assert.ok(calls[0][0].endsWith('/images/generations'));assert.ok(calls[1][0].endsWith('/images/edits'));
     assert.deepEqual(JSON.parse(calls[1][1].body).image,{url:'https://imgen.x.ai/master.jpg',type:'image_url'});
-    assert.deepEqual(JSON.parse(calls[2][1].body),{model:'grok-imagine-video',prompt:'exact approved motion',duration:4,aspect_ratio:'9:16',resolution:'480p',image:{url:'https://imgen.x.ai/still.jpg'}});
+    assert.deepEqual(JSON.parse(calls[2][1].body),{model:'grok-imagine-video-1.5-lite',prompt:'exact approved motion',duration:4,aspect_ratio:'9:16',resolution:'480p',image:{url:'https://imgen.x.ai/still.jpg'},generate_audio:false});
     assert.ok(calls[3][0].endsWith('/videos/saved-id'));
   } finally {if(priorKey===undefined)delete process.env.XAI_API_KEY;else process.env.XAI_API_KEY=priorKey;if(priorBase===undefined)delete process.env.XAI_API_BASE;else process.env.XAI_API_BASE=priorBase;}
 });
@@ -823,4 +823,42 @@ test('technical media failures during optional analysis still stop production',a
     await until(ctx,job.id,'held');const saved=ctx.rows.get(job.id);assert.equal(saved.state.failureCode,code);
     assert.equal(saved.state.shots[0].quality,undefined);assert.equal(ctx.calls.filter(c=>c[0]==='video').length,0);
   }
+});
+
+// Model selection is reserved with the job, before any media work or paid POST.
+test('new Pet jobs reserve Lite and resumed two-clip jobs retain every saved or legacy model', async () => {
+  for (const savedModel of [undefined, 'grok-imagine-video', 'grok-imagine-video-1.5', 'grok-imagine-video-1.5-lite']) {
+    const submissions = [];
+    const ctx = setup({ startVideo: async (_prompt, duration, keyframe, model) => {
+      const saved = [...ctx.rows.values()][0];
+      assert.equal(saved.state.lease.operation, 'video_submit');
+      assert.equal(saved.state.shots[submissions.length].videoStatus, 'submitting');
+      submissions.push({ duration, keyframe, model }); return { requestId: `reserved-${submissions.length}` };
+    } });
+    const created = await ctx.service.create(USER, episode(), TRACK);
+    assert.equal(ctx.rows.get(created.id).state.videoModel, 'grok-imagine-video-1.5-lite');
+    assert.deepEqual(ctx.calls, []);
+    // Emulate a saved job from a previous model default without changing its episode.
+    const row = ctx.rows.get(created.id);
+    if (savedModel === undefined) delete row.state.videoModel; else row.state.videoModel = savedModel;
+    const frozenEpisode = JSON.stringify(row.episode);
+    await ctx.service.create(USER, episode(), TRACK);
+    assert.equal(ctx.rows.get(created.id).state.videoModel, savedModel);
+    // A new service instance must continue C1 and C2 with the durable choice.
+    ctx.service = createPetVideoService(ctx.deps);
+    await until(ctx, created.id, 'completed');
+    assert.deepEqual(submissions.map(call => call.model), [savedModel ?? 'grok-imagine-video', savedModel ?? 'grok-imagine-video']);
+    assert.deepEqual(submissions.map(call => call.duration), [15, 15]);
+    assert.equal(ctx.rows.get(created.id).state.videoModel, savedModel);
+    assert.equal(JSON.stringify(ctx.rows.get(created.id).episode), frozenEpisode);
+  }
+});
+test('a malformed saved Pet model cannot submit either video clip', async () => {
+  let submissions = 0;
+  const ctx = setup({ startVideo: async () => { submissions++; return { requestId: 'forbidden' }; } });
+  const created = await ctx.service.create(USER, episode(), TRACK);
+  ctx.rows.get(created.id).state.videoModel = 'unrecognized-video-model';
+  const held = await until(ctx, created.id, 'held');
+  assert.equal(submissions, 0); assert.equal(ctx.rows.get(created.id).state.failureCode, 'PROVIDER_CONFIG');
+  assert.equal(held.canResume, false);
 });

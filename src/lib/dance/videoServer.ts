@@ -8,6 +8,7 @@ import { createDanceIdeas } from './ideas';
 import { extractDanceBridge, renderDancePreview, renderDanceVideo, reuseDanceAudio, snapshotDanceAudio, type DanceUpload } from './renderVideo';
 import { createPetXaiProvider } from '../video/petProvider';
 import { downloadPetMedia } from '../video/petMedia';
+import { DEFAULT_VIRAL_VIDEO_MODEL, LEGACY_VIRAL_VIDEO_MODEL } from '../video/viralVideoModel';
 
 type GenerationRow = { id: string; user_id: string; title: string; is_public: boolean; created_at: string; status: string; audio_url: string | null; license_hash: string | null };
 function record(row: GenerationRow): DanceOwnedRecord {
@@ -100,7 +101,7 @@ export function createDanceVideoServerService(admin: SupabaseClient, userId: str
     return admin.storage.from('melodio-assets').getPublicUrl(assetPath).data.publicUrl;
   };
   return createDanceVideoService({
-    videoModel: options.videoModel || 'grok-imagine-video-1.5',
+    videoModel: options.videoModel || DEFAULT_VIRAL_VIDEO_MODEL,
     store: createDanceVideoStore(admin),
     snapshot: (job, sourceUrl) => snapshotDanceAudio(job, sourceUrl, upload),
     reuseSnapshot: reuseDanceAudio,
@@ -108,7 +109,7 @@ export function createDanceVideoServerService(admin: SupabaseClient, userId: str
     ideas: (job, options) => createDanceIdeas(job, undefined, options),
     generateImage: prompt => createPetXaiProvider().generateImage(prompt),
     startVideo: (prompt, duration, keyframe, options) => createPetXaiProvider(undefined, {
-      resolution: options?.resolution || '480p', model: options?.model || 'grok-imagine-video',
+      resolution: options?.resolution || '480p', model: options?.model || LEGACY_VIRAL_VIDEO_MODEL,
       ...(options?.referenceImageUrl ? { referenceImageUrl: options.referenceImageUrl } : {}), generateAudio: false,
     }).startVideo(prompt, duration, keyframe),
     pollVideo: requestId => createPetXaiProvider().pollVideo(requestId),

@@ -3,6 +3,7 @@ type CoverTrack = {
   image_url?: string | null
   license_hash?: unknown
   metadata?: unknown
+  video_poster_url?: string | null
 }
 
 export const TRACK_COVER_PENDING = '/track-cover-pending.svg'
@@ -41,4 +42,10 @@ export function resolveTrackCoverUrl(track: CoverTrack, legacyFallback: string):
   }
   const cover = track.cover_art_url || track.image_url
   return validCoverUrl(cover) ? cover : legacyFallback
+}
+
+/** A completed video's saved opening frame has its own lifecycle from the audio cover. */
+export function resolveTrackVideoPosterUrl(track: CoverTrack, legacyFallback: string): string {
+  return validCoverUrl(track.video_poster_url)
+    ? track.video_poster_url : resolveTrackCoverUrl(track, legacyFallback)
 }
