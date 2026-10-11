@@ -55,12 +55,12 @@ function planningHarness(overrides = {}) {
   const account = { userId: 'owner' };
   const bindings = { genCategory: 'human', customTopic: topic, selectedGenre: '', selectedMood: '', selectedVocal: '',
     planningAccount: account, planningAccountRef: { current: account }, planningAccountReady: true, petUserId: 'owner',
-    isOptimizing: false, isGenerating: false, isGeneratingGrokVideo: false,
+    isOptimizing: false, isGenerating: false, isGeneratingGrokVideo: false, studioBusy: false,
     petPlanningRequest: { current: 0 }, petCategoryRef: { current: 'human' }, VIRAL_GENRE_PROMPT_MAP: genreMap,
     async fetch(url, options) { requests.push({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ success: true, brief: overrides.reply || brief() }) }; },
     async handlePlanPetEpisode() { changes.petDelegated = true; }, ...overrides };
   for (const name of ['setIsOptimizing', 'setPetPlanError', 'setCustomTopic', 'setProducerBrief', 'setCustomLyrics', 'setOptimizedPrompt', 'setStyleWarnings',
-    'setGeneratedResult', 'setSelectedGrokTrackId', 'setGrokVideoPrompt', 'setGrokVideoResult', 'setGrokVideoClips', 'setGrokVideoDuration']) bindings[name] = value => { (changes[name] ||= []).push(value); };
+    'setGeneratedResult', 'setSelectedGrokTrackId', 'setGrokVideoPrompt', 'setGrokVideoResult', 'setGrokVideoClips', 'setGrokVideoDuration', 'setPetStartRequest', 'setSingleVideoPhase', 'setSingleVideoError', 'setIsGeneratingGrokVideo', 'setGrokVideoProgress']) bindings[name] = value => { (changes[name] ||= []).push(value); };
   return { requests, changes, run: runNode(variable('handleOptimizePrompt'), bindings) };
 }
 
@@ -80,7 +80,7 @@ test('fresh music controls are automatic and category changes preserve user choi
 test('AI music action clears overrides for the next coherent plan without choosing a matrix or making a request', () => {
   for (const selected of ['', 'User choice']) {
     const changes = [], invalidations = [];
-    runNode(variable('handleAutoTuneShortsSound'), { isOptimizing: false, isGenerating: false, isGeneratingGrokVideo: false,
+    runNode(variable('handleAutoTuneShortsSound'), { isOptimizing: false, isGenerating: false, isGeneratingGrokVideo: false, studioBusy: false,
       selectedGenre: selected, selectedMood: selected, selectedVocal: selected,
       setSelectedGenre: value => changes.push(['genre', value]), setSelectedMood: value => changes.push(['mood', value]), setSelectedVocal: value => changes.push(['vocal', value]),
       invalidatePlanningOutput: () => invalidations.push(true), setStyleWarnings() {}, setAutoTuneFlash() {}, setTimeout() {},
@@ -93,7 +93,7 @@ test('AI music action clears overrides for the next coherent plan without choosi
 
 test('manual music edits preserve the other settings and invalidate the old plan', () => {
   const changes = [];
-  runNode(variable('handlePlanningStyleChange'), { isOptimizing: false, isGenerating: false, isGeneratingGrokVideo: false,
+  runNode(variable('handlePlanningStyleChange'), { isOptimizing: false, isGenerating: false, isGeneratingGrokVideo: false, studioBusy: false,
     selectedGenre: 'Jazz', selectedMood: 'Raw (날것의)', selectedVocal: '',
     setSelectedGenre: value => changes.push(['genre', value]), setSelectedMood: value => changes.push(['mood', value]), setSelectedVocal: value => changes.push(['vocal', value]),
     invalidatePlanningOutput: () => changes.push(['invalidate']),
@@ -128,7 +128,8 @@ function authPlanningHarness(reply) {
   const state = { planningAccount: null, planningAccountReady: false, isOptimizing: false, error: '', brief: null };
   const changes = {}, requests = [];
   const bindings = { genCategory: 'history', customTopic: topic, selectedGenre: '', selectedMood: '', selectedVocal: '',
-    isGenerating: false, isGeneratingGrokVideo: false, petAccountRef: { current: null }, planningAccountRef: { current: null },
+    isGenerating: false, isGeneratingGrokVideo: false, studioBusy: false, petAccountRef: { current: null }, planningAccountRef: { current: null },
+    grokPromptRequest: { current: 0 }, singleVideoGateRef: { current: null }, audioGenerationRef: { current: null }, petRequestSettledRef: { current: null },
     petPlanningRequest: { current: 0 }, petCategoryRef: { current: 'history' }, petTopicDraft: { current: '' }, VIRAL_GENRE_PROMPT_MAP: genreMap,
     readPetEpisode: () => null,
     async fetch(url, options) {
@@ -140,7 +141,7 @@ function authPlanningHarness(reply) {
   for (const name of ['setPlanningAccount', 'setPlanningAccountReady', 'setIsOptimizing', 'setPetPlanError', 'setProducerBrief',
     'setPetCompletedRefreshKey', 'setIsGenerating', 'setGenProgress', 'setPetEpisode', 'setPetTrackId', 'setPetPlanLocked', 'setPetDraftOwner',
     'setCustomTopic', 'setCustomLyrics', 'setOptimizedPrompt', 'setStyleWarnings', 'setGeneratedResult', 'setSelectedGrokTrackId',
-    'setGrokVideoPrompt', 'setGrokVideoResult', 'setGrokVideoClips', 'setGrokVideoDuration']) {
+    'setGrokVideoPrompt', 'setGrokVideoResult', 'setGrokVideoClips', 'setGrokVideoDuration', 'setPetStartRequest', 'setSingleVideoPhase', 'setSingleVideoError', 'setIsGeneratingGrokVideo', 'setGrokVideoProgress']) {
     bindings[name] = value => {
       (changes[name] ||= []).push(value);
       const key = { setPlanningAccount: 'planningAccount', setPlanningAccountReady: 'planningAccountReady', setIsOptimizing: 'isOptimizing',
@@ -259,6 +260,7 @@ function generationHarness(savedBrief, overrides = {}) {
   const requests = [], alerts = [], changes = {};
   const bindings = { genCategory: 'human', petEpisode: null, producerBrief: savedBrief, customLyrics: savedBrief.lyrics, optimizedPrompt: savedBrief.stylePrompt,
     planIsCurrent: true, petPlanLocked: false, generatedResult: null, selectedGenre: '', selectedMood: '', selectedVocal: '',
+    audioGenerationRef: { current: null }, pendingAudioRef: { current: null }, clearInterval() {},
     petUserId: 'owner', petPlanningRequest: { current: 1 }, petCategoryRef: { current: 'human' }, petAccountRef: { current: 'owner' },
     readCategoryBriefExtras: extras, VIRAL_GENRE_PROMPT_MAP: genreMap, CATEGORY_TITLES: { human: '현대인·직장인' },
     brandName: '', customTopic: savedBrief.sourceTopic, effectiveIsPublic: false, duration: '30s', durationSeconds: 30,

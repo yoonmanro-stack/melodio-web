@@ -371,8 +371,8 @@ test('a deferred fresh-track prompt survives the later scope reset on the same r
     fetch: async url => { calls.push(url); return deferred; },
   });
   bindings.fetchDynamicGrokPrompt = pageFunction('fetchDynamicGrokPrompt', bindings);
-  // React runs effects in declaration order: the prompt starts before the scope effect.
-  const promptCleanup = pageEffect(['selectedGrokTrack', 'fetchDynamicGrokPrompt', 'genCategory'], bindings)();
+  // Selection and restore are read-only; explicit planning follows the restore boundary.
+  const promptCleanup = pageEffect(['selectedGrokTrack?.id', 'genCategory'], bindings)();
   let restores = 0;
   class ReadOnlyClient {
     constructor() {}
@@ -381,14 +381,17 @@ test('a deferred fresh-track prompt survives the later scope reset on the same r
   }
   const scopeCleanup = pageEffect(['petUserId', 'storyTrackId'], {
     ...bindings, window: { localStorage: storage() }, ViralStoryVideoClient: ReadOnlyClient,
-    storyScopeRef: { current: '' }, storyCompletedResultRef: { current: '' }, storyClientRef: { current: null },
+    storyScopeRef: { current: '' }, storyCompletedResultRef: { current: '' }, storyClientRef: { current: null }, storyReadyRef: { current: null },
     setStoryClientState() {}, setIsGeneratingGrokVideo() {}, setGrokVideoProgress() {},
     setGrokVideoResult() {}, setGrokVideoClips() {}, setGrokVideoDuration() {},
   })();
+  assert.deepEqual(calls, []);
+  const pending = bindings.fetchDynamicGrokPrompt(bindings.selectedGrokTrack).then(value => bindings.setGrokVideoPrompt(value));
   release({ ok: true, json: async () => ({ prompt: 'Fresh selected-track prompt', allowDance: false, cutCadenceSeconds: 1.5 }) });
+  await pending;
   await tick();
   assert.deepEqual(calls, ['/api/viral-cf/grok-video/prompt']);
   assert.equal(restores, 1);
-  assert.deepEqual(writes, ['Fresh selected-track prompt']);
+  assert.deepEqual(writes, ['', 'Fresh selected-track prompt']);
   promptCleanup(); scopeCleanup();
 });

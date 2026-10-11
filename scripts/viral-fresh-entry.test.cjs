@@ -129,10 +129,13 @@ test('loading the saved/public track library alone never chooses a studio track 
 });
 
 for (const kind of ['explicit', 'generated']) {
-  test(`${kind} track selection retains prompt creation through the real helper and effect`, async () => {
+  test(`${kind} track selection remains read-only until the explicit prompt action`, async () => {
     const host = harness(kind === 'explicit' ? { availableTracks: [saved], selectedGrokTrackId: saved.id } : { generatedResult: saved });
     assert.equal(host.selected().id, saved.id);
     host.runPrompt();
+    await tick();
+    assert.equal(host.requests.length, 0);
+    host.tune();
     await tick();
     assert.equal(host.requests.length, 1);
     assert.equal(host.requests[0].body.lyrics, saved.lyrics);
@@ -145,6 +148,7 @@ test('a removed selection clears prompt and rejects its late asynchronous prompt
   const reply = new Promise(resolve => { release = resolve; });
   const host = harness({ availableTracks: [saved], selectedGrokTrackId: saved.id, reply: () => reply });
   const cleanup = host.runPrompt();
+  host.tune();
   assert.equal(typeof cleanup, 'function');
   cleanup();
   host.state.selectedGrokTrackId = '';
@@ -161,6 +165,7 @@ test('switching to pet clears the general prompt and rejects the previous catego
   const reply = new Promise(resolve => { release = resolve; });
   const host = harness({ generatedResult: saved, reply: () => reply });
   const cleanup = host.runPrompt();
+  host.tune();
   cleanup();
   host.state.genCategory = 'pet';
   host.runPrompt();

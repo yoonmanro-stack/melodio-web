@@ -20,9 +20,10 @@ import { registerActiveAudio } from "@/lib/globalAudio";
 import { selectTopViralVideos } from '@/lib/video/viralVideoRanking';
 import ViralVideoLibrary, { readCachedViralVideos, type ViralVideo, type ViralCategory } from "@/components/viral/ViralVideoLibrary";
 import { VIRAL_SONG_SPEC, estimateSeconds } from "@/lib/vle/viralSongSpec";
-import PetVideoStudio, { PetEpisodeEditor, readPetEpisode } from "@/components/viral/PetVideoStudio";
+import PetVideoStudio, { PetEpisodeEditor, readPetEpisode, type PetVideoExternalStartRequest, type PetVideoExternalState } from "@/components/viral/PetVideoStudio";
 import { validatePetEpisode, type PetEpisode, type PetVideoJobView } from "@/lib/vle/petEpisode";
-import { ViralStoryVideoClient, VIRAL_STORY_VIDEO_CATEGORIES, isViralStoryTrackId, readViralStoryRecovery, viralStoryProgressLabel, canResumeViralStoryJob, type ViralStoryClientState, type ViralStoryRecoveryToken } from '@/lib/vle/viral-story-client';
+import { SingleVideoActionGate, runSingleVideoAction, waitForSingleVideoReady, type SingleVideoScope, type SingleVideoPhase } from '@/lib/vle/single-video-action';
+import { ViralStoryVideoClient, VIRAL_STORY_VIDEO_CATEGORIES, isViralStoryTrackId, readViralStoryRecovery, viralStoryProgressLabel, type ViralStoryClientState, type ViralStoryRecoveryToken } from '@/lib/vle/viral-story-client';
 
 type ViralBriefSnapshot = CategoryBriefExtras & {
   sourceTopic: string;
@@ -55,6 +56,17 @@ function readViralBrief(track: unknown): ViralBriefSnapshot | null {
   } catch {
     return null;
   }
+}
+
+function readSavedViralVideo(track: any): string | null {
+  try {
+    const metadata = typeof track?.license_hash === 'string' && track.license_hash.length < 150_000
+      ? JSON.parse(track.license_hash) : track?.metadata;
+    const value = track?.video_url || track?.grok_video_url || metadata?.video_url;
+    if (typeof value !== 'string' || value.length > 2048) return null;
+    const url = new URL(value);
+    return url.protocol === 'https:' && !url.username && !url.password ? value : null;
+  } catch { return null; }
 }
 
 // 커스텀 유튜브 아이콘 SVG
@@ -341,12 +353,11 @@ function ViralTrendZoneStudio() {
   const [danceBusy, setDanceBusy] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // ─── 5-Step Linear Flow Progress ───
+  // ─── Four steps: category, music, context, lyrics + video ───
   // Step 1: 카테고리 선택 (genCategory)
   // Step 2: 사운드 스타일 (selectedGenre + selectedMood + selectedVocal)
   // Step 3: 상황 설정 & AI 기획 (customTopic + optimizedPrompt)
-  // Step 4: 가사 확인 & 음원 생성 (customLyrics + generatedResult)
-  // Step 5: AI 영상 생성 (grokVideoResult)
+  // Step 4: 가사 확인 & 영상 생성 (audio completion precedes the existing video engine)
 
   const [selectedGenre, setSelectedGenre] = useState('');
   const [selectedMood, setSelectedMood] = useState('');
@@ -379,7 +390,7 @@ function ViralTrendZoneStudio() {
   const petCategoryRef = useRef(genCategory);
   const explicitCategorySelection = useRef<{ petTrackId: string | null } | null>(null);
   const petPlanningRequest = useRef(0);
-  const grokPromptRequest = useRef(0) as { current: number; frozenJob?: { trackId: string; prompt: string } };
+  const grokPromptRequest = useRef(0) as { current: number; trackId?: string; parameters?: { allowDance: boolean; cutCadenceSeconds: number }; frozenJob?: { trackId: string; prompt: string } };
   const petTopicDraft = useRef('');
   const petOpeningTrackRequest = useRef<string | null>(null);
   useEffect(() => { petCategoryRef.current = genCategory; }, [genCategory]);
@@ -512,7 +523,6 @@ function ViralTrendZoneStudio() {
   const topVideoUrls = useMemo(() => new Set(topViralVideos.map(video => video.videoUrl)), [topViralVideos]);
 
   // Grok 30-sec Video Studio States
-  const [autoGrokVideo, setAutoGrokVideo] = useState(false);
   const [availableTracks, setAvailableTracks] = useState<any[]>(() => {
     if (typeof window !== 'undefined') {
       try {
@@ -531,6 +541,7 @@ function ViralTrendZoneStudio() {
     return [];
   });
   const [selectedGrokTrackId, setSelectedGrokTrackId] = useState<string>('');
+  const explicitGrokSelectionRef = useRef<string | null>(null);
 
   const [grokVideoPrompt, setGrokVideoPrompt] = useState('');
   // 영상 연출 파라미터. 카테고리 스펙에서 내려오며, 서버가 컷 밀도와
@@ -548,6 +559,19 @@ function ViralTrendZoneStudio() {
   const [storyClientState, setStoryClientState] = useState<ViralStoryClientState>({ job: null, busy: false, uncertain: false, error: null });
   const [storyRecovery, setStoryRecovery] = useState<ViralStoryRecoveryToken | null>(null);
   const storyClientRef = useRef<ViralStoryVideoClient | null>(null);
+  const storyReadyRef = useRef<{ scope: string; client: ViralStoryVideoClient; ready: boolean; state: ViralStoryClientState } | null>(null);
+  const singleVideoGateRef = useRef<SingleVideoActionGate | null>(null);
+  if (!singleVideoGateRef.current) singleVideoGateRef.current = new SingleVideoActionGate();
+  const [singleVideoPhase, setSingleVideoPhase] = useState<SingleVideoPhase | null>(null);
+  const [singleVideoError, setSingleVideoError] = useState('');
+  const singleVideoScopeRef = useRef<SingleVideoScope | null>(null);
+  const audioGenerationRef = useRef<(() => void) | null>(null);
+  const legacyVideoPendingRef = useRef<{ scope: SingleVideoScope; trackId: string } | null>(null);
+  const pendingAudioRef = useRef<{ scope: SingleVideoScope; trackId: string | null; uncertain: boolean } | null>(null);
+  const [petStartRequest, setPetStartRequest] = useState<PetVideoExternalStartRequest | null>(null);
+  const petVideoStateRef = useRef<{ scope: string; state: PetVideoExternalState } | null>(null);
+  const petRequestSettledRef = useRef<{ id: string; settle: () => void } | null>(null);
+  const studioBusy = !!singleVideoPhase || isGenerating || isGeneratingGrokVideo;
   const storyScopeRef = useRef('');
   const storyCompletedResultRef = useRef('');
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
@@ -567,6 +591,10 @@ function ViralTrendZoneStudio() {
         const account = { userId };
         planningAccountRef.current = account;
         petPlanningRequest.current += 1;
+        grokPromptRequest.current += 1;
+        singleVideoGateRef.current?.cancel(); audioGenerationRef.current?.();
+        petRequestSettledRef.current?.settle(); petRequestSettledRef.current = null;
+        setPetStartRequest(null); setSingleVideoPhase(null); setSingleVideoError(''); setIsGeneratingGrokVideo(false); setGrokVideoProgress(0);
         // Invalidate old-owner replies before React commits the account reset.
         setPlanningAccountReady(false);
         setPlanningAccount(account);
@@ -587,9 +615,9 @@ function ViralTrendZoneStudio() {
     setIsGenerating(false); setGenProgress(0);
     petTopicDraft.current = '';
     setPetEpisode(null); setPetTrackId(null); setPetPlanLocked(false); setPetDraftOwner(null);
-    if (previousOwner && petCategoryRef.current === 'pet') {
+    if (previousOwner && previousOwner !== petUserId) {
       setCustomTopic(''); setCustomLyrics(''); setOptimizedPrompt(''); setProducerBrief(null);
-      setGeneratedResult((current: any) => readPetEpisode(current) ? null : current);
+      setGeneratedResult(null); setSelectedGrokTrackId(''); setGrokVideoPrompt('');
       setGrokVideoResult(null); setGrokVideoClips([]);
     }
     setPetDraftOwner(petUserId);
@@ -763,7 +791,8 @@ function ViralTrendZoneStudio() {
     const savedBrief = readViralBrief(track);
     const lyricsText = savedBrief?.lyrics || track.lyrics || track.customLyrics || customLyrics || '';
     const rawTitle = (track.title || track.name || 'Viral Short Track');
-    const genreStyle = track.genre || track.style || (Array.isArray(track.tags) ? track.tags[0] : track.tags) || 'K-POP';
+    const genreCandidate = savedBrief?.creativePlan?.music?.genreEn || track.genre || (Array.isArray(track.tags) ? track.tags[0] : track.tags);
+    const genreStyle = typeof genreCandidate === 'string' && genreCandidate.length <= 300 ? genreCandidate : '';
     const cat = savedBrief?.categoryId || track.category || track.tab_type || track.presetId || genCategory || 'viral';
     const sourceTopic = savedBrief?.sourceTopic || rawTitle;
 
@@ -776,7 +805,7 @@ function ViralTrendZoneStudio() {
           lyrics: lyricsText,
           topic: sourceTopic,
           category: cat,
-          genre: genreStyle,
+          ...(genreStyle ? { genre: genreStyle } : {}),
           ...(savedBrief?.creativePlan ? { creativePlan: savedBrief.creativePlan } : {}),
         })
       });
@@ -786,16 +815,18 @@ function ViralTrendZoneStudio() {
         // v2 스펙 카테고리는 컷 케이던스와 춤 허용 여부를 함께 내려준다.
         if (typeof data.allowDance === 'boolean') setGrokAllowDance(data.allowDance);
         if (typeof data.cutCadenceSeconds === 'number') setGrokCutCadence(data.cutCadenceSeconds);
-        if (data.prompt) return data.prompt;
+        if (typeof data.prompt === 'string' && data.prompt.trim()) {
+          grokPromptRequest.trackId = String(track.id);
+          grokPromptRequest.parameters = { allowDance: data.allowDance === true, cutCadenceSeconds: typeof data.cutCadenceSeconds === 'number' ? data.cutCadenceSeconds : 1.5 };
+          return data.prompt;
+        }
       }
-    } catch (e) {
-      console.warn('[ViralPage] AI Grok Prompt API fallback:', e);
+    } catch {
+      console.warn('[ViralPage] AI video planning failed');
     }
 
     if (grokPromptRequest.current !== requestId) return '';
-    // Fallback Smart Prompt
-    const cleanTitle = rawTitle.replace(/^[Viral]s*/i, '').trim();
-    return `Hyper-kinetic 9:16 vertical short-form viral skit for "${cleanTitle}" (${genreStyle}). STRICT VISUAL SUBJECT: PROTAGONIST: EXPRESSIVE MAIN CHARACTER IN TRENDY OUTFIT, SUPPORTING ACTOR: DRAMATIC REACTION PARTNER. CORE OBJECT: ICONIC KEY ITEM FROM STORY. VISUAL ACTION & SCENE: EXAGGERATED 3-SECOND HOOK SITUATION & COMEDIC BODY LANGUAGE. CAMERA & LIGHTING: 0.5X FISHEYE SNAP-ZOOMS, DYNAMIC LIGHTING. ABSOLUTELY CLEAN VISUAL MOTION ONLY, ABSOLUTELY ZERO TEXT ON SCREEN, NO SUBTITLES, NO TYPOGRAPHY.`;
+    return '';
   }, [customLyrics, genCategory]);
 
   const selectedGrokTrack = useMemo(() => {
@@ -811,13 +842,12 @@ function ViralTrendZoneStudio() {
 
   useEffect(() => {
     setIsTuningPrompt(false);
-    if (genCategory === 'pet' || !selectedGrokTrack) { setGrokVideoPrompt(''); return; }
-    let cancelled = false;
-    fetchDynamicGrokPrompt(selectedGrokTrack).then(p => {
-      if (!cancelled && p) setGrokVideoPrompt(p);
-    });
-    return () => { cancelled = true; grokPromptRequest.current += 1; };
-  }, [selectedGrokTrack, fetchDynamicGrokPrompt, genCategory]);
+    grokPromptRequest.current += 1;
+    grokPromptRequest.trackId = undefined; grokPromptRequest.parameters = undefined;
+    setGrokVideoPrompt('');
+    // Selecting/restoring a track is read-only. Planning is authorized by the main click or the optional tuning action.
+    return () => { grokPromptRequest.current += 1; };
+  }, [selectedGrokTrack?.id, genCategory]);
 
   const frozenStoryPrompt = storyClientState.job?.prompt;
   const frozenStoryTrackId = storyClientState.job?.trackId;
@@ -867,14 +897,11 @@ function ViralTrendZoneStudio() {
   const durableStoryMode = VIRAL_STORY_VIDEO_CATEGORIES.has(genCategory)
     && (!selectedGrokTrack || VIRAL_STORY_VIDEO_CATEGORIES.has(selectedStoryCategory));
   const storyTrackId = durableStoryMode
-    ? isViralStoryTrackId(selectedGrokTrack?.id) ? selectedGrokTrack.id : !selectedGrokTrack ? storyRecovery?.trackId || null : null
+    ? isViralStoryTrackId(selectedGrokTrack?.id) ? selectedGrokTrack.id : !selectedGrokTrack && !producerBrief && !customTopic.trim() && !customLyrics.trim() && !optimizedPrompt.trim() ? storyRecovery?.trackId || null : null
     : null;
   const storyVideoJob = storyClientState.job;
-  const hasVideoSelection = !!generatedResult || !!selectedGrokTrack || !!storyTrackId;
   const storyVideoFrozen = durableStoryMode && !!storyVideoJob;
-  const storyVideoActionLabel = storyVideoJob?.status === 'completed' ? '완료 영상 확인'
-    : storyVideoJob?.status === 'held' && !canResumeViralStoryJob(storyVideoJob) ? '저장된 영상 상태 확인'
-    : storyVideoJob || storyClientState.uncertain ? '저장된 영상 작업 이어가기' : '30초 AI 영상 생성 시작하기 (클릭)';
+
 
   useEffect(() => {
     const scope = petUserId && storyTrackId ? `${petUserId}:${storyTrackId}` : '';
@@ -887,13 +914,14 @@ function ViralTrendZoneStudio() {
       setIsGeneratingGrokVideo(false); setGrokVideoError(null); setGrokVideoProgress(0);
       setGrokVideoResult(null); setGrokVideoClips([]); setGrokVideoDuration(0);
     }
-    if (!scope || !petUserId || !storyTrackId) { storyClientRef.current = null; return; }
+    if (!scope || !petUserId || !storyTrackId) { storyClientRef.current = null; storyReadyRef.current = null; return; }
     let storage: Storage | undefined;
     try { storage = window.localStorage; } catch { /* Recover by owned track if browser storage is unavailable. */ }
     const client = new ViralStoryVideoClient({
       ownerId: petUserId, trackId: storyTrackId, storage,
       onState(next) {
         if (storyScopeRef.current !== scope) return;
+        if (storyReadyRef.current?.scope === scope) storyReadyRef.current.state = next;
         setStoryClientState(next); setIsGeneratingGrokVideo(next.busy); setGrokVideoError(next.error);
         if (next.job) {
           grokPromptRequest.current += 1; grokPromptRequest.frozenJob = { trackId: next.job.trackId, prompt: next.job.prompt };
@@ -912,8 +940,10 @@ function ViralTrendZoneStudio() {
       },
     });
     storyClientRef.current = client;
-    void client.restore();
-    return () => { client.dispose(); if (storyClientRef.current === client) storyClientRef.current = null; };
+    const ready = { scope, client, ready: false, state: { job: null, busy: true, uncertain: false, error: null } as ViralStoryClientState };
+    storyReadyRef.current = ready;
+    void client.restore().finally(() => { if (storyReadyRef.current === ready) ready.ready = true; });
+    return () => { client.dispose(); if (storyClientRef.current === client) { storyClientRef.current = null; storyReadyRef.current = null; } };
   }, [petUserId, storyTrackId]);
 
   const handleTuneGrokPrompt = () => {
@@ -928,7 +958,8 @@ function ViralTrendZoneStudio() {
       }).catch(() => { if (grokPromptRequest.current === requestId) setIsTuningPrompt(false); });
     }
   };
-  const handleGenerateGrokVideo = async (overrideTrack?: any) => {
+  const handleGenerateGrokVideo = async (overrideTrack?: any, preparedPrompt?: string, isCurrent: () => boolean = () => true) => {
+    if (!isCurrent()) return;
     if (genCategory === 'pet' || readPetEpisode(overrideTrack || selectedGrokTrack)) return;
     const durableTrack = overrideTrack || selectedGrokTrack || generatedResult;
     const durableCategory = readViralBrief(durableTrack)?.categoryId
@@ -954,6 +985,7 @@ function ViralTrendZoneStudio() {
     setGrokVideoProgress(15);
     let p = 15;
     const interval = setInterval(() => {
+      if (!isCurrent()) { clearInterval(interval); return; }
       p = Math.min(95, p + Math.floor(Math.random() * 4) + 2);
       setGrokVideoProgress(p);
     }, 1000);
@@ -961,7 +993,9 @@ function ViralTrendZoneStudio() {
     try {
       const activeTrack = overrideTrack || selectedGrokTrack || generatedResult || currentPlayingTrack;
       const targetAudio = activeTrack?.audio_url || activeTrack?.audioUrl || activeTrack?.audio || activeTrack?.url || activeTrack?.stream_url || activeTrack?.file_url;
-      const activePrompt = await fetchDynamicGrokPrompt(activeTrack) || grokVideoPrompt;
+      const activePrompt = preparedPrompt || await fetchDynamicGrokPrompt(activeTrack);
+      if (!activePrompt.trim()) throw new Error('영상 기획을 완료하지 못했습니다.');
+      if (!isCurrent()) return;
       const activeCategory = activeTrack?.category || activeTrack?.tab_type || activeTrack?.presetId || genCategory;
 
       console.log('[ViralPage] Triggering Grok video for track:', { id: activeTrack?.id, title: activeTrack?.title, audioUrl: targetAudio });
@@ -983,6 +1017,7 @@ function ViralTrendZoneStudio() {
       });
 
       clearInterval(interval);
+      if (!isCurrent()) return;
       setGrokVideoProgress(96);
 
       let data: any;
@@ -990,8 +1025,9 @@ function ViralTrendZoneStudio() {
         const resText = await res.text();
         data = JSON.parse(resText);
       } catch {
-        throw new Error('Grok 영상 서버 응답 타임아웃 (Vercel 120초 제한). 잠시 후 [영상만 재시도] 버튼을 눌러주세요.');
+        throw new Error('영상 요청 결과를 확인하지 못했습니다. 내 보관함에서 작업을 확인해 주세요. 새 영상 요청은 보내지 않습니다.');
       }
+      if (!isCurrent()) return;
       if (data.success && data.videoUrl) {
         let generatedCoverUrl = '';
         try {
@@ -1010,16 +1046,19 @@ function ViralTrendZoneStudio() {
               count: 1,
             })
           });
+          if (!isCurrent()) return;
           if (coverRes.ok) {
             const coverData = await coverRes.json();
+            if (!isCurrent()) return;
             generatedCoverUrl = coverData.imageUrl || '';
           } else {
-            console.warn('[Viral] 실사 영상 커버 생성 실패:', await coverRes.text());
+            console.warn('[Viral] 실사 영상 커버 생성 실패');
           }
         } catch (coverError) {
           console.warn('[Viral] 실사 영상 커버 생성 예외:', coverError);
         }
 
+        if (!isCurrent()) return;
         setGrokVideoResult(data.videoUrl);
         setGrokVideoProgress(100);
         // 서버가 ffprobe 로 잰 실제 길이. <video> 메타데이터 로딩을 기다리지 않는다.
@@ -1053,7 +1092,7 @@ function ViralTrendZoneStudio() {
 
         // 🎬 비디오 화면으로 자동 스와이프 스크롤
         setTimeout(() => {
-          if (previewVideoRef.current) {
+          if (isCurrent() && previewVideoRef.current) {
             previewVideoRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
           }
         }, 400);
@@ -1073,7 +1112,7 @@ function ViralTrendZoneStudio() {
             })
           });
           if (!persistRes.ok) {
-            console.warn('[Viral] 영상·커버 저장 실패:', await persistRes.text());
+            console.warn('[Viral] 영상·커버 저장 실패');
           }
         }
       } else {
@@ -1081,10 +1120,12 @@ function ViralTrendZoneStudio() {
       }
     } catch (err: any) {
       clearInterval(interval);
+      if (!isCurrent()) return;
       console.error('[Grok Video]', err);
       setGrokVideoError(err.message || 'Grok 비디오 생성 네트워크 요청 실패');
     } finally {
-      setIsGeneratingGrokVideo(false);
+      clearInterval(interval);
+      if (isCurrent()) setIsGeneratingGrokVideo(false);
     }
   };
 
@@ -1190,6 +1231,8 @@ function ViralTrendZoneStudio() {
   }, []);
 
   const clearGeneratedMediaForDraftEdit = () => {
+    explicitGrokSelectionRef.current = null;
+    petPlanningRequest.current += 1; grokPromptRequest.current += 1;
     setGeneratedResult(null); setSelectedGrokTrackId(''); setAudioDuration(0);
     setGrokVideoPrompt(''); setGrokVideoResult(null); setGrokVideoClips([]); setGrokVideoDuration(0);
     if (genCategory === 'pet') { setPetTrackId(null); setPetLinkedTrack(null); }
@@ -1333,9 +1376,31 @@ function ViralTrendZoneStudio() {
   const completedOwnedPetAudio = !!petUserId && petDraftOwner === petUserId
     && petLinkedTrack?.user_id === petUserId && petLinkedTrack?.status === 'completed'
     && !!(petLinkedTrack.audio_url || petLinkedTrack.audioUrl);
-  const canContinueToVideo = !!(generatedResult?.audio_url || generatedResult?.audioUrl)
-    && !isGenerating && !isGeneratingGrokVideo
-    && (genCategory !== 'pet' || (!!completedOwnedPetAudio && String(generatedResult.id) === petMatchingTrackId));
+  const singleVideoInputKey = JSON.stringify([customTopic, customLyrics, optimizedPrompt, selectedGenre, selectedMood,
+    selectedVocal, duration, effectiveIsPublic, genCategory === 'pet' ? petCurrentEpisode : producerBrief]);
+  singleVideoScopeRef.current = petUserId && planningAccountReady
+    ? { ownerId: petUserId, category: genCategory, revision: petPlanningRequest.current, inputKey: singleVideoInputKey } : null;
+  const petVideoScope = `${petUserId || ''}:${petCurrentEpisode?.id || ''}:${petMatchingTrackId || ''}`;
+  const petVideoScopeRef = useRef(petVideoScope);
+  petVideoScopeRef.current = petVideoScope;
+  const handlePetVideoState = useCallback((state: PetVideoExternalState) => {
+    if (petVideoScopeRef.current === petVideoScope) petVideoStateRef.current = { scope: petVideoScope, state };
+  }, [petVideoScope]);
+  const handlePetRequestSettled = useCallback((id: string) => {
+    if (petRequestSettledRef.current?.id !== id) return;
+    petRequestSettledRef.current.settle(); petRequestSettledRef.current = null;
+    setPetStartRequest(current => current?.id === id ? null : current);
+  }, []);
+
+  useEffect(() => {
+    singleVideoGateRef.current?.cancel(); audioGenerationRef.current?.();
+    petRequestSettledRef.current?.settle(); petRequestSettledRef.current = null;
+    setPetStartRequest(null); setSingleVideoPhase(null); setSingleVideoError(''); setIsGeneratingGrokVideo(false); setGrokVideoProgress(0); setIsGenerating(false);
+    return () => {
+      singleVideoGateRef.current?.cancel(); audioGenerationRef.current?.();
+      petRequestSettledRef.current?.settle(); petRequestSettledRef.current = null;
+    };
+  }, [singleVideoInputKey, petUserId, genCategory]);
 
   const handleLoadPetTrack = useCallback(async (id: string) => {
     if (!id || !petUserId || petAccountRef.current !== petUserId || isGenerating || isGeneratingGrokVideo || isOptimizing) return;
@@ -1440,10 +1505,22 @@ function ViralTrendZoneStudio() {
     }
   };
 
-  const handleGenerate = async () => {
+  const handleGenerate = async (onSettled?: (track: any | null) => void, resumeTrackId?: string) => {
+    if (audioGenerationRef.current) { onSettled?.(null); return; }
+    let settled = false;
+    let pollingInterval: ReturnType<typeof setInterval> | undefined;
+    const settle = (track: any | null = null) => {
+      if (settled) return;
+      settled = true;
+      if (pollingInterval !== undefined) clearInterval(pollingInterval);
+      if (audioGenerationRef.current === cancel) audioGenerationRef.current = null;
+      onSettled?.(track);
+    };
+    const cancel = () => settle();
+    audioGenerationRef.current = cancel;
     if (!planIsCurrent) {
       setPetPlanError('현재 입력 내용을 반영하려면 Step 3에서 AI 기획하기를 먼저 눌러 주세요.');
-      return;
+      settle(); return;
     }
     const petSnapshot = genCategory === 'pet' && petEpisode ? { ...petEpisode, lyrics: customLyrics, stylePrompt: optimizedPrompt } : null;
     const viralBriefSnapshot: ViralBriefSnapshot | null = genCategory !== 'pet' && producerBrief ? {
@@ -1458,19 +1535,19 @@ function ViralTrendZoneStudio() {
     const generationCategory = genCategory;
     const generationOwner = petUserId;
     const generationRequest = petPlanningRequest.current;
-    const isCurrentGeneration = () => petCategoryRef.current === generationCategory
+    const isCurrentGeneration = () => !settled && petCategoryRef.current === generationCategory
       && petPlanningRequest.current === generationRequest
-      && (generationCategory !== 'pet' || (!!generationOwner && petAccountRef.current === generationOwner));
+      && !!generationOwner && petAccountRef.current === generationOwner;
     if (genCategory === 'pet') {
       const issues = validatePetEpisode(petSnapshot);
       if (issues.length || petPlanLocked) {
-        setPetPlanError(petPlanLocked ? '영상 작업이 시작된 콘티입니다. 새 콘티를 기획한 뒤 음원을 생성해 주세요.' : issues.join(' '));
-        return;
+        setPetPlanError(petPlanLocked ? '영상 작업이 시작된 콘티입니다. 새 콘티를 기획해 주세요.' : issues.join(' '));
+        settle(); return;
       }
     }
     if (!customLyrics.trim()) {
       alert("가사가 비어 있습니다. Step 3에서 다시 기획해 주세요.");
-      return;
+      settle(); return;
     }
     const prevTrack = generatedResult;
     setIsGenerating(true);
@@ -1514,6 +1591,8 @@ function ViralTrendZoneStudio() {
         finalTitle = `${categoryLabel} 숏폼 바이럴송`;
       }
 
+      let trackId = resumeTrackId;
+      if (!trackId) {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1532,18 +1611,22 @@ function ViralTrendZoneStudio() {
           metadata: { brand_name: brandName, tab_type: genCategory, duration: petSnapshot ? '30s' : duration, durationSeconds: petSnapshot ? 30 : durationSeconds, ...(petSnapshot ? { petEpisode: petSnapshot } : viralBriefSnapshot ? { viralBrief: viralBriefSnapshot } : {}) }
         })
       });
-      if (!isCurrentGeneration()) return;
+      if (!isCurrentGeneration()) { settle(); return; }
       if (!res.ok) {
         if (prevTrack) setGeneratedResult(prevTrack);
-        throw new Error(`생성 실패: ${await res.text()}`);
+        throw new Error('음원 요청을 완료하지 못했습니다. 저장 상태를 확인해 주세요.');
       }
       const data = await res.json();
-      if (!isCurrentGeneration()) return;
+      if (!isCurrentGeneration()) { settle(); return; }
       if (!data.success || !data.track?.id) {
         if (prevTrack) setGeneratedResult(prevTrack);
         throw new Error(data.error || '생성 작업 ID 누락');
       }
-      const trackId = data.track.id;
+      trackId = String(data.track.id);
+      if (pendingAudioRef.current?.scope.ownerId === generationOwner && pendingAudioRef.current.scope.revision === generationRequest) {
+        pendingAudioRef.current.trackId = trackId; pendingAudioRef.current.uncertain = false;
+      }
+      }
       if (petSnapshot && petAccountRef.current === petUserId && petCategoryRef.current === 'pet') {
         setPetTrackId(String(trackId));
       }
@@ -1564,15 +1647,15 @@ function ViralTrendZoneStudio() {
        */
       const maxPolls = 108; // × 5초 = 540초 (9분)
       const interval = setInterval(async () => {
-        if (pollingStopped || !isCurrentGeneration()) { clearInterval(interval); return; }
+        if (pollingStopped || !isCurrentGeneration()) { settle(); return; }
         pollCount++;
         if (!petSnapshot) setGenProgress(prev => Math.min(95, prev + Math.floor(Math.random() * 4) + 1));
         try {
           const statusRes = await fetch(`/api/generations?id=${trackId}`);
-          if (pollingStopped || !isCurrentGeneration()) { clearInterval(interval); return; }
+          if (pollingStopped || !isCurrentGeneration()) { settle(); return; }
           if (statusRes.ok) {
             const statusData = await statusRes.json();
-            if (pollingStopped || !isCurrentGeneration()) { clearInterval(interval); return; }
+            if (pollingStopped || !isCurrentGeneration()) { settle(); return; }
             const gen = statusData.generation;
             if (gen && gen.status === 'completed') {
               pollingStopped = true;
@@ -1581,6 +1664,7 @@ function ViralTrendZoneStudio() {
               const newViralTrack = {
                 id: trackId,
                 user_id: gen.user_id,
+                status: 'completed',
                 title: gen.title || finalTitle,
                 lyrics: finalLyrics,
                 prompt: finalStyle,
@@ -1612,13 +1696,15 @@ function ViralTrendZoneStudio() {
                 localStorage.setItem('melodio_viral_tracks', JSON.stringify(updated));
               } catch {}
               setIsGenerating(false);
+              settle(newViralTrack);
             } else if (gen && gen.status === 'failed') {
               pollingStopped = true;
               clearInterval(interval);
               if (petSnapshot) setPetOwnedTracksRefreshVersion(current => current + 1);
               setIsGenerating(false);
               if (prevTrack) setGeneratedResult(prevTrack);
-              alert('음원 생성 작업이 실패했습니다. 다시 시도해 주세요.');
+              alert('음원 생성 작업이 실패했습니다. 작업을 확인해 주세요.');
+              settle();
             }
           }
         } catch (e) { console.error('[Polling]', e); }
@@ -1634,15 +1720,157 @@ function ViralTrendZoneStudio() {
             '아직 생성이 진행 중입니다. 화면 대기만 종료하며 작업은 서버에서 계속됩니다.\n' +
             '잠시 후 Track Library에서 완성된 곡을 확인하실 수 있습니다.'
           );
+          settle();
         }
       }, 5000);
+      pollingInterval = interval;
     } catch (err: any) {
-      if (!isCurrentGeneration()) return;
+      if (!isCurrentGeneration()) { settle(); return; }
       console.error(err);
       if (prevTrack) setGeneratedResult(prevTrack);
       alert(`생성 처리 중 에러: ${err.message}`);
-      setIsGenerating(false);
+      setIsGenerating(false); settle();
     }
+  };
+
+  const handleCreateVideo = async () => {
+    const scope = singleVideoScopeRef.current;
+    const gate = singleVideoGateRef.current;
+    if (!scope || !gate || gate.busy || isOptimizing || isGenerating || isGeneratingGrokVideo) return;
+    if (grokVideoResult) { step4CardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+    const frozenEpisode = petCurrentEpisode;
+    const frozenBrief = producerBrief ? { ...producerBrief, lyrics: customLyrics, stylePrompt: optimizedPrompt } : null;
+    const implicitBrief = readViralBrief(selectedGrokTrack);
+    const implicitAudioMatches = !!implicitBrief && !!frozenBrief && implicitBrief.categoryId === scope.category
+      && implicitBrief.sourceTopic === frozenBrief.sourceTopic && implicitBrief.lyrics === frozenBrief.lyrics
+      && implicitBrief.stylePrompt === frozenBrief.stylePrompt
+      && JSON.stringify(readCategoryBriefExtras(implicitBrief)) === JSON.stringify(readCategoryBriefExtras(frozenBrief));
+    const candidate = genCategory === 'pet' ? completedOwnedPetAudio && petMatchingTrackId ? generatedResult : null
+      : selectedGrokTrack && (explicitGrokSelectionRef.current === String(selectedGrokTrack.id) || implicitAudioMatches) ? selectedGrokTrack : null;
+    const selectedId = candidate?.id ? String(candidate.id) : null;
+    const recoveryTrackId = genCategory !== 'pet' && !candidate && !planIsCurrent && !customLyrics.trim() ? storyTrackId : null;
+    const editedPrompt = selectedId && grokPromptRequest.trackId === selectedId ? grokVideoPrompt.trim() : '';
+    const editedParameters = { allowDance: grokAllowDance, cutCadenceSeconds: grokCutCadence };
+    setSingleVideoError('');
+    await runSingleVideoAction<any | null, { kind: 'pet' } | { kind: 'story'; client: ViralStoryVideoClient; input?: Parameters<ViralStoryVideoClient['start']>[0] } | { kind: 'legacy'; prompt: string } | { kind: 'saved'; videoUrl: string }>({
+      gate, scope, readScope: () => {
+        const current = singleVideoScopeRef.current;
+        return current && planningAccountRef.current?.userId === current.ownerId && petCategoryRef.current === current.category
+          && petPlanningRequest.current === current.revision ? current : null;
+      },
+      onPhase: setSingleVideoPhase,
+      onError: setSingleVideoError,
+      resolveAudio: async isCurrent => {
+        if (recoveryTrackId) return null;
+        const verify = async (id: string) => {
+          const response = await fetch(`/api/generations?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+          const result = await response.json();
+          if (!isCurrent()) return null;
+          const track = result.generation;
+          if (!response.ok || String(track?.id) !== id || track?.user_id !== scope.ownerId || track.status !== 'completed'
+            || !(track.audio_url || track.audioUrl)) throw new Error('완료된 본인 음원과 저장 상태를 확인해 주세요. 새 음원 요청은 보내지 않았습니다.');
+          if (scope.category === 'pet') {
+            if (!frozenEpisode || JSON.stringify(readPetEpisode(track)) !== JSON.stringify(frozenEpisode)) {
+              throw new Error('현재 콘티와 음원에 저장된 콘티가 다릅니다. 선택한 음원을 확인해 주세요.');
+            }
+            setPetLinkedTrack(track); setPetTrackId(id);
+          } else {
+            const saved = readViralBrief(track);
+            if (!saved || !frozenBrief || saved.categoryId !== scope.category || saved.sourceTopic !== frozenBrief.sourceTopic
+              || saved.lyrics !== frozenBrief.lyrics || saved.stylePrompt !== frozenBrief.stylePrompt
+              || JSON.stringify(readCategoryBriefExtras(saved)) !== JSON.stringify(readCategoryBriefExtras(frozenBrief))) {
+              throw new Error('현재 가사와 기획에 맞는 음원을 확인하지 못했습니다. 추가 설정에서 본인 음원을 확인해 주세요.');
+            }
+          }
+          const ready = { ...track, audioUrl: track.audio_url || track.audioUrl };
+          setGeneratedResult(ready); setSelectedGrokTrackId(id);
+          return ready;
+        };
+        if (selectedId) return verify(selectedId);
+        if (!planIsCurrent || !customLyrics.trim() || (scope.category === 'pet' && (petPlanLocked || validatePetEpisode(frozenEpisode).length))) {
+          throw new Error('현재 상황으로 AI 기획을 마친 뒤 가사를 확인해 주세요.');
+        }
+        const pending = pendingAudioRef.current;
+        const samePending = pending?.scope.ownerId === scope.ownerId && pending.scope.category === scope.category
+          && pending.scope.inputKey === scope.inputKey;
+        if (samePending && !pending.trackId) {
+          throw new Error('음원 요청의 접수 결과를 확인하지 못했습니다. 새 요청을 보내지 않았습니다. 내 보관함에서 작업을 확인해 주세요.');
+        }
+        const resumeTrackId = samePending ? pending.trackId || undefined : undefined;
+        if (!samePending) pendingAudioRef.current = { scope: { ...scope }, trackId: null, uncertain: true };
+        const track = await new Promise<any | null>(resolve => { void handleGenerate(resolve, resumeTrackId); });
+        if (!isCurrent()) return null;
+        if (!track?.id) throw new Error('음원 작업을 아직 완료하지 못했습니다. 같은 버튼으로 저장 상태를 확인할 수 있습니다.');
+        return verify(String(track.id));
+      },
+      prepareVideo: async (track, isCurrent) => {
+        if (scope.category === 'pet') {
+          const expected = `${scope.ownerId}:${frozenEpisode?.id || ''}:${track?.id || ''}`;
+          await waitForSingleVideoReady(() => petVideoStateRef.current?.scope === expected
+            && !petVideoStateRef.current.state.loading && !petVideoStateRef.current.state.busy ? petVideoStateRef.current : null, isCurrent);
+          return { kind: 'pet' };
+        }
+        const id = track?.id || recoveryTrackId;
+        if (VIRAL_STORY_VIDEO_CATEGORIES.has(scope.category)) {
+          const ready = await waitForSingleVideoReady(() => storyReadyRef.current?.scope === `${scope.ownerId}:${id}`
+            && storyReadyRef.current.ready && !storyReadyRef.current.state.busy ? storyReadyRef.current : null, isCurrent);
+          if (!ready) throw new Error('작업이 변경되었습니다.');
+          // Restore/unknown/held/completed identities use only the existing client's explicit recovery policy.
+          if (ready.state.job || ready.state.uncertain || !track) return { kind: 'story', client: ready.client };
+          const prompt = editedPrompt || await fetchDynamicGrokPrompt(track);
+          if (!isCurrent()) throw new Error('작업이 변경되었습니다.');
+          if (!prompt.trim()) throw new Error('영상 기획을 완료하지 못했습니다. 같은 버튼을 눌러 다시 확인해 주세요.');
+          const parameters = editedPrompt ? editedParameters : grokPromptRequest.parameters;
+          if (!parameters || (!editedPrompt && grokPromptRequest.trackId !== String(track.id))) throw new Error('선택한 음원의 영상 기획을 다시 확인해 주세요.');
+          setGrokVideoPrompt(prompt);
+          return { kind: 'story', client: ready.client, input: { trackId: String(track.id), prompt, category: scope.category,
+            ...parameters, audioUrl: track.audio_url || track.audioUrl } };
+        }
+        const savedVideo = readSavedViralVideo(track);
+        if (savedVideo) return { kind: 'saved', videoUrl: savedVideo };
+        const legacyPending = legacyVideoPendingRef.current;
+        if (legacyPending?.scope.ownerId === scope.ownerId && legacyPending.scope.category === scope.category && legacyPending.scope.inputKey === scope.inputKey) {
+          throw new Error('이전 영상 요청 결과를 확인해 주세요. 새 유료 요청은 보내지 않았습니다. 내 보관함에서 영상을 확인할 수 있습니다.');
+        }
+        const prompt = editedPrompt || await fetchDynamicGrokPrompt(track);
+        if (!prompt.trim()) throw new Error('영상 기획을 완료하지 못했습니다. 같은 버튼을 눌러 다시 확인해 주세요.');
+        return { kind: 'legacy', prompt };
+      },
+      startVideo: async (track, prepared, isCurrent) => {
+        if (!isCurrent()) return;
+        if (prepared.kind === 'story') { await prepared.client.start(prepared.input); return; }
+        if (prepared.kind === 'saved') { setGrokVideoResult(prepared.videoUrl); step4CardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return; }
+        if (prepared.kind === 'legacy') { legacyVideoPendingRef.current = { scope: { ...scope }, trackId: String(track.id) }; await handleGenerateGrokVideo(track, prepared.prompt, isCurrent); return; }
+        const state = petVideoStateRef.current?.state;
+        if (state?.job?.status === 'completed' || state?.job?.status === 'review') {
+          step4CardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }); return;
+        }
+        const id = crypto.randomUUID();
+        await new Promise<void>(resolve => {
+          petRequestSettledRef.current = { id, settle: resolve };
+          setPetStartRequest({ id, ownerId: scope.ownerId, episodeId: frozenEpisode!.id, trackId: String(track.id) });
+        });
+      },
+    });
+  };
+
+  const handleLoadViralTrack = async (id: string) => {
+    if (studioBusy || isOptimizing || !petUserId || !id) return;
+    const owner = petUserId, category = genCategory;
+    const revision = ++petPlanningRequest.current;
+    grokPromptRequest.current += 1; setSingleVideoError('');
+    try {
+      const response = await fetch(`/api/generations?id=${encodeURIComponent(id)}`, { cache: 'no-store' });
+      const result = await response.json();
+      const track = result.generation, brief = readViralBrief(track);
+      if (petPlanningRequest.current !== revision || petAccountRef.current !== owner || petCategoryRef.current !== category) return;
+      if (!response.ok || String(track?.id) !== id || track?.user_id !== owner || track.status !== 'completed'
+        || !track.audio_url || !brief || brief.categoryId !== category) throw new Error('이 카테고리의 완료된 본인 음원을 선택해 주세요.');
+      setProducerBrief(brief); setCustomTopic(brief.sourceTopic); setCustomLyrics(brief.lyrics); setOptimizedPrompt(brief.stylePrompt);
+      explicitGrokSelectionRef.current = id;
+      setSelectedGrokTrackId(id); setGeneratedResult({ ...track, audioUrl: track.audio_url });
+      setGrokVideoPrompt(''); setGrokVideoResult(null); setGrokVideoClips([]);
+    } catch (reason) { setSingleVideoError(reason instanceof Error ? reason.message : '음원을 불러오지 못했습니다.'); }
   };
 
   const togglePlay = () => {
@@ -1723,6 +1951,7 @@ function ViralTrendZoneStudio() {
     if (category === genCategory) return;
     grokPromptRequest.current += 1;
     petPlanningRequest.current += 1;
+    explicitGrokSelectionRef.current = null;
     setGenCategory(category);
     setProducerBrief(null); setCustomTopic(''); setCustomLyrics(''); setOptimizedPrompt('');
     setStyleWarnings([]); setPetPlanError(''); setGeneratedResult(null); setSelectedGrokTrackId(''); setAudioDuration(0);
@@ -1883,7 +2112,7 @@ function ViralTrendZoneStudio() {
         {/* ── 좌측: 영상과 음원이 결합된 완성 숏폼만 노출 ── */}
         <div className="lg:col-span-5 flex flex-col space-y-4">
           <ViralVideoLibrary onVideosLoaded={setViralVideos} onCreateFormat={handleSelectGenerationCategory}
-            creationDisabled={danceBusy || isOptimizing || isGenerating || isGeneratingGrokVideo} refreshKey={petCompletedRefreshKey} excludedVideoIds={topVideoIds} excludedVideoUrls={topVideoUrls} />
+            creationDisabled={danceBusy || isOptimizing || studioBusy} refreshKey={petCompletedRefreshKey} excludedVideoIds={topVideoIds} excludedVideoUrls={topVideoUrls} />
           <PetPendingTrackList tracks={petPendingTracks} owner={petOwnedTracksOwner} userId={petUserId}
             draftOwner={petDraftOwner} episodeId={petEpisode?.id || null} trackId={petTrackId} />
         </div>
@@ -1898,17 +2127,15 @@ function ViralTrendZoneStudio() {
               const step1Done = !!genCategory;
               const step2Done = true;
               const step3Done = planIsCurrent;
-              const step4Done = !!generatedResult;
-              const step5Done = !!grokVideoResult;
+              const step4Done = !!grokVideoResult;
               const steps = [
                 { num: 1, label: '카테고리', done: step1Done },
                 { num: 2, label: '음악 스타일', done: step2Done },
-                { num: 3, label: 'AI 기획', done: step3Done },
-                { num: 4, label: '음원 생성', done: step4Done },
-                { num: 5, label: '영상 생성', done: step5Done },
+                { num: 3, label: '상황·AI 기획', done: step3Done },
+                { num: 4, label: '가사·영상', done: step4Done },
               ];
               // current = first incomplete step
-              const currentStepNum = step5Done ? 5 : step4Done ? 5 : step3Done ? 4 : step2Done ? 3 : step1Done ? 2 : 1;
+              const currentStepNum = step3Done ? 4 : step2Done ? 3 : step1Done ? 2 : 1;
               return (
                 <div className="flex items-center gap-1 w-full mb-2">
                   {steps.map((s, i) => {
@@ -2131,7 +2358,7 @@ function ViralTrendZoneStudio() {
                     <button
                       key={cat.id}
                       type="button"
-                      disabled={danceBusy || isOptimizing || isGenerating || isGeneratingGrokVideo}
+                      disabled={danceBusy || isOptimizing || studioBusy}
                       aria-pressed={isCatSelected}
                       onClick={() => handleSelectGenerationCategory(cat.id as ViralCategory)}
                       className={`py-3 px-3.5 rounded-xl border text-xs sm:text-sm font-extrabold transition-all flex items-center justify-center gap-2 ${
@@ -2160,7 +2387,7 @@ function ViralTrendZoneStudio() {
                 <button
                   type="button"
                   onClick={handleAutoTuneShortsSound}
-                  disabled={isOptimizing || isGenerating || isGeneratingGrokVideo}
+                  disabled={isOptimizing || studioBusy}
                   className={`text-xs sm:text-sm font-black px-3 py-1 rounded-full border transition-all duration-300 ml-auto flex items-center gap-1 active:scale-95 shadow-md cursor-pointer ${
                     autoTuneFlash
                       ? 'bg-emerald-500 text-black border-emerald-400 shadow-emerald-500/50 scale-105'
@@ -2181,7 +2408,7 @@ function ViralTrendZoneStudio() {
                     장르
                   </label>
                   <div className="relative">
-                    <select value={selectedGenre} onChange={(e) => handlePlanningStyleChange('genre', e.target.value)} disabled={isOptimizing || isGenerating || isGeneratingGrokVideo}
+                    <select value={selectedGenre} onChange={(e) => handlePlanningStyleChange('genre', e.target.value)} disabled={isOptimizing || studioBusy}
                       className="w-full bg-black/60 border border-white/15 rounded-xl px-4 py-3 text-xs sm:text-sm font-bold text-white appearance-none focus:outline-none focus:border-indigo-500">
                       <option value="" className="bg-zinc-900 text-white">AI 설계 · 컨셉과 맥락에 맞춤</option>
                       {VIRAL_GENRE_OPTIONS.map(g => <option key={g} value={g} className="bg-zinc-900 text-white">{g}</option>)}
@@ -2195,7 +2422,7 @@ function ViralTrendZoneStudio() {
                     분위기
                   </label>
                   <div className="relative">
-                    <select value={selectedMood} onChange={(e) => handlePlanningStyleChange('mood', e.target.value)} disabled={isOptimizing || isGenerating || isGeneratingGrokVideo}
+                    <select value={selectedMood} onChange={(e) => handlePlanningStyleChange('mood', e.target.value)} disabled={isOptimizing || studioBusy}
                       className="w-full bg-black/60 border border-white/15 rounded-xl px-4 py-3 text-xs sm:text-sm font-bold text-white appearance-none focus:outline-none focus:border-indigo-500">
                       <option value="" className="bg-zinc-900 text-white">AI 설계 · 컨셉과 맥락에 맞춤</option>
                       {VIRAL_MOOD_OPTIONS.map(m => <option key={m} value={m} className="bg-zinc-900 text-white">{m}</option>)}
@@ -2211,7 +2438,7 @@ function ViralTrendZoneStudio() {
                   보컬 스타일 (Vocal)
                 </label>
                 <div className="relative">
-                  <select value={selectedVocal} onChange={(e) => handlePlanningStyleChange('vocal', e.target.value)} disabled={isOptimizing || isGenerating || isGeneratingGrokVideo}
+                  <select value={selectedVocal} onChange={(e) => handlePlanningStyleChange('vocal', e.target.value)} disabled={isOptimizing || studioBusy}
                     className="w-full bg-black/60 border border-white/15 rounded-xl px-4 py-3 text-xs sm:text-sm font-bold text-white appearance-none focus:outline-none focus:border-indigo-500">
                     <option value="" className="bg-zinc-900 text-white">AI 설계 · 보컬 여부와 스타일</option>
                     {VOCAL_OPTIONS.map(v => <option key={v.value} value={v.value} className="bg-zinc-900 text-white">{v.label}</option>)}
@@ -2269,7 +2496,7 @@ function ViralTrendZoneStudio() {
                   placeholder={genCategory === 'pet' ? '예: 평소 애교가 많은 고양이가 집사가 휴대폰을 들기만 하면 행동을 멈춘다. 집사는 고양이의 일상을 촬영하고 싶다.' : '예: 퇴근 직전마다 팀장이 “잠깐만”이라며 일을 더 준다. 하루를 마친 직장인은 가방을 챙기고 나갈 준비를 하고 있다.'}
                   value={customTopic}
                   onChange={(e) => handleSituationChange(e.target.value)}
-                  disabled={isOptimizing || isGenerating || isGeneratingGrokVideo}
+                  disabled={isOptimizing || studioBusy}
                   maxLength={1500}
                   className="w-full bg-black/50 border border-white/15 rounded-xl px-4 py-3.5 text-xs sm:text-sm text-white placeholder-zinc-400 focus:outline-none focus:border-indigo-500 resize-y h-36 min-h-[144px] leading-relaxed font-medium"
                 />
@@ -2286,11 +2513,11 @@ function ViralTrendZoneStudio() {
                     <button
                       onClick={handleOptimizePrompt}
                       aria-busy={isOptimizing}
-                      disabled={!isStep3Enabled || isOptimizing || isGenerating || isGeneratingGrokVideo}
+                      disabled={!isStep3Enabled || isOptimizing || studioBusy}
                       className={`w-full py-4 rounded-xl border text-xs sm:text-sm font-black flex items-center justify-center gap-2 transition-all ${
                         isOptimizing
                           ? 'bg-indigo-950 border-indigo-400/60 text-white cursor-wait'
-                          : isGenerating || isGeneratingGrokVideo
+                          : studioBusy
                           ? 'bg-zinc-800 border-zinc-600 text-zinc-200 cursor-not-allowed'
                           : !isStep3Enabled
                           ? 'bg-zinc-900 border-zinc-700 text-zinc-300 cursor-not-allowed'
@@ -2336,7 +2563,7 @@ function ViralTrendZoneStudio() {
                   <textarea
                     value={optimizedPrompt}
                     onChange={(e) => handleOptimizedPromptChange(e.target.value)}
-                    disabled={isOptimizing || isGenerating || isGeneratingGrokVideo || (genCategory === 'pet' && petPlanLocked)}
+                    disabled={isOptimizing || studioBusy || (genCategory === 'pet' && petPlanLocked)}
                     placeholder="AI 최적화 결과가 여기에 채워집니다."
                     className="w-full h-40 bg-black/50 border border-white/15 rounded-xl p-3.5 text-xs sm:text-sm text-zinc-100 placeholder-zinc-400 focus:outline-none focus:border-indigo-500 resize-none font-mono leading-relaxed font-medium"
                   />
@@ -2344,12 +2571,12 @@ function ViralTrendZoneStudio() {
               )}
               {petPlanError ? <p role="alert" className="text-sm text-amber-200">{petPlanError}</p> : null}
               {genCategory === 'pet' && petCurrentEpisode ? (
-                <PetEpisodeEditor episode={petCurrentEpisode} onChange={handlePetEpisodeChange} disabled={petPlanLocked || isGenerating || isGeneratingGrokVideo || isOptimizing} />
+                <PetEpisodeEditor episode={petCurrentEpisode} onChange={handlePetEpisodeChange} disabled={petPlanLocked || studioBusy || isOptimizing} />
               ) : null}
             </div>
 
-            {/* Step 4: 가사 확인 & 음원 생성 */}
-            <div className={`space-y-4 pt-2 transition-all duration-300 ${!planIsCurrent ? 'pointer-events-none' : ''}`}>
+            {/* Step 4: 가사 확인 & 영상 생성 */}
+            <div className="space-y-4 pt-2 transition-all duration-300">
               <div className="space-y-3.5">
                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
                   <h3 className="text-sm sm:text-base font-black text-white flex items-center gap-2">
@@ -2360,7 +2587,7 @@ function ViralTrendZoneStudio() {
                         ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300'
                         : 'bg-purple-500/20 border border-purple-500/40 text-purple-300'
                     }`}>{generatedResult ? <Check className="w-3 h-3" /> : '4'}</div>
-                    가사 확인 & 음원 생성 ({genCategory === 'pet' ? '30초 콘티용 음원' : `⚡ ${VIRAL_SONG_SPEC.targetSecondsMin}~${VIRAL_SONG_SPEC.targetSecondsMax}초 숏폼`})
+                    가사 확인 & 영상 생성 ({genCategory === 'pet' ? '완성 영상 30초' : `⚡ ${VIRAL_SONG_SPEC.targetSecondsMin}~${VIRAL_SONG_SPEC.targetSecondsMax}초 숏폼`})
                     {!optimizedPrompt.trim() && <Lock className="w-3.5 h-3.5 text-zinc-400 ml-1" />}
                   </h3>
                   {/*
@@ -2398,7 +2625,7 @@ function ViralTrendZoneStudio() {
                       key={tag.label}
                       type="button"
                       onClick={() => insertTextAtCursor(tag.label)}
-                      disabled={isOptimizing || isGenerating || isGeneratingGrokVideo}
+                      disabled={isOptimizing || studioBusy}
                       className="px-3 py-1.5 text-xs font-extrabold rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-white/10 transition-all flex items-center gap-1.5 shadow-sm"
                     >
                       {tag.icon}
@@ -2414,7 +2641,7 @@ function ViralTrendZoneStudio() {
                   // 정상 가사도 입력이 막혔고, 정작 API가 채운 값은 검사하지 않아
                   // 초과 상태로 생성이 진행됐다. 분량은 위 음절 카운터로 안내한다.
                   onChange={(e) => handleLyricsChange(e.target.value)}
-                  disabled={!optimizedPrompt.trim() || isOptimizing || isGenerating || isGeneratingGrokVideo || (genCategory === 'pet' && petPlanLocked)}
+                  disabled={!optimizedPrompt.trim() || isOptimizing || studioBusy || (genCategory === 'pet' && petPlanLocked)}
                   className={`w-full h-[220px] bg-black/50 border rounded-xl p-4 text-xs sm:text-sm leading-relaxed font-mono focus:outline-none resize-none font-medium ${
                     !optimizedPrompt.trim()
                       ? 'border-white/10 text-zinc-300 cursor-not-allowed'
@@ -2478,83 +2705,29 @@ function ViralTrendZoneStudio() {
                 )}
               </div>
 
-              {/* 생성 버튼 — 맥박 pulse ring 효과 */}
-              {(() => {
-                const isReadyToGenerate = planIsCurrent && !!customLyrics.trim() && !isOptimizing && (genCategory !== 'pet' || (!petPlanLocked && validatePetEpisode(petCurrentEpisode).length === 0));
-
-                if (generatedResult && !isGenerating) {
-                  if (isGeneratingGrokVideo) return null;
-                  return (
-                    <div className="text-center">
-                      <button
-                        type="button"
-                        onClick={handleGenerate}
-                        disabled={isGenerating || isOptimizing}
-                        className="text-xs font-bold text-zinc-300 hover:text-zinc-200 underline inline-flex items-center gap-1.5 transition-all"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5 text-zinc-300" />
-                        음원 다시 생성하기
-                      </button>
-                    </div>
-                  );
-                }
-
-                return (
-                  <div className="relative">
-                    {!isGenerating && isReadyToGenerate && (
-                      <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-fuchsia-600 to-indigo-600 opacity-40 blur-xl animate-pulse pointer-events-none" />
-                    )}
-                    <button
-                      onClick={handleGenerate}
-                      aria-busy={isGenerating || isOptimizing || isGeneratingGrokVideo}
-                      disabled={isGenerating || isOptimizing || isGeneratingGrokVideo || !isReadyToGenerate}
-                      className={`relative w-full py-5 rounded-2xl text-base sm:text-lg font-black tracking-tight flex items-center justify-center gap-2.5 transition-all ${
-                        isGenerating || isOptimizing || isGeneratingGrokVideo
-                          ? 'bg-indigo-950 border border-indigo-400/60 text-white cursor-wait'
-                          : !isReadyToGenerate
-                          ? 'bg-zinc-900 border border-zinc-700 text-zinc-300 cursor-not-allowed'
-                          : 'bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 text-white border border-cyan-400/40 shadow-[0_0_35px_rgba(6,182,212,0.4)] hover:shadow-[0_0_50px_rgba(6,182,212,0.5)] hover:scale-[1.01] active:scale-[0.99]'
-                      }`}
-                    >
-                      {isGenerating ? (
-                        <div className="w-full flex items-center justify-between px-4">
-                          <div className="flex items-center gap-2.5">
-                            <RefreshCw className="w-5 h-5 animate-spin text-cyan-400" />
-                            <span className="text-xs sm:text-sm font-bold text-zinc-300">{genCategory === 'pet' ? '댕냥이 숏폼 음원 생성 중…' : `Suno V5.5 실시간 믹싱 중... (${genProgress}%)`}</span>
-                          </div>
-                          <div className="w-28 bg-zinc-700 h-2 rounded-full overflow-hidden">
-                            <div style={{ width: `${genProgress}%` }} className="bg-cyan-400 h-full transition-all duration-500" />
-                          </div>
-                        </div>
-                      ) : isGeneratingGrokVideo ? (
-                        <>
-                          <Film className="w-5 h-5 text-fuchsia-400 animate-pulse" />
-                          영상 생성 중…
-                        </>
-                      ) : isOptimizing ? (
-                        <>
-                          <RefreshCw className="w-5 h-5 animate-spin text-fuchsia-400" />
-                          AI 기획 분석 진행 중... (Step 3)
-                        </>
-                      ) : !isReadyToGenerate ? (
-                        <>
-                          <Sparkles className="w-5 h-5 text-zinc-400" />
-                          🔒 Step 3 (AI 기획) 완료 후 활성화됩니다
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-6 h-6 text-yellow-300 animate-bounce" />
-                          {genCategory === 'pet' ? '댕냥이 숏폼 음원 생성하기' : '🚀 음원 생성하기 (Suno V5.5 바이럴 숏폼)'}
-                        </>
-                      )}
-                    </button>
-                  </div>
-                );
-              })()}
+              <div className="space-y-3">
+                <button
+                  type="button"
+                  onClick={handleCreateVideo}
+                  aria-busy={studioBusy}
+                  disabled={studioBusy || isOptimizing || !planningAccountReady || (!planIsCurrent && !storyTrackId && !petMatchingTrackId)}
+                  className="w-full py-5 rounded-2xl text-base sm:text-lg font-black flex items-center justify-center gap-2.5 transition-all bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 text-white border border-cyan-400/40 shadow-lg disabled:bg-none disabled:bg-zinc-900 disabled:text-zinc-400 disabled:cursor-not-allowed"
+                >
+                  {studioBusy ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Film className="w-5 h-5" />}
+                  {singleVideoPhase === 'audio' || isGenerating ? `음원 준비 중… (${genProgress}%)`
+                    : singleVideoPhase === 'prompt' ? '영상 기획 중…'
+                    : isGeneratingGrokVideo || singleVideoPhase === 'video' ? genCategory === 'pet' ? '영상 생성 중…' : `${viralStoryProgressLabel(storyVideoJob)} (${grokVideoProgress}%)`
+                    : grokVideoResult ? '완료 영상 확인'
+                    : storyVideoJob || storyClientState.uncertain || singleVideoError || petVideoStateRef.current?.state.error ? '저장된 작업 상태 확인 · 이어가기'
+                    : '영상 생성하기'}
+                </button>
+                <p className="text-xs text-zinc-300">가사에 맞는 음원을 준비한 뒤 30초 영상까지 이어서 만듭니다. 음원과 영상 생성 비용이 발생합니다.</p>
+                {singleVideoError ? <p role="alert" className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">{singleVideoError}</p> : null}
+              </div>
 
               {/* ─── 🎵 [결과 1] 생성된 바이럴 숏폼 음원 카드 (Card 1 영역 하단 즉시 배치) ─── */}
               {(generatedResult || (genCategory === 'pet' && petCurrentEpisode && petTrackId)) && (
-                <div className="mt-5 p-5 rounded-2xl bg-indigo-950/50 border border-cyan-500/50 space-y-3.5 shadow-2xl relative overflow-hidden animate-fadeIn">
+                <div ref={genCategory === 'pet' ? step4CardRef : undefined} className="mt-5 p-5 rounded-2xl bg-indigo-950/50 border border-cyan-500/50 space-y-3.5 shadow-2xl relative overflow-hidden animate-fadeIn">
                   {generatedResult ? <>
                   <div className="flex items-center justify-between flex-wrap gap-2.5">
                     <div className="flex items-center gap-2">
@@ -2607,6 +2780,10 @@ function ViralTrendZoneStudio() {
                     <PetVideoStudio
                       key={`${petUserId || 'guest'}:${petCurrentEpisode?.id || 'none'}`}
                       compact
+                      externalControl
+                      startRequest={petStartRequest}
+                      onStateChange={handlePetVideoState}
+                      onRequestSettled={handlePetRequestSettled}
                       userId={petUserId}
                       episode={petCurrentEpisode}
                       trackId={completedOwnedPetAudio && String(generatedResult?.id) === petMatchingTrackId ? petMatchingTrackId : null}
@@ -2615,78 +2792,18 @@ function ViralTrendZoneStudio() {
                       onLockedChange={setPetPlanLocked}
                       onCompleted={handlePetCompleted}
                     />
-                  ) : canContinueToVideo ? (
-                    <div className="pt-3 border-t border-white/10 space-y-3">
-                      <p className="text-xs font-bold text-emerald-400 flex items-center gap-1.5">
-                        <Check className="w-4 h-4 shrink-0" />
-                        음원이 준비됐습니다. 영상 생성을 진행해 주세요.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          step4CardRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                        }}
-                        className="w-full py-4 rounded-2xl text-base font-black flex items-center justify-center gap-2 transition-all bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white border border-fuchsia-400/50 shadow-lg active:scale-[0.99]"
-                      >
-                        <Film className="w-5 h-5" />
-                        Step 5 영상 생성하기
-                      </button>
-                    </div>
                   ) : null}
                 </div>
               )}
             </div>
 
-            {/* ─── Step 5: 🎬 AI 영상 생성 ─── */}
+            {/* Status and results belong to the single lyrics/video action. */}
             {genCategory !== 'pet' ? (
-            <div ref={step4CardRef} className={`mt-8 p-6 rounded-3xl bg-black/60 border space-y-5 shadow-2xl relative transition-all duration-300 ${
-              !hasVideoSelection
-                ? 'border-zinc-800 pointer-events-none'
-                : 'border-fuchsia-500/40'
-            }`}>
-              <div className="flex items-center justify-between flex-wrap gap-3 border-b border-white/10 pb-4">
-                <div className="flex items-center gap-2.5">
-                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center text-white font-black text-sm shadow-md ${
-                    !hasVideoSelection
-                      ? 'bg-zinc-800 border border-zinc-700'
-                      : grokVideoResult
-                      ? 'bg-gradient-to-tr from-emerald-500 to-emerald-600'
-                      : 'bg-gradient-to-tr from-fuchsia-500 to-purple-600'
-                  }`}>
-                    {grokVideoResult ? <Check className="w-4 h-4" /> : '5'}
-                  </div>
-                  <h3 className="text-base font-extrabold text-white flex items-center gap-2">
-                    🎬 AI 영상 생성
-                    {!hasVideoSelection && <Lock className="w-4 h-4 text-zinc-400 ml-1" />}
-                    <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">
-                      {!hasVideoSelection ? '🔒 음원 생성 후 활성화' : '30초 영상 + 음원'}
-                    </span>
-                  </h3>
-                </div>
+            <div ref={step4CardRef} className="mt-5 p-5 rounded-3xl bg-black/60 border border-white/10 space-y-4">
+              <div className="p-4 rounded-2xl bg-zinc-950/70 border border-white/10 space-y-3">
+                <details className="space-y-3">
+                  <summary className="cursor-pointer text-xs font-bold text-zinc-300">추가 설정 · 기존 음원 / 영상 기획</summary>
 
-                {/* 하이브리드 자동화 토글 버튼 (기본: OFF 🔴) */}
-                <div className="flex items-center gap-2.5 bg-black/40 border border-white/10 px-3 py-1.5 rounded-full">
-                  <span className="text-[11px] font-bold text-zinc-300">음원 생성 시 자동 비디오 연동</span>
-                  <button
-                    type="button"
-                    onClick={() => setAutoGrokVideo(!autoGrokVideo)}
-                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                      autoGrokVideo ? 'bg-fuchsia-500' : 'bg-zinc-700'
-                    }`}
-                  >
-                    <span
-                      className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-lg ring-0 transition duration-200 ease-in-out ${
-                        autoGrokVideo ? 'translate-x-4' : 'translate-x-0'
-                      }`}
-                    />
-                  </button>
-                  <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded ${autoGrokVideo ? 'bg-fuchsia-500/20 text-fuchsia-300' : 'bg-zinc-800 text-zinc-300'}`}>
-                    {autoGrokVideo ? 'ON (자동)' : 'OFF (수동 검증)'}
-                  </span>
-                </div>
-              </div>
-
-                <div className="p-4 rounded-2xl bg-zinc-950/70 border border-white/10 space-y-3">
                   {/* 대상 음원 선택 셀렉트 드롭다운 */}
                   <div className="flex items-center justify-between text-xs text-zinc-300 bg-black/60 border border-white/10 px-3.5 py-2.5 rounded-xl flex-wrap gap-2.5">
                     <label className="flex items-center gap-1.5 font-black text-fuchsia-400 shrink-0">
@@ -2695,8 +2812,8 @@ function ViralTrendZoneStudio() {
                     </label>
                     <select
                       value={selectedGrokTrackId || (selectedGrokTrack?.id ? String(selectedGrokTrack.id) : storyTrackId || '')}
-                      disabled={isGeneratingGrokVideo}
-                      onChange={(e) => setSelectedGrokTrackId(e.target.value)}
+                      disabled={studioBusy}
+                      onChange={(e) => { void handleLoadViralTrack(e.target.value); }}
                       className="bg-zinc-900 text-white font-bold border border-fuchsia-500/50 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-fuchsia-400 flex-1 min-w-[220px] cursor-pointer shadow-sm hover:border-fuchsia-400 transition-colors"
                     >
                       <option value="">음원을 생성하거나 선택해 주세요</option>
@@ -2706,12 +2823,7 @@ function ViralTrendZoneStudio() {
                           ✨ [방금 생성된 곡] {generatedResult.title}
                         </option>
                       )}
-                      {currentPlayingTrack && String(currentPlayingTrack.id) !== String(generatedResult?.id) && (
-                        <option value={String(currentPlayingTrack.id)}>
-                          🎧 [현재 재생 중] {currentPlayingTrack.title || currentPlayingTrack.name}
-                        </option>
-                      )}
-                      {availableTracks.map((t) => (
+                      {availableTracks.filter(t => t.user_id === petUserId && readViralBrief(t)?.categoryId === genCategory).map((t) => (
                         <option key={t.id} value={String(t.id)}>
                           🎵 {t.title || '바이럴 음원'} ({t.genre || t.tags?.[0] || 'Master Quality'})
                         </option>
@@ -2729,7 +2841,7 @@ function ViralTrendZoneStudio() {
                     <button
                       type="button"
                       onClick={handleTuneGrokPrompt}
-                      disabled={isTuningPrompt || isGeneratingGrokVideo || storyVideoFrozen}
+                      disabled={isTuningPrompt || studioBusy || storyVideoFrozen || !selectedGrokTrack}
                       className="text-[11px] font-bold text-cyan-400 hover:text-cyan-300 flex items-center gap-1.5 px-3 py-1 rounded-lg bg-cyan-950/40 border border-cyan-500/30 hover:bg-cyan-900/50 transition-all disabled:opacity-50"
                     >
                       {isTuningPrompt ? (
@@ -2749,34 +2861,13 @@ function ViralTrendZoneStudio() {
                   <textarea
                     rows={4}
                     value={grokVideoPrompt}
-                    onChange={(e) => setGrokVideoPrompt(e.target.value)}
-                    disabled={isGeneratingGrokVideo || storyVideoFrozen}
+                    onChange={(e) => { if (selectedGrokTrack) grokPromptRequest.trackId = String(selectedGrokTrack.id); setGrokVideoPrompt(e.target.value); }}
+                    disabled={studioBusy || storyVideoFrozen}
                     placeholder="자막 없는 30초 영상의 장면과 동작을 입력해 주세요."
                     className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500/50 resize-none font-mono leading-relaxed"
                   />
 
-                  {/* 🚀 [Step 5 메인 액션 버튼] Grok 30초 AI 비디오 생성 버튼 */}
-                  <div className="relative pt-1">
-                    <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 opacity-50 blur-xl animate-pulse pointer-events-none" />
-                    <button
-                      type="button"
-                      onClick={() => handleGenerateGrokVideo()}
-                      disabled={isGeneratingGrokVideo || !hasVideoSelection}
-                      className="relative w-full py-4.5 rounded-2xl text-base font-black tracking-tight flex items-center justify-center gap-2.5 transition-all bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 hover:from-fuchsia-500 hover:to-indigo-500 text-white border border-fuchsia-400/60 shadow-[0_0_35px_rgba(217,70,239,0.5)] hover:shadow-[0_0_50px_rgba(217,70,239,0.7)] hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50 cursor-pointer"
-                    >
-                      {isGeneratingGrokVideo ? (
-                        <>
-                          <RefreshCw className="w-5 h-5 animate-spin text-fuchsia-300" />
-                          <span>{durableStoryMode ? viralStoryProgressLabel(storyVideoJob) : 'Grok Imagine 30초 AI 비디오 렌더링 중...'} ({grokVideoProgress}%)</span>
-                        </>
-                      ) : (
-                        <>
-                          <Film className="w-5 h-5 text-yellow-300 animate-bounce" />
-                          <span>{durableStoryMode ? storyVideoActionLabel : '30초 AI 영상 생성 시작하기 (클릭)'}</span>
-                        </>
-                      )}
-                    </button>
-                  </div>
+                </details>
 
                   {/* 🎬 2단계 비디오 결과 표시 영역 */}
                   {isGeneratingGrokVideo ? (
@@ -2788,18 +2879,10 @@ function ViralTrendZoneStudio() {
                   ) : grokVideoError ? (
                     <div className="p-6 rounded-2xl bg-zinc-900/90 border border-red-500/40 flex flex-col items-center justify-center text-center space-y-3 shadow-inner">
                       <AlertTriangle className="w-8 h-8 text-red-400" />
-                      <p className="text-sm font-extrabold text-red-300">⚠️ Grok 영상 생성 실패</p>
+                      <p className="text-sm font-extrabold text-red-300">⚠️ 영상 작업 확인 필요</p>
                       <p className="text-xs text-zinc-300 max-w-md break-all">{grokVideoError}</p>
                       <p className="text-[11px] text-zinc-400">{durableStoryMode ? '음원과 저장된 영상 단계를 유지합니다. 요청 상태를 확인한 뒤 이어갑니다.' : '음원은 정상 생성되었습니다. 영상만 재시도할 수 있습니다.'}</p>
-                      <button
-                        type="button"
-                        onClick={() => handleGenerateGrokVideo()}
-                        disabled={isGeneratingGrokVideo}
-                        className="mt-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-600 to-purple-600 hover:from-fuchsia-500 hover:to-purple-500 text-white text-sm font-extrabold flex items-center gap-2 shadow-lg transition-all active:scale-95 disabled:opacity-50"
-                      >
-                        <RotateCcw className="w-4 h-4" />
-                        🎬 {durableStoryMode ? '저장된 작업 상태 확인 · 이어가기' : '영상만 재시도 (음원 유지)'}
-                      </button>
+
                     </div>
                   ) : durableStoryMode && storyVideoJob && storyVideoJob.status !== 'completed' ? (
                     <div role="status" className="p-6 rounded-2xl bg-zinc-900/90 border border-fuchsia-500/40 text-center space-y-3 shadow-inner">
@@ -2814,7 +2897,7 @@ function ViralTrendZoneStudio() {
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <span className="text-xs font-bold text-cyan-300 flex items-center gap-1.5">
                           <Check className="w-4 h-4 text-cyan-400" />
-                          Grok 코믹 AI 비디오 + 멜로디오 음원 결합 완료!
+                          30초 영상과 음원 결합 완료
                         </span>
                         <div className="flex items-center gap-2">
                           {grokVideoDuration > 0 && (
@@ -2835,14 +2918,7 @@ function ViralTrendZoneStudio() {
                           >
                             <Download className="w-3.5 h-3.5" /> 쇼츠 MP4 다운로드
                           </a>
-                          <button
-                            type="button"
-                            onClick={() => handleGenerateGrokVideo()}
-                            disabled={isGeneratingGrokVideo}
-                            className="text-[11px] font-bold text-white px-3.5 py-1.5 rounded-lg bg-fuchsia-600 hover:bg-fuchsia-500 flex items-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50"
-                          >
-                            <RotateCcw className="w-3.5 h-3.5" /> {durableStoryMode ? '완료 영상 확인' : '영상 재생성'}
-                          </button>
+
                         </div>
                       </div>
 

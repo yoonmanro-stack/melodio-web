@@ -120,14 +120,16 @@ function studioHarness(initialJob = null, overrides = {}) {
     setTimeout(callback, delay) { delays.push(delay); queueMicrotask(callback); return 1; },
     async fetch(url, options) {
       requests.push({ url, body: options?.body ? JSON.parse(options.body) : null });
-      const next = overrides.reply ? overrides.reply(requests.at(-1), requests.length) : initialJob;
+      const next = overrides.reply ? await overrides.reply(requests.at(-1), requests.length) : initialJob;
       if (!next) throw new Error('No offline reply configured');
       return { ok: true, json: async () => ({ success: true, job: next }) };
     },
   }, react).default;
   function render(nextProps = {}) { Object.assign(props, nextProps); stateCursor = 0; refCursor = 0; effectCursor = 0; return component(props); }
   function flushEffects() { effects.splice(0).forEach(effect => effect()); }
-  return { render, flushEffects, effects, requests, delays, storageReads, storageWrites, completed, busy, states };
+  return { render, flushEffects, effects, requests, delays, storageReads, storageWrites, completed, busy, states,
+    unmount() { cleanups.forEach(cleanup => cleanup?.()); },
+  };
 }
 async function settle(check) {
   for (let i = 0; i < 30; i++) { if (check()) return; await new Promise(resolve => setImmediate(resolve)); }
@@ -324,7 +326,8 @@ function petGenerationHarness(overrides = {}) {
     genCategory: 'pet', petEpisode: fixture, customLyrics: fixture.lyrics, optimizedPrompt: fixture.stylePrompt, planIsCurrent: true,
     petPlanLocked: false, generatedResult: null, selectedVocal: 'Talk-Sung', selectedGenre: 'fixture', selectedMood: 'Quiet',
     petUserId: 'owner-A', petAccountRef: { current: 'owner-A' }, petCategoryRef: { current: 'pet' },
-    petPlanningRequest: { current: 0 },
+    petPlanningRequest: { current: 0 }, audioGenerationRef: { current: null }, pendingAudioRef: { current: null },
+    readCategoryBriefExtras() { return {}; },
     VIRAL_GENRE_PROMPT_MAP: {}, CATEGORY_TITLES: { pet: '댕냥이' }, CATEGORY_THUMBNAIL_MAP: { pet: 'https://example.invalid/poster.png' }, brandName: '', producerBrief: null, customTopic: fixture.sourceTopic,
     effectiveIsPublic: false, validatePetEpisode: contract.validatePetEpisode,
     setPetTrackId(value) { trackIds.push(value); },
@@ -431,16 +434,24 @@ test('dashboard shows owned pet audio work awaiting video with accurate states a
 
 function requestedTrackHarness(overrides = {}) {
   const opened = [], categories = [];
-  const effect = pageDeclaration('loadRequestedPetTrack').parent.parent;
+  let effect;
+  function visit(node) {
+    if (ts.isCallExpression(node) && node.expression.getText(pageSource) === 'useEffect'
+      && node.arguments[0]?.getText(pageSource).includes('petOpeningTrackRequest.current = requestKey')) effect = node.arguments[0];
+    ts.forEachChild(node, visit);
+  }
+  visit(pageSource); assert.ok(effect, 'Use the actual requested-track effect');
   const module = { exports: {} };
   const bindings = {
     requestedPetTrackId: 'owned-track', petUserId: 'owner-A', petOwnedTracksOwner: 'owner-A', petOwnedTracksStatus: 'ready',
     petAccountRef: { current: 'owner-A' }, isGenerating: false, isGeneratingGrokVideo: false, isOptimizing: false, genCategory: 'pet',
-    petOwnedTracks: [{ id: 'owned-track', user_id: 'owner-A', status: 'completed', petEpisode: fixture }],
-    petOpenedTrackRequests: { current: new Set() }, readPetEpisode: editor.readPetEpisode,
-    setGenCategory(value) { categories.push(value); }, handleLoadPetTrack(id) { opened.push(id); }, ...overrides,
+    petOwnedTracks: [{ id: 'owned-track', user_id: 'owner-A', status: 'completed', audio_url: 'https://example.invalid/owned.mp3', petEpisode: fixture }],
+    explicitCategorySelection: { current: null }, petOpeningTrackRequest: { current: null }, petTrackId: null, generatedResult: null,
+    readPetEpisode: editor.readPetEpisode,
+    setGenCategory(value) { categories.push(value); }, async handleLoadPetTrack(id) { opened.push(id); bindings.petTrackId = id; bindings.generatedResult = { id }; }, ...overrides,
   };
-  vm.runInNewContext(compile(`module.exports = (${effect.getText(pageSource)});`, 'requested-track-effect.ts'), { ...bindings, module, exports: module.exports });
+  Object.assign(bindings, { module, exports: module.exports });
+  vm.runInNewContext(compile(`module.exports = (${effect.getText(pageSource)});`, 'requested-track-effect.ts'), bindings);
   return { run: module.exports, opened, categories, bindings };
 }
 
@@ -479,13 +490,13 @@ function petTrackLoadHarness(overrides = {}) {
 function completedAudioCardHarness(overrides = {}) {
   let card;
   function visit(node) {
-    if (ts.isBinaryExpression(node) && node.left.getText(pageSource) === 'generatedResult'
+    if (ts.isBinaryExpression(node) && node.left.getText(pageSource).includes('generatedResult ||')
       && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken
-      && node.right.getText(pageSource).includes('MP3 음원 다운로드')) card = node;
+      && node.right.getText(pageSource).includes('<PetVideoStudio')) card = node;
     ts.forEachChild(node, visit);
   }
   visit(pageSource); assert.ok(card, 'Use the actual completed-audio card');
-  const declarations = ['petCurrentEpisode', 'petLinkedEpisode', 'petMatchingTrackId', 'completedOwnedPetAudio', 'canContinueToVideo']
+  const declarations = ['petCurrentEpisode', 'petLinkedEpisode', 'petMatchingTrackId', 'completedOwnedPetAudio']
     .map(name => `const ${pageDeclaration(name).getText(pageSource)};`).join('\n');
   const scrolls = [], module = { exports: {} };
   vm.runInNewContext(compile(`${declarations}\nmodule.exports = ${card.getText(pageSource)};`, 'completed-audio-card.tsx'), {
@@ -493,13 +504,15 @@ function completedAudioCardHarness(overrides = {}) {
     petUserId: 'owner-A', petDraftOwner: 'owner-A', petOwnedTracksOwner: 'owner-A', petOwnedTracksStatus: 'loading', petOwnedTracks: [],
     petEpisode: fixture, customLyrics: fixture.lyrics, optimizedPrompt: fixture.stylePrompt, genCategory: 'pet',
     generatedResult: null, petLinkedTrack: null, audioDuration: 27.7, isGenerating: false, isGeneratingGrokVideo: false,
+    petTrackId: null, petStartRequest: null, PetVideoStudio: editor.default,
+    handlePetVideoState() {}, handlePetRequestSettled() {}, setIsGeneratingGrokVideo() {}, setPetPlanLocked() {}, handlePetCompleted() {},
     isPlaying: false, currentPlayingTrack: null, readPetEpisode: editor.readPetEpisode, togglePlay() {},
     step4CardRef: { current: { scrollIntoView(value) { scrolls.push(value); } } }, ...overrides,
   });
   return { tree: module.exports, scrolls };
 }
 
-test('completed pet audio shows one lower CTA even while the owned list loads or fails', async () => {
+test('completed pet audio delegates to the scoped studio and has no duplicate Step 5 CTA', async () => {
   const generated = petGenerationHarness({ reply(url) {
     return { ok: true, json: async () => url === '/api/generate'
       ? { success: true, track: { id: 'new-pet-track' } }
@@ -510,29 +523,72 @@ test('completed pet audio shows one lower CTA even while the owned list loads or
   assert.equal(generated.calls.setIsGenerating.at(-1), false);
   for (const petOwnedTracksStatus of ['loading', 'error']) {
     const card = completedAudioCardHarness({ ...completed, petOwnedTracksStatus });
-    const buttons = walk(card.tree, node => node.type === 'button' && label(node).trim() === 'Step 5 영상 생성하기');
-    assert.equal(buttons.length, 1);
-    assert.equal(React.Children.toArray(buttons[0].props.children).filter(React.isValidElement).length, 1);
+    const studio = walk(card.tree, node => node.type === editor.default);
+    assert.equal(studio.length, 1);
+    assert.equal(studio[0].props.externalControl, true); assert.equal(studio[0].props.compact, true);
+    assert.equal(studio[0].props.trackId, 'new-pet-track'); assert.equal(studio[0].props.userId, 'owner-A');
+    assert.equal(typeof studio[0].props.onStateChange, 'function'); assert.equal(typeof studio[0].props.onRequestSettled, 'function');
+    assert.equal(studio[0].props.startRequest, null);
+    assert.equal(findButton(card.tree, 'Step 5 영상 생성하기'), undefined);
     const html = renderToStaticMarkup(card.tree);
-    assert.ok(html.indexOf('Step 5 영상 생성하기') > html.indexOf('MP3 음원 다운로드'));
-    buttons[0].props.onClick();
-    assert.deepEqual(card.scrolls.map(scroll => scroll.behavior), ['smooth']);
+    assert.equal(html.includes('Step 5 영상 생성하기'), false);
+    assert.deepEqual(card.scrolls, []);
   }
   for (const context of [
-    { isGenerating: true }, { isGeneratingGrokVideo: true }, { petUserId: 'owner-B' }, { petDraftOwner: 'owner-B' },
+    { petUserId: 'owner-B' }, { petDraftOwner: 'owner-B' },
     { petLinkedTrack: { ...completed.petLinkedTrack, user_id: 'owner-B' } },
     { petLinkedTrack: { ...completed.petLinkedTrack, status: 'generating' } },
     { petLinkedTrack: { ...completed.petLinkedTrack, id: 'other-track' } }, { generatedResult: null },
-  ]) assert.equal(findButton(completedAudioCardHarness({ ...completed, ...context }).tree, 'Step 5 영상 생성하기'), undefined);
+  ]) {
+    const card = completedAudioCardHarness({ ...completed, ...context });
+    assert.equal(findButton(card.tree, 'Step 5 영상 생성하기'), undefined);
+    const studio = walk(card.tree, node => node.type === editor.default)[0];
+    if (studio) assert.equal(studio.props.trackId, null, 'Only matching completed owned audio can enter video creation');
+  }
 });
 
-test('loading an owned legacy 27.7-second track keeps the CTA when the list omits it', async () => {
+test('loading an owned legacy 27.7-second track connects the externally controlled studio when the list omits it', async () => {
   const track = { id: 'legacy-27.7s', user_id: 'owner-A', status: 'completed', audio_url: 'https://example.invalid/legacy.mp3', title: '기존 완료 음원', petEpisode: fixture };
   const loaded = petTrackLoadHarness({ reply: () => ({ ok: true, json: async () => ({ generation: track }) }) });
   await loaded.run(track.id);
   const card = completedAudioCardHarness({ generatedResult: loaded.calls.setGeneratedResult.at(-1), petLinkedTrack: loaded.calls.setPetLinkedTrack.at(-1), petOwnedTracksStatus: 'ready', petOwnedTracks: [] });
-  assert.ok(findButton(card.tree, 'Step 5 영상 생성하기'));
+  const studio = walk(card.tree, node => node.type === editor.default)[0];
+  assert.equal(studio.props.externalControl, true); assert.equal(studio.props.trackId, track.id);
+  assert.equal(findButton(card.tree, 'Step 5 영상 생성하기'), undefined);
   assert.ok(renderToStaticMarkup(card.tree).includes('27.7초'));
+});
+
+test('the single main video action owns creation while lyrics and account state control availability', () => {
+  const buttons = [];
+  function visit(node) {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(pageSource) === 'button'
+      && node.openingElement.attributes.properties.some(attribute => ts.isJsxAttribute(attribute)
+        && attribute.name.getText(pageSource) === 'onClick' && ts.isJsxExpression(attribute.initializer)
+        && attribute.initializer.expression?.getText(pageSource) === 'handleCreateVideo')) buttons.push(node);
+    ts.forEachChild(node, visit);
+  }
+  visit(pageSource); assert.equal(buttons.length, 1, 'Use one shared creation action across categories');
+  function render(overrides = {}) {
+    const clicks = [], module = { exports: {} };
+    vm.runInNewContext(compile(`module.exports = ${buttons[0].getText(pageSource)};`, 'single-main-action.tsx'), {
+      ...require('lucide-react'), module, exports: module.exports, require,
+      studioBusy: false, isOptimizing: false, planningAccountReady: true, planIsCurrent: true,
+      storyTrackId: null, petMatchingTrackId: null, singleVideoPhase: null, isGenerating: false, genProgress: 0,
+      isGeneratingGrokVideo: false, genCategory: 'pet', storyVideoJob: null, grokVideoProgress: 0, grokVideoResult: null,
+      storyClientState: { uncertain: false }, singleVideoError: '', petVideoStateRef: { current: null },
+      handleCreateVideo() { clicks.push('create-video'); }, ...overrides,
+    });
+    return { tree: module.exports, clicks };
+  }
+  const main = render(); assert.equal(label(main.tree), '영상 생성하기'); assert.equal(main.tree.props.disabled, false);
+  main.tree.props.onClick(); assert.deepEqual(main.clicks, ['create-video']);
+  for (const context of [{ studioBusy: true }, { isOptimizing: true }, { planningAccountReady: false }, { planIsCurrent: false }]) {
+    assert.equal(render(context).tree.props.disabled, true);
+  }
+  const audio = render({ singleVideoPhase: 'audio', isGenerating: true, studioBusy: true, genProgress: 20 });
+  assert.equal(label(audio.tree), '음원 준비 중… (20%)'); assert.equal(audio.tree.props['aria-busy'], true);
+  const recovery = render({ planIsCurrent: false, petMatchingTrackId: 'saved-track', singleVideoError: 'Saved work needs checking' });
+  assert.equal(recovery.tree.props.disabled, false); assert.ok(label(recovery.tree).includes('저장된 작업 상태 확인'));
 });
 
 test('opening pet audio verifies ownership and ignores responses after account or draft changes', async () => {
@@ -646,6 +702,139 @@ test('v4 render and completed restore never start work or autoplay media', async
   assert.equal(videos.length, 1); assert.equal(videos[0].props.controls, true); assert.notEqual(videos[0].props.autoPlay, true);
   assert.equal(findButton(tree, '영상 생성 승인'), undefined);
   assert.ok(label(tree).includes('30초 영상 만들기'));
+});
+
+test('external start waits for restoration and consumes one matching request only once', async () => {
+  const episode = v4Fixture(), states = [], settled = [];
+  const startRequest = { id: 'one-click', ownerId: 'owner-A', episodeId: episode.id, trackId: 'matching-v4-track' };
+  const harness = studioHarness(null, { props: { episode, trackId: startRequest.trackId, compact: true, externalControl: true,
+    startRequest, onStateChange: state => states.push(state), onRequestSettled: id => settled.push(id) },
+    reply(_request, count) { return count === 1 ? v4Job('generating') : v4Job('completed', { progress: 100, videoUrl: 'https://example.invalid/final-v4.mp4' }); },
+  });
+  assert.equal(findButton(harness.render(), 'Step 5 영상 생성하기'), undefined);
+  harness.flushEffects();
+  assert.equal(harness.requests.length, 0, 'Restoration must commit before the explicit request can start');
+  assert.equal(states.at(-1).loading, true);
+  harness.render(); harness.flushEffects();
+  harness.render({ startRequest: { ...startRequest } }); harness.flushEffects();
+  await settle(() => settled.length === 1);
+  harness.render({ onStateChange: state => states.push(state) }); harness.flushEffects();
+  const before = states.length;
+  harness.render({ onStateChange: state => states.push(state) }); harness.flushEffects();
+  assert.equal(states.length, before, 'Changing only parent callbacks must not publish duplicate state');
+  assert.deepEqual(settled, ['one-click']);
+  assert.deepEqual(harness.requests.map(request => request.body.action), ['create', 'advance']);
+  assert.equal(harness.completed.length, 1);
+  assert.equal(states.at(-1).canStart, false);
+});
+
+test('external requests reject foreign or stale owner, episode and track scopes without POST', () => {
+  const episode = v4Fixture(), settled = [];
+  const harness = studioHarness(null, { props: { episode, trackId: 'matching-v4-track', externalControl: true, onRequestSettled: id => settled.push(id) } });
+  harness.render(); harness.flushEffects(); harness.render(); harness.flushEffects();
+  for (const [index, mismatch] of [{ ownerId: 'owner-B' }, { episodeId: 'stale-episode' }, { trackId: 'stale-track' }].entries()) {
+    harness.render({ startRequest: { id: `stale-${index}`, ownerId: 'owner-A', episodeId: episode.id, trackId: 'matching-v4-track', ...mismatch } });
+    harness.flushEffects();
+  }
+  assert.deepEqual(settled, ['stale-0', 'stale-1', 'stale-2']);
+  assert.equal(harness.requests.length, 0);
+});
+
+test('pending external start waits for saved job GET and never recreates a completed job', async () => {
+  const episode = v4Fixture(), settled = []; let resolveRestore;
+  const harness = studioHarness(null, { savedJobId: 'fixture-v4-job', props: { episode, trackId: 'matching-v4-track', externalControl: true,
+    startRequest: { id: 'restore-click', ownerId: 'owner-A', episodeId: episode.id, trackId: 'matching-v4-track' }, onRequestSettled: id => settled.push(id) },
+    reply() { return new Promise(resolve => { resolveRestore = resolve; }); },
+  });
+  harness.render(); harness.flushEffects(); harness.render(); harness.flushEffects();
+  assert.equal(harness.requests.length, 1); assert.equal(harness.requests[0].body, null);
+  assert.equal(settled.length, 0);
+  resolveRestore(v4Job('completed', { videoUrl: 'https://example.invalid/saved.mp4' }));
+  await settle(() => harness.states[0]?.status === 'completed' && harness.states[2] === false);
+  harness.render(); harness.flushEffects();
+  assert.deepEqual(settled, ['restore-click']); assert.equal(harness.requests.length, 1);
+});
+
+test('pending external start continues a restored active job without a new create', async () => {
+  const episode = v4Fixture(), settled = []; let resolveRestore;
+  const harness = studioHarness(null, { savedJobId: 'fixture-v4-job', props: { episode, trackId: 'matching-v4-track', externalControl: true,
+    startRequest: { id: 'active-click', ownerId: 'owner-A', episodeId: episode.id, trackId: 'matching-v4-track' }, onRequestSettled: id => settled.push(id) },
+    reply(request) { return request.body ? v4Job('completed', { videoUrl: 'https://example.invalid/continued.mp4' }) : new Promise(resolve => { resolveRestore = resolve; }); },
+  });
+  harness.render(); harness.flushEffects(); harness.render(); harness.flushEffects();
+  assert.equal(harness.requests.length, 1); assert.equal(harness.requests[0].body, null);
+  resolveRestore(v4Job('generating')); await settle(() => harness.states[0]?.status === 'generating' && harness.states[2] === false);
+  harness.render(); harness.flushEffects(); await settle(() => settled.length === 1);
+  assert.deepEqual(harness.requests.map(request => request.body?.action ?? 'get'), ['get', 'advance']);
+  assert.equal(harness.completed.length, 1);
+});
+
+test('external resume requires an explicit new token and server-safe recovery', async () => {
+  const episode = v4Fixture();
+  for (const [status, canResume] of [['held', false], ['failed', false], ['held', true], ['review', false]]) {
+    const saved = v4Job(status, { canResume }), settled = [], states = [];
+    const harness = studioHarness(null, { savedJobId: saved.id, props: { episode, trackId: 'matching-v4-track', compact: true, externalControl: true,
+      onStateChange: state => states.push(state), onRequestSettled: id => settled.push(id) },
+      reply(request) { return request.body ? v4Job('completed', { videoUrl: 'https://example.invalid/resumed.mp4' }) : saved; },
+    });
+    harness.render(); harness.flushEffects(); await settle(() => harness.states[0]?.status === status && harness.states[2] === false);
+    const tree = harness.render(); harness.flushEffects();
+    assert.equal(harness.requests.length, 1, 'Mount may only read durable state');
+    assert.equal(states.at(-1).canStart, canResume);
+    assert.equal(findButton(tree, '저장된 결과로 제작 이어가기'), undefined);
+    assert.equal(findButton(tree, '상태 다시 확인')?.type, 'button');
+    harness.render({ startRequest: { id: `${status}-${canResume}`, ownerId: 'owner-A', episodeId: episode.id, trackId: 'matching-v4-track' } }); harness.flushEffects();
+    await settle(() => settled.length === 1);
+    assert.deepEqual(harness.requests.map(request => request.body?.action ?? 'get'), canResume ? ['get', 'resume'] : ['get']);
+  }
+  const legacy = studioHarness(job('review'), { props: { externalControl: true } });
+  assert.ok(findButton(legacy.render(), '6장면 확인 완료 · 영상 생성 승인'), 'Legacy six-clip approval remains explicit');
+});
+
+test('failed saved-job restore blocks external create and offers a read-only status retry', async () => {
+  const episode = v4Fixture(), settled = [], states = []; let reads = 0;
+  const harness = studioHarness(null, { savedJobId: 'fixture-v4-job', props: { episode, trackId: 'matching-v4-track', externalControl: true,
+    onStateChange: state => states.push(state), onRequestSettled: id => settled.push(id) },
+    reply() { if (++reads === 1) throw new Error('Offline restore failure'); return v4Job('held', { canResume: false }); },
+  });
+  harness.render(); harness.flushEffects(); await settle(() => harness.states[2] === false && harness.states[3] !== '');
+  const tree = harness.render(); harness.flushEffects();
+  assert.equal(states.at(-1).canStart, false);
+  harness.render({ startRequest: { id: 'blocked-create', ownerId: 'owner-A', episodeId: episode.id, trackId: 'matching-v4-track' } }); harness.flushEffects();
+  assert.deepEqual(settled, ['blocked-create']); assert.equal(harness.requests.length, 1);
+  findButton(tree, '상태 다시 확인').props.onClick(); harness.render(); harness.flushEffects();
+  await settle(() => harness.states[0]?.status === 'held');
+  assert.ok(harness.requests.every(request => request.body === null));
+});
+
+test('uncertain external response is not retried by parent rerenders or the same token', async () => {
+  const episode = v4Fixture(), settled = [];
+  const startRequest = { id: 'uncertain-click', ownerId: 'owner-A', episodeId: episode.id, trackId: 'matching-v4-track' };
+  const harness = studioHarness(null, { props: { episode, trackId: startRequest.trackId, externalControl: true, startRequest, onRequestSettled: id => settled.push(id) },
+    reply() { throw new Error('Submission response unavailable'); },
+  });
+  harness.render(); harness.flushEffects(); harness.render(); harness.flushEffects();
+  await settle(() => settled.length === 1);
+  for (let i = 0; i < 3; i++) { harness.render({ startRequest: { ...startRequest } }); harness.flushEffects(); }
+  assert.equal(harness.requests.length, 1); assert.equal(harness.requests[0].body.action, 'create');
+  assert.equal(harness.states[1], false);
+});
+
+test('owner change and unmount cancel in-flight external progression and stale callbacks', async () => {
+  const episode = v4Fixture();
+  for (const change of ['owner', 'unmount']) {
+    const settled = []; let resolveCreate;
+    const harness = studioHarness(null, { props: { episode, trackId: 'matching-v4-track', externalControl: true,
+      startRequest: { id: 'cancel-click', ownerId: 'owner-A', episodeId: episode.id, trackId: 'matching-v4-track' }, onRequestSettled: id => settled.push(id) },
+      reply() { return new Promise(resolve => { resolveCreate = resolve; }); },
+    });
+    harness.render(); harness.flushEffects(); harness.render(); harness.flushEffects();
+    assert.equal(harness.requests.length, 1);
+    if (change === 'owner') { harness.render({ userId: 'owner-B', startRequest: null }); harness.flushEffects(); }
+    else harness.unmount();
+    resolveCreate(v4Job('generating')); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(harness.requests.length, 1); assert.equal(harness.storageWrites.length, 0); assert.equal(harness.completed.length, 0); assert.equal(settled.length, 0);
+  }
 });
 
 test('new v3 work uses the 30-second CTA while saved six-image jobs retain explicit approval', () => {
@@ -819,7 +1008,8 @@ test('Step 3 keeps one input path and clear one-icon actions', () => {
   assert.match(source, /const generationCategory = genCategory/);
   assert.match(source, /petCategoryRef\.current === generationCategory/);
   assert.doesNotMatch(source, /const isCurrentPetGeneration =/);
-  assert.match(source, /petPlanningRequest\.current \+= 1;\s*\/\/[\s\S]*?setIsGenerating\(false\); setGenProgress\(0\);/);
+  assert.match(source, /singleVideoGateRef\.current\?\.cancel\(\); audioGenerationRef\.current\?\.\(\);/);
+  assert.match(source, /setIsGenerating\(false\); setGenProgress\(0\);/);
   assert.match(source, /onChange=\{\(e\) => handleLyricsChange\(e\.target\.value\)\}/);
   assert.match(source, /onChange=\{\(e\) => handleOptimizedPromptChange\(e\.target\.value\)\}/);
   assert.match(source, /다시 기획하기/);

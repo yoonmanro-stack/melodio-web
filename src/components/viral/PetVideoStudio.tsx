@@ -113,12 +113,31 @@ export function PetEpisodeEditor({ episode, onChange, disabled = false }: {
   );
 }
 
+export interface PetVideoExternalStartRequest {
+  id: string;
+  ownerId: string;
+  episodeId: string;
+  trackId: string;
+}
+
+export interface PetVideoExternalState {
+  busy: boolean;
+  loading: boolean;
+  canStart: boolean;
+  job: PetVideoJobView | null;
+  error: string;
+}
+
 interface Props {
   userId: string | null;
   episode: PetEpisode | null;
   trackId: string | null;
   trackTitle?: string;
   compact?: boolean;
+  externalControl?: boolean;
+  startRequest?: PetVideoExternalStartRequest | null;
+  onStateChange?: (state: PetVideoExternalState) => void;
+  onRequestSettled?: (id: string) => void;
   onBusyChange: (busy: boolean) => void;
   onLockedChange: (locked: boolean) => void;
   onCompleted: (job: PetVideoJobView) => void;
@@ -150,21 +169,27 @@ function AssetIssue({ error, imageQuality, canResume }: { error?: string; imageQ
   </div> : <p className="text-xs text-amber-200">{error}</p>;
 }
 
-export default function PetVideoStudio({ userId, episode, trackId, trackTitle, compact = false, onBusyChange, onLockedChange, onCompleted }: Props) {
+export default function PetVideoStudio({ userId, episode, trackId, trackTitle, compact = false, externalControl = false, startRequest, onStateChange, onRequestSettled, onBusyChange, onLockedChange, onCompleted }: Props) {
   const [job, setJob] = useState<PetVideoJobView | null>(null);
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [motionDraft, setMotionDraft] = useState<{ scope: string | null; values: Record<string, string> }>({ scope: null, values: {} });
+  const [restoredScope, setRestoredScope] = useState<string | null>(null);
+  const [restoreFailed, setRestoreFailed] = useState(false);
+  const [restoreAttempt, setRestoreAttempt] = useState(0);
   const mounted = useRef(true);
   const running = useRef(false);
   const runId = useRef(0);
   const twoClip = !!episode && (!job || job.productionMode === 'two-clips');
   const productionShots = episode ? getPetProductionShots(episode) : [];
   const storageKey = userId && episode ? petVideoStorageKey(userId, episode) : null;
+  const scope = storageKey ? `${storageKey}:${trackId || ''}` : null;
   const motionScope = storageKey && job ? `${storageKey}:${job.id}` : null;
-  const callbacks = useRef({ onBusyChange, onLockedChange, onCompleted });
-  useEffect(() => { callbacks.current = { onBusyChange, onLockedChange, onCompleted }; }, [onBusyChange, onLockedChange, onCompleted]);
+  const callbacks = useRef({ onBusyChange, onLockedChange, onCompleted, onStateChange, onRequestSettled });
+  const handledRequests = useRef(new Set<string>());
+  const startHandler = useRef<((action?: 'approve' | 'resume') => Promise<void>) | null>(null);
+  useEffect(() => { callbacks.current = { onBusyChange, onLockedChange, onCompleted, onStateChange, onRequestSettled }; }, [onBusyChange, onLockedChange, onCompleted, onStateChange, onRequestSettled]);
   // Only a different job/account resets local edits. A status refresh of this job does not.
   useEffect(() => { setMotionDraft({ scope: motionScope, values: {} }); }, [motionScope]);
 
@@ -182,33 +207,34 @@ export default function PetVideoStudio({ userId, episode, trackId, trackTitle, c
     if (next.status === 'completed') callbacks.current.onCompleted(next);
   };
 
-  // Reload only reads durable state. A button is required to resume paid work.
+  // Reload only reads durable state. An explicit button request is required to resume paid work.
   useEffect(() => {
     let cancelled = false;
     runId.current += 1;
     running.current = false;
-    setJob(null); setError(''); setBusy(false);
+    setJob(null); setError(''); setBusy(false); setRestoredScope(null); setRestoreFailed(false);
     callbacks.current.onBusyChange(false);
     callbacks.current.onLockedChange(false);
     if (!storageKey) { setLoading(false); return; }
     let savedId: string | null = null;
     try { savedId = localStorage.getItem(storageKey); } catch { /* Storage may be unavailable. */ }
-    if (!savedId || !/^[a-zA-Z0-9_-]{1,100}$/.test(savedId)) { setLoading(false); return; }
+    if (!savedId || !/^[a-zA-Z0-9_-]{1,100}$/.test(savedId)) { setLoading(false); setRestoredScope(scope); return; }
     setLoading(true);
     fetch(`/api/viral-cf/pet-video?jobId=${encodeURIComponent(savedId)}`, { cache: 'no-store' })
       .then(async response => {
         const result = await response.json();
         if (!response.ok || !result.success || !result.job) throw new Error(result.error || '저장된 영상 상태를 불러오지 못했습니다.');
+        if (result.job.episodeId !== episode?.id) throw new Error('저장된 영상과 현재 콘티가 일치하지 않습니다.');
         if (!cancelled) {
           setJob(result.job);
           callbacks.current.onLockedChange(true);
           if (result.job.status === 'completed') callbacks.current.onCompleted(result.job);
         }
       })
-      .catch(reason => { if (!cancelled) setError(reason instanceof Error ? reason.message : '영상 상태를 확인해 주세요.'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
+      .catch(reason => { if (!cancelled) { setRestoreFailed(true); setError(reason instanceof Error ? reason.message : '영상 상태를 확인해 주세요.'); } })
+      .finally(() => { if (!cancelled) { setLoading(false); setRestoredScope(scope); } });
     return () => { cancelled = true; };
-  }, [storageKey]);
+  }, [storageKey, scope, episode?.id, restoreAttempt]);
 
   async function post(body: object): Promise<PetVideoJobView> {
     const response = await fetch('/api/viral-cf/pet-video', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
@@ -256,6 +282,7 @@ export default function PetVideoStudio({ userId, episode, trackId, trackTitle, c
   }
 
   async function refresh() {
+    if (!job && restoreFailed && !busy && !loading) { setRestoreAttempt(attempt => attempt + 1); return; }
     if (!job || busy) return;
     const currentRun = runId.current;
     setLoading(true); setError('');
@@ -269,6 +296,35 @@ export default function PetVideoStudio({ userId, episode, trackId, trackTitle, c
   }
 
   const ready = !!userId && !!episode && (!!job || !!trackId) && validatePetEpisode(episode).length === 0;
+  const restoring = restoredScope !== scope;
+  const canStart = ready && !busy && !loading && !restoring && !restoreFailed
+    && (!job || job.episodeId === episode?.id && (!stoppedStatuses.has(job.status) || job.status === 'held' && !!job.canResume));
+  useEffect(() => { startHandler.current = start; });
+  useEffect(() => {
+    callbacks.current.onStateChange?.({ busy, loading: loading || restoring, canStart, job: restoring ? null : job, error });
+  }, [busy, loading, restoring, canStart, job, error]);
+
+  const requestId = startRequest?.id;
+  const requestOwner = startRequest?.ownerId;
+  const requestEpisode = startRequest?.episodeId;
+  const requestTrack = startRequest?.trackId;
+  useEffect(() => {
+    if (!externalControl || !requestId || handledRequests.current.has(requestId)) return;
+    const matches = requestOwner === userId && requestEpisode === episode?.id && requestTrack === trackId && !!trackId;
+    if (matches && (loading || restoring)) return;
+    handledRequests.current.add(requestId);
+    if (!matches || running.current || !canStart) {
+      callbacks.current.onRequestSettled?.(requestId);
+      return;
+    }
+    // Reuse the synchronous guard and serial progression from the normal button.
+    // A held job can only resume when the server explicitly marks it safe.
+    const currentRun = runId.current + 1;
+    const request = startHandler.current?.(job?.canResume ? 'resume' : undefined);
+    void request?.finally(() => {
+      if (mounted.current && currentRun === runId.current) callbacks.current.onRequestSettled?.(requestId);
+    });
+  }, [externalControl, requestId, requestOwner, requestEpisode, requestTrack, userId, episode?.id, trackId, loading, restoring, canStart, job?.canResume]);
   const openingRecovery = !!job?.shots[0]?.keyframeUrl && job.shots.every(shot => !shot.videoUrl && !shot.requestId);
   const jobDetails = job ? <>
     <p className="break-all text-xs text-zinc-400">작업 {job.id} · 이미지·영상 예상 비용 ${job.estimatedCostUsd.toFixed(2)} · 기획·음원·참고 분석 별도</p>
@@ -308,9 +364,9 @@ export default function PetVideoStudio({ userId, episode, trackId, trackTitle, c
         <p className="text-xs text-zinc-300">{trackId ? `연결 음원: ${trackTitle || trackId}` : '이 콘티와 가사가 같은 음원을 Step 4에서 생성해 주세요.'}</p>
       </> : null}
       <p className="text-xs leading-relaxed text-zinc-300">{job?.status === 'completed' && !job.videoUrl?.includes('final-captionless-v1-') ? '자막과 효과 편집은 완성 영상을 다운로드한 후 캡컷에서 진행해 주세요.' : '음원이 포함된 자막 없는 30초 MP4를 제공합니다. 자막과 효과는 다운로드 후 캡컷에서 편집해 주세요.'}</p>
-      {!job ? compact && (loading || busy) ? (
+      {!job ? compact && (loading || busy || externalControl && restoring) ? (
         <p aria-live="polite" className="text-sm font-bold text-fuchsia-200">{loading ? '저장된 영상 작업 확인 중…' : '영상 제작을 준비하고 있습니다…'}</p>
-      ) : <button className={compact ? "w-full rounded-2xl border border-fuchsia-400/50 bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 px-4 py-4 text-base font-black text-white shadow-lg transition-all active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-100" : buttonClass} disabled={!ready} onClick={() => void start()}>{compact ? 'Step 5 영상 생성하기' : '30초 영상 만들기'}</button> : null}
+      ) : !externalControl ? <button className={compact ? "w-full rounded-2xl border border-fuchsia-400/50 bg-gradient-to-r from-fuchsia-600 via-purple-600 to-indigo-600 px-4 py-4 text-base font-black text-white shadow-lg transition-all active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-100" : buttonClass} disabled={!ready} onClick={() => void start()}>{compact ? 'Step 5 영상 생성하기' : '30초 영상 만들기'}</button> : null : null}
       {job ? (
         <>
           <div aria-live="polite" className="space-y-2">
@@ -324,13 +380,14 @@ export default function PetVideoStudio({ userId, episode, trackId, trackTitle, c
           </div> : jobDetails}
           {job.status === 'review' && !validMotionPrompts ? <p className="text-xs text-amber-200">6개 움직임 프롬프트를 모두 입력해 주세요. 각 문구는 5,000자 이하여야 합니다.</p> : null}
           {job.status === 'review' ? <button className={buttonClass} disabled={!ready || !allKeyframes || !validMotionPrompts || busy || loading} onClick={() => void start('approve')}>2. 6장면 확인 완료 · 영상 생성 승인</button> : null}
-          {!stoppedStatuses.has(job.status) && !busy ? <button className={buttonClass} disabled={!ready || loading} onClick={() => void start()}>저장된 단계부터 이어서 진행</button> : null}
+          {!externalControl && !stoppedStatuses.has(job.status) && !busy ? <button className={buttonClass} disabled={!ready || loading} onClick={() => void start()}>저장된 단계부터 이어서 진행</button> : null}
           {job.status === 'failed' || job.status === 'held' ? <p className="text-sm text-amber-200">작업이 멈췄습니다. 상태를 확인해 주세요. 같은 장면을 자동으로 다시 결제하지 않습니다.</p> : null}
-          {job.canResume ? <button className={buttonClass} disabled={!ready || busy || loading} onClick={() => void start('resume')}>{twoClip ? openingRecovery ? '저장된 이미지로 영상 제작 이어가기' : '저장된 결과로 제작 이어가기' : '저장된 결과로 다시 합성/보관'}</button> : null}
+          {!externalControl && job.canResume ? <button className={buttonClass} disabled={!ready || busy || loading} onClick={() => void start('resume')}>{twoClip ? openingRecovery ? '저장된 이미지로 영상 제작 이어가기' : '저장된 결과로 제작 이어가기' : '저장된 결과로 다시 합성/보관'}</button> : null}
           {job.status !== 'completed' ? <button className="text-xs text-zinc-300 underline disabled:opacity-100" disabled={busy || loading} onClick={() => void refresh()}>상태 다시 확인</button> : null}
           {job.status === 'completed' && mediaUrl(job.videoUrl) ? <div className="space-y-3"><video controls playsInline preload="metadata" src={mediaUrl(job.videoUrl)} onPlay={event => registerActiveAudio(event.currentTarget)} className="mx-auto max-h-[560px] max-w-full rounded-xl" /><a className="inline-block text-sm text-fuchsia-300 underline" href={mediaUrl(job.videoUrl)} download>완성 영상 다운로드 · {job.durationSeconds ?? 30}초</a></div> : null}
         </>
       ) : null}
+      {!job && restoreFailed ? <button className="text-xs text-zinc-300 underline disabled:opacity-100" disabled={busy || loading} onClick={() => void refresh()}>상태 다시 확인</button> : null}
       {error ? <p role="alert" className="text-sm text-amber-200">{error}</p> : null}
     </section>
   );

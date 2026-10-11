@@ -4,6 +4,7 @@ import { getCategoryMatrix, pickProtagonist } from '@/lib/vle/viralCategoryMatri
 import { buildCategoryQualityInstructions, getCategoryQualityDirection } from '@/lib/vle/categoryQualityDirection';
 import { createClient } from '@/lib/supabase/server';
 import { readPetBoundedBody } from '@/lib/video/petMedia';
+import { compileViralStoryPrompts, VIRAL_STORY_CATEGORIES } from '@/lib/video/viralStoryPipeline';
 import {
   CategorySpecV2,
   getCategorySpec,
@@ -14,6 +15,20 @@ import {
 
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY ?? '';
 export const maxDuration = 90;
+const STORY_PROMPT_PATTERN = /^[ -~]{900,1800}$/;
+const STORY_PROMPT_RESPONSE_FORMAT = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'viral_story_prompt',
+    strict: true,
+    schema: {
+      type: 'object',
+      properties: { prompt: { type: 'string', pattern: STORY_PROMPT_PATTERN.source } },
+      required: ['prompt'],
+      additionalProperties: false,
+    },
+  },
+};
 
 /**
  * 가사에서 영상 장면 비트를 뽑는다.
@@ -162,6 +177,7 @@ export async function POST(request: NextRequest) {
 
     const targetCategory = category || 'trend';
     if (!getCategoryQualityDirection(targetCategory) && !['ai_future', 'dance'].includes(targetCategory)) return NextResponse.json({ error: '카테고리를 확인해 주세요.' }, { status: 400 });
+    const storyCategory = VIRAL_STORY_CATEGORIES.some(id => id === targetCategory);
     const cleanTitle = (title || 'Viral Short Track').replace(/^\[Viral\]\s*/i, '').trim();
     const cleanGenre = genre || 'K-Pop Parody';
 
@@ -221,7 +237,7 @@ ${creativePlan ? `APPROVED COMPLETE PRODUCTION CONTRACT (creative data): ${JSON.
 Selected category: ${categoryMatrix.name}. If the song does not specify a protagonist, use the category casting rule; the optional anchor is ${protagonist}.
 ${styleSeed}
 
-Return one actionable English video prompt of 900–1800 characters, maximum2400. Include: exact original cast identities and stable positions; setting and necessary props; immediate visible0–2s hook; physical development; the causal reveal/payoff; a resolved final reaction. Both fifteen-second halves belong to this same story. Choose restrained or energetic camera motion to suit this category and song, never mandatory fisheye or crash zooms. Maintain natural contact, appropriate anatomy and believable object quantity. No floating objects, transformations, unmotivated cuts or extra characters. Original silent visual only: no generated speech/music/text/logos/captions. For an existing song, do not invent a new joke, rewrite lyrics or claim measured beat synchronization. Output only the prompt without markdown or commentary.`;
+${storyCategory ? 'Return one actionable English video prompt of 900-1800 printable ASCII characters. Use one paragraph without line breaks; romanize names where needed while preserving the exact approved identities and situation. Do not pad the prompt with whitespace or irrelevant prose.' : 'Return one actionable English video prompt of 900–1800 characters, maximum2400.'} Include: exact original cast identities and stable positions; setting and necessary props; immediate visible0–2s hook; physical development; the causal reveal/payoff; a resolved final reaction. Both fifteen-second halves belong to this same story. Choose restrained or energetic camera motion to suit this category and song, never mandatory fisheye or crash zooms. Maintain natural contact, appropriate anatomy and believable object quantity. No floating objects, transformations, unmotivated cuts or extra characters. Original silent visual only: no generated speech/music/text/logos/captions. For an existing song, do not invent a new joke, rewrite lyrics or claim measured beat synchronization. ${storyCategory ? 'Return only the strict JSON object {"prompt":"..."}, with no additional fields, markdown or commentary.' : 'Output only the prompt without markdown or commentary.'}`;
 
     const userContent = `[Song Title]: ${cleanTitle}
 [Genre]: ${cleanGenre}
@@ -248,6 +264,7 @@ ${lyrics || 'No specific lyrics provided'}`;
             ],
             reasoning_effort: 'low',
             max_completion_tokens: 4096,
+            ...(storyCategory ? { response_format: STORY_PROMPT_RESPONSE_FORMAT } : {}),
           }),
           signal: AbortSignal.timeout(75_000),
         });
@@ -255,15 +272,29 @@ ${lyrics || 'No specific lyrics provided'}`;
         if (res.ok) {
           const data = JSON.parse((await readPetBoundedBody(res, 32 * 1024)).toString('utf8'));
           const choice = data.choices?.[0];
-          if (choice?.finish_reason === 'stop' && !choice.message?.refusal && typeof choice.message?.content === 'string') generatedPrompt = choice.message.content.trim();
+          if (choice?.finish_reason === 'stop' && !choice.message?.refusal && typeof choice.message?.content === 'string') {
+            if (storyCategory) {
+              const result: unknown = JSON.parse(choice.message.content);
+              if (result && typeof result === 'object' && !Array.isArray(result) && Object.keys(result).length === 1
+                && Object.hasOwn(result, 'prompt') && typeof (result as { prompt: unknown }).prompt === 'string') {
+                generatedPrompt = (result as { prompt: string }).prompt;
+              }
+            } else generatedPrompt = choice.message.content.trim();
+          }
         } else { await res.body?.cancel(); }
       } catch {
         console.warn('[GrokPromptAPI]', { code: 'PROMPT_PROVIDER_FAILED' });
       }
     }
 
-    if (!generatedPrompt || generatedPrompt.length > 2400 || /data:|base64|[\u0000-\u0008\u000b\u000c\u000e-\u001f]/i.test(generatedPrompt)) {
+    if (!generatedPrompt.trim() || generatedPrompt.length > 2400 || /data:|base64|[\u0000-\u0008\u000b\u000c\u000e-\u001f]/i.test(generatedPrompt)) {
       throw new Error('GPT-5.6 Sol 영상 프롬프트를 완료하지 못했습니다.');
+    }
+    if (storyCategory) {
+      const promptBytes = Buffer.byteLength(generatedPrompt, 'utf8');
+      if (promptBytes < 900 || promptBytes > 1800 || /[^ -~]/.test(generatedPrompt)) throw new Error('영상 프롬프트 길이와 문자 형식을 확인해 주세요.');
+      // The same compiler used by job creation must accept both fifteen-second inputs.
+      compileViralStoryPrompts({ prompt: generatedPrompt, category: targetCategory, allowDance: false, cutCadenceSeconds: 1.5 });
     }
 
     return NextResponse.json({ prompt: generatedPrompt });
