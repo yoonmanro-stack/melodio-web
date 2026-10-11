@@ -120,9 +120,34 @@ test('exact interval intersections cover 30 seconds without retiming or replayin
   assert.match(clips[0].videoPrompt, /SOURCE ACTION CONTEXT \(6s total\):/);
   assert.match(clips[0].videoPrompt, /ACTION: Begin only source seconds 0-1; leave the action in progress for C2/);
   assert.doesNotMatch(clips[0].videoPrompt, /(?:^|\n)ACTION: The dog slowly pushes slipper A under the sofa/);
-  assert.match(clips[1].videoPrompt, /finish S4 without replaying completed movement/);
+  assert.match(clips[1].videoPrompt, /Finish only unfinished S4 changes; never undo a completed transfer/);
   assert.match(clips[1].videoPrompt, /CONTINUATION: perform only the remaining part/);
   assert.match(clips[1].videoPrompt, /ACTION: Continue only source seconds 1-6 from the bridge frame/);
+  assert.match(clips[1].videoPrompt, /BACKGROUND BEAT \(original start is not execution state\) \(6s total\):/);
+});
+
+test('a straddled prop transfer conserves identity and count while bridge ownership outranks its original start', () => {
+  const episode = fixture();
+  episode.character.owner = 'H1 is one adult owner with a short dark bob and navy sweater.';
+  episode.character.continuity = ['Exactly two blue slippers exist: A and B.', 'Slipper B stays beside the sofa; slipper A is the transferred object.'];
+  episode.shots[3].action = 'The dog begins with slipper A in its mouth, brings it to H1, and H1 accepts the same slipper as the dog lets go; slipper B remains beside the sofa.';
+  episode.shots[4].action = 'H1 examines slipper A while the dog waits beside her.';
+  episode.shots[5].action = 'H1 smiles at the dog while holding slipper A; slipper B is still beside the sofa.';
+  const original = structuredClone(episode);
+  const [first, second] = compileLegacyPetClips(episode);
+  for (const clip of [first, second]) {
+    assert.match(clip.videoPrompt, /essential prop identity, count and holder/);
+    assert.match(clip.videoPrompt, /Keep moved and untouched objects distinct; no morphing or duplication unless authored/);
+    assert.match(clip.videoPrompt, /Show transfers with giver release/);
+    assert.ok(clip.videoPrompt.includes(episode.character.continuity[0]));
+    assert.ok(clip.videoPrompt.length <= 4096);
+  }
+  assert.match(second.videoPrompt, /Bridge-frame visible prop holder\/position takes priority over original beat starts/);
+  assert.ok(second.videoPrompt.includes(`BACKGROUND BEAT (original start is not execution state) (6s total): ${episode.shots[3].action}`));
+  assert.doesNotMatch(second.videoPrompt, /(?:^|\n)ACTION: The dog begins with slipper A/);
+  assert.match(second.videoPrompt, /advance remaining causal change, skipping completed transfers/);
+  assert.match(second.videoPrompt, /never undo a completed transfer/);
+  assert.deepEqual(episode, original, 'Prompt precedence does not rewrite a frozen source or infer who actually holds the generated object.');
 });
 
 test('every action, camera and actor/object lock survives verbatim; redundant motion prompts are excluded', () => {

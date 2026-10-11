@@ -227,14 +227,14 @@ export function compileLegacyPetClips(episode: PetEpisode, timing?: { actionStar
     const direction = [
       ...storyLocks,
       ...characterLocks,
-      '15-second vertical 9:16 photorealistic film. Preserve timed actions, cast and essential prop state/count. Let body movement, reactions and camera behavior feel natural. No added story events, actors, core props or text.',
+      '15s vertical 9:16 photoreal. Preserve timed actions/cast and essential prop identity, count and holder. Keep moved and untouched objects distinct; no morphing or duplication unless authored. Show transfers with giver release. Let body movement, reactions and camera behavior feel natural. No added events, actors, core props or text.',
       'CAST CONTINUITY: Same identity for every required person. Sleeping, covered or background figures are valid; faces are not mandatory. Hands, crops, POV and off-screen presence are allowed elsewhere; never replace a required person with anonymous limbs throughout the film.',
       'IDENTITY: Stable gender, age, face, hair and clothes; changing expressions never recast a person.',
       buildPetPerformanceDirection(story.sourceContract?.cast.humanPolicy !== 'source_pet_only' && Boolean(character.owner.trim())),
       ...(starts ? ['AUDIO TIMING INTENT: Selected action starts follow detected audio energy events; others keep editorial timing. Approximate motion timing, normal playback speed. Keep the 15s seam continuous; hold the final reaction without rushing.'] : []),
       index === 0
         ? `C1: Begin at S1 and follow the timed actions through ${starts ? 'the opening portion' : 'the first second'} of S4. Do not perform S5 or S6 in this clip.`
-        : 'C2: Continue from C1’s final frame and finish S4 without replaying completed movement. Then perform S5–S6 only in their listed timed intervals.',
+        : 'C2: Bridge-frame visible prop holder/position takes priority over original beat starts. Finish only unfinished S4 changes; never undo a completed transfer. Then perform S5–S6 only in their listed timed intervals.',
       ...segments.map(({ shot, start, end, sourceOffset }) => [
         `[${start}-${end}s] ${shot.id}; source ${sourceOffset}-${timingNumber(sourceOffset + end - start)}/${shot.durationSeconds}s.`,
         sourceOffset > 0
@@ -243,7 +243,7 @@ export function compileLegacyPetClips(episode: PetEpisode, timing?: { actionStar
             ? `PARTIAL: perform ${starts ? 'only the listed opening portion' : 'the first second'} here; leave the remainder for C2.`
             : '',
         sourceOffset > 0 || end - start < shot.durationSeconds
-          ? `SOURCE ACTION CONTEXT (${shot.durationSeconds}s total): ${shot.action}\nACTION: ${sourceOffset > 0 ? `Continue only source seconds ${sourceOffset}-${timingNumber(sourceOffset + end - start)} from the bridge frame` : `Begin only source seconds 0-${timingNumber(end - start)}; leave the action in progress for C2`}. Do not complete or replay the source action outside this slice.`
+          ? `${sourceOffset > 0 ? 'BACKGROUND BEAT (original start is not execution state)' : 'SOURCE ACTION CONTEXT'} (${shot.durationSeconds}s total): ${shot.action}\nACTION: ${sourceOffset > 0 ? `Continue only source seconds ${sourceOffset}-${timingNumber(sourceOffset + end - start)} from the bridge frame; advance remaining causal change, skipping completed transfers` : `Begin only source seconds 0-${timingNumber(end - start)}; leave the action in progress for C2`}. Do not complete or replay the source action outside this slice.`
           : `ACTION: ${shot.action}`,
         `CAMERA: ${shot.camera}`,
       ].filter(Boolean).join('\n')),

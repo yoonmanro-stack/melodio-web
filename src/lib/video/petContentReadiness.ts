@@ -25,11 +25,14 @@ function record(value: unknown): Record<string, unknown> | undefined {
 export function summarizePetContentReadiness(input: ReviewInput): PetContentReview {
   const totalClips = input.shots.length;
   let analyzedClips = 0;
-  const concerns: string[] = (input.planningWarnings || [])
+  const planningConcerns: string[] = (input.planningWarnings || [])
     .filter(warning => typeof warning === 'string' && warning.trim() && warning.length <= 500 && !/data:|base64/i.test(warning))
     .slice(0, 3).map(warning => `기획 · ${warning.trim()}`);
+  const clipConcerns: string[][] = [];
   for (const [index, shot] of input.shots.entries()) {
     const review = record(shot.quality?.video);
+    const concerns: string[] = [];
+    clipConcerns.push(concerns);
     const label = typeof shot.id === 'string' && /^[CS][1-6]$/.test(shot.id) ? shot.id : `클립 ${index + 1}`;
     if (review?.analysisStatus === 'complete' && review.scope === 'sampled_frames') analyzedClips += 1;
     if (review?.analysisStatus === 'unavailable') concerns.push(`${label} · 참고 분석을 완료하지 못했습니다. 영상을 직접 확인해 주세요.`);
@@ -40,6 +43,10 @@ export function summarizePetContentReadiness(input: ReviewInput): PetContentRevi
       }
     }
   }
+  // Show evidence from every rendered clip before lexical planning cautions.
+  const concerns = Array.from({ length: Math.max(0, ...clipConcerns.map(items => items.length)) }, (_, index) =>
+    clipConcerns.flatMap(items => items[index] ? [items[index]] : [])).flat();
+  concerns.push(...planningConcerns);
   const boundedConcerns = [...new Set(concerns)].slice(0, 6);
   const approval = input.approval;
   const approved = !!input.videoUrl && approval?.videoUrl === input.videoUrl

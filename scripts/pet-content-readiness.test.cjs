@@ -51,6 +51,12 @@ test('planning cautions remain visible through completion and owner review', () 
   assert.equal(result.status, 'owner_confirmed');
   assert.equal(result.concerns[0], '기획 · 원문과 장면의 행동 연결을 확인해 주세요.');
 });
+test('rendered concerns from both clips take priority over planning cautions', () => {
+  const result = summarize({ shots: [shot('C1', { ...good(), issues: ['첫 행동', '첫 반전', '첫 인과'] }), shot('C2', { ...good(), issues: ['후반 행동', '후반 반전', '중복 소품'] })], planningWarnings: ['의미 검사', '기획 확인', '흐름 확인'] });
+  assert.equal(result.concerns.length, 6);
+  assert.equal(result.concerns[1], 'C2 · 후반 행동');
+  assert.ok(result.concerns.includes('C2 · 중복 소품'));
+});
 test('new policy fails closed and archived jobs preserve their publication', () => {
   assert.equal(approved({}), true); assert.equal(approved({ contentPolicyVersion: policy, videoUrl: url }), false);
   assert.equal(approved({ contentPolicyVersion: policy, videoUrl: url, approvalUrl: url, approvedAt: now }), true);
