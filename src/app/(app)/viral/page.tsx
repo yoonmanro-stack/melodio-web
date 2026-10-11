@@ -2767,12 +2767,12 @@ function ViralTrendZoneStudio() {
                       {isGeneratingGrokVideo ? (
                         <>
                           <RefreshCw className="w-5 h-5 animate-spin text-fuchsia-300" />
-                          <span>🎬 {durableStoryMode ? viralStoryProgressLabel(storyVideoJob) : 'Grok Imagine 30초 AI 비디오 렌더링 중...'} ({grokVideoProgress}%)</span>
+                          <span>{durableStoryMode ? viralStoryProgressLabel(storyVideoJob) : 'Grok Imagine 30초 AI 비디오 렌더링 중...'} ({grokVideoProgress}%)</span>
                         </>
                       ) : (
                         <>
                           <Film className="w-5 h-5 text-yellow-300 animate-bounce" />
-                          <span>🎬 {durableStoryMode ? storyVideoActionLabel : '30초 AI 영상 생성 시작하기 (클릭)'}</span>
+                          <span>{durableStoryMode ? storyVideoActionLabel : '30초 AI 영상 생성 시작하기 (클릭)'}</span>
                         </>
                       )}
                     </button>
