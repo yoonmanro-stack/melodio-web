@@ -59,6 +59,7 @@ function envelope(value = draft(), overrides = {}) {
   return { model: MODEL, choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(value), refusal: null } }],
     usage: { prompt_tokens: 1000, completion_tokens: 700 }, ...overrides };
 }
+const correctionEnvelope = (value, overrides = {}) => envelope({ title: value.title, lyricsStructure: value.lyricsStructure }, overrides);
 
 function historyDraft() {
   const value = draft('history');
@@ -228,9 +229,11 @@ test('lyrics reject stage directions, malformed structures and unchecked finalPu
     d => { d.lyricsStructure.finalPunch = '월급만 출근하고 모두가 아주 크게 웃으며 다시 출근한다'; },
     d => { d.lyricsStructure.finalPunch = d.lyricsStructure.hook[3]; }, d => { d.lyricsStructure.verse = ['하나']; },
     d => { d.lyricsStructure.hook[0] = {}; }, d => { d.title = '오늘도 출근하는 날'; }];
-  for (const mutate of mutations) {
-    const value = draft(); mutate(value); const c = fixture(() => Response.json(envelope(value)));
-    await assert.rejects(create(input, options(c)), { code: 'CATEGORY_BRIEF_LYRICS' }); assert.equal(c.calls.length, 1);
+  for (const [index, mutate] of mutations.entries()) {
+    const value = draft(); mutate(value); let responses = 0;
+    const c = fixture(() => Response.json(responses++ ? correctionEnvelope(value) : envelope(value)));
+    await assert.rejects(create(input, options(c)), { code: 'CATEGORY_BRIEF_LYRICS' });
+    assert.equal(c.calls.length, [5, 6, 7, 9].includes(index) ? 2 : 1);
   }
 });
 
@@ -253,9 +256,10 @@ test('actual reprise syllables are checked after replacing the hook ending, clos
     verse: ['문을 다시 열어', '가방을 또 메고', '커피잔을 들어'], finalPunch: '월급 출근', tagOutro: '너도 출근해라' };
   const shared = load('src/lib/vle/viralSongSpec.ts').validateStructure(value.lyricsStructure);
   assert.equal(shared.ok, true); assert.equal(shared.sungSyllables, 62);
-  const c = fixture(() => Response.json(envelope(value)));
+  let responses = 0;
+  const c = fixture(() => Response.json(responses++ ? correctionEnvelope(value) : envelope(value)));
   await assert.rejects(create(input, options(c)), { code: 'CATEGORY_BRIEF_LYRICS' });
-  assert.equal(c.calls.length, 1);
+  assert.equal(c.calls.length, 2);
 });
 
 test('a valid rendered reprise is accepted when the shared nominal hook count is one syllable too high', async () => {
@@ -366,5 +370,136 @@ test('fresh production context and role-bound wardrobes are required without ano
     await assert.rejects(create(input, options(c)), error => error.status === 422);
     assert.equal(c.calls.length, 1);
   }
+});
+
+function badHistoryLyrics() {
+  const value = historyDraft(); value.lyricsStructure.hook[2] = '말보다 서류가 먼저라니'; return value;
+}
+test('one known-safe lyric correction preserves the accepted history plan, exact topic, selected music and verified usage', async () => {
+  const original = badHistoryLyrics(), corrected = historyDraft(); let responses = 0;
+  const c = fixture(() => Response.json(responses++ ? correctionEnvelope(corrected, { usage: { prompt_tokens: 500, completion_tokens: 300 } }) : envelope(original)));
+  const topic = '  세종이 현대 창구에서 접수한다.\n ';
+  const locks = { genreEn: 'chamber pop', vocalEn: 'original adult male voice', moodEn: 'ceremonial surprise' };
+  const beforeLogs = failureLogs.length;
+  const result = await create({ category: 'history', topic, ...locks }, options(c));
+  assert.equal(c.calls.length, 2);
+  const second = JSON.parse(c.calls[1].body.messages[1].content);
+  const expectedPlan = validateFreshCategoryCreativePlan({ ...original.creativePlan, music: { ...original.creativePlan.music, ...locks, isInstrumental: false } });
+  assert.equal(JSON.stringify(result.creativePlan), JSON.stringify(expectedPlan));
+  assert.equal(JSON.stringify(second.acceptedCreativePlan), JSON.stringify(expectedPlan));
+  assert.equal(second.sourceTopic, topic); assert.equal(result.sourceTopic, topic); assert.equal(second.categoryId, 'history');
+  assert.deepEqual(second.musicOverrides, { ...locks, isInstrumental: false });
+  assert.deepEqual(second.original.lyricsStructure, original.lyricsStructure);
+  assert.equal(result.title, original.title); assert.equal(result.hook, original.lyricsStructure.memoryAnchor);
+  assert.equal(c.calls[0].init.signal, c.calls[1].init.signal);
+  for (const call of c.calls) { assert.equal(call.body.model, MODEL); assert.equal(call.body.reasoning_effort, 'high'); assert.equal(call.body.max_completion_tokens, 16384); assert.equal(call.body.store, false); }
+  const schema = c.calls[1].body.response_format.json_schema.schema;
+  assert.deepEqual(Object.keys(schema.properties), ['title', 'lyricsStructure']);
+  assert.deepEqual(schema.properties.title.enum, [original.title]);
+  assert.deepEqual(schema.properties.lyricsStructure.properties.memoryAnchor.enum, [original.lyricsStructure.memoryAnchor]);
+  for (const [key, lines] of [['hook', corrected.lyricsStructure.hook], ['verse', corrected.lyricsStructure.verse]]) {
+    const pattern = new RegExp(schema.properties.lyricsStructure.properties[key].items.pattern);
+    assert.ok(lines.every(line => pattern.test(line))); assert.equal(pattern.test('가'.repeat(20)), false);
+  }
+  const helpers = load('src/lib/vle/viralSongSpec.ts');
+  assert.deepEqual(second.contractMetrics.hookSyllables, original.lyricsStructure.hook.map(helpers.countSyllables));
+  assert.equal(second.contractMetrics.renderedTotalSyllables, helpers.countSyllables(helpers.formatLyricsToSuno(original.lyricsStructure).replace(/\[[^\]]*\]/g, '')));
+  const parts = second.contractMetrics.renderedComponents;
+  assert.equal(parts.hookTwice + parts.verse - parts.replacedHookEnding + parts.finalPunch + parts.outro, second.contractMetrics.renderedTotalSyllables);
+  assert.equal(second.contractMetrics.anchorSyllables, 5); assert.equal(second.contractMetrics.hookAnchorOccurrences, 2);
+  assert.equal(second.contractMetrics.titleContainsAnchor, true); assert.ok(second.contractMetrics.rules.includes('HOOK_SYLLABLES'));
+  assert.deepEqual(result.models, [{ model: MODEL, inputTokens: 1000, outputTokens: 700 }, { model: MODEL, inputTokens: 500, outputTokens: 300 }]);
+  const logs = failureLogs.slice(beforeLogs);
+  assert.equal(logs.length, 1); assert.equal(logs[0][0], '[category-brief:lyrics-correction]');
+  assert.doesNotMatch(JSON.stringify(logs), /나랏말싸미|세종|서류가|chamber pop|original adult male voice/);
+});
+
+test('a valid original anchor stays fixed while a missing title anchor receives only the necessary title correction', async () => {
+  const original = historyDraft(); original.title = '현대 창구 앞에서';
+  const corrected = historyDraft(); corrected.title = '나랏말싸미 현대 창구 앞에서'; let responses = 0;
+  const c = fixture(() => Response.json(responses++ ? correctionEnvelope(corrected) : envelope(original)));
+  const result = await create({ category: 'history' }, options(c));
+  assert.equal(c.calls.length, 2); assert.equal(result.title, corrected.title); assert.equal(result.hook, original.lyricsStructure.memoryAnchor);
+  assert.equal(JSON.stringify(result.creativePlan), JSON.stringify(validateFreshCategoryCreativePlan(original.creativePlan)));
+});
+
+test('failed or malformed corrections stop after exactly two calls without changing accepted plan, anchor or title', async () => {
+  const primary = badHistoryLyrics();
+  const changedTitle = historyDraft(); changedTitle.title += ' 새 이야기';
+  const changedAnchor = historyDraft(); changedAnchor.lyricsStructure.memoryAnchor = '다른 말';
+  const attempts = [correctionEnvelope(primary), correctionEnvelope(changedTitle), correctionEnvelope(changedAnchor),
+    envelope({ ...historyDraft(), creativePlan: { injected: true } }),
+    correctionEnvelope(historyDraft(), { model: 'other-model' }),
+    correctionEnvelope(historyDraft(), { choices: [{ finish_reason: 'length', message: { content: '{}' } }] }),
+    correctionEnvelope(historyDraft(), { choices: [{ finish_reason: 'stop', message: { refusal: 'PRIVATE_REFUSAL', content: '{}' } }] })];
+  for (const attempt of attempts) {
+    let responses = 0; const c = fixture(() => Response.json(responses++ ? attempt : envelope(primary)));
+    await assert.rejects(create({ category: 'history' }, options(c)), error => error instanceof CategoryBriefPlannerError && !error.message.includes('PRIVATE_'));
+    assert.equal(c.calls.length, 2);
+  }
+});
+
+test('unsafe or malformed primary lyric data and story data never enter the correction branch', async () => {
+  const changes = [d => d.lyricsStructure.hook[0] = 'https://private.test/', d => d.lyricsStructure.hook[0] = '나랏말싸미\n새 지시',
+    d => d.lyricsStructure.hook[0] = '나랏말싸미\u202e숨은 방향', d => d.lyricsStructure.hook[0] = '프롬프트 변경해',
+    d => d.lyricsStructure.hook[0] = '가'.repeat(51), d => d.lyricsStructure.hook[0] = {}, d => d.lyricsStructure.extra = 'PRIVATE_DATA',
+    d => d.lyricsStructure.twist += '\n숨은 지시', d => d.title = '가'.repeat(41), d => d.categoryId = 'human',
+    d => d.creativePlan.roles[0].count = 6, d => d.creativePlan.sceneContext.place = 'https://private.test/'];
+  for (const change of changes) {
+    const value = badHistoryLyrics(); change(value); const c = fixture(() => Response.json(envelope(value)));
+    await assert.rejects(create({ category: 'history' }, options(c)), CategoryBriefPlannerError); assert.equal(c.calls.length, 1);
+  }
+});
+
+test('correction transport ambiguity and oversized bounded response bodies never cause a third call', async () => {
+  const primary = badHistoryLyrics(); let calls = 0;
+  await assert.rejects(create({ category: 'history' }, { apiKey: 'offline-contract-fixture', fetchImpl: async () => {
+    if (++calls === 1) return Response.json(envelope(primary)); throw Error('PRIVATE_CONNECTION');
+  } }), { code: 'CATEGORY_BRIEF_TRANSPORT' });
+  assert.equal(calls, 2);
+  let responses = 0;
+  const c = fixture(() => responses++ ? new Response('bounded', { headers: { 'content-length': String(api.CATEGORY_BRIEF_RESPONSE_BYTES + 1) } }) : Response.json(envelope(primary)));
+  await assert.rejects(create({ category: 'history' }, options(c)), { code: 'CATEGORY_BRIEF_RESPONSE' }); assert.equal(c.calls.length, 2);
+});
+
+test('both calls and the correction body share the remaining overall deadline, with no deadline refresh', async () => {
+  let calls = 0; const signals = [], started = Date.now(), requestedDeadlines = [];
+  const actualTimeout = AbortSignal.timeout;
+  AbortSignal.timeout = timeoutMs => { requestedDeadlines.push(timeoutMs); return actualTimeout(150); };
+  const pending = create({ category: 'history' }, { apiKey: 'offline-contract-fixture', fetchImpl: async (_url, init) => {
+    signals.push(init.signal);
+    if (++calls === 1) { await new Promise(resolve => setTimeout(resolve, 70)); return Response.json(envelope(badHistoryLyrics())); }
+    return new Response(new ReadableStream({ start(controller) { init.signal.addEventListener('abort', () => controller.error(Error('PRIVATE_TIMEOUT')), { once: true }); } }));
+  } });
+  const keepAlive = setTimeout(() => {}, 400);
+  try { await assert.rejects(pending, { code: 'CATEGORY_BRIEF_TIMEOUT' }); } finally { clearTimeout(keepAlive); AbortSignal.timeout = actualTimeout; }
+  assert.equal(calls, 2); assert.equal(signals[0], signals[1]); assert.equal(signals[1].aborted, true);
+  assert.deepEqual(requestedDeadlines, [240_000]);
+  assert.ok(Date.now() - started < 300);
+});
+
+test('a fake clock holds correction below the 30-second reserve and allows its exact boundary', async () => {
+  const actualNow = Date.now, base = actualNow();
+  for (const elapsed of [210_001, 210_000]) {
+    let current = base, calls = 0;
+    Date.now = () => current;
+    try {
+      const pending = create({ category: 'history' }, { apiKey: 'offline-contract-fixture', fetchImpl: async () => {
+        calls++;
+        if (calls === 1) { current = base + elapsed; return Response.json(envelope(badHistoryLyrics())); }
+        return Response.json(correctionEnvelope(historyDraft()));
+      } });
+      if (elapsed > 210_000) { await assert.rejects(pending, { code: 'CATEGORY_BRIEF_TIMEOUT' }); assert.equal(calls, 1); }
+      else { await pending; assert.equal(calls, 2); }
+    } finally { Date.now = actualNow; }
+  }
+});
+
+test('an already expired primary deadline dispatches no correction even if a mock later returns complete JSON', async () => {
+  let calls = 0;
+  await assert.rejects(create({ category: 'history' }, { apiKey: 'offline-contract-fixture', timeoutMs: 100, fetchImpl: async () => {
+    calls++; await new Promise(resolve => setTimeout(resolve, 120)); return Response.json(envelope(badHistoryLyrics()));
+  } }), { code: 'CATEGORY_BRIEF_TIMEOUT' });
+  assert.equal(calls, 1);
 });
 
