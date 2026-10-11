@@ -23,7 +23,7 @@ import { VIRAL_SONG_SPEC, estimateSeconds } from "@/lib/vle/viralSongSpec";
 import PetVideoStudio, { PetEpisodeEditor, readPetEpisode, type PetVideoExternalStartRequest, type PetVideoExternalState } from "@/components/viral/PetVideoStudio";
 import { validatePetEpisode, type PetEpisode, type PetVideoJobView } from "@/lib/vle/petEpisode";
 import { SingleVideoActionGate, runSingleVideoAction, waitForSingleVideoReady, type SingleVideoScope, type SingleVideoPhase } from '@/lib/vle/single-video-action';
-import { ViralStoryVideoClient, VIRAL_STORY_VIDEO_CATEGORIES, isViralStoryTrackId, readViralStoryRecovery, viralStoryProgressLabel, type ViralStoryClientState, type ViralStoryRecoveryToken } from '@/lib/vle/viral-story-client';
+import { ViralStoryVideoClient, VIRAL_STORY_VIDEO_CATEGORIES, isViralStoryTrackId, readViralStoryRecovery, type ViralStoryClientState, type ViralStoryRecoveryToken } from '@/lib/vle/viral-story-client';
 
 type ViralBriefSnapshot = CategoryBriefExtras & {
   sourceTopic: string;
@@ -1376,6 +1376,16 @@ function ViralTrendZoneStudio() {
   const completedOwnedPetAudio = !!petUserId && petDraftOwner === petUserId
     && petLinkedTrack?.user_id === petUserId && petLinkedTrack?.status === 'completed'
     && !!(petLinkedTrack.audio_url || petLinkedTrack.audioUrl);
+  const preparedStoryBrief = readViralBrief(selectedGrokTrack);
+  const hasPreparedCurrentAudio = genCategory === 'pet'
+    ? completedOwnedPetAudio && !!petMatchingTrackId && String(generatedResult?.id) === petMatchingTrackId
+    : !!petUserId && selectedGrokTrack?.user_id === petUserId && selectedGrokTrack?.status === 'completed'
+      && !!(selectedGrokTrack.audio_url || selectedGrokTrack.audioUrl) && planIsCurrent
+      && preparedStoryBrief?.categoryId === genCategory && preparedStoryBrief.sourceTopic === customTopic
+      && preparedStoryBrief.lyrics === customLyrics && preparedStoryBrief.stylePrompt === optimizedPrompt
+      && JSON.stringify(readCategoryBriefExtras(preparedStoryBrief)) === JSON.stringify(readCategoryBriefExtras(producerBrief));
+  const primaryVideoJob = genCategory === 'pet' ? petVideoStateRef.current?.state.job : storyVideoJob;
+  const primaryVideoError = singleVideoError || (genCategory === 'pet' ? petVideoStateRef.current?.state.error : grokVideoError || storyClientState.error) || '';
   const singleVideoInputKey = JSON.stringify([customTopic, customLyrics, optimizedPrompt, selectedGenre, selectedMood,
     selectedVocal, duration, effectiveIsPublic, genCategory === 'pet' ? petCurrentEpisode : producerBrief]);
   singleVideoScopeRef.current = petUserId && planningAccountReady
@@ -2716,13 +2726,18 @@ function ViralTrendZoneStudio() {
                   {studioBusy ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Film className="w-5 h-5" />}
                   {singleVideoPhase === 'audio' || isGenerating ? `음원 준비 중… (${genProgress}%)`
                     : singleVideoPhase === 'prompt' ? '영상 기획 중…'
-                    : isGeneratingGrokVideo || singleVideoPhase === 'video' ? genCategory === 'pet' ? '영상 생성 중…' : `${viralStoryProgressLabel(storyVideoJob)} (${grokVideoProgress}%)`
-                    : grokVideoResult ? '완료 영상 확인'
-                    : storyVideoJob || storyClientState.uncertain || singleVideoError || petVideoStateRef.current?.state.error ? '저장된 작업 상태 확인 · 이어가기'
+                    : isGeneratingGrokVideo || singleVideoPhase === 'video' ? genCategory === 'pet' ? '영상 제작 중…' : `영상 제작 중… (${grokVideoProgress}%)`
+                    : grokVideoResult ? '완성 영상 보기'
+                    : primaryVideoJob ? '영상 제작 이어가기'
+                    : storyClientState.uncertain || primaryVideoError ? '영상 연결 다시 확인'
                     : '영상 생성하기'}
                 </button>
-                <p className="text-xs text-zinc-300">가사에 맞는 음원을 준비한 뒤 30초 영상까지 이어서 만듭니다. 음원과 영상 생성 비용이 발생합니다.</p>
-                {singleVideoError ? <p role="alert" className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200">{singleVideoError}</p> : null}
+                <p className="text-xs text-zinc-300">{hasPreparedCurrentAudio ? '준비된 음원으로 30초 영상을 만듭니다.' : '가사에 맞는 음원을 준비한 뒤 30초 영상까지 이어서 만듭니다.'}</p>
+                {!grokVideoResult ? <p className="text-[11px] text-zinc-400">{hasPreparedCurrentAudio ? '영상 생성 비용이 발생합니다.' : '음원과 영상 생성 비용이 발생합니다.'}</p> : null}
+                {primaryVideoError ? <div role="alert" className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-xs text-amber-200 space-y-2">
+                  <p>{primaryVideoError}</p>
+                  <p>{primaryVideoJob ? '위의 영상 제작 이어가기 버튼으로 같은 작업을 확인해 주세요.' : '위의 영상 연결 다시 확인 버튼을 눌러 주세요.'}{hasPreparedCurrentAudio ? ' 준비된 음원은 유지합니다.' : ''}</p>
+                </div> : primaryVideoJob && primaryVideoJob.status !== 'completed' ? <p role="status" className="text-xs text-zinc-300">저장된 영상 작업이 있습니다. 위 버튼으로 같은 작업을 이어갑니다.</p> : null}
               </div>
 
               {/* ─── 🎵 [결과 1] 생성된 바이럴 숏폼 음원 카드 (Card 1 영역 하단 즉시 배치) ─── */}
@@ -2737,17 +2752,9 @@ function ViralTrendZoneStudio() {
                         <span className="text-xs font-mono font-bold text-cyan-300 px-2.5 py-0.5 rounded-full bg-cyan-500/20 border border-cyan-500/40 shadow-sm flex items-center gap-1 flex-wrap">
                           <Clock className="w-3 h-3 text-cyan-400" />
                           <span>{audioDuration.toFixed(1)}초</span>
-                          <span className="text-[10px] text-emerald-300 font-extrabold bg-emerald-950/80 border border-emerald-500/40 px-1.5 py-0.5 rounded ml-1">
-                            {/* 30초는 영상 클립 경계다. 넘으면 15초 클립이 하나 더 붙는다. */}
-                            {genCategory === 'pet'
-                              ? audioDuration >= 20 && audioDuration <= 30
-                                ? '영상에 연결 가능한 20~30초 음원'
-                                : '20~30초 음원으로 다시 생성해 주세요'
-                              : audioDuration <= VIRAL_SONG_SPEC.targetSecondsMax
-                              ? `🎵 목표 ${VIRAL_SONG_SPEC.targetSecondsMin}~${VIRAL_SONG_SPEC.targetSecondsMax}초 달성 (🛡️ 영상 2클립으로 커버)`
-                              : audioDuration <= 30
-                                ? `⚠️ 목표 ${VIRAL_SONG_SPEC.targetSecondsMax}초 초과 — 아직 영상 2클립 안쪽`
-                                : `🚨 30초 초과 — 남는 ${(audioDuration - 30).toFixed(1)}초는 마지막 프레임 정지로 채웁니다`}
+                          <span className={`text-[10px] font-extrabold border px-1.5 py-0.5 rounded ml-1 ${audioDuration > 30.15 || genCategory === 'pet' && audioDuration < 20 ? 'text-amber-200 bg-amber-950/80 border-amber-500/40' : 'text-emerald-300 bg-emerald-950/80 border-emerald-500/40'}`}>
+                            {genCategory === 'pet' && audioDuration < 20 ? '20초보다 짧은 음원 · 확인 필요'
+                              : audioDuration <= 30.15 ? '음원 준비 완료' : '30초보다 긴 음원 · 확인 필요'}
                           </span>
                         </span>
                       )}
@@ -2868,28 +2875,6 @@ function ViralTrendZoneStudio() {
                   />
 
                 </details>
-
-                  {/* 🎬 2단계 비디오 결과 표시 영역 */}
-                  {isGeneratingGrokVideo ? (
-                    <div className="p-6 rounded-2xl bg-zinc-900/90 border border-fuchsia-500/40 flex flex-col items-center justify-center text-center space-y-3 shadow-inner">
-                      <RefreshCw className="w-8 h-8 animate-spin text-fuchsia-400" />
-                      <p className="text-sm font-extrabold text-white">🎬 {durableStoryMode ? viralStoryProgressLabel(storyVideoJob) : 'Grok Imagine 30초 AI 비디오 렌더링 중...'} ({grokVideoProgress}%)</p>
-                      <p className="text-xs text-zinc-300">가사 맞춤 9:16 비디오 렌더링 및 멜로디오 30초 음원 FFmpeg 인코딩 중입니다.</p>
-                    </div>
-                  ) : grokVideoError ? (
-                    <div className="p-6 rounded-2xl bg-zinc-900/90 border border-red-500/40 flex flex-col items-center justify-center text-center space-y-3 shadow-inner">
-                      <AlertTriangle className="w-8 h-8 text-red-400" />
-                      <p className="text-sm font-extrabold text-red-300">⚠️ 영상 작업 확인 필요</p>
-                      <p className="text-xs text-zinc-300 max-w-md break-all">{grokVideoError}</p>
-                      <p className="text-[11px] text-zinc-400">{durableStoryMode ? '음원과 저장된 영상 단계를 유지합니다. 요청 상태를 확인한 뒤 이어갑니다.' : '음원은 정상 생성되었습니다. 영상만 재시도할 수 있습니다.'}</p>
-
-                    </div>
-                  ) : durableStoryMode && storyVideoJob && storyVideoJob.status !== 'completed' ? (
-                    <div role="status" className="p-6 rounded-2xl bg-zinc-900/90 border border-fuchsia-500/40 text-center space-y-3 shadow-inner">
-                      <p className="text-sm font-extrabold text-white">🎬 {viralStoryProgressLabel(storyVideoJob)} ({storyVideoJob.progress}%)</p>
-                      <p className="text-xs text-zinc-300">저장된 단계에서 대기 중입니다. 버튼을 누르면 같은 작업을 이어갑니다.</p>
-                    </div>
-                  ) : null}
 
                   {/* 생성된 비디오 프리뷰 및 보관함 안내 */}
                   {grokVideoResult && (

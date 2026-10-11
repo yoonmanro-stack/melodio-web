@@ -180,7 +180,8 @@ export class ViralStoryVideoClient {
   private requestFetch: typeof fetch;
 
   constructor(private options: ClientOptions) {
-    this.requestFetch = options.fetch || fetch;
+    // Browser fetch cannot use this client instance as its native receiver.
+    this.requestFetch = options.fetch || ((...args) => fetch(...args));
     this.token = readViralStoryRecovery(options.storage, options.ownerId, options.trackId);
     this.state.uncertain = this.token?.uncertain || false;
   }

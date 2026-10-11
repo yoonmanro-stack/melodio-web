@@ -570,15 +570,16 @@ test('the single main video action owns creation while lyrics and account state 
   visit(pageSource); assert.equal(buttons.length, 1, 'Use one shared creation action across categories');
   function render(overrides = {}) {
     const clicks = [], module = { exports: {} };
-    vm.runInNewContext(compile(`module.exports = ${buttons[0].getText(pageSource)};`, 'single-main-action.tsx'), {
+    const declarations = ['primaryVideoJob', 'primaryVideoError'].map(name => `const ${pageDeclaration(name).getText(pageSource)};`).join('\n');
+    vm.runInNewContext(compile(`${declarations}\nmodule.exports = ${buttons[0].parent.getText(pageSource)};`, 'single-main-action.tsx'), {
       ...require('lucide-react'), module, exports: module.exports, require,
       studioBusy: false, isOptimizing: false, planningAccountReady: true, planIsCurrent: true,
       storyTrackId: null, petMatchingTrackId: null, singleVideoPhase: null, isGenerating: false, genProgress: 0,
       isGeneratingGrokVideo: false, genCategory: 'pet', storyVideoJob: null, grokVideoProgress: 0, grokVideoResult: null,
-      storyClientState: { uncertain: false }, singleVideoError: '', petVideoStateRef: { current: null },
+      storyClientState: { uncertain: false, error: null }, singleVideoError: '', grokVideoError: null, petVideoStateRef: { current: null }, hasPreparedCurrentAudio: false,
       handleCreateVideo() { clicks.push('create-video'); }, ...overrides,
     });
-    return { tree: module.exports, clicks };
+    return { tree: walk(module.exports, node => node.type === 'button')[0], container: module.exports, clicks };
   }
   const main = render(); assert.equal(label(main.tree), '영상 생성하기'); assert.equal(main.tree.props.disabled, false);
   main.tree.props.onClick(); assert.deepEqual(main.clicks, ['create-video']);
@@ -588,7 +589,52 @@ test('the single main video action owns creation while lyrics and account state 
   const audio = render({ singleVideoPhase: 'audio', isGenerating: true, studioBusy: true, genProgress: 20 });
   assert.equal(label(audio.tree), '음원 준비 중… (20%)'); assert.equal(audio.tree.props['aria-busy'], true);
   const recovery = render({ planIsCurrent: false, petMatchingTrackId: 'saved-track', singleVideoError: 'Saved work needs checking' });
-  assert.equal(recovery.tree.props.disabled, false); assert.ok(label(recovery.tree).includes('저장된 작업 상태 확인'));
+  assert.equal(recovery.tree.props.disabled, false); assert.equal(label(recovery.tree), '영상 연결 다시 확인');
+  assert.equal(walk(recovery.container, node => node.props.role === 'alert').length, 1);
+  assert.ok(label(recovery.container).includes('위의 영상 연결 다시 확인 버튼을 눌러 주세요.'));
+  const prepared = render({ hasPreparedCurrentAudio: true });
+  assert.ok(label(prepared.container).includes('준비된 음원으로 30초 영상을 만듭니다.'));
+  assert.equal(label(prepared.container).includes('음원을 준비한 뒤'), false);
+  const fresh = render();
+  assert.ok(label(fresh.container).includes('가사에 맞는 음원을 준비한 뒤 30초 영상까지 이어서 만듭니다.'));
+  const transport = render({ genCategory: 'history', grokVideoError: '연결 상태를 확인하지 못했습니다.', storyClientState: { uncertain: true } });
+  assert.equal(label(transport.tree), '영상 연결 다시 확인');
+  assert.equal(walk(transport.container, node => node.props.role === 'alert').length, 1);
+  const saved = render({ genCategory: 'history', storyVideoJob: { status: 'held' } });
+  assert.equal(label(saved.tree), '영상 제작 이어가기');
+  assert.equal(walk(saved.container, node => node.props.role === 'status').length, 1);
+  const completed = render({ grokVideoResult: 'https://example.invalid/completed.mp4' });
+  assert.equal(label(completed.tree), '완성 영상 보기');
+  assert.equal(label(completed.container).includes('생성 비용'), false);
+  const video = render({ genCategory: 'history', singleVideoPhase: 'video', isGeneratingGrokVideo: true, studioBusy: true, grokVideoProgress: 42 });
+  assert.equal(label(video.tree), '영상 제작 중… (42%)');
+});
+
+test('audio readiness badge accepts the actual 30-second container and preserves the pet minimum', () => {
+  let badge;
+  function visit(node) {
+    if (ts.isJsxElement(node) && node.openingElement.tagName.getText(pageSource) === 'span'
+      && node.children.filter(child => ts.isJsxExpression(child)).length === 1
+      && node.children.some(child => ts.isJsxExpression(child) && child.getText(pageSource).includes("'음원 준비 완료'"))) badge = node;
+    ts.forEachChild(node, visit);
+  }
+  visit(pageSource); assert.ok(badge);
+  function render(audioDuration, genCategory = 'history') {
+    const module = { exports: {} };
+    vm.runInNewContext(compile(`module.exports = ${badge.getText(pageSource)};`, 'audio-ready-badge.tsx'), {
+      module, exports: module.exports, require, audioDuration, genCategory,
+    });
+    return module.exports;
+  }
+  for (const duration of [28.8, 30, 30.15]) {
+    const tree = render(duration); assert.equal(label(tree), '음원 준비 완료'); assert.ok(tree.props.className.includes('text-emerald-300'));
+  }
+  const long = render(30.16); assert.equal(label(long), '30초보다 긴 음원 · 확인 필요'); assert.ok(long.props.className.includes('text-amber-200'));
+  assert.equal(label(render(19.9, 'pet')), '20초보다 짧은 음원 · 확인 필요');
+  assert.equal(label(render(20, 'pet')), '음원 준비 완료');
+  assert.equal(label(render(28.8, 'pet')), '음원 준비 완료');
+  assert.equal(label(render(30.15, 'pet')), '음원 준비 완료');
+  assert.equal(label(render(30.16, 'pet')), '30초보다 긴 음원 · 확인 필요');
 });
 
 test('opening pet audio verifies ownership and ignores responses after account or draft changes', async () => {

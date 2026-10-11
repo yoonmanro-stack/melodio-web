@@ -53,6 +53,58 @@ function harness(replies, options = {}) {
 }
 const tick = () => new Promise(resolve => setImmediate(resolve));
 
+test('default browser fetch keeps a valid native receiver for restore GET and create POST', async () => {
+  const calls = [], states = [], store = storage();
+  const browserModule = { exports: {} };
+  const browser = vm.createContext({
+    module: browserModule, exports: browserModule.exports, crypto: webcrypto, TextEncoder,
+    AbortController, URL, setTimeout, clearTimeout,
+    reply(url, init = {}) {
+      const body = init.body ? JSON.parse(init.body) : null;
+      calls.push({ url, body, method: init.method || 'GET' });
+      assert.ok(String(url).startsWith('/api/viral-cf/grok-video/jobs'));
+      assert.equal(init.cache, 'no-store');
+      if (body) {
+        assert.equal(body.action, 'create');
+        assert.equal(readViralStoryRecovery(store, ownerId, trackId).jobId, body.requestId);
+      }
+      return Promise.resolve({ ok: true, json: async () => ({ success: true,
+        job: body ? job('completed', { id: body.requestId }) : null }) });
+    },
+  });
+  vm.runInContext(`globalThis.fetch = function nativeFetch(url, init) {
+    'use strict';
+    if (this !== undefined && this !== globalThis) throw new TypeError('Illegal invocation');
+    return reply(url, init);
+  };`, browser);
+  assert.throws(() => vm.runInContext('({ requestFetch: fetch }).requestFetch("/read")', browser), /Illegal invocation/);
+  vm.runInContext(compiled, browser);
+  const client = new browserModule.exports.ViralStoryVideoClient({ ownerId, trackId, storage: store,
+    onState(state) { states.push(state); },
+  });
+  await client.restore();
+  await client.start(input);
+  assert.deepEqual(calls.map(call => call.method), ['GET', 'GET', 'POST']);
+  assert.equal(states.at(-1).job.status, 'completed');
+  assert.equal(states.at(-1).uncertain, false);
+  assert.equal(states.at(-1).error, null);
+});
+
+test('an explicitly injected fetch retains its existing client receiver', async () => {
+  let client;
+  const receivers = [];
+  function injectedFetch() {
+    'use strict';
+    receivers.push(this);
+    return Promise.resolve({ ok: true, json: async () => ({ success: true, job: job('completed') }) });
+  }
+  client = new ViralStoryVideoClient({ ownerId, trackId, fetch: injectedFetch, onState() {} });
+  await client.restore();
+  await client.start(input);
+  assert.equal(receivers.length, 2);
+  assert.ok(receivers.every(receiver => receiver === client));
+});
+
 test('ten generic categories opt in while pet, dance and legacy categories stay outside the new flow', () => {
   assert.equal(VIRAL_STORY_VIDEO_CATEGORIES.size, 10);
   for (const category of ['pet', 'dance', 'dance_challenge', 'ai_future', 'unknown']) assert.equal(VIRAL_STORY_VIDEO_CATEGORIES.has(category), false);
