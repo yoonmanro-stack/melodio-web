@@ -690,6 +690,44 @@ test('negated roles, plural counts and ringing bell vocabulary do not create a f
   assert.equal(derivePetSourceContract('No owner appears; two women sit beside a dog.').cast.requiredVisibleAdults, 2);
 });
 
+test('a source human descriptor aliases owner identity across later references without inventing a second adult', () => {
+  const topic = '거실에서 성인 여성 집사가 강아지에게 장난감 공을 가져오라며 손을 내민다. 강아지는 공 대신 빈 밥그릇을 가져와 집사 앞에 내려놓는다. 심부름을 시킨 집사가 오히려 밥 심부름을 하게 되는 귀여운 반전.';
+  const contract = derivePetSourceContract(topic);
+  assert.equal(contract.cast.requiredVisibleAdults, 1);
+  assert.deepEqual(contract.cast.humans, [{ id: 'H1', role: 'woman', adult: true }]);
+  for (const source of ['An adult woman owner asks the dog to fetch a ball. The owner receives a bowl.', 'A woman is an owner. The owner smiles at her dog.', '성인 여성은 집사다. 강아지가 집사에게 공을 가져온다.']) {
+    assert.equal(derivePetSourceContract(source).cast.requiredVisibleAdults, 1, source);
+    assert.deepEqual(derivePetSourceContract(source).cast.humans.map(human => human.role), ['woman']);
+  }
+});
+
+test('descriptor aliases preserve explicit distinct humans, plural women and simple married roles', () => {
+  for (const source of ['여성과 집사가 강아지와 앉는다.', 'A woman and an owner sit beside a dog.']) {
+    assert.equal(derivePetSourceContract(source).cast.requiredVisibleAdults, 2, source);
+  }
+  for (const source of ['Two women owners sit beside a dog. The owners smile.', '두 여성 집사가 강아지와 앉는다. 집사들은 웃는다.']) {
+    assert.deepEqual(derivePetSourceContract(source).cast.humans.map(human => human.role), ['woman', 'woman'], source);
+  }
+  for (const source of ['An adult husband owner sits beside the dog. The owner smiles.', 'The husband is the owner. His dog brings a ball.', '남편 집사가 강아지와 앉는다. 집사는 웃는다.', '아내는 보호자다. 보호자가 강아지를 안는다.']) {
+    assert.equal(derivePetSourceContract(source).cast.requiredVisibleAdults, 1, source);
+  }
+  assert.equal(derivePetSourceContract('A woman owner and another owner sit beside the dog.').cast.requiredVisibleAdults, 2);
+  assert.equal(derivePetSourceContract('여성 집사와 다른 집사가 강아지와 앉는다.').cast.requiredVisibleAdults, 2);
+  assert.equal(derivePetSourceContract('Two women owners and another owner sit beside a dog.').cast.requiredVisibleAdults, 3);
+  assert.equal(derivePetSourceContract('여성이 집사를 안고 강아지를 바라본다.').cast.requiredVisibleAdults, 2, 'Object contact is not a copula alias.');
+});
+
+test('requested fetch actions do not become performed source events while the actual bowl substitution remains required', () => {
+  const actions = ['H1 holds out her hand to request a ball from the dog.', 'The dog approaches the ball.', 'The dog looks at the empty bowl.', 'The dog carries the empty bowl to H1.', 'The dog places the bowl beside H1.', 'H1 fills the bowl.'];
+  const korean = '거실에서 성인 여성 집사가 강아지에게 장난감 공을 가져오라며 손을 내민다. 강아지는 공 대신 빈 밥그릇을 가져와 집사 앞에 내려놓는다. 심부름을 시킨 집사가 오히려 밥 심부름을 하게 되는 귀여운 반전.';
+  assert.deepEqual(validatePetSourceEvents(derivePetSourceContract(korean), actions), []);
+  for (const coreAction of ['집사가 강아지에게 공을 가져오라고 말하고 강아지는 밥그릇을 가져와 집사 앞에 내려놓는다.', 'The owner asks the dog to fetch a ball and the dog brings an empty bowl instead.', 'The woman tells the dog to bring a ball. The dog carries an empty bowl instead.', 'The owner requests the dog to fetch a ball; the dog carries an empty bowl.']) {
+    const source = { sourceTopic: coreAction, coreAction, reversal: 'Not separately stated', payoff: 'Not separately stated' };
+    assert.deepEqual(validatePetSourceEvents(source, actions), [], coreAction);
+    assert.ok(validatePetSourceEvents(source, ['The dog looks at the empty bowl.', 'H1 fills the bowl.']).length, 'The actual performed bowl delivery cannot be discarded with its preceding request.');
+  }
+});
+
 test('English species and perspective work with local negation and explicit input override', () => {
   assert.deepEqual(inferPetPlanningHints("A dog carries a ball, in the dog's inner voice."), { species: 'dog', pov: 'pet_inner_voice' });
   assert.deepEqual(inferPetPlanningHints('Not a cat but a dog, with the owner perspective.'), { species: 'dog', pov: 'owner_inner_voice' });

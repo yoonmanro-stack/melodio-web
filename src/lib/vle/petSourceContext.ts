@@ -65,8 +65,26 @@ export function extractPetSourceCast(topic: string): {
   if (explicitlyNoHuman) return { humans: [], couple: false, explicitlyNoHuman };
   let roles = detected;
   const owners = positiveMatches(text, PET_HUMAN_ROLES.find(item => item.role === 'owner')!.pattern);
-  if (owners.length && owners.every(match => /(?:women?|men?|female|male|mother|father|husband|wife|여성|남성|여자|남자|엄마|아빠|남편|아내)\s*$/iu.test(text.slice(Math.max(0, (match.index ?? 0) - 24), match.index)))) {
-    roles = roles.filter(item => item.role !== 'owner');
+  const personDescriptors = PET_HUMAN_ROLES.filter(item => item.adult && !['owner', 'person'].includes(item.role))
+    .flatMap(item => positiveMatches(text, item.pattern).map(match => ({ role: item.role, start: match.index ?? 0, end: (match.index ?? 0) + match[0].length })));
+  const aliasedRoles = new Set<string>();
+  for (const owner of owners) {
+    const start = owner.index ?? 0;
+    const descriptor = personDescriptors.filter(item => item.end <= start).sort((a, b) => b.end - a.end)[0];
+    if (!descriptor) continue;
+    const between = text.slice(descriptor.end, start);
+    const after = text.slice(start + owner[0].length, start + owner[0].length + 16);
+    if (/^\s*$/u.test(between) || /^\s+(?:is|are|was|were)\s+(?:(?:a|an|the)\s+)?$/iu.test(between)
+      || (/^(?:이|가|은|는)\s*$/u.test(between) && /^(?:이다|다|입니다|이며|이고|였다|였습니다)/u.test(after))) aliasedRoles.add(descriptor.role);
+  }
+  if (aliasedRoles.size) {
+    // A clear alias establishes identity for later bare "owner" mentions too.
+    // Preserve an explicitly additional owner or an owner count exceeding the aliased cast.
+    const aliasCount = roles.filter(item => aliasedRoles.has(item.role)).length;
+    const distinct = owners.filter(match => /\b(?:and|plus|another|other|second|different|additional)\s+(?:(?:a|an|the|distinct|adult)\s+)*$|(?:여성|남성|여자|남자|엄마|아빠|남편|아내|집사|보호자)(?:와|과)\s*$|(?:^|\s)(?:그리고|다른|별도의?)\s*$/iu.test(text.slice(Math.max(0, (match.index ?? 0) - 40), match.index)));
+    const ownerCount = Math.max(0, ...owners.map(match => mentionCount(text, match)));
+    const extraCount = Math.max(ownerCount - aliasCount, 0, ...distinct.map(match => mentionCount(text, match)));
+    roles = [...roles.filter(item => item.role !== 'owner'), ...Array.from({ length: Math.min(4, extraCount) }, () => ({ role: 'owner', adult: true }))];
   }
   // "Adult woman" describes one person; explicit generic count can still establish a missing second adult.
   const generic = roles.filter(item => item.role === 'person');

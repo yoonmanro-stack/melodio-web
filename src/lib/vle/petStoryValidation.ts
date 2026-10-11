@@ -30,7 +30,7 @@ const PROPS: Family[] = [
 const ACTIONS: Family[] = [
   { key: 'pick_up', pattern: /\b(?:pick(?:s|ed|ing)?\s+up|grip(?:s|ped|ping)?|grab(?:s|bed|bing)?|take(?:s)?\s+(?:the\s+)?[^.;]{0,24}\bin\s+(?:its|the)\s+mouth)\b|집어|물고|문다|문채|물어/iu },
   { key: 'carry', pattern: /\b(?:carr(?:y|ies|ied|ying)|bring(?:s|ing)?|brought|deliver(?:s|ed|ing)?|fetch(?:es|ed|ing)?)\b|가져|가져다|물고\s*(?:가|간|달|옮)|옮겨|운반/iu },
-  { key: 'push', pattern: /\b(?:push(?:es|ed|ing)?|shov(?:e|es|ed|ing)|knock(?:s|ed|ing)?\s+(?:the\s+)?[^.;]{0,24}(?:off|over)|bat(?:s|ted|ting)?)\b|밀어|민다|밀고|떨어뜨/iu },
+  { key: 'push', pattern: /\b(?:push(?:es|ed|ing)?|shov(?:e|es|ed|ing)|knock(?:s|ed|ing)?\s+(?:the\s+)?[^.;]{0,24}(?:off|over)|bat(?:s|ted|ting)?)\b|밀어|(?<!내)민다|밀고|떨어뜨/iu },
   { key: 'nudge', pattern: /\b(?:nudg(?:e|es|ed|ing)|nose(?:s|d)?|poke(?:s|d|ing)?|tap(?:s|ped|ping)?|touch(?:es|ed|ing)?)\b|툭|건드|콕|비비|깨운/iu },
   { key: 'hide', pattern: /\b(?:hid(?:e|es|den|ing)|stash(?:es|ed|ing)?|conceal(?:s|ed|ing)?)\b|숨기|숨긴|숨겨|감춘|감추/iu },
   { key: 'give', pattern: /\b(?:giv(?:e|es|ing)|gave|hand(?:s|ed|ing)?\s+(?:back|over)|return(?:s|ed|ing)?\s+(?:the\s+)?(?:leash|ball|toy|cup|shoe)|press(?:es)?[^.;]{0,40}\binto[^.;]{0,24}\bhand|release(?:s|d|ing)?)\b|돌려주|건네|반납/iu },
@@ -116,19 +116,22 @@ function actorBefore(value: string, position: number): Event['actor'] {
 
 function eventFacts(value: string): Event[] {
   const clauses = value.normalize('NFKC').split(/[.!?;]|\b(?:while|whereas|but|then)\b|하지만|그리고/iu);
-  return clauses.flatMap(clause => ACTIONS.flatMap(({ key, pattern }) => {
-    const action = clause.match(pattern);
-    if (!action) return [];
+  return clauses.flatMap(clause => ACTIONS.flatMap(({ key, pattern }) => [...clause.matchAll(new RegExp(pattern.source, 'giu'))].flatMap(action => {
     const position = action.index ?? 0;
     const before = clause.slice(Math.max(0, position - 25), position);
     const after = clause.slice(position + action[0].length, position + action[0].length + 25);
+    const requestContext = clause.slice(Math.max(0, position - 100), position);
+    // A quoted imperative or explicit request is not proof that its requested action occurred.
+    // Inspect each occurrence so a later performed action in the same clause is still checked.
+    if (/^(?:오|다주|으|달|어달|아달|해달|가|주)?(?:라며|라고|라는|도록)/u.test(after)
+      || /\b(?:asks?|tells?|requests?|orders?|instructs?)\b[^.!?;]{0,70}\bto\s+(?:(?:please|now|just|gently|quickly|quietly|immediately)\s+){0,2}$/iu.test(requestContext)) return [];
     if (['open', 'close'].includes(key) && /^(?:open|closed)$/iu.test(action[0])
       && /\b(?:at|to|from|beside|near|toward|towards|behind|through|with|on)\s+(?:\w+\s+){0,3}$/iu.test(before)
       && /^\s+(?:(?:front|back|small|large)\s+)?(?:door|window|gate)\b/iu.test(after)) return [];
     if (/\b(?:no|not|never|without|doesn['’]?t|cannot|can['’]?t)\s*(?:\w+\s+){0,2}$/iu.test(before)
       || /^\s*(?:지\s*않|지\s*못)/u.test(after)) return [];
     return [{ kind: key, actor: actorBefore(clause, position), props: families(clause, PROPS), object: actionObject(clause, position, key) }];
-  }));
+  })));
 }
 
 function eventMatches(source: Event, action: Event): boolean {
