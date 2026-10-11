@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from 'react';
-import { getPetProductionShots, isPetTwoClipEpisode, validatePetEpisode, type PetEpisode, type PetShot, type PetVideoJobView } from '@/lib/vle/petEpisode';
+import { getPetProductionShots, isPetInstrumental, isPetTwoClipEpisode, validatePetEpisode, type PetEpisode, type PetShot, type PetVideoJobView } from '@/lib/vle/petEpisode';
 import { registerActiveAudio } from '@/lib/globalAudio';
+import { summarizePetContentReadiness } from '@/lib/video/petContentReadiness';
 
 const fieldClass = 'w-full rounded-xl border border-white/15 bg-black/40 p-3 text-sm text-zinc-100 disabled:cursor-not-allowed';
 const buttonClass = 'rounded-xl border border-fuchsia-400/40 bg-fuchsia-950/60 px-4 py-3 text-sm font-bold text-fuchsia-200 disabled:cursor-not-allowed disabled:opacity-100';
@@ -52,10 +53,12 @@ export function PetEpisodeEditor({ episode, onChange, disabled = false }: {
   episode: PetEpisode; onChange: (episode: PetEpisode) => void; disabled?: boolean;
 }) {
   const issues = validatePetEpisode(episode);
+  const musicMode = isPetInstrumental(episode) ? '인스트루멘탈 · 보컬·가사 없음' : '보컬곡 · 기획한 가사 사용';
   if (isPetTwoClipEpisode(episode)) return (
     <section className="space-y-4 rounded-2xl border border-fuchsia-400/25 bg-fuchsia-950/10 p-4" aria-label="댕냥이 30초 콘티">
       <ViralStoryReview title={episode.title} story={episode.story} candidates={episode.candidates} selectedCandidateIndex={episode.editorialReview?.selectedCandidateIndex ?? 0} selectedReason={episode.editorialReview?.selectedReason || '선정 이유 확인 필요'} />
       <p className="text-xs text-zinc-300">영상 제작 · 15초 + 15초</p>
+      <p className="text-xs text-zinc-300">음악 · {musicMode}</p>
       <p className="text-xs text-zinc-300">{episode.pov === 'owner_inner_voice' ? '집사 속마음' : '반려동물 속마음'} · 이야기를 바꾸려면 위 상황을 수정한 뒤 다시 기획해 주세요.</p>
       <div className="grid gap-3 sm:grid-cols-2">{episode.production.clips.map(clip => <div key={clip.id} className="rounded-xl bg-black/25 p-3">
         <p className="mb-2 text-xs font-bold text-fuchsia-200">{clip.startSeconds}–{clip.startSeconds + 15}초 · {clip.id === 'C1' ? '상황과 시도' : '반전과 마무리'}</p>
@@ -85,6 +88,7 @@ export function PetEpisodeEditor({ episode, onChange, disabled = false }: {
         <textarea className={fieldClass} rows={3} value={episode.story} maxLength={3000} disabled={disabled} onChange={e => onChange({ ...episode, story: e.target.value })} />
       </label>
       <p className="text-xs leading-relaxed text-zinc-300">{episode.pov === 'owner_inner_voice' ? '집사 속마음' : '반려동물 속마음'} · {episode.character.appearance}<br />{episode.character.setting}</p>
+      <p className="text-xs text-zinc-300">음악 · {musicMode}</p>
       {disabled ? <p className="text-xs text-amber-200">영상 작업에 저장된 콘티입니다. 새 이야기는 Step 3에서 다시 기획할 수 있습니다.</p> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         {episode.shots.map(shot => (
@@ -167,6 +171,17 @@ function AssetIssue({ error, imageQuality, canResume }: { error?: string; imageQ
     <p>이전 세부 검수로 중단된 작업입니다. 저장된 이미지로 제작을 이어갈 수 있습니다.</p>
     <details className="mt-2"><summary className="cursor-pointer">이전 검수 기록</summary><p className="mt-2">{error}</p></details>
   </div> : <p className="text-xs text-amber-200">{error}</p>;
+}
+
+export function PetContentReviewNotice({ job }: { job: PetVideoJobView }) {
+  const review = job.contentReview || summarizePetContentReadiness({ videoUrl: job.videoUrl, shots: job.shots });
+  if (job.status !== 'completed') return null;
+  return <section className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-950/15 p-3 text-xs leading-relaxed text-zinc-200" aria-label="완성 영상 내용 확인">
+    <p className="font-bold text-amber-100">{review.status === 'owner_confirmed' ? '직접 확인 완료' : '영상 제작 완료 · 내용 확인 필요'}</p>
+    <p>아래 영상에서 동물의 행동, 이야기의 전개와 마무리, 음악을 확인해 주세요. 정지 화면의 참고 분석만으로 전체 영상의 자연스러움이나 재미를 보장할 수는 없습니다.</p>
+    {review.status !== 'owner_confirmed' ? <p>새 영상은 확인 완료 후 공개 목록에 표시됩니다. 비공개로 설정한 영상은 공개되지 않습니다.</p> : null}
+    {review.concerns.map((concern, index) => <p key={index} className="text-amber-100">{concern}</p>)}
+  </section>;
 }
 
 export default function PetVideoStudio({ userId, episode, trackId, trackTitle, compact = false, externalControl = false, startRequest, onStateChange, onRequestSettled, onBusyChange, onLockedChange, onCompleted }: Props) {
@@ -295,6 +310,21 @@ export default function PetVideoStudio({ userId, episode, trackId, trackTitle, c
     finally { if (mounted.current && currentRun === runId.current) setLoading(false); }
   }
 
+  async function confirmContent() {
+    if (running.current || loading || !job || job.status !== 'completed' || !job.videoUrl || !userId) return;
+    running.current = true;
+    const currentRun = ++runId.current;
+    setLoading(true); setError('');
+    try {
+      const confirmed = await post({ action: 'confirm', jobId: job.id, videoUrl: job.videoUrl });
+      if (mounted.current && currentRun === runId.current) acceptJob(confirmed);
+    } catch (reason) {
+      if (mounted.current && currentRun === runId.current) setError(reason instanceof Error ? reason.message : '확인 상태를 저장하지 못했습니다.');
+    } finally {
+      if (mounted.current && currentRun === runId.current) { running.current = false; setLoading(false); }
+    }
+  }
+
   const ready = !!userId && !!episode && (!!job || !!trackId) && validatePetEpisode(episode).length === 0;
   const restoring = restoredScope !== scope;
   const canStart = ready && !busy && !loading && !restoring && !restoreFailed
@@ -384,7 +414,14 @@ export default function PetVideoStudio({ userId, episode, trackId, trackTitle, c
           {job.status === 'failed' || job.status === 'held' ? <p className="text-sm text-amber-200">작업이 멈췄습니다. 상태를 확인해 주세요. 같은 장면을 자동으로 다시 결제하지 않습니다.</p> : null}
           {!externalControl && job.canResume ? <button className={buttonClass} disabled={!ready || busy || loading} onClick={() => void start('resume')}>{twoClip ? openingRecovery ? '저장된 이미지로 영상 제작 이어가기' : '저장된 결과로 제작 이어가기' : '저장된 결과로 다시 합성/보관'}</button> : null}
           {job.status !== 'completed' ? <button className="text-xs text-zinc-300 underline disabled:opacity-100" disabled={busy || loading} onClick={() => void refresh()}>상태 다시 확인</button> : null}
-          {job.status === 'completed' && mediaUrl(job.videoUrl) ? <div className="space-y-3"><video controls playsInline preload="metadata" src={mediaUrl(job.videoUrl)} onPlay={event => registerActiveAudio(event.currentTarget)} className="mx-auto max-h-[560px] max-w-full rounded-xl" /><a className="inline-block text-sm text-fuchsia-300 underline" href={mediaUrl(job.videoUrl)} download>완성 영상 다운로드 · {job.durationSeconds ?? 30}초</a></div> : null}
+          {job.status === 'completed' && mediaUrl(job.videoUrl) ? <div className="space-y-3">
+            <PetContentReviewNotice job={job} />
+            <video controls playsInline preload="metadata" src={mediaUrl(job.videoUrl)} onPlay={event => registerActiveAudio(event.currentTarget)} className="mx-auto max-h-[560px] max-w-full rounded-xl" />
+            <div className="flex flex-wrap items-center gap-3">
+              <a className="inline-block text-sm text-fuchsia-300 underline" href={mediaUrl(job.videoUrl)} download>완성 영상 다운로드 · {job.durationSeconds ?? 30}초</a>
+              {job.contentReview?.status !== 'owner_confirmed' ? <button type="button" className={buttonClass} disabled={busy || loading} onClick={() => void confirmContent()}>영상 확인 완료</button> : null}
+            </div>
+          </div> : null}
         </>
       ) : null}
       {!job && restoreFailed ? <button className="text-xs text-zinc-300 underline disabled:opacity-100" disabled={busy || loading} onClick={() => void refresh()}>상태 다시 확인</button> : null}

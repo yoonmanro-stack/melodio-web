@@ -65,7 +65,7 @@ test('v3 analysis keeps story intent and only the timed actions included in each
     assert.equal(expected.kind, 'video'); assert.equal(expected.clip, `C${index + 1}`);
     assert.equal(expected.sourceIntent, original.episode.sourceTopic);
     assert.deepEqual(expected.beats.map(beat => beat.id), selectedIds);
-    assert.deepEqual(expected.evaluationScope, { type: 'clip_story_core', sourceStartSeconds: index * 15, durationSeconds: 15, sampledFrameCount: 3 });
+    assert.deepEqual(expected.evaluationScope, { type: 'clip_story_core', sourceStartSeconds: index * 15, durationSeconds: 15, sampledFrameCount: 3, identityReference: 'No opening image reference is supplied.' });
     const seam = expected.beats.find(beat => beat.id === 'S4');
     assert.equal(seam.sourceOffsetSeconds, index === 0 ? 0 : 1); assert.equal(seam.includedDurationSeconds, index === 0 ? 1 : 5);
     assert.equal(expected.coreStory.setup, original.episode.shots[0].action);
@@ -112,15 +112,15 @@ test('analysis instructions focus on causal story suggestions without prop inspe
   await reviewPetAsset(legacyJob(), 1, 'video', frames, dependencies);
   const instructions = dependencies.calls[0].request.instructions;
   assert.match(instructions, /connection to the user's authored core story/); assert.match(instructions, /concrete improvement/);
-  assert.match(instructions, /not pen details, object counts, duplicate props, appearance specifications, anatomy, furniture geometry, whole-background locks/);
+  assert.match(instructions, /not pen details, incidental duplicate props, fine appearance specifications, furniture geometry, whole-background locks/);
   assert.match(instructions, /A story metaphor does not require literal props/);
   assert.match(instructions, /only an obvious visible change.*that confuses that relationship/);
   assert.match(instructions, /do not infer hidden features or require a face/);
-  assert.match(instructions, /chosenIdentityContext is the authored identity reference/);
-  assert.match(instructions, /not an exact hairstyle, wardrobe, markings or beauty requirement/);
+  assert.match(instructions, /chosenIdentityContext and optional image reference/);
+  assert.match(instructions, /not exact hairstyle, wardrobe, markings or beauty requirements/);
   assert.match(instructions, /cannot verify complete C1-to-C2 continuity/);
   assert.match(instructions, /Do not claim to have seen motion between stills/); assert.match(instructions, /or promise viral performance/);
-  assert.match(instructions, /If these three samples cannot establish/); assert.match(instructions, /C1 need not contain a later reversal\/payoff/);
+  assert.match(instructions, /If these samples cannot establish/); assert.match(instructions, /C1 need not contain a later reversal\/payoff/);
   assert.doesNotMatch(instructions, /Inspect inventory|fails continuity|fails progression|exact seating.*requirements/);
 });
 test('all legacy story concerns remain advisory; unclear frames suggest improvements without blocking', async () => {

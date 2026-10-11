@@ -5,7 +5,7 @@ import { buildPublicViralVideoRows } from '@/lib/video/publicViralVideos'
 // Visibility changes and deleted generations must apply on the next read.
 export const dynamic = 'force-dynamic'
 const GENERATION_FIELDS = 'id,user_id,title,status,is_public,license_hash,created_at,cover_art_url'
-const JOB_FIELDS = 'user_id,status,updated_at,track_id:state->audio->>trackId,video_url:state->>videoUrl,poster_url:state->shots->0->>keyframeUrl'
+const JOB_FIELDS = 'user_id,status,updated_at,track_id:state->audio->>trackId,video_url:state->>videoUrl,poster_url:state->shots->0->>keyframeUrl,content_policy_version:state->>contentPolicyVersion,approval_url:state->contentApproval->>videoUrl,approval_at:state->contentApproval->>approvedAt'
 const PAGE_SIZE = 500
 
 type Row = Record<string, unknown>

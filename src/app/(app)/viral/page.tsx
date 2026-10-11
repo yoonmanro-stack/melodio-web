@@ -22,7 +22,7 @@ import { selectTopViralVideos } from '@/lib/video/viralVideoRanking';
 import ViralVideoLibrary, { readCachedViralVideos, type ViralVideo, type ViralCategory } from "@/components/viral/ViralVideoLibrary";
 import { VIRAL_SONG_SPEC, estimateSeconds } from "@/lib/vle/viralSongSpec";
 import PetVideoStudio, { PetEpisodeEditor, readPetEpisode, type PetVideoExternalStartRequest, type PetVideoExternalState } from "@/components/viral/PetVideoStudio";
-import { validatePetEpisode, type PetEpisode, type PetVideoJobView } from "@/lib/vle/petEpisode";
+import { isPetInstrumental, validatePetEpisode, type PetEpisode, type PetVideoJobView } from "@/lib/vle/petEpisode";
 import { SingleVideoActionGate, runSingleVideoAction, waitForSingleVideoReady, type SingleVideoScope, type SingleVideoPhase } from '@/lib/vle/single-video-action';
 import { ViralStoryVideoClient, VIRAL_STORY_VIDEO_CATEGORIES, isViralStoryTrackId, readViralStoryRecovery, type ViralStoryClientState, type ViralStoryRecoveryToken } from '@/lib/vle/viral-story-client';
 
@@ -630,7 +630,7 @@ function ViralTrendZoneStudio() {
     setGrokVideoResult(job.videoUrl); setGrokVideoDuration(job.durationSeconds || 30);
     setGrokVideoClips([job.videoUrl]); setGrokVideoProgress(job.progress);
     // React skips an identical key when restore or state refresh repeats this result.
-    setPetCompletedRefreshKey(`${petUserId}:${job.id}:${job.videoUrl}`);
+    setPetCompletedRefreshKey(`${petUserId}:${job.id}:${job.videoUrl}:${job.contentReview?.approvedAt || ''}`);
   }, [petUserId]);
 
   useEffect(() => {
@@ -1335,6 +1335,7 @@ function ViralTrendZoneStudio() {
   }
 
   const petCurrentEpisode = petEpisode ? { ...petEpisode, lyrics: customLyrics, stylePrompt: optimizedPrompt } : null;
+  const petInstrumentalMode = genCategory === 'pet' && isPetInstrumental(petCurrentEpisode);
   const plannedSourceTopic = genCategory === 'pet' ? petEpisode?.sourceTopic : producerBrief?.sourceTopic;
   const planIsCurrent = plannedSourceTopic !== undefined
     && plannedSourceTopic === customTopic
@@ -1556,7 +1557,7 @@ function ViralTrendZoneStudio() {
         settle(); return;
       }
     }
-    if (!customLyrics.trim()) {
+    if (!customLyrics.trim() && !isPetInstrumental(petSnapshot)) {
       alert("가사가 비어 있습니다. Step 3에서 다시 기획해 주세요.");
       settle(); return;
     }
@@ -1567,7 +1568,9 @@ function ViralTrendZoneStudio() {
     setIsPlaying(false);
     try {
       const baseGenrePrompt = VIRAL_GENRE_PROMPT_MAP[selectedGenre] || '';
-      const isInstrumental = viralBriefSnapshot?.isInstrumental ?? selectedVocal.includes('Instrumental');
+      const isInstrumental = petSnapshot ? isPetInstrumental(petSnapshot)
+        : viralBriefSnapshot?.isInstrumental ?? selectedVocal.includes('Instrumental');
+      const audioVocalLabel = petSnapshot ? isInstrumental ? 'Instrumental' : 'Vocal' : selectedVocal;
       // 카테고리 사운드 정체성은 서버(producer-brief)가 결정한다.
       // 여기서 "B-grade meme energy" 같은 전역 접미사를 덧붙이면 모든
       // 카테고리가 같은 소리가 나고, 귀여운 댕냥이가 디스곡이 된다.
@@ -1613,7 +1616,7 @@ function ViralTrendZoneStudio() {
           title: finalTitle,
           isInstrumental,
           sunoVersion: 'v5.5',
-          selections: { genre: selectedGenre ? [selectedGenre] : [], mood: selectedMood ? [selectedMood] : [], vocal: selectedVocal ? [selectedVocal] : [] },
+          selections: { genre: selectedGenre ? [selectedGenre] : [], mood: selectedMood ? [selectedMood] : [], vocal: audioVocalLabel ? [audioVocalLabel] : [] },
           presetId: genCategory,
           presetName: `${categoryLabel} 템플릿`,
           sourceMenu: 'viral',
@@ -1684,7 +1687,7 @@ function ViralTrendZoneStudio() {
                 audio_url: gen.audio_url || gen.source_audio_url,
                 thumbnailUrl: gen.thumbnail_url || gen.image_url || CATEGORY_THUMBNAIL_MAP[genCategory] || 'https://jfsfxzhunkrjyibsdswb.supabase.co/storage/v1/object/public/melodio-assets/presets/joseon-hip-hop.png',
                 visualGuide: "9:16 vertical shorts visual outline",
-                tags: [selectedGenre, selectedMood, selectedVocal, 'viral'].filter(Boolean),
+                tags: [selectedGenre, selectedMood, audioVocalLabel, 'viral'].filter(Boolean),
                 suggestedTitle: finalTitle,
                 is_viral: true,
                 source: 'viral',
@@ -1798,8 +1801,9 @@ function ViralTrendZoneStudio() {
           return ready;
         };
         if (selectedId) return verify(selectedId);
-        if (!planIsCurrent || !customLyrics.trim() || (scope.category === 'pet' && (petPlanLocked || validatePetEpisode(frozenEpisode).length))) {
-          throw new Error('현재 상황으로 AI 기획을 마친 뒤 가사를 확인해 주세요.');
+        if (!planIsCurrent || (!customLyrics.trim() && !(scope.category === 'pet' && isPetInstrumental(frozenEpisode)))
+          || (scope.category === 'pet' && (petPlanLocked || validatePetEpisode(frozenEpisode).length))) {
+          throw new Error(scope.category === 'pet' ? '현재 상황으로 AI 기획을 마친 뒤 음악과 콘티를 확인해 주세요.' : '현재 상황으로 AI 기획을 마친 뒤 가사를 확인해 주세요.');
         }
         const pending = pendingAudioRef.current;
         const samePending = pending?.scope.ownerId === scope.ownerId && pending.scope.category === scope.category
@@ -2589,7 +2593,7 @@ function ViralTrendZoneStudio() {
                         ? 'bg-emerald-500/20 border border-emerald-500/40 text-emerald-300'
                         : 'bg-purple-500/20 border border-purple-500/40 text-purple-300'
                     }`}>{generatedResult ? <Check className="w-3 h-3" /> : '4'}</div>
-                    가사 확인 & 영상 생성 ({genCategory === 'pet' ? '완성 영상 30초' : `⚡ ${VIRAL_SONG_SPEC.targetSecondsMin}~${VIRAL_SONG_SPEC.targetSecondsMax}초 숏폼`})
+                    {petInstrumentalMode ? '음악 확인 & 영상 생성' : '가사 확인 & 영상 생성'} ({genCategory === 'pet' ? '완성 영상 30초' : `⚡ ${VIRAL_SONG_SPEC.targetSecondsMin}~${VIRAL_SONG_SPEC.targetSecondsMax}초 숏폼`})
                     {!optimizedPrompt.trim() && <Lock className="w-3.5 h-3.5 text-zinc-400 ml-1" />}
                   </h3>
                   {/*
@@ -2597,7 +2601,7 @@ function ViralTrendZoneStudio() {
                     실측 발화 속도로 환산한 예상 길이를 함께 띄워서, 생성 버튼을
                     누르기 전에 30초를 넘길지 판단할 수 있게 한다.
                   */}
-                  {genCategory === 'pet' ? <span className="text-xs text-zinc-300">가사 {sungSyllables}음절 · 완성 영상 30초</span> : <span
+                  {genCategory === 'pet' ? <span className="text-xs text-zinc-300">{petInstrumentalMode ? '인스트루멘탈 · 가사 없음' : `가사 ${sungSyllables}음절`} · 완성 영상 30초</span> : <span
                     className={`text-xs font-mono font-black flex items-center gap-1.5 ${
                       isOverBudget ? 'text-amber-400' : isUnderBudget ? 'text-sky-400' : 'text-zinc-300'
                     }`}
@@ -2636,7 +2640,9 @@ function ViralTrendZoneStudio() {
                   ))}
                 </div> : null}
 
-                <textarea
+                {petInstrumentalMode ? <p role="status" className="rounded-xl border border-white/15 bg-black/50 p-4 text-sm leading-relaxed text-zinc-200">
+                  인스트루멘탈 음악으로 제작합니다. 보컬과 가사는 사용하지 않으며, 위 콘티의 6개 장면으로 이야기를 전달합니다.
+                </p> : <textarea
                   ref={textareaRef}
                   value={customLyrics}
                   // 문자 수 하드 블록 제거: 섹션 태그까지 포함해 세던 기준이라
@@ -2654,11 +2660,12 @@ function ViralTrendZoneStudio() {
                       ? "Step 3에서 AI 기획하기를 누르면 이 영역이 활성화됩니다."
                       : "기획된 가사를 확인하고 필요한 부분만 직접 다듬어 주세요."
                   }
-                />
+                />}
                 <p className="text-xs text-zinc-300 leading-normal">
                   <span className="inline-flex items-center gap-1.5">
                     <Lightbulb className="w-3.5 h-3.5 text-yellow-400" />
-                    {genCategory === 'pet' ? '말하듯 부를 가사를 확인해 주세요. 가사를 바꾸면 변경한 가사로 새 음원을 생성해야 영상에 연결할 수 있습니다.' : '한 행당 10~14글자 내외로 작성하고 쉼표(,)나 마침표(.)를 찍으면 AI의 발음이 훨씬 정확해집니다.'}
+                    {petInstrumentalMode ? '음악 스타일과 콘티를 확인해 주세요. 보컬곡으로 바꾸려면 위 음악 설정을 변경한 뒤 다시 기획해 주세요.'
+                      : genCategory === 'pet' ? '말하듯 부를 가사를 확인해 주세요. 가사를 바꾸면 변경한 가사로 새 음원을 생성해야 영상에 연결할 수 있습니다.' : '한 행당 10~14글자 내외로 작성하고 쉼표(,)나 마침표(.)를 찍으면 AI의 발음이 훨씬 정확해집니다.'}
                   </span>
                 </p>
               </div>

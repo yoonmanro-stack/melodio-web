@@ -1,3 +1,5 @@
+import type { PetAudioAlignment } from '../video/petAudioAlignment';
+
 /** Pet pilot contract. Other viral categories keep their existing pipeline. */
 export const PET_EPISODE_VERSION = 'pet-v4' as const;
 /** Official Grok image-to-video prompt limit; never truncate to fit. */
@@ -103,6 +105,8 @@ export interface PetEpisode {
   candidates: Array<PetStoryFingerprint & { title: string; premise: string; relatableMoment?: string; behavioralContradiction?: string; storyBeats?: { setup: string; escalation: string; reversal: string; punchline: string }; ownerWantedToSay?: string; review?: PetCandidateReview }>;
   editorialReview?: { provenance: 'ai_hypothesis'; scoreMeaning: 'model_estimate'; selectedCandidateIndex: number; selectedReason: string; evidenceNote: string };
   character: { species: 'cat' | 'dog'; appearance: string; owner: string; setting: string; continuity: string[] };
+  /** Missing on saved episodes means legacy vocal; never rewrite a saved identity. */
+  audioMode?: 'vocal' | 'instrumental';
   lyrics: string;
   stylePrompt: string;
   shots: PetShot[];
@@ -118,11 +122,16 @@ export interface PetVideoJobView {
   message: string;
   productionMode?: 'legacy-six-clips' | 'two-clips';
   shots: Array<{ id: string; status: string; keyframeUrl?: string; videoUrl?: string; requestId?: string; error?: string; motionPrompt?: string; quality?: { image?: unknown; video?: unknown } }>;
-  audioQuality?: { bpm?: number; confidence?: number; method?: string; endingStatus?: string; endingReasons?: string[] };
+  audioQuality?: { bpm?: number; confidence?: number; method?: string; endingStatus?: string; endingReasons?: string[]; alignment?: PetAudioAlignment };
   videoUrl?: string;
   durationSeconds?: number;
   estimatedCostUsd: number;
   canResume?: boolean;
+  contentReview?: { status: 'not_evaluated' | 'needs_attention' | 'preview_required' | 'owner_confirmed'; analyzedClips: number; totalClips: number; concerns: string[]; approvedAt?: string };
+}
+
+export function isPetInstrumental(episode: PetEpisode | null | undefined): boolean {
+  return episode?.audioMode === 'instrumental';
 }
 
 export function validatePetEpisode(value: unknown): string[] {
@@ -130,7 +139,11 @@ export function validatePetEpisode(value: unknown): string[] {
   const e = value as PetEpisode;
   const issues: string[] = [];
   if (e.version !== PET_EPISODE_VERSION && e.version !== 'pet-v3') issues.push('댕냥이 콘티 버전을 확인해 주세요.');
-  if (!e.id || !e.title || !e.story || !e.lyrics || !e.stylePrompt) issues.push('제목·스토리·가사·음악 스타일이 필요합니다.');
+  if (!e.id || !e.title || !e.story || !e.stylePrompt) issues.push('제목·스토리·음악 스타일이 필요합니다.');
+  if (e.audioMode !== undefined && e.audioMode !== 'vocal' && e.audioMode !== 'instrumental') issues.push('음악 모드는 보컬 또는 인스트루멘탈이어야 합니다.');
+  if (isPetInstrumental(e)) {
+    if (e.lyrics !== '') issues.push('인스트루멘탈 콘티에는 가사를 넣을 수 없습니다.');
+  } else if (typeof e.lyrics !== 'string' || !e.lyrics.trim()) issues.push('보컬 콘티에는 가사가 필요합니다.');
   if (!['cat', 'dog'].includes(e.character?.species) || !e.character?.appearance || !e.character?.setting) issues.push('고정 캐릭터와 공간이 필요합니다.');
   if (!e.fingerprint?.prop || !e.fingerprint?.conflict || !e.fingerprint?.twist) issues.push('소품·갈등·반전 구분이 필요합니다.');
   if (!Array.isArray(e.shots) || e.shots.length !== 6) return [...issues, '정확히 6개 장면이 필요합니다.'];

@@ -63,6 +63,7 @@ export async function POST(request: NextRequest) {
       if (body.action === 'advance') job = await service.advance(userId, body.jobId);
       else if (body.action === 'approve') job = await service.approve(userId, body.jobId, body.motionPrompts);
       else if (body.action === 'resume') job = await service.resume(userId, body.jobId);
+      else if (body.action === 'confirm') job = await service.confirm(userId, body.jobId, body.videoUrl);
       else throw new PetPipelineError('지원하지 않는 작업입니다.');
     }
     return NextResponse.json({ success: true, job }, { headers: { 'Cache-Control': 'no-store' } });

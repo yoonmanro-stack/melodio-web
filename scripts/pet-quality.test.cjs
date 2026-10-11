@@ -50,7 +50,7 @@ test('opening image helper is pure and image review reads neither frames nor pro
   assert.deepEqual(openingImageAnalysis(fixture, 0), expected);
 });
 test('policy marks both known opening gate versions obsolete and preserves the deployed C2 guard', () => {
-  assert.equal(PET_QUALITY_POLICY_VERSION, 'pet-story-core-analysis-v1');
+  assert.equal(PET_QUALITY_POLICY_VERSION, 'pet-story-core-analysis-v2');
   assert.deepEqual(PET_OBSOLETE_OPENING_IMAGE_POLICY_VERSIONS, ['pet-asset-review-v2-opening-actor', 'pet-asset-review-v3-physical-beats']);
   assert.equal(PET_OBSOLETE_C2_VIDEO_POLICY_VERSION, 'pet-asset-review-v2-opening-actor');
 });
@@ -61,7 +61,7 @@ test('video uses the same model and exactly three supplied samples once, without
     assert.equal(url, 'https://api.openai.com/v1/responses'); assert.equal(body.model, 'gpt-5.6-sol'); assert.equal(body.max_output_tokens, 5000); assert.deepEqual(body.reasoning, { effort: 'low' });
     assert.deepEqual(body.input[0].content.slice(1), frames.map(image_url => ({ type: 'input_image', image_url, detail: 'high' })));
     assert.deepEqual(body.text.format.schema.properties.checks.required, keys);
-    assert.match(body.instructions, /no finding blocks production/); assert.match(body.instructions, /not pen details, object counts/);
+    assert.match(body.instructions, /no finding blocks production/); assert.match(body.instructions, /not pen details, incidental duplicate props/);
     assert.match(body.instructions, /Do not claim to have seen motion between stills/); assert.match(body.instructions, /or promise viral performance/);
     assert.doesNotMatch(body.input[0].content[0].text, /inventory|geometry|count|keyframePrompt|videoPrompt|before|after/);
     return new Response(JSON.stringify({ status: 'completed', model: 'gpt-5.6-sol', output: [{ content: [{ type: 'output_text', text: JSON.stringify(good()) }] }], usage: { input_tokens: 100, output_tokens: 50 } }));
@@ -80,4 +80,20 @@ test('Sol advisory refuses mislabeled or unaccounted responses without retrying 
     } }), error => error.code === 'QUALITY_RESPONSE');
     assert.equal(calls, 1);
   }
+});
+test('C2 reuses the stored opening identity in the same advisory request without treating it as motion', async () => {
+  const fixture = job();
+  fixture.episode.production.clips.push({ id: 'C2', startSeconds: 15, durationSeconds: 15, beatIds: ['S1'] });
+  const reference = 'https://images.x.ai/offline-opening.jpg';
+  fixture.state = { shots: [{ keyframeUrl: reference }] };
+  const before = JSON.stringify(fixture), frames = [1, 2, 3].map(i => `https://images.x.ai/offline-c2-${i}.jpg`);
+  let calls = 0;
+  const result = await reviewPetAsset(fixture, 1, 'video', frames, { apiKey: 'fixture', fetch: async (_url, options) => {
+    calls++; const body = JSON.parse(options.body);
+    assert.deepEqual(body.input[0].content.filter(c => c.type === 'input_image').map(c => c.image_url), [...frames, reference]);
+    assert.match(body.input[0].content[0].text, /not a fourth action sample/);
+    return new Response(JSON.stringify({ status: 'completed', model: 'gpt-5.6-sol', output: [{ content: [{ type: 'output_text', text: JSON.stringify(good()) }] }], usage: { input_tokens: 100, output_tokens: 50 } }));
+  } });
+  assert.equal(calls, 1); assert.equal(result.frameCount, 3); assert.equal(result.referenceFrameCount, 1);
+  assert.equal(result.continuityScope, 'current_clip_samples_plus_opening_reference'); assert.equal(JSON.stringify(fixture), before);
 });

@@ -60,7 +60,7 @@ function harness(options = {}) {
     VIRAL_STORY_VIDEO_CATEGORIES: new Set(['human','history','drama']), isViralStoryTrackId: value => typeof value === 'string' && value.length === 36,
     readViralBrief: readBrief, readCategoryBriefExtras: extras, readPetEpisode: value => value?.petEpisode || null,
     readSavedViralVideo: value => { const m = value?.license_hash ? JSON.parse(value.license_hash) : {}; return value?.video_url || m.video_url || null; },
-    validatePetEpisode: () => [], buildViralVideoCoverPrompt: () => 'cover',
+    validatePetEpisode: () => [], isPetInstrumental: value => value?.audioMode === 'instrumental', buildViralVideoCoverPrompt: () => 'cover',
     localStorage: { getItem() { return '[]'; }, setItem() {} }, window: { localStorage: { getItem() { return null; }, setItem() {} } },
     setInterval(callback) { polls.push(callback); return polls.length; }, clearInterval() {}, setTimeout() {},
     alert: message => alerts.push(message),
@@ -253,6 +253,18 @@ test('new pet audio reaches the child only after actual completion and scoped re
   assert.equal(audioPosts(host).length,1); assert.ok(host.state.petStartRequest); assert.equal(host.state.petStartRequest.trackId,trackId);
   host.settlePet(host.state.petStartRequest.id); await running;
   assert.equal(host.calls.filter(call=>call.url.endsWith('/prompt')).length,0);
+});
+
+test('instrumental Pet uses the single action to generate empty-lyrics audio and continue once', async () => {
+  const host = harness({ category: 'pet', pet: true, ready: false, brief: { lyrics: '' } });
+  host.state.petEpisode.audioMode = 'instrumental'; host.state.selectedVocal = 'Talk-Sung';
+  const running = host.run(); await host.completeAudio();
+  assert.equal(host.state.petStartRequest, undefined);
+  host.state.petVideoStateRef.current.state.loading = false; await tick();
+  assert.equal(audioPosts(host).length, 1); assert.equal(audioPosts(host)[0].body.isInstrumental, true);
+  assert.equal(audioPosts(host)[0].body.lyricsPrompt, ''); assert.ok(host.state.petStartRequest);
+  host.settlePet(host.state.petStartRequest.id); await running;
+  assert.equal(host.state.singleVideoGateRef.current.busy, false);
 });
 
 test('parent pet continuation is canceled when its owner changes during child restore', async () => {

@@ -1,3 +1,5 @@
+import { hasPetOwnerContentApproval } from './petContentReadiness';
+
 type Row = Record<string, unknown>;
 
 interface CompletedVideo {
@@ -5,6 +7,7 @@ interface CompletedVideo {
   poster: string;
   completedAt: string;
   timestamp: number;
+  publishable: boolean;
 }
 
 export interface PublicViralVideoRow {
@@ -63,17 +66,27 @@ function count(...values: unknown[]): number {
 /** Public list projection only. Never writes jobs, submits media, or returns private planning data. */
 export function buildPublicViralVideoRows(generations: Row[], jobs: Row[]): PublicViralVideoRow[] {
   const completed = new Map<string, Map<string, CompletedVideo>>();
+  const withheld = new Set<string>();
   for (const job of jobs) {
     const trackId = text(job.track_id, 200);
     const owner = text(job.user_id, 200);
     const url = httpsUrl(job.video_url);
     const completedAt = date(job.updated_at);
-    if (job.status !== 'completed' || !trackId || !owner || !url || !completedAt) continue;
+    if (job.status !== 'completed' || !trackId || !owner) continue;
+    if (!url || !completedAt) {
+      // New review-policy records with malformed completion data cannot fall back to a cached URL.
+      if (job.content_policy_version) withheld.add(JSON.stringify([trackId, owner]));
+      continue;
+    }
     const timestamp = Date.parse(completedAt);
+    const publishable = hasPetOwnerContentApproval({
+      contentPolicyVersion: job.content_policy_version, videoUrl: job.video_url,
+      approvalUrl: job.approval_url, approvedAt: job.approval_at,
+    });
     const owners = completed.get(trackId) || new Map<string, CompletedVideo>();
     const previous = owners.get(owner);
     if (!previous || timestamp > previous.timestamp) {
-      owners.set(owner, { url, poster: httpsUrl(job.poster_url), completedAt, timestamp });
+      owners.set(owner, { url, poster: httpsUrl(job.poster_url), completedAt, timestamp, publishable });
       completed.set(trackId, owners);
     }
   }
@@ -84,7 +97,10 @@ export function buildPublicViralVideoRows(generations: Row[], jobs: Row[]): Publ
   const rows = new Map<string, PublicViralVideoRow>();
   for (const { row, id, meta } of parsed) {
     if (!id || blocked.has(id) || row.status !== 'completed' || !meta) continue;
+    if (withheld.has(JSON.stringify([id, text(row.user_id, 200)]))) continue;
     const bound = completed.get(id)?.get(text(row.user_id, 200));
+    // A cached generation video URL cannot bypass the newest owner's preview decision.
+    if (bound && !bound.publishable) continue;
     const source = text(meta.sourceMenu).toLowerCase();
     if (!bound && source !== 'viral' && source !== 'viral-cf' && meta.viralMode !== true) continue;
     const videoUrl = bound?.url || [meta.video_url, meta.grok_video_url, meta.videoUrl].map(httpsUrl).find(Boolean);

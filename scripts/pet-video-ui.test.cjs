@@ -25,6 +25,7 @@ function load(file, globals = {}, react = React) {
       if (name === '@/lib/globalAudio') return { registerActiveAudio() {} };
       if (name === 'react') return react;
       if (name === '@/lib/vle/petEpisode') return contract;
+      if (name === '@/lib/video/petContentReadiness') return load(path.join(root, 'src/lib/video/petContentReadiness.ts'));
       return require(name);
     },
     setTimeout, clearTimeout, console,
@@ -329,7 +330,7 @@ function petGenerationHarness(overrides = {}) {
     petPlanningRequest: { current: 0 }, audioGenerationRef: { current: null }, pendingAudioRef: { current: null },
     readCategoryBriefExtras() { return {}; },
     VIRAL_GENRE_PROMPT_MAP: {}, CATEGORY_TITLES: { pet: '댕냥이' }, CATEGORY_THUMBNAIL_MAP: { pet: 'https://example.invalid/poster.png' }, brandName: '', producerBrief: null, customTopic: fixture.sourceTopic,
-    effectiveIsPublic: false, validatePetEpisode: contract.validatePetEpisode,
+    effectiveIsPublic: false, validatePetEpisode: contract.validatePetEpisode, isPetInstrumental: contract.isPetInstrumental,
     setPetTrackId(value) { trackIds.push(value); },
     setPetOwnedTracksRefreshVersion(value) { refreshVersion = typeof value === 'function' ? value(refreshVersion) : value; },
     setInterval(callback) { polls.push(callback); return 1; }, clearInterval(id) { cleared.push(id); },
@@ -353,6 +354,39 @@ test('an explicitly submitted pet audio ID is retained for draft restoration bef
   assert.equal(harness.polls.length, 1);
   assert.deepEqual(harness.requests.map(request => request.url), ['/api/generate']);
   assert.equal(JSON.parse(harness.requests[0].options.body).metadata.petEpisode.id, fixture.id);
+});
+
+test('instrumental Pet audio submits its planned mode and empty lyrics despite a stale vocal selector', async () => {
+  const episode = { ...fixture, audioMode: 'instrumental', lyrics: '' };
+  const harness = petGenerationHarness({ petEpisode: episode, customLyrics: '', selectedVocal: 'Talk-Sung' });
+  await harness.run();
+  assert.equal(harness.alerts.length, 0); assert.equal(harness.requests.length, 1);
+  const payload = JSON.parse(harness.requests[0].options.body);
+  assert.equal(payload.isInstrumental, true); assert.equal(payload.lyricsPrompt, '');
+  assert.deepEqual(payload.selections.vocal, ['Instrumental']);
+  assert.deepEqual(payload.metadata.petEpisode, episode);
+  assert.equal(payload.metadata.petEpisode.shots.filter(shot => shot.caption).length, 6);
+});
+
+test('legacy Pet vocal audio preserves its identity and lyrics despite a stale instrumental selector', async () => {
+  const harness = petGenerationHarness({ selectedVocal: 'Instrumental' });
+  await harness.run();
+  const payload = JSON.parse(harness.requests[0].options.body);
+  assert.equal(payload.isInstrumental, false); assert.equal(payload.lyricsPrompt, fixture.lyrics);
+  assert.deepEqual(payload.selections.vocal, ['Vocal']); assert.deepEqual(payload.metadata.petEpisode, fixture);
+  assert.equal(Object.hasOwn(payload.metadata.petEpisode, 'audioMode'), false);
+});
+
+test('empty lyrics cannot submit stale instrumental plans, empty vocal plans or contradictory instrumental lyrics', async () => {
+  for (const change of [
+    { petEpisode: { ...fixture, audioMode: 'instrumental', lyrics: '' }, customLyrics: '', planIsCurrent: false },
+    { customLyrics: '' },
+    { petEpisode: { ...fixture, audioMode: 'instrumental', lyrics: '' }, customLyrics: '숨겨진 보컬 가사' },
+  ]) {
+    const harness = petGenerationHarness(change); await harness.run();
+    assert.equal(harness.requests.length, 0); assert.equal(harness.polls.length, 0);
+    assert.ok(harness.calls.setPetPlanError?.length);
+  }
 });
 
 test('late pet audio completion cannot overwrite another account or a newer draft', async () => {
@@ -705,6 +739,30 @@ test('editor renders six reviewed shots, read-only action summaries and editable
   assert.equal(fields.filter(node => node.props.value === fixture.shots[0].videoPrompt && !node.props.disabled).length, 6);
   const html = renderToStaticMarkup(React.createElement(editor.PetEpisodeEditor, { episode: fixture, onChange() {} }));
   assert.ok(html.includes('총 30초'));
+});
+
+test('instrumental Pet editor identifies music mode and retains all six narrative captions', () => {
+  const episode = { ...fixture, audioMode: 'instrumental', lyrics: '' };
+  const tree = editor.PetEpisodeEditor({ episode, onChange() {} });
+  assert.match(label(tree), /인스트루멘탈 · 보컬·가사 없음/);
+  assert.equal(walk(tree, node => node.type === 'article').length, 6);
+  assert.doesNotMatch(label(tree), /보컬 콘티에는 가사가 필요/);
+});
+
+test('instrumental Step 4 shows an explicit music status instead of an empty lyrics editor', () => {
+  let expression;
+  function visit(node) {
+    if (ts.isConditionalExpression(node) && node.condition.getText(pageSource) === 'petInstrumentalMode'
+      && ts.isJsxElement(node.whenTrue) && node.whenFalse.getText(pageSource).startsWith('<textarea')) expression = node;
+    ts.forEachChild(node, visit);
+  }
+  visit(pageSource); assert.ok(expression, 'Exercise the actual instrumental/editor branch');
+  const module = { exports: {} };
+  vm.runInNewContext(compile(`module.exports = (${expression.getText(pageSource)});`, 'instrumental-status.tsx'), {
+    module, exports: module.exports, require, petInstrumentalMode: true,
+  });
+  assert.match(label(module.exports), /인스트루멘탈 음악으로 제작합니다/);
+  assert.equal(walk(module.exports, node => node.type === 'textarea').length, 0);
 });
 
 test('v4 story review is read-only, shares one candidate list and separates production details', () => {
@@ -1092,6 +1150,21 @@ test('pet pilot advisory concerns are displayed as suggestions without a blocked
   const harness=studioHarness(view);const html=renderToStaticMarkup(harness.render());
   assert.match(html,/콘텐츠 핵심 분석 · 참고 의견/);assert.match(html,/전체 움직임이나 재미를 검증한 결과는 아닙니다/);
   assert.match(html,/고양이의 행동과 집사의 반응/);assert.doesNotMatch(html,/작업이 멈췄습니다/);assert.deepEqual(harness.requests,[]);
+});
+test('completed pet preview exposes one explicit free confirmation and binds the render URL', async () => {
+  const view = job('completed', { videoUrl: 'https://example.invalid/final.mp4', contentReview: { status: 'preview_required', analyzedClips: 2, totalClips: 2, concerns: ['C2 · 반응을 확인하세요.'] } });
+  let resolve;
+  const harness = studioHarness(view, { reply: () => new Promise(r => { resolve = r; }) });
+  const tree = harness.render(), html = renderToStaticMarkup(tree), button = findButton(tree, '영상 확인 완료');
+  assert.match(html, /영상 제작 완료 · 내용 확인 필요/); assert.match(html, /반응을 확인하세요/);
+  button.props.onClick(); button.props.onClick();
+  assert.equal(harness.requests.length, 1);
+  assert.deepEqual(harness.requests[0].body, { action: 'confirm', jobId: view.id, videoUrl: view.videoUrl });
+  resolve({ ...view, contentReview: { ...view.contentReview, status: 'owner_confirmed', approvedAt: '2026-10-11T10:00:00.000Z' } });
+  await settle(() => harness.states[2] === false);
+  assert.equal(findButton(harness.render(), '영상 확인 완료'), undefined);
+  assert.match(renderToStaticMarkup(harness.render()), /직접 확인 완료/);
+  assert.ok(harness.requests.every(request => request.body.action === 'confirm'));
 });
 test('known opening hold shows a manual saved-image continuation and labels old detail findings as history',()=>{
   const view=job('held',{productionMode:'two-clips',canResume:true,shots:[{id:'C1',status:'image_ready',keyframeUrl:'https://example.invalid/saved.jpg',error:'필기구가 안 보입니다.',quality:{image:{status:'review'}}},{id:'C2',status:'image_empty'}]});

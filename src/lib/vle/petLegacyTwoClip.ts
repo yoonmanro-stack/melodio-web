@@ -3,6 +3,7 @@ import { buildPetPerformanceDirection } from './petPerformanceDirection';
 
 const LEGACY_SECONDS = [4, 5, 5, 6, 6, 4] as const;
 const VIDEO_PROMPT_LIMIT = 4096;
+const timingNumber = (seconds: number) => Math.round(seconds * 1000) / 1000;
 
 export class PetLegacyCompilationError extends Error {
   readonly status = 422;
@@ -159,7 +160,7 @@ export function getLegacyPetStoryContract(episode: PetEpisode): LegacyPetStoryCo
 }
 
 /** Derive production timing only. Recorded lyrics and the six editorial beats stay untouched. */
-export function compileLegacyPetClips(episode: PetEpisode): PetShot[] {
+export function compileLegacyPetClips(episode: PetEpisode, timing?: { actionStartSeconds: readonly number[] }): PetShot[] {
   if (!episode || episode.version !== 'pet-v3' || !Array.isArray(episode.shots) || episode.shots.length !== 6) {
     throw new PetLegacyCompilationError('PET_LEGACY_EPISODE', '기존 pet-v3의 여섯 장면 콘티가 필요합니다.');
   }
@@ -179,13 +180,24 @@ export function compileLegacyPetClips(episode: PetEpisode): PetShot[] {
     expectedStart += shot.durationSeconds;
   });
 
+  const starts = timing?.actionStartSeconds;
+  if (starts && (starts.length !== 6 || starts[0] !== 0 || starts.some((start, index) => !Number.isFinite(start)
+    || start < 0 || start > 27 || (index > 0 && start - starts[index - 1] < 3))
+    || starts[3] < 13.25 || starts[3] > 14.25 || starts[4] < 15)) {
+    throw new PetLegacyCompilationError('PET_LEGACY_TIMELINE', '측정 비트에 맞춘 행동 간격과 15초 연결 지점을 확인해 주세요.');
+  }
+  // Production timing is separate from the recorded lyrics and frozen episode.
+  const timedShots = starts ? episode.shots.map((shot, index) => ({ ...shot,
+    startSeconds: starts[index], durationSeconds: timingNumber((starts[index + 1] ?? 30) - starts[index]),
+  })) : episode.shots;
+
   const story = getLegacyPetStoryContract(episode);
 
   return [0, 15].map((clipStart, index) => {
-    const segments: Segment[] = episode.shots.flatMap(shot => {
+    const segments: Segment[] = timedShots.flatMap(shot => {
       const start = Math.max(clipStart, shot.startSeconds);
       const end = Math.min(clipStart + 15, shot.startSeconds + shot.durationSeconds);
-      return end > start ? [{ shot, start: start - clipStart, end: end - clipStart, sourceOffset: start - shot.startSeconds }] : [];
+      return end > start ? [{ shot, start: timingNumber(start - clipStart), end: timingNumber(end - clipStart), sourceOffset: timingNumber(start - shot.startSeconds) }] : [];
     });
     const beatIds = new Set(segments.map(({ shot }) => shot.id));
     const characterLocks = [
@@ -219,18 +231,19 @@ export function compileLegacyPetClips(episode: PetEpisode): PetShot[] {
       'CAST CONTINUITY: Same identity for every required person. Sleeping, covered or background figures are valid; faces are not mandatory. Hands, crops, POV and off-screen presence are allowed elsewhere; never replace a required person with anonymous limbs throughout the film.',
       'IDENTITY: Stable gender, age, face, hair and clothes; changing expressions never recast a person.',
       buildPetPerformanceDirection(story.sourceContract?.cast.humanPolicy !== 'source_pet_only' && Boolean(character.owner.trim())),
+      ...(starts ? ['AUDIO TIMING INTENT: Selected action starts follow detected audio energy events; others keep editorial timing. Approximate motion timing, normal playback speed. Keep the 15s seam continuous; hold the final reaction without rushing.'] : []),
       index === 0
-        ? 'C1: Begin at S1 and follow the timed actions through the first second of S4. Do not perform S5 or S6 in this clip.'
+        ? `C1: Begin at S1 and follow the timed actions through ${starts ? 'the opening portion' : 'the first second'} of S4. Do not perform S5 or S6 in this clip.`
         : 'C2: Continue from C1’s final frame and finish S4 without replaying completed movement. Then perform S5–S6 only in their listed timed intervals.',
       ...segments.map(({ shot, start, end, sourceOffset }) => [
-        `[${start}-${end}s] ${shot.id}; source ${sourceOffset}-${sourceOffset + end - start}/${shot.durationSeconds}s.`,
+        `[${start}-${end}s] ${shot.id}; source ${sourceOffset}-${timingNumber(sourceOffset + end - start)}/${shot.durationSeconds}s.`,
         sourceOffset > 0
           ? 'CONTINUATION: perform only the remaining part from the bridge frame.'
           : end - start < shot.durationSeconds
-            ? 'PARTIAL: perform the first second here; leave the remainder for C2.'
+            ? `PARTIAL: perform ${starts ? 'only the listed opening portion' : 'the first second'} here; leave the remainder for C2.`
             : '',
         sourceOffset > 0 || end - start < shot.durationSeconds
-          ? `SOURCE ACTION CONTEXT (${shot.durationSeconds}s total): ${shot.action}\nACTION: ${sourceOffset > 0 ? `Continue only source seconds ${sourceOffset}-${sourceOffset + end - start} from the bridge frame` : `Begin only source seconds 0-${end - start}; leave the action in progress for C2`}. Do not complete or replay the source action outside this slice.`
+          ? `SOURCE ACTION CONTEXT (${shot.durationSeconds}s total): ${shot.action}\nACTION: ${sourceOffset > 0 ? `Continue only source seconds ${sourceOffset}-${timingNumber(sourceOffset + end - start)} from the bridge frame` : `Begin only source seconds 0-${timingNumber(end - start)}; leave the action in progress for C2`}. Do not complete or replay the source action outside this slice.`
           : `ACTION: ${shot.action}`,
         `CAMERA: ${shot.camera}`,
       ].filter(Boolean).join('\n')),

@@ -39,7 +39,7 @@ export function createPetXaiProvider(fetchImpl: typeof fetch = fetch, options: {
           && /4096/.test(errorText) && /length|long|maximum|limit/i.test(errorText);
       } catch { await response.body?.cancel().catch(() => undefined); }
       if (promptTooLong) throw new PetPipelineError('영상 프롬프트가 Grok의 4,096자 한도를 넘었습니다. 콘티 압축이 필요합니다.', 'PROVIDER_PROMPT_LENGTH', 422);
-      throw new PetPipelineError(`xAI 요청을 확인하지 못했습니다 (HTTP ${response.status}). 자동 재생성하지 않습니다.`, 'PROVIDER_HTTP');
+      throw new PetPipelineError(`xAI 요청을 확인하지 못했습니다 (HTTP ${response.status}). 자동 재생성하지 않습니다.`, 'PROVIDER_HTTP', 400, response.status);
     }
     const buffer = await readPetBoundedBody(response, 128 * 1024);
     let data: unknown;
@@ -83,6 +83,9 @@ export function createPetXaiProvider(fetchImpl: typeof fetch = fetch, options: {
         const video = data.video as Record<string, unknown> | undefined;
         if (typeof video?.url !== 'string' || video.respect_moderation === false) return { status: 'failed' };
         assertPetMediaUrl(video.url, 'video'); return { status: 'done', url: video.url };
+      }
+      if (!['pending', 'processing', 'queued', 'in_progress'].includes(String(data.status))) {
+        throw new PetPipelineError('저장된 영상 요청의 공급자 상태 형식을 확인하지 못했습니다.', 'PROVIDER_STATUS');
       }
       return { status: 'pending' };
     },

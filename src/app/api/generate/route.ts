@@ -36,7 +36,7 @@ import { GoogleAuth } from 'google-auth-library'
 import { titlePlaybooks } from '@/data/titlePlaybooks'
 import { scrubConflictingVocalTags } from '@/lib/voice-dna-scrubber'
 import { submitKieSunoJob, kieTaskReference, sunoVersionLabel, fitSunoStylePrompt } from '../../../../worker/suno-provider'
-import { validatePetEpisode, type PetEpisode } from '@/lib/vle/petEpisode'
+import { isPetInstrumental, validatePetEpisode, type PetEpisode } from '@/lib/vle/petEpisode'
 import { registeredVoicePersona } from '@/lib/voice/custom-voice-integrity'
 import { readCustomVoice } from '@/lib/voice/custom-voice-repository'
 import { compileLyricsSections, prepareLyricsSubmission, assertSafeVocalLyrics, LyricsInstructionError } from '@/lib/lyrics/compile-sections'
@@ -437,13 +437,17 @@ export async function POST(request: NextRequest) {
     if (requestedViralBrief !== undefined && !viralBrief) {
       return NextResponse.json({ error: '바이럴 기획 정보 형식을 확인해 주세요.' }, { status: 400 })
     }
-    const petEpisode = rawBody.sourceMenu === 'viral' && rawBody.presetId === 'pet'
+    const isPetRequest = rawBody.sourceMenu === 'viral' && rawBody.presetId === 'pet'
+    const petEpisode = isPetRequest
       ? rawBody.metadata?.petEpisode as PetEpisode | undefined
       : undefined
-    if (petEpisode) {
+    if (isPetRequest) {
       const issues = validatePetEpisode(petEpisode)
       if (issues.length) {
         return NextResponse.json({ error: issues[0] }, { status: 400 })
+      }
+      if (typeof payload.isInstrumental !== 'boolean' || payload.isInstrumental !== isPetInstrumental(petEpisode)) {
+        return NextResponse.json({ error: '콘티의 음악 모드와 음원 요청이 다릅니다. 다시 기획해 주세요.' }, { status: 400 })
       }
       // Pet v3 must remain a short even when the chosen music genre has no "viral" tag.
       rawBody.isViral = true
@@ -466,7 +470,7 @@ export async function POST(request: NextRequest) {
 
     // Compare snapshots only after lyricsSections has been canonicalized. Otherwise a
     // caller could validate one lyricsPrompt and submit different structured lyrics.
-    if (petEpisode && petEpisode.lyrics !== payload.lyricsPrompt) {
+    if (petEpisode && (petEpisode.lyrics !== payload.lyricsPrompt || (isPetInstrumental(petEpisode) && canonicalLyricsPrompt !== ''))) {
       return NextResponse.json({ error: '콘티의 가사와 음원 가사가 다릅니다. 콘티를 다시 확인해 주세요.' }, { status: 400 })
     }
     if (viralBrief && (rawBody.sourceMenu !== 'viral' || rawBody.presetId === 'pet'

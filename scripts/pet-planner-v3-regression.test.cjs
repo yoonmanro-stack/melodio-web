@@ -39,7 +39,10 @@ const {
   PET_PLANNING_MODEL,
   PET_SOURCE_CONTRACT_LOCK_PREFIX,
   derivePetSourceContract,
+  petRecentFingerprints,
 } = load('src/lib/vle/petPlanner.ts');
+const { validatePetSourceEvents, validatePetSceneProgression, petStoriesRepeat, petActionSummary } = load('src/lib/vle/petStoryValidation.ts');
+const { validatePetEpisode, isPetInstrumental } = load('src/lib/vle/petEpisode.ts');
 const { PET_HUMAN_REACTION_DIRECTION, PET_ANIMAL_REACTION_DIRECTION } = load('src/lib/vle/petPerformanceDirection.ts');
 
 function assertPerformance(prompts, hasHumans) {
@@ -89,7 +92,7 @@ function plan(lines = validLines, sourceTopic = '') {
       caption: `old caption ${index}`,
       action: [
         'The adult dog grips the single red leash in its mouth.',
-        'The adult dog walks quickly to the closed front door with the leash while H1 stands recognizably beside it with a visible face and upper body.',
+        'The adult dog runs quickly to the closed front door with the leash while H1 stands recognizably beside it with a visible face and upper body.',
         'Close detail: H1 right hand opens the door while the dog pauses at the threshold and looks at the rain.',
         'The adult dog steps backward from the rainy doorway while still holding the leash.',
         'The adult dog presses the leash into H1 hand while H1 reacts with a clear face and visible upper body, then releases it.',
@@ -664,4 +667,214 @@ test('pet music is inferred in its existing planning call and compiles after the
   const override = await createPetEpisode({ genreEn: 'acoustic jazz', vocalEn: 'expressive adult male Korean voice', moodEn: 'deadpan amusement' }, selected.dependencies);
   assert.match(override.stylePrompt, /acoustic jazz/); assert.match(override.stylePrompt, /adult male Korean voice/); assert.match(override.stylePrompt, /deadpan amusement/);
   assert.doesNotMatch(override.stylePrompt, /dry swing|wry anticipation/);
+});
+
+for (const topic of ['Two women sit beside a dog; they are not a couple.', '커플이 아닌 두 여성이 강아지와 소파에 앉는다.', '여자 두 명이 고양이와 함께 창가에 앉는다.']) {
+  test(`source cast preserves two women without inventing a couple: ${topic}`, () => {
+    const contract = derivePetSourceContract(topic);
+    assert.deepEqual(contract.cast.humans.map(human => [human.id, human.role]), [['H1', 'woman'], ['H2', 'woman']]);
+    assert.equal(contract.cast.requiredVisibleAdults, 2);
+    assert.doesNotMatch(contract.relationship, /partners|spouses/);
+  });
+}
+
+test('negated roles, plural counts and ringing bell vocabulary do not create a false cast', () => {
+  assert.deepEqual(derivePetSourceContract('No couple appears. A dog hides a ball.').cast.humans, []);
+  assert.deepEqual(derivePetSourceContract('부부는 없고 강아지가 공을 숨긴다.').cast.humans, []);
+  assert.deepEqual(derivePetSourceContract('딸랑이는 방울을 고양이가 툭 친다.').cast.humans, []);
+  assert.equal(derivePetSourceContract('딸이 강아지와 공을 가지고 논다.').cast.humans[0].role, 'daughter');
+  assert.equal(derivePetSourceContract('Three women watch a dog.').cast.requiredVisibleAdults, 3);
+  assert.equal(derivePetSourceContract('Women sit beside a dog.').cast.requiredVisibleAdults, 2);
+  assert.deepEqual(derivePetSourceContract('두 성인 여성 집사가 강아지와 앉는다.').cast.humans.map(human => human.role), ['woman', 'woman']);
+  assert.deepEqual(derivePetSourceContract('An adult brown dog hides a ball.').cast.humans, []);
+  assert.equal(derivePetSourceContract('No owner appears; two women sit beside a dog.').cast.requiredVisibleAdults, 2);
+});
+
+test('English species and perspective work with local negation and explicit input override', () => {
+  assert.deepEqual(inferPetPlanningHints("A dog carries a ball, in the dog's inner voice."), { species: 'dog', pov: 'pet_inner_voice' });
+  assert.deepEqual(inferPetPlanningHints('Not a cat but a dog, with the owner perspective.'), { species: 'dog', pov: 'owner_inner_voice' });
+  assert.deepEqual(inferPetPlanningHints('고양이가 아니라 강아지가 공을 숨긴다.'), { species: 'dog' });
+  assert.equal(derivePetSourceContract('A dog carries a ball.', 'cat').cast.pet, 'cat');
+});
+
+test('two women require two scene identities even when both are described in the static cast', async () => {
+  const topic = 'Two women sit beside a dog, not a couple. Finally they smile at the dog.';
+  const value = couplePlan(topic);
+  value.character.owner = 'H1 is an adult woman with short hair and a navy sweater; H2 is an adult woman with long hair and a cream cardigan.';
+  value.story = topic;
+  value.candidates[0].premise = topic;
+  value.candidates[0].storyBeats = beats('Two women sit beside the dog.', 'The dog looks between the women.', 'The dog settles beside them.', 'Both women smile at the dog.');
+  value.shots[1].action = 'H1 is one woman sitting beside the dog with a visible face and navy sweater.';
+  value.shots[1].camera = 'Medium view containing one woman and the dog.';
+  value.shots[4].action = 'H1 is the woman smiling beside the dog with a visible face.';
+  value.shots[4].camera = 'Medium view containing the same woman and the dog.';
+  value.shots[5].action = 'The adult dog calmly looks at H1 on the sofa.';
+  value.shots[5].camera = 'Quiet view containing the dog and H1.';
+  const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(value, PET_PLANNING_MODEL)]);
+  await assert.rejects(createPetEpisode({ topic }, r.dependencies), error => error.code === 'pet_plan_invalid' && error.issues.some(issue => /H2|두 성인/.test(issue)));
+  assert.equal(r.requests.length, 2);
+});
+
+test('a varied two-woman photo story keeps its count and authors a distinct pet action and human reaction', async () => {
+  const topic = 'Two women sit beside a dog, not a couple. The dog squeezes between them for a photo. Finally both women smile.';
+  const value = couplePlan(topic);
+  value.character.owner = 'H1 is an adult woman with short hair and a navy sweater; H2 is an adult woman with long hair and a cream cardigan.';
+  value.story = topic;
+  value.candidates[0].premise = topic;
+  value.candidates[0].storyBeats = beats('Two women sit beside the dog.', 'Both women prepare a family photo.', 'The dog squeezes into the gap between them.', 'Both women smile at the dog.');
+  value.lyricLines = ['사진 찍을 준비야', '두 사람은 웃으며', '가운데가 비었네', '내 자리로 쏙 들어가', '웃음도 함께 커져가', '우리 셋이 주인공'];
+  const actions = [
+    'The adult dog approaches the sofa.',
+    'H1 and H2 sit beside the dog with visible faces and prepare a family photo.',
+    'H1 reaches toward the camera timer while the dog looks at the gap between the two women.',
+    'The adult dog squeezes into the gap between H1 and H2.',
+    'H1 and H2 smile at the dog between them, both visible faces responding to its arrival.',
+    'The dog looks toward the camera while settled between H1 and H2 on the sofa.',
+  ];
+  value.shots = value.shots.map((shot, index) => ({ ...shot, caption: value.lyricLines[index], action: actions[index], camera: `Natural composition of the authored event ${index + 1}.` }));
+  const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(naturalCompilation(value), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({ topic }, r.dependencies);
+  assert.equal(r.requests.length, 2);
+  assert.equal(episode.character.species, 'dog');
+  assert.deepEqual(JSON.parse(r.requests[0].input).sourceContract.cast.humans.map(human => human.role), ['woman', 'woman']);
+  assert.deepEqual(episode.shots.map(shot => shot.action), actions);
+});
+
+test('ringing-bell cat story remains pet-only and allows a short instrumental narrative arc', async () => {
+  const topic = '딸랑이는 방울을 고양이가 툭 친다. 마지막에는 혼자 쉰다.';
+  const value = petOnlyPlan(topic, 'cat');
+  value.story = topic;
+  value.candidates[0] = { prop: 'bell', conflict: 'sound_starts_attention', twist: 'improvement_backfires', title: '방울 발견', premise: topic,
+    storyBeats: beats('The cat approaches a bell.', 'The cat nudges the bell.', 'The bell jingles and the cat tilts its head.', 'The cat rests beside the bell.') };
+  value.character.setting = 'One quiet living room with a small bell and grey sofa.';
+  value.character.continuity = ['Same adult beige cat.', 'One small silver bell.', 'The same quiet living room.'];
+  value.lyricLines = ['방울 발견', '냄새부터', '살짝 툭', '소리에 갸웃', '이제 조용해', '잠깐 쉬자'];
+  const actions = ['The cat approaches the bell.', 'The cat sniffs the bell.', 'The cat nudges the bell with its paw.', 'The bell jingles and the cat tilts its head.', 'The cat looks at the bell now still.', 'The cat rests beside the bell.'];
+  value.shots = value.shots.map((shot, index) => ({ ...shot, caption: value.lyricLines[index], action: actions[index], camera: 'Pet-centered composition with the bell. No humans are visible.' }));
+  const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(naturalCompilation(value), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({ topic, vocalEn: '연주곡' }, r.dependencies);
+  assert.equal(r.requests.length, 2);
+  assert.equal(episode.character.species, 'cat');
+  assert.equal(episode.audioMode, 'instrumental');
+  assert.deepEqual(JSON.parse(r.requests[0].input).sourceContract.cast.humans, []);
+  assert.deepEqual(episode.shots.map(shot => shot.action), actions);
+});
+
+test('a source action missing from scenes cannot be supplied by unchanged story, captions, or camera prose', async () => {
+  const topic = 'A dog carries a red ball across the room and hides it under the sofa. Finally it rests alone beside the sofa.';
+  const value = petOnlyPlan(topic, 'dog');
+  value.shots[1].action = 'The adult dog walks across the room; the red ball remains on the floor.';
+  value.shots[1].camera = 'Show the dog carries a ball according to the full story.';
+  assert.match(value.story, /carries/);
+  const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(value, PET_PLANNING_MODEL)]);
+  await assert.rejects(createPetEpisode({ topic }, r.dependencies), error => error.code === 'pet_plan_invalid' && error.issues.some(issue => /실제 장면 행동/.test(issue)));
+  assert.equal(r.requests.length, 2, 'One repair only; never compile a missing core event.');
+});
+
+test('source event validation keeps the actor while allowing bilingual prop synonyms and natural result cuts', () => {
+  const source = { sourceTopic: '강아지가 공을 물고 가서 소파 밑에 숨긴다.', coreAction: '강아지가 공을 물고 간다.', reversal: '강아지가 공을 소파 밑에 숨긴다.', payoff: 'Not separately stated' };
+  assert.deepEqual(validatePetSourceEvents(source, ['The adult dog grips a red ball.', 'The dog carries the ball across the room.', 'Result cut: the dog hides the ball beneath the couch.']), []);
+  assert.ok(validatePetSourceEvents(source, ['The adult dog grips the ball.', 'H1 carries the ball across the room.', 'H1 hides the ball beneath the sofa.']).length);
+  const cup = { sourceTopic: '고양이가 컵을 방석 위로 민다.', coreAction: '고양이가 컵을 방석 위로 민다.', reversal: 'Not separately stated', payoff: 'Not separately stated' };
+  assert.deepEqual(validatePetSourceEvents(cup, ['The cat pushes a mug off the table onto a pillow.']), []);
+  assert.ok(validatePetSourceEvents(cup, ['The cat looks at the mug.', 'The owner pushes the mug onto a pillow.']).length);
+  assert.ok(validatePetSourceEvents(cup, ['The cat pushes a pillow while the mug stays on the table.']).length, 'Sharing one backdrop noun cannot replace the action target.');
+});
+
+for (const regression of ['duplicate', 'static', 'impossible']) {
+  test(`fresh planner rejects ${regression} scene regression within the existing repair budget`, async () => {
+    const value = plan();
+    if (regression === 'duplicate') {
+      value.shots[4].action = 'The dog settles on the sofa beside H1.';
+      value.shots[5].action = 'The adult dog loafs beside H1 on the couch.';
+    } else if (regression === 'static') {
+      value.shots.forEach((shot, index) => { shot.action = `The adult dog sits on the sofa and looks at H1; still frame ${index + 1}.`; });
+    } else value.shots[2].action = 'The dog types a sentence using its fingers at the laptop while H1 sits beside it.';
+    const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(value, PET_PLANNING_MODEL)]);
+    await assert.rejects(createPetEpisode({}, r.dependencies), error => error.code === 'pet_plan_invalid'
+      && error.issues.some(issue => regression === 'duplicate' ? /마지막 두 장면/.test(issue) : regression === 'static' ? /실제 행동이나 변화/.test(issue) : /신체 능력/.test(issue)));
+    assert.equal(r.requests.length, 2);
+  });
+}
+
+test('scene guards leave natural variation, reactions, close-ups and unfamiliar meaningful actions available', () => {
+  assert.deepEqual(validatePetSceneProgression([
+    'The cat stretches beside the window.', 'The cat pounces on the toy.', 'The cat nudges the toy under the curtain.',
+    'The cat listens behind the curtain.', 'The cat reveals the toy to the owner.', 'The owner smiles while the cat curls beside the toy.',
+  ]), []);
+  assert.deepEqual(validatePetSceneProgression([
+    'The dog investigates a suitcase.', 'The dog uncovers a scarf.', 'The dog drapes the scarf over a stool.',
+    'The scarf catches a breeze.', 'The dog follows the drifting scarf.', 'The scarf reaches the doorway.',
+  ]), [], 'Unknown actions are not declared impossible merely because a bounded dictionary cannot classify them.');
+});
+
+test('fresh episode scene summaries survive recent history and catch relabeled copies without mutating the archive', async () => {
+  const original = runner([providerResponse(plan(), PET_PLANNING_MODEL), providerResponse(compilation(), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({}, original.dependencies);
+  const saved = JSON.stringify(episode);
+  const recent = petRecentFingerprints([{ episode }]);
+  assert.equal(recent[0].action, episode.fingerprint.action);
+  assert.equal(recent[0].payoff, episode.fingerprint.payoff);
+  const renamed = plan();
+  renamed.candidates[0].prop = 'outing_request_ribbon';
+  renamed.candidates[0].conflict = 'forecast_changes_priority';
+  renamed.candidates[0].twist = 'improvement_backfires';
+  const r = runner([providerResponse(renamed, PET_PLANNING_MODEL), providerResponse(renamed, PET_PLANNING_MODEL)]);
+  await assert.rejects(createPetEpisode({ recent }, r.dependencies), error => error.code === 'pet_plan_invalid' && error.issues.some(issue => /최근 10편/.test(issue)));
+  assert.equal(r.requests.length, 2);
+  assert.equal(JSON.stringify(episode), saved, 'History checks do not rewrite saved episodes or fingerprints.');
+});
+
+test('semantic novelty catches canonical synonyms and actual cause/payoff copies while allowing a new conflict with the same prop', () => {
+  assert.equal(petStoriesRepeat({ prop: 'keyboard', conflict: 'typing_blocked', twist: 'owner_misreads' }, { prop: 'workstation', conflict: 'work_interrupted', twist: 'unexpected_care' }), true);
+  const previous = { prop: 'ball', conflict: 'missing_object', twist: 'owner_misreads', action: petActionSummary(['The cat carries a ball.', 'The cat hides the ball beneath the sofa.']), payoff: petActionSummary(['The owner discovers the ball.', 'The owner smiles at the cat.']) };
+  assert.equal(petStoriesRepeat({ ...previous, prop: 'toy_sphere', conflict: 'surprise_discovery', twist: 'sensory_difference' }, previous), true);
+  const changed = { prop: 'ball', conflict: 'rolling_object', twist: 'improvement_backfires', action: petActionSummary(['The cat pushes the ball.', 'The ball rolls toward the window.']), payoff: petActionSummary(['The dog carries the ball to the cat.']) };
+  assert.equal(petStoriesRepeat(changed, previous), false);
+});
+
+test('inferred instrumental music retains short narrative captions with canonical empty lyrics and two calls', async () => {
+  const captions = ['산책', '목줄을 챙겨', '비가 온다', '한 걸음 뒤로', '목줄 반납', '소파로'];
+  const value = plan(captions);
+  value.music = { genreEn: 'dry swing', vocalEn: 'instrumental only', moodEn: 'playful hesitation', styleEn: 'plucked bass and brushed snare resolve after the leash returns', rationale: '짧은 행동의 리듬과 결말을 악기로 들려준다.', targetBpm: 114, isInstrumental: true };
+  const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(compilation(), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({}, r.dependencies);
+  assert.equal(episode.audioMode, 'instrumental');
+  assert.equal(isPetInstrumental(episode), true);
+  assert.equal(episode.lyrics, '');
+  assert.deepEqual(episode.shots.map(shot => shot.caption), captions);
+  assert.match(episode.stylePrompt, /instrumental only, no vocals, no singing/);
+  assert.doesNotMatch(episode.stylePrompt, /sing the supplied/);
+  assert.deepEqual(validatePetEpisode(episode), []);
+  assert.equal(r.requests.length, 2);
+  assert.equal(r.requests[0].text.format.schema.properties.music.properties.isInstrumental.enum, undefined);
+});
+
+test('explicit instrumental override controls legacy proposals while an explicit voice restores the vocal budget', async () => {
+  const short = plan(['산책', '목줄', '비가 온다', '뒤로', '반납', '소파']);
+  const instrumental = runner([providerResponse(short, PET_PLANNING_MODEL), providerResponse(compilation(), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({ vocalEn: 'instrumental only' }, instrumental.dependencies);
+  assert.equal(episode.audioMode, 'instrumental'); assert.equal(episode.lyrics, ''); assert.equal(instrumental.requests.length, 2);
+  const proposal = plan();
+  proposal.music = { genreEn: 'dry swing', vocalEn: 'instrumental', moodEn: 'deadpan', styleEn: 'piano and bass', rationale: '행동의 대비를 리듬으로 들려준다.', targetBpm: 112, isInstrumental: true };
+  const vocal = runner([providerResponse(proposal, PET_PLANNING_MODEL), providerResponse(compilation(), PET_COMPILATION_MODEL)]);
+  const restored = await createPetEpisode({ vocalEn: 'natural adult Korean male voice' }, vocal.dependencies);
+  assert.equal(restored.audioMode, 'vocal'); assert.match(restored.lyrics, /\[Verse\]/); assert.match(restored.stylePrompt, /male voice/);
+  const tooShort = { ...proposal, lyricLines: short.lyricLines };
+  const rejected = runner([providerResponse(tooShort, PET_PLANNING_MODEL), providerResponse(tooShort, PET_PLANNING_MODEL)]);
+  await assert.rejects(createPetEpisode({ vocalEn: 'natural adult Korean male voice' }, rejected.dependencies), error => error.issues.some(issue => /음절/.test(issue)));
+  assert.equal(rejected.requests.length, 2);
+});
+
+test('legacy archives without audio mode or scene summaries remain readable and unchanged', async () => {
+  const r = runner([providerResponse(plan(), PET_PLANNING_MODEL), providerResponse(compilation(), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({}, r.dependencies);
+  delete episode.audioMode;
+  delete episode.fingerprint.action;
+  delete episode.fingerprint.payoff;
+  const saved = JSON.stringify(episode);
+  assert.equal(isPetInstrumental(episode), false);
+  assert.deepEqual(validatePetEpisode(episode), []);
+  assert.deepEqual(petRecentFingerprints([{ episode }]), [{ prop: 'leash', conflict: 'rain_cancels_walk', twist: 'owner_misreads' }]);
+  assert.equal(JSON.stringify(episode), saved);
 });

@@ -3,7 +3,9 @@ import { isDeepStrictEqual } from 'node:util';
 import { getPetProductionShots, hasPetTwoClipProduction, PetEpisode, PetVideoJobView, validatePetEpisode } from '../vle/petEpisode';
 import { compileLegacyPetClips } from '../vle/petLegacyTwoClip';
 import type { AudioRhythmAnalysis } from './audioRhythm';
+import { fallbackPetAudioAlignment, measurePetAudioAlignment, plannedPetAudioAlignment, type PetAudioAlignment } from './petAudioAlignment';
 import { PET_OBSOLETE_OPENING_IMAGE_POLICY_VERSIONS, PET_QUALITY_POLICY_VERSION } from './petQualityPolicy';
+import { PET_CONTENT_REVIEW_POLICY, summarizePetContentReadiness } from './petContentReadiness';
 
 export type PetAssetStatus = 'empty' | 'submitting' | 'pending' | 'generated' | 'ready' | 'held';
 export interface PetAssetQualityReview { status: 'passed' | 'review' | 'advisory'; issues: string[]; [key: string]: unknown }
@@ -14,9 +16,22 @@ export interface PetImageQualityRecheck {
 }
 export type PetVideoQualityRecheck = PetImageQualityRecheck;
 export const PET_VIDEO_REQUEST_MAX_BYTES = 120_000;
+export const PET_VIDEO_POLL_MAX_ATTEMPTS = 120;
+export const PET_VIDEO_POLL_MAX_WAIT_MS = 30 * 60_000;
+export interface PetVideoRetrieval {
+  startedAt: number;
+  deadlineAt: number;
+  attempts: number;
+  totalAttempts: number;
+  resumeCount: number;
+  lastErrorCode?: string;
+}
 export interface PetJobState {
-  audio: { trackId: string; sourceUrl: string; stableUrl?: string; durationSeconds?: number; rhythm?: AudioRhythmAnalysis };
-  shots: Array<{ id: string; imageStatus: PetAssetStatus; videoStatus: PetAssetStatus; imageSourceUrl?: string; keyframeUrl?: string; videoSourceUrl?: string; videoUrl?: string; requestId?: string; error?: string; nextPollAt?: number; quality?: { image?: PetAssetQualityReview; video?: PetAssetQualityReview }; imageQualityRecheck?: PetImageQualityRecheck; videoQualityRecheck?: PetVideoQualityRecheck }>;
+  audio: { trackId: string; sourceUrl: string; stableUrl?: string; durationSeconds?: number; rhythm?: AudioRhythmAnalysis; alignment?: PetAudioAlignment };
+  shots: Array<{ id: string; imageStatus: PetAssetStatus; videoStatus: PetAssetStatus; imageSourceUrl?: string; keyframeUrl?: string; videoSourceUrl?: string; videoUrl?: string; requestId?: string; error?: string; nextPollAt?: number; retrieval?: PetVideoRetrieval; quality?: { image?: PetAssetQualityReview; video?: PetAssetQualityReview }; imageQualityRecheck?: PetImageQualityRecheck; videoQualityRecheck?: PetVideoQualityRecheck }>;
+  productionMotionPrompts?: string[];
+  contentPolicyVersion?: typeof PET_CONTENT_REVIEW_POLICY;
+  contentApproval?: { videoUrl: string; approvedAt: string };
   approvedAt?: string;
   approvedMotionPrompts?: string[];
   lease?: { token: string; until: number; operation: string; shotIndex?: number };
@@ -52,7 +67,18 @@ export interface PetPipelineDependencies {
   render(job: PetJobRecord): Promise<{ url: string; durationSeconds: number }>;
 }
 export class PetPipelineError extends Error {
-  constructor(message: string, public code = 'PET_ERROR', public status = 400) { super(message); }
+  constructor(message: string, public code = 'PET_ERROR', public status = 400, public providerHttpStatus?: number) { super(message); }
+}
+/** Provider GET failures may be retried; invalid results/configuration cannot heal by polling. */
+export function classifyPetPollFailure(error: unknown): 'permanent' | 'transient' {
+  if (!(error instanceof PetPipelineError)) return 'transient';
+  if (error.code === 'PROVIDER_HTTP') {
+    // Preserve compatibility with the older provider adapter's sanitized HTTP message.
+    const status = error.providerHttpStatus ?? Number(/\bHTTP (\d{3})\b/.exec(error.message)?.[1]);
+    return Number.isFinite(status) && status >= 400 && status < 500 && ![408, 425, 429].includes(status) ? 'permanent' : 'transient';
+  }
+  return ['REQUEST_ID', 'PROVIDER_CONFIG', 'PROVIDER_PROMPT_LENGTH', 'PROVIDER_RESPONSE', 'PROVIDER_STATUS',
+    'MEDIA_URL', 'MEDIA_HOST', 'MEDIA_TYPE', 'MEDIA_SIZE', 'MEDIA_EMPTY', 'MEDIA_REDIRECT'].includes(error.code) ? 'permanent' : 'transient';
 }
 export function assertPetUuid(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) throw new PetPipelineError('작업 또는 음원 ID가 올바르지 않습니다.');
@@ -147,6 +173,8 @@ export function canResumePetJob(job: PetJobRecord): boolean {
   const shot = job.state.failedShotIndex === undefined ? undefined : job.state.shots[job.state.failedShotIndex];
   switch (job.state.failedOperation) {
     case 'audio': return !!job.state.audio.sourceUrl && !job.state.audio.stableUrl;
+    case 'video_poll': return job.state.failureCode === 'PROVIDER_POLL_TIMEOUT'
+      && !!shot?.requestId && shot.videoStatus === 'pending' && !shot.videoSourceUrl && !shot.videoUrl;
     case 'image_copy': return !!shot?.imageSourceUrl && shot.imageStatus === 'generated';
     case 'video_copy': return !!shot?.videoSourceUrl && !!shot.requestId && shot.videoStatus === 'generated';
     case 'bridge': return hasPetTwoClipProduction(job.episode) && job.state.shots[0]?.videoStatus === 'ready' && !!job.state.shots[0]?.videoUrl;
@@ -167,15 +195,17 @@ export function petJobView(job: PetJobRecord): PetVideoJobView {
     id: job.id, episodeId: job.episode.id, status: job.status,
     progress: job.status === 'completed' ? 100 : Math.round(imageCount * 5 + videoCount * 10 + (job.state.audio.stableUrl ? 5 : 0)),
     message: job.state.message,
-    shots: job.state.shots.map((s, i) => ({ id: s.id, status: s.videoStatus === 'empty' ? `image_${s.imageStatus}` : `video_${s.videoStatus}`, keyframeUrl: s.keyframeUrl, videoUrl: s.videoUrl, requestId: s.requestId, error: s.error, motionPrompt: job.state.approvedMotionPrompts?.[i] ?? productionShots[i]?.videoPrompt, quality: s.quality })),
+    shots: job.state.shots.map((s, i) => ({ id: s.id, status: s.videoStatus === 'empty' ? `image_${s.imageStatus}` : `video_${s.videoStatus}`, keyframeUrl: s.keyframeUrl, videoUrl: s.videoUrl, requestId: s.requestId, error: s.error, motionPrompt: job.state.approvedMotionPrompts?.[i] ?? job.state.productionMotionPrompts?.[i] ?? productionShots[i]?.videoPrompt, quality: s.quality })),
     videoUrl: job.state.videoUrl, durationSeconds: job.state.durationSeconds, canResume: canResumePetJob(job),
     productionMode,
-    audioQuality: job.state.audio.rhythm ? {
-      bpm: job.state.audio.rhythm.bpm,
-      confidence: job.state.audio.rhythm.confidence,
-      method: job.state.audio.rhythm.method,
-      endingStatus: job.state.audio.rhythm.ending.status,
-      endingReasons: job.state.audio.rhythm.ending.reasons,
+    contentReview: summarizePetContentReadiness({ videoUrl: job.state.videoUrl, shots: job.state.shots, approval: job.state.contentApproval }),
+    audioQuality: job.state.audio.rhythm || job.state.audio.alignment ? {
+      bpm: job.state.audio.rhythm?.bpm,
+      confidence: job.state.audio.rhythm?.confidence,
+      method: job.state.audio.rhythm?.method,
+      endingStatus: job.state.audio.rhythm?.ending.status,
+      endingReasons: job.state.audio.rhythm?.ending.reasons,
+      alignment: job.state.audio.alignment,
     } : undefined,
     // Planned list price, not a provider billing receipt.
     estimatedCostUsd: productionMode === 'two-clips'
@@ -206,6 +236,17 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
     return saved;
   }
   async function finish(job: PetJobRecord) { delete job.state.lease; return save(job); }
+  function newRetrieval(previous?: PetVideoRetrieval): PetVideoRetrieval {
+    return { startedAt: now(), deadlineAt: now() + PET_VIDEO_POLL_MAX_WAIT_MS, attempts: 0,
+      totalAttempts: previous?.totalAttempts ?? 0, resumeCount: previous ? previous.resumeCount + 1 : 0 };
+  }
+  function holdRetrieval(job: PetJobRecord, shotIndex: number) {
+    const shot = job.state.shots[shotIndex];
+    shot.error = '저장된 영상 요청의 조회 대기 한도에 도달했습니다. 새 결제 없이 같은 요청을 다시 조회할 수 있습니다.';
+    delete shot.nextPollAt;
+    job.status = 'held'; job.state.failedOperation = 'video_poll'; job.state.failedShotIndex = shotIndex;
+    job.state.failureCode = 'PROVIDER_POLL_TIMEOUT'; job.state.message = `${shot.id}: ${shot.error}`;
+  }
   return {
     async create(userId: string, episode: PetEpisode, trackId: string): Promise<PetVideoJobView> {
       assertPetUuid(trackId);
@@ -239,11 +280,25 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
       const productionMode = hasPetTwoClipProduction(episode) ? 'two-clips' : 'legacy-six-clips';
       const job: PetJobRecord = {
         id: randomUUID(), user_id: userId, episode: structuredClone(episode), status: 'draft', revision: 0, created_at: timestamp, updated_at: timestamp,
-        state: { audio: { trackId, sourceUrl: audio.sourceUrl }, shots: productionShots.map(s => ({ id: s.id, imageStatus: 'empty', videoStatus: 'empty' })), productionMode, message: '승인한 콘티가 저장되었습니다. 음원 길이를 확인합니다.' },
+        state: { contentPolicyVersion: PET_CONTENT_REVIEW_POLICY, audio: { trackId, sourceUrl: audio.sourceUrl, ...(episode.version === 'pet-v3' ? { alignment: plannedPetAudioAlignment(episode) } : {}) }, shots: productionShots.map(s => ({ id: s.id, imageStatus: 'empty', videoStatus: 'empty' })), productionMode, message: '승인한 콘티가 저장되었습니다. 음원 길이를 확인합니다.' },
       };
       return petJobView(await store.insert(job));
     },
     async get(userId: string, jobId: string) { return petJobView(await load(userId, jobId)); },
+    /** Owner preview acknowledgement only: no renderer, analysis or paid provider operation. */
+    async confirm(userId: string, jobId: string, expectedVideoUrl: unknown) {
+      const job = await load(userId, jobId);
+      if (job.status !== 'completed' || !job.state.videoUrl || job.state.lease) {
+        throw new PetPipelineError('완성된 영상을 확인한 후 진행해 주세요.', 'CONTENT_NOT_READY', 409);
+      }
+      if (typeof expectedVideoUrl !== 'string' || expectedVideoUrl !== job.state.videoUrl) {
+        throw new PetPipelineError('영상이 변경되었습니다. 저장된 최신 영상을 확인해 주세요.', 'CONTENT_CHANGED', 409);
+      }
+      if (job.state.contentApproval?.videoUrl === job.state.videoUrl
+        && Number.isFinite(Date.parse(job.state.contentApproval.approvedAt))) return petJobView(job);
+      job.state.contentApproval = { videoUrl: job.state.videoUrl, approvedAt: new Date(now()).toISOString() };
+      return petJobView(await save(job));
+    },
     async resume(userId: string, jobId: string) {
       const job = await load(userId, jobId);
       if (job.status !== 'held') return petJobView(job);
@@ -269,6 +324,10 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
         };
         delete shot.quality.video;
       }
+      if (operation === 'video_poll' && shot) {
+        shot.retrieval = newRetrieval(shot.retrieval);
+        delete shot.nextPollAt;
+      }
       if (shot) delete shot.error;
       delete job.state.failedOperation; delete job.state.failedShotIndex; delete job.state.failureCode;
       job.status = operation === 'render' ? 'assembling' : hasPetTwoClipProduction(job.episode) ? 'generating' : operation === 'video_copy' ? 'generating' : 'keyframes';
@@ -276,6 +335,7 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
         ? '세부 검수 중단 조건을 해제했습니다. 저장된 이미지로 영상 제작을 이어갑니다.'
         : obsoleteVideoRecheck
           ? '저장된 C2 영상의 핵심 전달을 참고 분석한 뒤 합성을 이어갑니다.'
+        : operation === 'video_poll' ? '저장된 요청 ID로 영상 결과를 다시 조회합니다. 새 영상을 요청하지 않습니다.'
         : '저장된 원본으로 중단된 보관·합성 단계를 다시 진행합니다.';
       // Resume itself makes no provider call. The next advance reuses saved media and follows the remaining stages.
       return petJobView(await finish(job));
@@ -357,6 +417,15 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
         }
       }
       const shot = shotIndex >= 0 ? job.state.shots[shotIndex] : undefined;
+      if (operation === 'video_poll') {
+        shot!.retrieval ??= newRetrieval();
+        if (shot!.retrieval.attempts >= PET_VIDEO_POLL_MAX_ATTEMPTS || now() >= shot!.retrieval.deadlineAt) {
+          holdRetrieval(job, shotIndex);
+          return petJobView(await finish(job));
+        }
+        // Consume an attempt before GET. A lost response/lease cannot reset this bound.
+        shot!.retrieval.attempts += 1; shot!.retrieval.totalAttempts += 1;
+      }
       if (operation === 'image_submit') shot!.imageStatus = 'submitting';
       if (operation === 'video_submit') shot!.videoStatus = 'submitting';
       job.state.lease = { token: randomUUID(), until: now() + (operation === 'render' ? 600_000 : 150_000), operation, ...(shotIndex >= 0 ? { shotIndex } : {}) };
@@ -370,6 +439,23 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
           if (twoClip) assertPetV4AudioDuration(audio.durationSeconds); else assertPetAudioDuration(audio.durationSeconds);
           job.state.audio.stableUrl = audio.url; job.state.audio.durationSeconds = audio.durationSeconds;
           if (audio.rhythm) job.state.audio.rhythm = structuredClone(audio.rhythm);
+          if (hasAdvisoryPetProduction(job)) {
+            const unsubmitted = job.state.audio.alignment?.status === 'planned'
+              && job.state.shots.every(shot => shot.imageStatus === 'empty' && shot.videoStatus === 'empty'
+                && !shot.requestId && !shot.keyframeUrl && !shot.imageSourceUrl && !shot.videoSourceUrl && !shot.videoUrl);
+            let alignment = unsubmitted ? measurePetAudioAlignment(job.episode, audio.durationSeconds, audio.rhythm)
+              : fallbackPetAudioAlignment(job.episode, audio.durationSeconds, 'saved-motion-prompts-preserved', audio.rhythm?.confidence);
+            if (alignment.appliedToMotionPrompts) {
+              try {
+                const alignedClips = compileLegacyPetClips(job.episode, { actionStartSeconds: alignment.actionStarts.map(action => action.seconds) });
+                job.state.productionMotionPrompts = alignedClips.map(clip => clip.videoPrompt);
+              } catch {
+                // A conservative timing/prompt-limit fallback must never erase story instructions.
+                alignment = fallbackPetAudioAlignment(job.episode, audio.durationSeconds, 'motion-timing-or-prompt-limit', audio.rhythm?.confidence);
+              }
+            }
+            job.state.audio.alignment = alignment;
+          }
           if (twoClip && audio.rhythm?.ending.status === 'review') {
             job.state.failedOperation = 'audio_review'; job.state.failureCode = 'AUDIO_ENDING_REVIEW'; job.status = 'held';
             job.state.message = '음원 끝에서 소리가 이어진 채 종료될 가능성이 있어 영상 제작을 시작하지 않았습니다. 음원 끝부분을 확인해 주세요.';
@@ -407,9 +493,10 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
               : `${current!.id} ${kind === 'image' ? '기준 이미지' : '영상'} 품질 확인 완료.`;
           }
         } else if (operation === 'video_submit') {
-          const motionPrompt = job.state.approvedMotionPrompts?.[shotIndex] ?? productionShots[shotIndex].videoPrompt;
+          const motionPrompt = job.state.approvedMotionPrompts?.[shotIndex] ?? job.state.productionMotionPrompts?.[shotIndex] ?? productionShots[shotIndex].videoPrompt;
           const result = await deps.startVideo(motionPrompt, productionShots[shotIndex].durationSeconds, current!.keyframeUrl!);
           current!.requestId = result.requestId; current!.videoStatus = 'pending'; current!.nextPollAt = now() + 5000;
+          current!.retrieval = newRetrieval();
           job.state.message = `${current!.id} 영상 요청을 저장했습니다. 결과를 기다립니다.`;
         } else if (operation === 'video_poll') {
           const result = await deps.pollVideo(current!.requestId!);
@@ -419,7 +506,12 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
             current!.videoStatus = 'held'; current!.error = result.status === 'expired' ? '공급자 결과가 만료되었습니다. 이 장면은 운영자 확인이 필요합니다.' : '이 장면의 생성이 실패했습니다. 자동으로 다시 결제하지 않습니다.';
             job.state.failedOperation = operation; job.state.failedShotIndex = shotIndex; job.state.failureCode = 'PROVIDER_RESULT';
             job.status = 'held'; job.state.message = `${current!.id}: ${current!.error}`;
-          } else job.state.message = `${current!.id} 영상 생성 중. 저장된 요청 ID로 확인합니다.`;
+          } else if (current!.retrieval!.attempts >= PET_VIDEO_POLL_MAX_ATTEMPTS || now() >= current!.retrieval!.deadlineAt) {
+            holdRetrieval(job, shotIndex);
+          } else {
+            delete current!.retrieval!.lastErrorCode;
+            job.state.message = `${current!.id} 영상 생성 중. 저장된 요청 ID로 확인합니다.`;
+          }
         } else if (operation === 'video_copy') {
           current!.videoUrl = await deps.copyAsset(job, shotIndex, 'video', current!.videoSourceUrl!); current!.videoStatus = 'ready';
           job.state.message = `${current!.id} 영상 보관 완료.`;
@@ -439,8 +531,18 @@ export function createPetVideoService(deps: PetPipelineDependencies) {
           delete current!.error;
           job.state.message = `${current!.id}: 참고 분석을 완료하지 못했습니다. 제작은 계속 진행합니다.`;
         } else if (operation === 'video_poll') {
-          // GET is safe to resume; keep the original request ID, never call POST again.
-          current!.nextPollAt = now() + 10_000; job.state.message = '공급자 조회가 지연되었습니다. 같은 요청 ID로 다시 확인합니다.';
+          current!.retrieval!.lastErrorCode = error instanceof PetPipelineError ? error.code : 'TRANSIENT_IO';
+          if (classifyPetPollFailure(error) === 'permanent') {
+            current!.videoStatus = 'held'; current!.error = message; delete current!.nextPollAt;
+            job.status = 'held'; job.state.failedOperation = operation; job.state.failedShotIndex = shotIndex;
+            job.state.failureCode = error instanceof PetPipelineError ? error.code : 'PROVIDER_POLL_PERMANENT';
+            job.state.message = `${current!.id}: ${message}`;
+          } else if (current!.retrieval!.attempts >= PET_VIDEO_POLL_MAX_ATTEMPTS || now() >= current!.retrieval!.deadlineAt) {
+            holdRetrieval(job, shotIndex);
+          } else {
+            // GET is safe within the persisted bound; preserve the original POST marker and ID.
+            current!.nextPollAt = now() + 10_000; job.state.message = '공급자 조회가 지연되었습니다. 같은 요청 ID로 다시 확인합니다.';
+          }
         } else {
           job.status = 'held'; job.state.message = (current ? `${current.id}: ` : '') + message;
           job.state.failedOperation = operation; job.state.failedShotIndex = shotIndex >= 0 ? shotIndex : undefined;

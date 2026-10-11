@@ -60,6 +60,30 @@ function setup(overrides={}) {
   const service=createPetVideoService(deps);
   return {service,rows,calls,store,deps,tick:()=>{time+=20_000;},setTime:t=>{time=t;}};
 }
+test('content confirmation only writes an owned completed render and never calls media dependencies', async () => {
+  const ctx = setup(), created = await ctx.service.create(USER, episode(), TRACK);
+  assert.equal(ctx.rows.get(created.id).state.contentPolicyVersion, 'pet-content-review-v1');
+  await assert.rejects(ctx.service.confirm(USER, created.id, 'https://storage.test/final.mp4'), e => e.code === 'CONTENT_NOT_READY');
+  const row = ctx.rows.get(created.id); row.status = 'completed'; row.state.videoUrl = 'https://storage.test/final.mp4';
+  const before = JSON.stringify(row.episode), revision = row.revision;
+  await assert.rejects(ctx.service.confirm('another-owner', created.id, row.state.videoUrl), e => e.code === 'NOT_FOUND');
+  await assert.rejects(ctx.service.confirm(USER, created.id, 'https://storage.test/stale.mp4'), e => e.code === 'CONTENT_CHANGED');
+  const confirmed = await ctx.service.confirm(USER, created.id, row.state.videoUrl);
+  assert.equal(confirmed.contentReview.status, 'owner_confirmed'); assert.equal(ctx.rows.get(created.id).revision, revision + 1);
+  assert.equal(JSON.stringify(ctx.rows.get(created.id).episode), before); assert.deepEqual(ctx.calls, []);
+  await ctx.service.confirm(USER, created.id, row.state.videoUrl);
+  assert.equal(ctx.rows.get(created.id).revision, revision + 1);
+});
+test('content confirmation guards CAS conflicts and active render leases without provider calls', async () => {
+  const ctx = setup(), created = await ctx.service.create(USER, episode(), TRACK);
+  const row = ctx.rows.get(created.id); row.status = 'completed'; row.state.videoUrl = 'https://storage.test/final.mp4';
+  row.state.lease = { token: 'fixture', until: 999999, operation: 'render' };
+  await assert.rejects(ctx.service.confirm(USER, created.id, row.state.videoUrl), e => e.code === 'CONTENT_NOT_READY');
+  delete row.state.lease;
+  ctx.store.compareAndSwap = async () => null;
+  await assert.rejects(ctx.service.confirm(USER, created.id, row.state.videoUrl), e => e.code === 'CONFLICT');
+  assert.equal(ctx.rows.get(created.id).state.contentApproval, undefined); assert.deepEqual(ctx.calls, []);
+});
 /** A durable job created before the two-clip adapter existed, never new-create. */
 async function seedLegacyJob(ctx, original=episode()) {
   const id=require('node:crypto').randomUUID();const timestamp=new Date(100_000).toISOString();

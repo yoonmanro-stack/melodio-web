@@ -17,7 +17,15 @@ const moduleFixture = { exports: {} };
 vm.runInNewContext(compiled, {
   module: moduleFixture, exports: moduleFixture.exports, URL, Date,
   fetch() { providerCalls++; throw new Error('Provider access is forbidden in this pure projection'); },
-  require() { throw new Error('Projection must not import runtime services'); },
+  require(name) {
+    if (name !== './petContentReadiness') throw new Error('Projection must not import runtime services');
+    const helper = { exports: {} };
+    const code = ts.transpileModule(fs.readFileSync(path.join(root, 'src/lib/video/petContentReadiness.ts'), 'utf8'), {
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+    }).outputText;
+    vm.runInNewContext(code, { module: helper, exports: helper.exports, Date });
+    return helper.exports;
+  },
   process: { env: new Proxy({}, { get() { throw new Error('Projection must not read environment keys'); } }) },
 });
 const build = (generations, jobs = []) => JSON.parse(JSON.stringify(moduleFixture.exports.buildPublicViralVideoRows(generations, jobs)));
