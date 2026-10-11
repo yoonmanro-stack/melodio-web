@@ -54,11 +54,16 @@ export function PetEpisodeEditor({ episode, onChange, disabled = false }: {
 }) {
   const issues = validatePetEpisode(episode);
   const musicMode = isPetInstrumental(episode) ? '인스트루멘탈 · 보컬·가사 없음' : '보컬곡 · 기획한 가사 사용';
+  const planningNotice = episode.planningWarnings?.length ? <div role="status" className="rounded-xl border border-amber-400/30 bg-amber-950/15 p-3 text-sm text-amber-100">
+    <p className="font-semibold">생성 전에 이야기 흐름을 확인해 주세요</p>
+    <ul className="mt-2 list-disc space-y-1 pl-5">{episode.planningWarnings.map(warning => <li key={warning}>{warning}</li>)}</ul>
+  </div> : null;
   if (isPetTwoClipEpisode(episode)) return (
     <section className="space-y-4 rounded-2xl border border-fuchsia-400/25 bg-fuchsia-950/10 p-4" aria-label="댕냥이 30초 콘티">
       <ViralStoryReview title={episode.title} story={episode.story} candidates={episode.candidates} selectedCandidateIndex={episode.editorialReview?.selectedCandidateIndex ?? 0} selectedReason={episode.editorialReview?.selectedReason || '선정 이유 확인 필요'} />
       <p className="text-xs text-zinc-300">영상 제작 · 15초 + 15초</p>
       <p className="text-xs text-zinc-300">음악 · {musicMode}</p>
+      {planningNotice}
       <p className="text-xs text-zinc-300">{episode.pov === 'owner_inner_voice' ? '집사 속마음' : '반려동물 속마음'} · 이야기를 바꾸려면 위 상황을 수정한 뒤 다시 기획해 주세요.</p>
       <div className="grid gap-3 sm:grid-cols-2">{episode.production.clips.map(clip => <div key={clip.id} className="rounded-xl bg-black/25 p-3">
         <p className="mb-2 text-xs font-bold text-fuchsia-200">{clip.startSeconds}–{clip.startSeconds + 15}초 · {clip.id === 'C1' ? '상황과 시도' : '반전과 마무리'}</p>
@@ -89,6 +94,7 @@ export function PetEpisodeEditor({ episode, onChange, disabled = false }: {
       </label>
       <p className="text-xs leading-relaxed text-zinc-300">{episode.pov === 'owner_inner_voice' ? '집사 속마음' : '반려동물 속마음'} · {episode.character.appearance}<br />{episode.character.setting}</p>
       <p className="text-xs text-zinc-300">음악 · {musicMode}</p>
+      {planningNotice}
       {disabled ? <p className="text-xs text-amber-200">영상 작업에 저장된 콘티입니다. 새 이야기는 Step 3에서 다시 기획할 수 있습니다.</p> : null}
       <div className="grid gap-3 sm:grid-cols-2">
         {episode.shots.map(shot => (

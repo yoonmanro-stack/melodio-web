@@ -5,6 +5,8 @@ export const PET_EPISODE_VERSION = 'pet-v4' as const;
 /** Official Grok image-to-video prompt limit; never truncate to fit. */
 export const PET_VIDEO_PROMPT_MAX_LENGTH = 4096;
 export const LEGACY_PET_SHOT_SECONDS = [4, 5, 5, 6, 6, 4] as const;
+export const PET_PLANNING_WARNINGS_MAX_COUNT = 8;
+export const PET_PLANNING_WARNING_MAX_LENGTH = 240;
 /** Editorial beats; provider generation uses two 15-second clips. */
 export const PET_SHOT_SECONDS = [3, 5, 7, 5, 6, 4] as const;
 
@@ -107,6 +109,8 @@ export interface PetEpisode {
   character: { species: 'cat' | 'dog'; appearance: string; owner: string; setting: string; continuity: string[] };
   /** Missing on saved episodes means legacy vocal; never rewrite a saved identity. */
   audioMode?: 'vocal' | 'instrumental';
+  /** Uncertain automatic story checks on fresh plans; absence keeps old episodes readable. */
+  planningWarnings?: string[];
   lyrics: string;
   stylePrompt: string;
   shots: PetShot[];
@@ -141,6 +145,8 @@ export function validatePetEpisode(value: unknown): string[] {
   if (e.version !== PET_EPISODE_VERSION && e.version !== 'pet-v3') issues.push('댕냥이 콘티 버전을 확인해 주세요.');
   if (!e.id || !e.title || !e.story || !e.stylePrompt) issues.push('제목·스토리·음악 스타일이 필요합니다.');
   if (e.audioMode !== undefined && e.audioMode !== 'vocal' && e.audioMode !== 'instrumental') issues.push('음악 모드는 보컬 또는 인스트루멘탈이어야 합니다.');
+  if (e.planningWarnings !== undefined && (!Array.isArray(e.planningWarnings) || e.planningWarnings.length > PET_PLANNING_WARNINGS_MAX_COUNT
+    || e.planningWarnings.some(warning => typeof warning !== 'string' || !warning.trim() || warning.length > PET_PLANNING_WARNING_MAX_LENGTH || /data:|base64|[\u0000-\u001f\u007f]/i.test(warning)))) issues.push('기획 확인 메모는 짧은 텍스트 8개 이내여야 합니다.');
   if (isPetInstrumental(e)) {
     if (e.lyrics !== '') issues.push('인스트루멘탈 콘티에는 가사를 넣을 수 없습니다.');
   } else if (typeof e.lyrics !== 'string' || !e.lyrics.trim()) issues.push('보컬 콘티에는 가사가 필요합니다.');

@@ -8,6 +8,8 @@ import { extractPetSourceCast, inferPetSourceHints, PET_HUMAN_ROLES } from './pe
 import { petActionSummary, petFingerprintPair, petStoriesRepeat, validatePetSceneProgression, validatePetSourceEvents } from './petStoryValidation';
 import {
   LEGACY_PET_SHOT_SECONDS as PET_SHOT_SECONDS,
+  PET_PLANNING_WARNINGS_MAX_COUNT,
+  PET_PLANNING_WARNING_MAX_LENGTH,
   validatePetEpisode,
   type PetEpisode,
   type PetModelUsage,
@@ -291,12 +293,22 @@ function positiveHumanText(value: string): string {
 function recognizablePersonFrame(value: string, human?: PetSourceContract['cast']['humans'][number]): boolean {
   const visual = positiveHumanText(value);
   const rolePattern = human && HUMAN_ROLES.find(role => role.role === human.role)?.pattern;
-  const reference = human ? actorMentioned(visual, human.id) || !!rolePattern?.test(visual) : HUMAN_LIMB_PATTERN.test(visual);
+  const reference = human ? actorMentioned(visual, human.id) || !!rolePattern?.test(visual) : HUMAN_LIMB_PATTERN.test(visual) || /\bH[1-4]\b/iu.test(visual);
   return reference && (FACE_PATTERN.test(visual) || BODY_PATTERN.test(visual) || RECOGNIZABLE_PATTERN.test(visual) || EMBODIED_PERSON_PATTERN.test(visual));
 }
 
-function validateSourceContractPlan(plan: JsonRecord, character: JsonRecord | null, contract: PetSourceContract): string[] {
+interface PetPlanValidation { issues: string[]; warnings: string[] }
+
+function sourceEventWarnings(issues: string[], scope: 'source' | 'selected'): string[] {
+  return issues.map(issue => {
+    const event = issue.includes('핵심 행동') ? '핵심 행동' : issue.includes('반전') ? '반전' : '결말';
+    return `${scope === 'source' ? '입력 원문' : '선택한 이야기'}의 ${event}과 장면 행동이 맞는지는 자동 의미 검사만으로 확정하기 어렵습니다. 콘티를 확인해 주세요.`;
+  });
+}
+
+function validateSourceContractPlan(plan: JsonRecord, character: JsonRecord | null, contract: PetSourceContract): PetPlanValidation {
   const issues: string[] = [];
+  const warnings: string[] = [];
   if (Object.hasOwn(plan, 'music')) {
     try { validateCategoryMusicDirection(plan.music); }
     catch { issues.push('상황에 맞춘 음악 선택과 짧은 근거를 확인해 주세요.'); }
@@ -306,8 +318,14 @@ function validateSourceContractPlan(plan: JsonRecord, character: JsonRecord | nu
   const beats = asRecord(selected?.storyBeats);
   const shots = Array.isArray(plan.shots) ? plan.shots.map(asRecord).filter((shot): shot is JsonRecord => !!shot) : [];
   const actions = shots.map(shot => String(shot.action || ''));
-  issues.push(...validatePetSourceEvents(contract, actions), ...validatePetSceneProgression(actions));
-  if (beats) issues.push(...validatePetSourceEvents({ sourceTopic: String(selected?.premise || ''), coreAction: `${String(beats.setup || '')} ${String(beats.escalation || '')}`, reversal: String(beats.reversal || ''), payoff: String(beats.punchline || '') }, actions));
+  warnings.push(...sourceEventWarnings(validatePetSourceEvents(contract, actions), 'source'));
+  if (beats) warnings.push(...sourceEventWarnings(validatePetSourceEvents({ sourceTopic: String(selected?.premise || ''), coreAction: `${String(beats.setup || '')} ${String(beats.escalation || '')}`, reversal: String(beats.reversal || ''), payoff: String(beats.punchline || '') }, actions), 'selected'));
+  for (const issue of validatePetSceneProgression(actions)) {
+    if (/^장면 \d+과 \d+의 행동이 같은 장면을 반복/u.test(issue) || issue.includes('신체 능력')) issues.push(issue);
+    else warnings.push(issue.includes('실제 행동이나 변화')
+      ? '장면의 변화와 사건 진행은 자동 검사만으로 확인하기 어렵습니다. 여섯 장면의 흐름을 확인해 주세요.'
+      : '일부 장면의 행동이나 결말이 비슷해 보일 수 있습니다. 각 장면이 전하는 변화를 확인해 주세요.');
+  }
 
   const owner = typeof character?.owner === 'string' ? character.owner : '';
   const continuity = Array.isArray(character?.continuity) ? character.continuity.filter(value => typeof value === 'string').join(' ') : '';
@@ -340,12 +358,12 @@ function validateSourceContractPlan(plan: JsonRecord, character: JsonRecord | nu
       issues.push('새 인물을 영화 전체에서 익명의 손이나 팔로만 표현할 수 없습니다.');
     }
   }
-  return issues;
+  return { issues, warnings };
 }
 
-function validatePlan(value: unknown, input: PetPlanningInput, recent: PetStoryFingerprint[], contract: PetSourceContract): string[] {
+function validatePlan(value: unknown, input: PetPlanningInput, recent: PetStoryFingerprint[], contract: PetSourceContract): PetPlanValidation {
   const p = asRecord(value);
-  if (!p) return ['기획 결과는 JSON 객체여야 합니다.'];
+  if (!p) return { issues: ['기획 결과는 JSON 객체여야 합니다.'], warnings: [] };
   const issues: string[] = [];
   if (p.sourceTopic !== contract.sourceTopic) issues.push('기획 결과가 입력 원문을 정확히 되돌려 주어야 합니다.');
   if (!hasText(p.title, 40) || !hasText(p.story, 500)) issues.push('제목 40자·스토리 500자 이내로 구체적인 이야기가 필요합니다.');
@@ -406,8 +424,10 @@ function validatePlan(value: unknown, input: PetPlanningInput, recent: PetStoryF
     const s = asRecord(shot);
     if (!s || s.id !== `S${i + 1}` || s.caption !== lines[i] || !hasText(s.beat, 120) || !hasText(s.action, 1000) || !hasText(s.camera, 300)) issues.push(`장면 ${i + 1}의 순서·가사 자막·행동·카메라를 확인하세요.`);
   });
-  issues.push(...validateSourceContractPlan(p, character, contract));
-  return [...new Set(issues)];
+  const sourceValidation = validateSourceContractPlan(p, character, contract);
+  issues.push(...sourceValidation.issues);
+  return { issues: [...new Set(issues)], warnings: [...new Set(sourceValidation.warnings)].slice(0, PET_PLANNING_WARNINGS_MAX_COUNT)
+    .map(warning => warning.slice(0, PET_PLANNING_WARNING_MAX_LENGTH)) };
 }
 
 function normalizePlanMetadata(value: unknown): unknown {
@@ -538,15 +558,15 @@ export async function createPetEpisode(input: PetPlanningInput, dependencies: Pe
   const context = JSON.stringify({ sourceTopic: sourceContract.sourceTopic, sourceContract, species: effectiveInput.species ?? 'choose_from_topic', pov: effectiveInput.pov ?? 'choose_from_topic_default_owner_inner_voice',
     musicOverrides: { genreEn: input.genreEn || '', vocalEn: input.vocalEn || '', moodEn: input.moodEn || '' }, recentEpisodesNewestFirst: recent });
   let raw = normalizePlanMetadata(await call(PET_PLANNING_MODEL, 'planning', PLANNING_INSTRUCTIONS, context, PLAN_SCHEMA));
-  let issues = validatePlan(raw, effectiveInput, recent, sourceContract);
-  if (issues.length) {
+  let validation = validatePlan(raw, effectiveInput, recent, sourceContract);
+  if (validation.issues.length || validation.warnings.length) {
     // A single visible correction budget. The explicitly configured planner remains the story owner.
     raw = await call(PET_PLANNING_MODEL, 'planning', PLANNING_INSTRUCTIONS,
-      `${context}\nCorrect the preceding draft once. Preserve the source situation and repair only the listed failures.\n${lyricRepairReport(raw, effectiveInput)}\nDraft: ${JSON.stringify(raw)}\nFailures: ${JSON.stringify(issues)}`, PLAN_SCHEMA, 'repair');
+      `${context}\nCorrect the preceding draft once. Preserve the source situation and repair the listed contract failures. Automatic planning cautions are uncertain lexical hints, not proof that an event is absent. Keep faithful paraphrases and the authored causal timing; clarify a scene only where its meaning needs it, without inventing events to satisfy a vocabulary match.\n${lyricRepairReport(raw, effectiveInput)}\nDraft: ${JSON.stringify(raw)}\nFailures: ${JSON.stringify(validation.issues)}\nPlanning cautions: ${JSON.stringify(validation.warnings)}`, PLAN_SCHEMA, 'repair');
     raw = normalizePlanMetadata(raw);
-    issues = validatePlan(raw, effectiveInput, recent, sourceContract);
+    validation = validatePlan(raw, effectiveInput, recent, sourceContract);
   }
-  if (issues.length) throw new PetPlannerError('pet_plan_invalid', 'AI 기획 결과가 콘티 형식 검증을 통과하지 못했습니다. 입력 내용은 그대로 유지됩니다.', 422, [...models], issues);
+  if (validation.issues.length) throw new PetPlannerError('pet_plan_invalid', 'AI 기획 결과가 콘티 형식 검증을 통과하지 못했습니다. 입력 내용은 그대로 유지됩니다.', 422, [...models], validation.issues);
   const plan = raw as Plan;
   const selectedAudio = selectedPetAudio(asRecord(plan), effectiveInput);
   const stylePrompt = `${selectedAudio.stylePrompt}${selectedAudio.isInstrumental ? '' : ', sing the supplied six lines once in order, no extra verses or repeated chorus'}`;
@@ -579,6 +599,7 @@ export async function createPetEpisode(input: PetPlanningInput, dependencies: Pe
     audioMode: selectedAudio.isInstrumental ? 'instrumental' : 'vocal',
     lyrics: selectedAudio.isInstrumental ? '' : `[Verse]\n${plan.lyricLines.slice(0, 4).join('\n')}\n\n[Chorus]\n${plan.lyricLines.slice(4).join('\n')}`,
     stylePrompt,
+    ...(validation.warnings.length ? { planningWarnings: validation.warnings } : {}),
     shots: plan.shots.map((shot, i) => {
       const rendered = compiledShots[i] as { keyframePrompt: string; videoPrompt: string };
       const arcTiming = i >= 4

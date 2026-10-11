@@ -44,6 +44,13 @@ test('concerns stay bounded', () => {
   const review = summarize({ shots: [shot('C1', { ...good(), issues: [...Array.from({ length: 20 }, (_, i) => `문제 ${i}`), '긴'.repeat(501)] })] });
   assert.equal(review.concerns.length, 6); assert.ok(review.concerns.every(s => s.length < 510));
 });
+test('planning cautions remain visible through completion and owner review', () => {
+  const input = { videoUrl: url, shots: [shot('C1'), shot('C2')], planningWarnings: ['원문과 장면의 행동 연결을 확인해 주세요.'], approval: { videoUrl: url, approvedAt: now } };
+  assert.equal(summarize({ ...input, approval: undefined }).status, 'needs_attention');
+  const result = summarize(input);
+  assert.equal(result.status, 'owner_confirmed');
+  assert.equal(result.concerns[0], '기획 · 원문과 장면의 행동 연결을 확인해 주세요.');
+});
 test('new policy fails closed and archived jobs preserve their publication', () => {
   assert.equal(approved({}), true); assert.equal(approved({ contentPolicyVersion: policy, videoUrl: url }), false);
   assert.equal(approved({ contentPolicyVersion: policy, videoUrl: url, approvalUrl: url, approvedAt: now }), true);

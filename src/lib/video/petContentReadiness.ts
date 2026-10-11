@@ -12,6 +12,7 @@ export interface PetContentReview {
 type ReviewInput = {
   videoUrl?: string;
   shots: ReadonlyArray<{ id?: string; quality?: { video?: unknown } }>;
+  planningWarnings?: readonly string[];
   approval?: { videoUrl: string; approvedAt: string };
 };
 
@@ -24,7 +25,9 @@ function record(value: unknown): Record<string, unknown> | undefined {
 export function summarizePetContentReadiness(input: ReviewInput): PetContentReview {
   const totalClips = input.shots.length;
   let analyzedClips = 0;
-  const concerns: string[] = [];
+  const concerns: string[] = (input.planningWarnings || [])
+    .filter(warning => typeof warning === 'string' && warning.trim() && warning.length <= 500 && !/data:|base64/i.test(warning))
+    .slice(0, 3).map(warning => `기획 · ${warning.trim()}`);
   for (const [index, shot] of input.shots.entries()) {
     const review = record(shot.quality?.video);
     const label = typeof shot.id === 'string' && /^[CS][1-6]$/.test(shot.id) ? shot.id : `클립 ${index + 1}`;

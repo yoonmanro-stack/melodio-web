@@ -198,7 +198,7 @@ export function petJobView(job: PetJobRecord): PetVideoJobView {
     shots: job.state.shots.map((s, i) => ({ id: s.id, status: s.videoStatus === 'empty' ? `image_${s.imageStatus}` : `video_${s.videoStatus}`, keyframeUrl: s.keyframeUrl, videoUrl: s.videoUrl, requestId: s.requestId, error: s.error, motionPrompt: job.state.approvedMotionPrompts?.[i] ?? job.state.productionMotionPrompts?.[i] ?? productionShots[i]?.videoPrompt, quality: s.quality })),
     videoUrl: job.state.videoUrl, durationSeconds: job.state.durationSeconds, canResume: canResumePetJob(job),
     productionMode,
-    contentReview: summarizePetContentReadiness({ videoUrl: job.state.videoUrl, shots: job.state.shots, approval: job.state.contentApproval }),
+    contentReview: summarizePetContentReadiness({ videoUrl: job.state.videoUrl, shots: job.state.shots, planningWarnings: job.episode.planningWarnings, approval: job.state.contentApproval }),
     audioQuality: job.state.audio.rhythm || job.state.audio.alignment ? {
       bpm: job.state.audio.rhythm?.bpm,
       confidence: job.state.audio.rhythm?.confidence,

@@ -49,6 +49,13 @@ const fixture = {
     keyframePrompt: 'Adult cat beside a desk, one starting frame', videoPrompt: 'One small head turn, fixed camera',
   })),
 };
+test('planning cautions are visible in both public planner and two-clip editors before generation', () => {
+  for (const episode of [fixture, v4Fixture()]) {
+    const html = renderToStaticMarkup(editor.PetEpisodeEditor({ episode: { ...episode, planningWarnings: ['원문과 장면의 행동 연결을 확인해 주세요.'] }, onChange() {} }));
+    assert.match(html, /생성 전에 이야기 흐름을 확인해 주세요/);
+    assert.match(html, /원문과 장면의 행동 연결을 확인해 주세요/);
+  }
+});
 function v4Fixture() {
   const sourceTopic = '강아지가 슬리퍼를 사람에게 배달하고 사람이 웃으며 받는다';
   let start = 0;

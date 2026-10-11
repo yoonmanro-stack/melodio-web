@@ -42,7 +42,7 @@ const {
   petRecentFingerprints,
 } = load('src/lib/vle/petPlanner.ts');
 const { validatePetSourceEvents, validatePetSceneProgression, petStoriesRepeat, petActionSummary } = load('src/lib/vle/petStoryValidation.ts');
-const { validatePetEpisode, isPetInstrumental } = load('src/lib/vle/petEpisode.ts');
+const { validatePetEpisode, isPetInstrumental, PET_PLANNING_WARNINGS_MAX_COUNT, PET_PLANNING_WARNING_MAX_LENGTH } = load('src/lib/vle/petEpisode.ts');
 const { PET_HUMAN_REACTION_DIRECTION, PET_ANIMAL_REACTION_DIRECTION } = load('src/lib/vle/petPerformanceDirection.ts');
 
 function assertPerformance(prompts, hasHumans) {
@@ -798,15 +798,17 @@ test('ringing-bell cat story remains pet-only and allows a short instrumental na
   assert.deepEqual(episode.shots.map(shot => shot.action), actions);
 });
 
-test('a source action missing from scenes cannot be supplied by unchanged story, captions, or camera prose', async () => {
+test('a source action vocabulary mismatch receives one repair and a surfaced uncertainty warning', async () => {
   const topic = 'A dog carries a red ball across the room and hides it under the sofa. Finally it rests alone beside the sofa.';
   const value = petOnlyPlan(topic, 'dog');
   value.shots[1].action = 'The adult dog walks across the room; the red ball remains on the floor.';
   value.shots[1].camera = 'Show the dog carries a ball according to the full story.';
   assert.match(value.story, /carries/);
-  const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(value, PET_PLANNING_MODEL)]);
-  await assert.rejects(createPetEpisode({ topic }, r.dependencies), error => error.code === 'pet_plan_invalid' && error.issues.some(issue => /실제 장면 행동/.test(issue)));
-  assert.equal(r.requests.length, 2, 'One repair only; never compile a missing core event.');
+  const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(value, PET_PLANNING_MODEL), providerResponse(naturalCompilation(value), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({ topic }, r.dependencies);
+  assert.ok(episode.planningWarnings.some(warning => /입력 원문.*자동 의미 검사만으로 확정하기 어렵/.test(warning)));
+  assert.equal(r.requests.length, 3, 'One repair and compilation; no repeated vocabulary enforcement loop.');
+  assert.ok(episode.planningWarnings.every(warning => !/빠졌|누락|주체가 바뀌/.test(warning)));
 });
 
 test('source event validation keeps the actor while allowing bilingual prop synonyms and natural result cuts', () => {
@@ -819,18 +821,16 @@ test('source event validation keeps the actor while allowing bilingual prop syno
   assert.ok(validatePetSourceEvents(cup, ['The cat pushes a pillow while the mug stays on the table.']).length, 'Sharing one backdrop noun cannot replace the action target.');
 });
 
-for (const regression of ['duplicate', 'static', 'impossible']) {
+for (const regression of ['duplicate', 'impossible']) {
   test(`fresh planner rejects ${regression} scene regression within the existing repair budget`, async () => {
     const value = plan();
     if (regression === 'duplicate') {
       value.shots[4].action = 'The dog settles on the sofa beside H1.';
-      value.shots[5].action = 'The adult dog loafs beside H1 on the couch.';
-    } else if (regression === 'static') {
-      value.shots.forEach((shot, index) => { shot.action = `The adult dog sits on the sofa and looks at H1; still frame ${index + 1}.`; });
+      value.shots[5].action = value.shots[4].action;
     } else value.shots[2].action = 'The dog types a sentence using its fingers at the laptop while H1 sits beside it.';
     const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(value, PET_PLANNING_MODEL)]);
     await assert.rejects(createPetEpisode({}, r.dependencies), error => error.code === 'pet_plan_invalid'
-      && error.issues.some(issue => regression === 'duplicate' ? /마지막 두 장면/.test(issue) : regression === 'static' ? /실제 행동이나 변화/.test(issue) : /신체 능력/.test(issue)));
+      && error.issues.some(issue => regression === 'duplicate' ? /같은 장면을 반복/.test(issue) : /신체 능력/.test(issue)));
     assert.equal(r.requests.length, 2);
   });
 }
@@ -914,5 +914,97 @@ test('legacy archives without audio mode or scene summaries remain readable and 
   assert.equal(isPetInstrumental(episode), false);
   assert.deepEqual(validatePetEpisode(episode), []);
   assert.deepEqual(petRecentFingerprints([{ episode }]), [{ prop: 'leash', conflict: 'rain_cancels_walk', twist: 'owner_misreads' }]);
+  assert.equal(JSON.stringify(episode), saved);
+});
+
+function faithfulBowlRequestPlan() {
+  const topic = '거실에서 성인 여성 집사가 강아지에게 장난감 공을 가져오라며 손을 내민다. 강아지는 공 대신 빈 밥그릇을 가져와 집사 앞에 내려놓는다. 심부름을 시킨 집사가 오히려 밥 심부름을 하게 되는 귀여운 반전.';
+  const value = plan(['공 좀 가져와 줄래', '심부름은 내 특기', '공보다 이게 먼저야', '빈 그릇을 물고 왔어', '내 밥부터 채워 줘요', '심부름이 바뀌네'], topic);
+  value.title = '심부름이 바뀌네';
+  value.story = topic;
+  value.character.owner = 'H1 is one adult woman with short dark hair, a rounded face and a navy sweater.';
+  value.character.setting = 'One living room with a red ball and empty food bowl.';
+  value.character.continuity = ['Same adult beige dog.', 'H1 keeps the same face, hair and navy sweater.', 'One red ball and one food bowl.'];
+  value.candidates[0] = { prop: 'bowl', conflict: 'fetch_request_reversed', twist: 'negotiation_backfires', title: value.title, premise: topic,
+    storyBeats: beats('H1 asks the dog to bring a ball.', 'The dog approaches the empty bowl.', 'The dog carries the bowl to H1 and places it before her.', 'H1 fills the bowl.') };
+  const actions = [
+    'H1 holds out her hand toward the dog, her visible face and upper body inviting a fetch game.',
+    'The dog looks at the red ball, then turns toward the empty food bowl.',
+    'The dog grips the empty food bowl gently in its mouth.',
+    'The dog returns to H1 with the bowl held between its jaws.',
+    'The dog lowers the bowl to the floor before H1 and lets go; H1 reacts with a surprised visible face.',
+    'H1 fills the bowl while the dog waits beside her.',
+  ];
+  value.shots = value.shots.map((shot, index) => ({ ...shot, caption: value.lyricLines[index], action: actions[index], camera: 'Natural composition of the current authored action.' }));
+  return value;
+}
+
+test('faithful bowl-delivery paraphrases compile after one repair with bounded uncertainty warnings and no extra calls', async () => {
+  const value = faithfulBowlRequestPlan();
+  const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(value, PET_PLANNING_MODEL), providerResponse(naturalCompilation(value), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({ topic: value.sourceTopic }, r.dependencies);
+  assert.deepEqual(r.requests.map(request => request.model), [PET_PLANNING_MODEL, PET_PLANNING_MODEL, PET_COMPILATION_MODEL]);
+  assert.equal(episode.models.length, 3);
+  assert.deepEqual(episode.shots.map(shot => shot.action), value.shots.map(shot => shot.action), 'A vocabulary warning cannot force new choreography into a faithful arc.');
+  assert.ok(episode.planningWarnings.some(warning => /입력 원문.*반전/.test(warning)));
+  assert.ok(episode.planningWarnings.some(warning => /선택한 이야기.*반전/.test(warning)));
+  assert.ok(episode.planningWarnings.length <= PET_PLANNING_WARNINGS_MAX_COUNT);
+  assert.ok(episode.planningWarnings.every(warning => warning.length <= PET_PLANNING_WARNING_MAX_LENGTH && /확정하기 어렵/.test(warning)));
+  assert.deepEqual(validatePetEpisode(episode), []);
+  assert.match(r.requests[1].input, /uncertain lexical hints, not proof that an event is absent/);
+});
+
+test('a repaired story match clears the warning without adding a second repair or altering the saved source', async () => {
+  const draft = faithfulBowlRequestPlan();
+  const corrected = structuredClone(draft);
+  corrected.candidates[0].storyBeats.reversal = 'The dog carries the bowl to H1. The dog places the bowl before her.';
+  corrected.shots[3].action = 'The dog carries the empty bowl to H1.';
+  corrected.shots[4].action = 'The dog places the empty bowl before H1, whose visible face reacts with surprise.';
+  const r = runner([providerResponse(draft, PET_PLANNING_MODEL), providerResponse(corrected, PET_PLANNING_MODEL), providerResponse(naturalCompilation(corrected), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({ topic: draft.sourceTopic }, r.dependencies);
+  assert.equal(r.requests.length, 3);
+  assert.equal(episode.planningWarnings, undefined);
+  assert.equal(episode.sourceTopic, draft.sourceTopic);
+});
+
+for (const caution of ['static', 'similar_ending']) {
+  test(`inferred ${caution} progression is a planning caution after one repair`, async () => {
+    const value = plan();
+    if (caution === 'static') value.shots.forEach((shot, index) => { shot.action = `The dog sits on the sofa and looks at H1; quiet moment ${index + 1}.`; });
+    else { value.shots[4].action = 'The dog settles on the sofa beside H1.'; value.shots[5].action = 'The adult dog loafs beside H1 on the couch.'; }
+    const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(value, PET_PLANNING_MODEL), providerResponse(naturalCompilation(value), PET_COMPILATION_MODEL)]);
+    const episode = await createPetEpisode({}, r.dependencies);
+    assert.equal(r.requests.length, 3);
+    assert.ok(episode.planningWarnings.some(warning => caution === 'static' ? /사건 진행.*확인하기 어렵/.test(warning) : /비슷해 보일 수/.test(warning)));
+    assert.deepEqual(validatePetEpisode(episode), []);
+  });
+}
+
+for (const contradiction of ['source_echo', 'species', 'no_humans']) {
+  test(`hard ${contradiction} contradiction still fails before compilation even alongside story warnings`, async () => {
+    const value = faithfulBowlRequestPlan();
+    const input = { topic: value.sourceTopic, species: 'dog' };
+    if (contradiction === 'source_echo') value.sourceTopic = '다른 원문';
+    else if (contradiction === 'species') value.character.species = 'cat';
+    else {
+      input.topic = 'Without humans, a dog carries an empty bowl and places it on the floor.';
+      value.sourceTopic = input.topic;
+    }
+    const r = runner([providerResponse(value, PET_PLANNING_MODEL), providerResponse(value, PET_PLANNING_MODEL)]);
+    await assert.rejects(createPetEpisode(input, r.dependencies), error => error.code === 'pet_plan_invalid'
+      && error.issues.some(issue => contradiction === 'source_echo' ? /원문을 정확히/.test(issue) : contradiction === 'species' ? /성묘·성견/.test(issue) : /사람이 없는/.test(issue)));
+    assert.equal(r.requests.length, 2);
+  });
+}
+
+test('warning metadata is bounded while archives without it validate without mutation', async () => {
+  const r = runner([providerResponse(plan(), PET_PLANNING_MODEL), providerResponse(compilation(), PET_COMPILATION_MODEL)]);
+  const episode = await createPetEpisode({}, r.dependencies);
+  const saved = JSON.stringify(episode);
+  assert.equal(episode.planningWarnings, undefined);
+  assert.deepEqual(validatePetEpisode(episode), []);
+  assert.ok(validatePetEpisode({ ...episode, planningWarnings: Array.from({ length: PET_PLANNING_WARNINGS_MAX_COUNT + 1 }, () => '자동 의미 검사를 확인해 주세요.') }).length);
+  assert.ok(validatePetEpisode({ ...episode, planningWarnings: ['가'.repeat(PET_PLANNING_WARNING_MAX_LENGTH + 1)] }).length);
+  assert.ok(validatePetEpisode({ ...episode, planningWarnings: ['확인\n메모'] }).length);
   assert.equal(JSON.stringify(episode), saved);
 });
