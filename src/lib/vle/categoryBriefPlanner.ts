@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { buildCategoryQualityInstructions, getCategoryQualityDirection, VIRAL_QUALITY_CATEGORY_IDS, type ViralQualityCategoryId } from './categoryQualityDirection';
 import { categoryInstrumentalChoice, compileCategoryMusicStyle, validateFreshCategoryCreativePlan, type CategoryCreativePlan } from './categoryCreativePlan';
+import { hasObservableCategoryAction } from './categoryObservableAction';
 import { countSyllables, formatLyricsToSuno, validateStructure, VIRAL_PART_SPECS, VIRAL_SONG_SPEC, type ViralLyricsStructure } from './viralSongSpec';
 import { readPetBoundedBody } from '../video/petMedia';
 
@@ -94,7 +95,6 @@ export const CATEGORY_BRIEF_SCHEMA = schemaObject({
   }),
 });
 
-const physicalAction = /딛|걷|걸어|돌리|돌아|닫|열|옮|집어|잡|놓|밀|당기|들어|들고|내리|올리|가리|멈|앉|일어|누르|펴|접|뻗|건네|꺼내|넣|빼|벗|메고|씌|빗|씹|먹|마시|찍|덮|훑|응시|바라|웃|찡그|고개|눈썹/;
 function narrative(value: unknown, max: number): string {
   const result = text(value, max, true);
   if (/[\[\]<>]|(?:API|HTTP|JSON|프롬프트|시스템 명령)|(?:최신|실시간|인기)\s*1위|(?:시청률|반응률)\s*\d/i.test(result)) invalid();
@@ -114,10 +114,10 @@ export function validateCategoryBriefDraft(raw: unknown, category: CategoryBrief
   const opening = exact(plan.opening2s, ['startSeconds', 'endSeconds', 'action']);
   if (opening.startSeconds !== 0 || opening.endSeconds !== 2) invalid();
   const action = narrative(opening.action, 180), payoff = narrative(plan.payoff, 240);
-  if (!physicalAction.test(action) || !physicalAction.test(payoff)) invalid('CATEGORY_BRIEF_ACTION');
+  if (!hasObservableCategoryAction(action) || !hasObservableCategoryAction(payoff)) invalid('CATEGORY_BRIEF_ACTION');
   if (!Array.isArray(plan.development) || plan.development.length < 1 || plan.development.length > 2) invalid();
   const development = plan.development.map(value => narrative(value, 240));
-  if (new Set([action, ...development, payoff]).size !== development.length + 2 || development.some(value => !physicalAction.test(value))) invalid('CATEGORY_BRIEF_ACTION');
+  if (new Set([action, ...development, payoff]).size !== development.length + 2 || development.some(value => !hasObservableCategoryAction(value))) invalid('CATEGORY_BRIEF_ACTION');
   if (!Array.isArray(plan.roles) || !plan.roles.length || plan.roles.length > 3) invalid();
   const roles = plan.roles.map(rawRole => {
     const role = exact(rawRole, ['id', 'role', 'appearance', 'count', 'visibility']);

@@ -1,4 +1,6 @@
 /** Client-safe persisted story contract. No provider, Node or server imports. */
+import { hasObservableCategoryAction } from './categoryObservableAction';
+
 export type CategorySceneContext = { place: string; ongoingActivity: string; immediateTrigger: string; settingEvidence: string };
 export type CategoryMusicDirection = {
   genreEn: string; vocalEn: string; moodEn: string; styleEn: string;
@@ -26,8 +28,6 @@ export class CategoryCreativePlanError extends Error {
 }
 function invalid(): never { throw new CategoryCreativePlanError(); }
 const unsafeText = /data\s*:|base64|(?:https?|javascript)\s*:\s*|[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u2028-\u202e\u2066-\u2069]/i;
-// These checks establish readable planned action, never generated-video quality.
-const physicalAction = /딛|걷|걸어|돌리|돌아|닫|열|옮|집어|잡|놓|밀|당기|들어|들고|내리|올리|가리|멈|앉|일어|누르|펴|접|뻗|건네|꺼내|넣|빼|벗|메고|씌|빗|씹|먹|마시|찍|덮|훑|응시|바라|웃|찡그|고개|눈썹|흔들|끄덕|모으|펼/;
 type DataObject = Record<string, unknown>;
 function object(raw: unknown, keys?: readonly string[], optional: readonly string[] = []): DataObject {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) invalid();
@@ -99,7 +99,7 @@ function normalizePlan(raw: unknown): CategoryCreativePlan {
   const action = narrative(opening.action, 180), watchReason = narrative(plan.watchReason, 180), payoff = narrative(plan.payoff, 240);
   const development = array(plan.development, 1, 2).map(value => narrative(value, 240));
   const physical = [action, ...development, payoff];
-  if (physical.some(value => !physicalAction.test(value)) || new Set(physical).size !== physical.length) invalid();
+  if (physical.some(value => !hasObservableCategoryAction(value)) || new Set(physical).size !== physical.length) invalid();
   const roles = array(plan.roles, 1, 3).map(rawRole => {
     const role = object(rawRole, ['id', 'role', 'appearance', 'count', 'visibility']);
     if (typeof role.id !== 'string' || !/^R[1-3]$/.test(role.id) || !Number.isInteger(role.count) || Number(role.count) < 1 || Number(role.count) > 6

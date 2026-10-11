@@ -6,7 +6,7 @@ const ts = require('typescript');
 
 const root = path.resolve(__dirname, '..');
 const baseline = process.env.CATEGORY_BRIEF_BASELINE_ROOT || root;
-const authored = new Set(['src/lib/vle/categoryBriefPlanner.ts', 'src/lib/vle/categoryQualityDirection.ts', 'src/lib/vle/categoryCreativePlan.ts', 'src/lib/vle/conceptContextDirection.ts']);
+const authored = new Set(['src/lib/vle/categoryBriefPlanner.ts', 'src/lib/vle/categoryQualityDirection.ts', 'src/lib/vle/categoryCreativePlan.ts', 'src/lib/vle/categoryObservableAction.ts', 'src/lib/vle/conceptContextDirection.ts']);
 const cache = new Map();
 function load(relative) {
   if (cache.has(relative)) return cache.get(relative).exports;
@@ -32,6 +32,7 @@ function load(relative) {
 }
 const api = load('src/lib/vle/categoryBriefPlanner.ts');
 const { createCategoryBrief: create, CategoryBriefPlannerError, CATEGORY_BRIEF_MODEL: MODEL } = api;
+const { validateCategoryCreativePlan, validateFreshCategoryCreativePlan } = load('src/lib/vle/categoryCreativePlan.ts');
 const categories = ['drama', 'relationship', 'human', 'trend', 'challenge', 'brand', 'history', 'parenting', 'food_diet', 'horror_mystery'];
 const structure = {
   memoryAnchor: '나만 출근', twist: '월급은 휴가 중이고 커피마저 먼저 퇴근한다.',
@@ -56,6 +57,51 @@ function envelope(value = draft(), overrides = {}) {
   return { model: MODEL, choices: [{ finish_reason: 'stop', message: { content: JSON.stringify(value), refusal: null } }],
     usage: { prompt_tokens: 1000, completion_tokens: 700 }, ...overrides };
 }
+
+function historyDraft() {
+  const value = draft('history');
+  value.title = '나랏말싸미 창구 앞에서';
+  value.creativePlan.opening2s.action = '세종이 현대 창구 앞에서 서류를 펼친다.';
+  value.creativePlan.watchReason = '왕의 말보다 서류가 먼저인 창구에서 세종은 접수를 마칠 수 있을까.';
+  value.creativePlan.development = ['직원이 접수 서류를 세종에게 건넨다.', '세종이 붓을 내려놓고 현대식 펜을 집어 든다.'];
+  value.creativePlan.payoff = '세종이 도장을 찍고 접수 서류를 직원에게 건넨다.';
+  value.creativePlan.roles[0] = { id: 'R1', role: '현대 창구를 찾은 세종', appearance: '조선 시대 왕의 복식을 입은 성인 남성 세종', count: 1, visibility: 'on_screen' };
+  value.creativePlan.roles[1].role = '창구에서 서류를 확인하는 현대 직원';
+  value.creativePlan.sceneContext = { place: '직원이 민원 서류를 접수하는 현대 창구', ongoingActivity: '세종이 접수를 위해 서류를 준비하고 있다.', immediateTrigger: '직원이 서류의 비어 있는 서명란을 가리킨다.', settingEvidence: '직원과 방문자가 창구를 사이에 두고 서류를 주고받는 공용 업무 공간이다.' };
+  value.creativePlan.wardrobes[0] = { roleId: 'R1', clothing: '세종의 시대와 신분에 맞는 왕의 복식', footwear: '왕의 복식과 맞는 전통 신발' };
+  value.creativePlan.wardrobes[1] = { roleId: 'R2', clothing: '창구 직원의 근무용 셔츠와 긴 바지', footwear: '근무 복장과 맞는 단정한 신발' };
+  value.lyricsStructure = { memoryAnchor: '나랏말싸미', twist: '세종도 현대 창구에서는 도장을 찍어야 한다.',
+    hook: ['나랏말싸미', '나랏말싸미', '말보다 서류', '도장만 찍어'],
+    verse: ['백성 대신 창구 줄', '붓 대신 펜을 잡아', '서류가 먼저 말해'], finalPunch: '도장이 임금', tagOutro: '도장 찍고 가시오' };
+  return value;
+}
+
+test('fresh and persisted history plans accept the same observable Korean action inflections', () => {
+  const actions = ['세종이 정중히 절한다.', '세종이 큰절을 한다.', '세종이 공손하게 인사한다.', '장수가 거수경례를 한다.',
+    '장수가 목례한다.', '세종이 양팔을 흔든다.', '장수가 상체를 숙인다.', '장수가 허리를 굽힌다.',
+    '장수가 책상을 두드린다.', '장수가 두 손을 펼친다.', '세종이 두 손을 모은다.', '장수가 고개를 끄덕인다.',
+    '세종이 글씨를 쓴다.', '세종이 종이에 한글을 적는다.', '신사임당이 붓으로 그림을 그린다.',
+    '세종이 종이에 메모한다.', '세종이 서류에 서명한다.', '세종이 서신을 쓴다.',
+    '이순신이 마당에서 뛰거나 달린다.', '이순신이 마당에서 뛴다.', '왕이 어깨를 움직이며 춤춘다.', '왕이 마당에서 춤을 춘다.'];
+  for (const action of actions) for (const position of ['opening', 'development', 'payoff']) {
+    const value = historyDraft();
+    if (position === 'opening') value.creativePlan.opening2s.action = action;
+    else if (position === 'development') value.creativePlan.development[0] = action;
+    else value.creativePlan.payoff = action;
+    const fresh = api.validateCategoryBriefDraft(value, 'history');
+    assert.deepEqual(validateCategoryCreativePlan(value.creativePlan), fresh.creativePlan, `${position}: ${action}`);
+    assert.deepEqual(validateFreshCategoryCreativePlan(value.creativePlan), fresh.creativePlan, `${position}: ${action}`);
+  }
+});
+
+test('both history validators reject purely abstract wishes, feelings and thoughts', () => {
+  for (const action of ['세종이 행복한 사람이 된다.', '장수가 승리를 원한다.', '세종이 평화를 바란다.', '장수가 옛일을 생각한다.',
+    '장수가 좌절한다.', '장수가 마음을 쓴다.', '신사임당이 마음을 그린다.', '세종이 꿈을 그린다.', '장수가 마음에 메모한다.']) {
+    const value = historyDraft(); value.creativePlan.opening2s.action = action;
+    assert.throws(() => api.validateCategoryBriefDraft(value, 'history'), { code: 'CATEGORY_BRIEF_ACTION' });
+    assert.throws(() => validateCategoryCreativePlan(value.creativePlan), { code: 'CATEGORY_CREATIVE_PLAN' });
+  }
+});
 function fixture(responseFactory = () => Response.json(envelope())) {
   const calls = [];
   return { calls, fetchImpl: async (url, init) => {

@@ -17,14 +17,19 @@ function find(predicate) {
 function variable(name) { return find(node => ts.isVariableDeclaration(node) && node.name.getText(page) === name).initializer; }
 function runNode(node, bindings = {}) {
   const expression = node.getText(page);
-  const code = ts.transpileModule(`const result = (${expression});`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+  const code = ts.transpileModule(`const result = (${expression});`, { compilerOptions: { target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText;
   return new Function(...Object.keys(bindings), `${code}\nreturn result;`)(...Object.values(bindings));
 }
 const creativeModule = { exports: {} };
 const creativeCode = ts.transpileModule(fs.readFileSync(path.join(root, 'src/lib/vle/categoryCreativePlan.ts'), 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
 }).outputText;
-new Function('module', 'exports', creativeCode)(creativeModule, creativeModule.exports);
+const actionModule = { exports: {} };
+const actionCode = ts.transpileModule(fs.readFileSync(path.join(root, 'src/lib/vle/categoryObservableAction.ts'), 'utf8'), {
+  compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+new Function('module', 'exports', actionCode)(actionModule, actionModule.exports);
+new Function('require', 'module', 'exports', creativeCode)(name => { assert.equal(name, './categoryObservableAction'); return actionModule.exports; }, creativeModule, creativeModule.exports);
 const extras = creativeModule.exports.readCategoryBriefExtras;
 const genreMap = runNode(variable('VIRAL_GENRE_PROMPT_MAP'));
 const topic = '  야근 중인 디자이너가 젖은 운동화를 벗고 실내화를 신는다.\n실내 복도에서 동료와 마주친다.  ';
@@ -47,7 +52,9 @@ function freshPlan(instrumental) {
 }
 function planningHarness(overrides = {}) {
   const requests = [], changes = {};
+  const account = { userId: 'owner' };
   const bindings = { genCategory: 'human', customTopic: topic, selectedGenre: '', selectedMood: '', selectedVocal: '',
+    planningAccount: account, planningAccountRef: { current: account }, planningAccountReady: true, petUserId: 'owner',
     isOptimizing: false, isGenerating: false, isGeneratingGrokVideo: false,
     petPlanningRequest: { current: 0 }, petCategoryRef: { current: 'human' }, VIRAL_GENRE_PROMPT_MAP: genreMap,
     async fetch(url, options) { requests.push({ url, body: JSON.parse(options.body) }); return { ok: true, json: async () => ({ success: true, brief: overrides.reply || brief() }) }; },
@@ -107,6 +114,145 @@ test('a mismatched source topic cannot replace the plan, while pet keeps its ded
   const mismatch = planningHarness({ reply: { ...brief(), sourceTopic: topic.trim() } }); await mismatch.run();
   assert.equal(mismatch.changes.setProducerBrief, undefined); assert.ok(mismatch.changes.setPetPlanError.some(value => value));
   const pet = planningHarness({ genCategory: 'pet' }); await pet.run(); assert.equal(pet.changes.petDelegated, true); assert.deepEqual(pet.requests, []);
+});
+
+const authCallback = find(node => ts.isCallExpression(node) && node.expression.getText(page) === 'client.auth.onAuthStateChange').arguments[0];
+const accountReset = find(node => ts.isCallExpression(node) && node.expression.getText(page) === 'useEffect'
+  && node.arguments[0]?.getText(page).includes('const previousOwner = petAccountRef.current')).arguments[0];
+const planningButton = find(node => ts.isCallExpression(node) && ts.isParenthesizedExpression(node.expression)
+  && node.expression.getText(page).includes('const isStep3Enabled'));
+const planningError = find(node => ts.isConditionalExpression(node) && node.condition.getText(page) === 'petPlanError');
+const React = { createElement: (type, props, ...children) => ({ type, props: props || {}, children }) };
+
+function authPlanningHarness(reply) {
+  const state = { planningAccount: null, planningAccountReady: false, isOptimizing: false, error: '', brief: null };
+  const changes = {}, requests = [];
+  const bindings = { genCategory: 'history', customTopic: topic, selectedGenre: '', selectedMood: '', selectedVocal: '',
+    isGenerating: false, isGeneratingGrokVideo: false, petAccountRef: { current: null }, planningAccountRef: { current: null },
+    petPlanningRequest: { current: 0 }, petCategoryRef: { current: 'history' }, petTopicDraft: { current: '' }, VIRAL_GENRE_PROMPT_MAP: genreMap,
+    readPetEpisode: () => null,
+    async fetch(url, options) {
+      requests.push({ url, body: JSON.parse(options.body) });
+      return reply ? reply(requests.length) : { ok: true, json: async () => ({ success: true, brief: brief() }) };
+    },
+    async handlePlanPetEpisode() { changes.petDelegated = true; },
+  };
+  for (const name of ['setPlanningAccount', 'setPlanningAccountReady', 'setIsOptimizing', 'setPetPlanError', 'setProducerBrief',
+    'setPetCompletedRefreshKey', 'setIsGenerating', 'setGenProgress', 'setPetEpisode', 'setPetTrackId', 'setPetPlanLocked', 'setPetDraftOwner',
+    'setCustomTopic', 'setCustomLyrics', 'setOptimizedPrompt', 'setStyleWarnings', 'setGeneratedResult', 'setSelectedGrokTrackId',
+    'setGrokVideoPrompt', 'setGrokVideoResult', 'setGrokVideoClips', 'setGrokVideoDuration']) {
+    bindings[name] = value => {
+      (changes[name] ||= []).push(value);
+      const key = { setPlanningAccount: 'planningAccount', setPlanningAccountReady: 'planningAccountReady', setIsOptimizing: 'isOptimizing',
+        setPetPlanError: 'error', setProducerBrief: 'brief' }[name];
+      if (key) state[key] = value;
+    };
+  }
+  const snapshot = () => ({ ...bindings, ...state, petUserId: state.planningAccount?.userId || null });
+  const auth = runNode(authCallback, { ...bindings, disposed: false });
+  const handler = () => runNode(variable('handleOptimizePrompt'), snapshot());
+  const button = () => {
+    const tree = runNode(planningButton, { ...snapshot(), React, planIsCurrent: !!state.brief,
+      handleOptimizePrompt: handler(), RefreshCw: 'RefreshCw', RotateCcw: 'RotateCcw', Wand2: 'Wand2' });
+    return tree.children.find(child => child?.type === 'button');
+  };
+  return { state, changes, requests, bindings, handler, button,
+    auth: (event, owner) => auth(event, owner ? { user: { id: owner } } : null),
+    reset: () => runNode(accountReset, snapshot())(),
+    error: () => runNode(planningError, { petPlanError: state.error, React }),
+  };
+}
+
+test('history planning stays disabled through initial auth hydration and account reset, then allows AI music defaults', async () => {
+  const host = authPlanningHarness();
+  host.reset();
+  assert.equal(host.button().props.disabled, true);
+  await host.handler()();
+  host.auth('INITIAL_SESSION', 'owner-A');
+  assert.equal(host.button().props.disabled, true);
+  await host.handler()();
+  assert.equal(host.requests.length, 0);
+  host.reset();
+  assert.equal(host.button().props.disabled, false);
+  await host.handler()();
+  assert.deepEqual(host.requests, [{ url: '/api/viral-cf/producer-brief', body: { category: 'history', topic, genreEn: '', vocalEn: '', moodEn: '' } }]);
+  assert.equal(host.state.brief.categoryId, 'history');
+  assert.equal(host.state.brief.sourceTopic, topic);
+
+  const loggedOut = authPlanningHarness();
+  loggedOut.auth('INITIAL_SESSION', null); loggedOut.reset();
+  assert.equal(loggedOut.button().props.disabled, true);
+  await loggedOut.handler()();
+  assert.equal(loggedOut.requests.length, 0);
+});
+
+test('same-owner auth events preserve the active history plan request and enabled account', async () => {
+  let resolve;
+  const host = authPlanningHarness(() => new Promise(done => { resolve = done; }));
+  host.auth('INITIAL_SESSION', 'owner-A'); host.reset();
+  const pending = host.handler()();
+  const revision = host.bindings.petPlanningRequest.current;
+  const account = host.state.planningAccount;
+  for (const event of ['TOKEN_REFRESHED', 'SIGNED_IN', 'USER_UPDATED']) host.auth(event, 'owner-A');
+  assert.equal(host.bindings.petPlanningRequest.current, revision);
+  assert.equal(host.state.planningAccount, account);
+  assert.equal(host.state.planningAccountReady, true);
+  resolve({ ok: true, json: async () => ({ success: true, brief: brief() }) });
+  await pending;
+  assert.equal(host.state.brief.categoryId, 'history');
+  assert.equal(host.button().props.disabled, false);
+});
+
+test('real owner transitions reject old replies before reset and cannot unlock a new planning request', async () => {
+  for (const failed of [false, true]) {
+    const replies = [];
+    const host = authPlanningHarness(() => new Promise(resolve => { replies.push(resolve); }));
+    host.auth('INITIAL_SESSION', 'owner-A'); host.reset();
+    const previousClick = host.handler();
+    const oldPending = previousClick();
+    host.auth('SIGNED_IN', 'owner-B');
+    assert.equal(host.button().props.disabled, true);
+    await previousClick(); await host.handler()();
+    assert.equal(host.requests.length, 1, 'Even a pre-transition click handler is blocked until reset');
+    host.reset();
+    const newPending = host.handler()();
+    replies[0]({ ok: !failed, json: async () => failed ? { success: false, error: 'Old owner failure' }
+      : { success: true, brief: { ...brief(), title: 'Old owner plan' } } });
+    await oldPending;
+    assert.equal(host.state.brief, null);
+    assert.equal(host.state.error, '');
+    assert.equal(host.state.isOptimizing, true, 'Old finally cannot release the new request lock');
+    replies[1]({ ok: true, json: async () => ({ success: true, brief: { ...brief(), title: 'Current owner plan' } }) });
+    await newPending;
+    assert.equal(host.state.brief.title, 'Current owner plan');
+    assert.equal(host.state.isOptimizing, false);
+  }
+});
+
+test('logout rejects an old history reply before the account reset effect runs', async () => {
+  let resolve;
+  const host = authPlanningHarness(() => new Promise(done => { resolve = done; }));
+  host.auth('INITIAL_SESSION', 'owner-A'); host.reset();
+  const pending = host.handler()();
+  host.auth('SIGNED_OUT', null);
+  resolve({ ok: true, json: async () => ({ success: true, brief: brief() }) });
+  await pending;
+  assert.equal(host.state.brief, null);
+  assert.equal(host.state.error, '');
+  assert.equal(host.button().props.disabled, true);
+  host.reset();
+  assert.equal(host.state.isOptimizing, false);
+  assert.equal(host.state.planningAccountReady, false);
+});
+
+test('a history JSON planning failure remains visible in the production alert', async () => {
+  const host = authPlanningHarness(() => ({ ok: false, json: async () => ({ success: false, error: '기획 형식을 확인하지 못했습니다.', code: 'CATEGORY_BRIEF_CONTRACT' }) }));
+  host.auth('INITIAL_SESSION', 'owner-A'); host.reset();
+  await host.handler()();
+  assert.equal(host.state.brief, null);
+  assert.equal(host.state.isOptimizing, false);
+  assert.equal(host.error().props.role, 'alert');
+  assert.deepEqual(host.error().children, ['기획 형식을 확인하지 못했습니다.']);
 });
 
 function generationHarness(savedBrief, overrides = {}) {

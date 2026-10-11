@@ -7,7 +7,10 @@ const ts = require('typescript');
 const filename = path.resolve(__dirname, '../src/lib/vle/categoryCreativePlan.ts');
 const code = ts.transpileModule(fs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
 const moduleFixture = { exports: {} };
-new Function('require', 'module', 'exports', code)(() => { throw Error('CLIENT_MODULE_IMPORT_FORBIDDEN'); }, moduleFixture, moduleFixture.exports);
+const actionModule = { exports: {} };
+const actionCode = ts.transpileModule(fs.readFileSync(path.resolve(__dirname, '../src/lib/vle/categoryObservableAction.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+new Function('module', 'exports', actionCode)(actionModule, actionModule.exports);
+new Function('require', 'module', 'exports', code)(name => { assert.equal(name, './categoryObservableAction'); return actionModule.exports; }, moduleFixture, moduleFixture.exports);
 const { validateCategoryCreativePlan: validate, readCategoryBriefExtras: extras, serializeCategoryCreativePlan: serialize, serializeCategoryBriefExtras, CategoryCreativePlanError } = moduleFixture.exports;
 function plan() { return { opening2s: { startSeconds: 0, endSeconds: 2, action: '성인 여성이 가방을 메고 사무실 문을 연다.' }, watchReason: '빈 커피잔으로 오늘의 일을 버틸 수 있을까?',
   development: ['여성이 빈 커피잔을 들어 마시려다 내려놓는다.', '동료가 자기 잔을 집어 들고 먼저 문을 열어 나간다.'], payoff: '여성이 자기 가방만 의자에 다시 놓고 빈 잔을 들어 보인다.',

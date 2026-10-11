@@ -4,7 +4,7 @@ const path = require('node:path');
 const test = require('node:test');
 const ts = require('typescript');
 
-const stage = process.env.CATEGORY_PRODUCTION_STAGE_ROOT || '/private/tmp/melodio-dance-cast-release-20261009';
+const stage = process.env.CATEGORY_PRODUCTION_STAGE_ROOT || path.resolve(__dirname, '..');
 const categories = ['drama', 'relationship', 'human', 'trend', 'challenge', 'brand', 'history', 'parenting', 'food_diet', 'horror_mystery'];
 const UUID = 'c4d4d1a3-a867-44a4-bfed-ead74f80501b';
 function compile(relative) {
@@ -30,7 +30,8 @@ function evaluate(relative, overrides, env, fetchImpl) {
 const noNetwork = () => { throw Error('REAL_PROVIDER_ACCESS_FORBIDDEN'); };
 const common = evaluate('src/lib/vle/conceptContextDirection.ts', {}, {}, noNetwork);
 const quality = evaluate('src/lib/vle/categoryQualityDirection.ts', { './conceptContextDirection': common }, {}, noNetwork);
-const creative = evaluate('src/lib/vle/categoryCreativePlan.ts', {}, {}, noNetwork);
+const action = evaluate('src/lib/vle/categoryObservableAction.ts', {}, {}, noNetwork);
+const creative = evaluate('src/lib/vle/categoryCreativePlan.ts', { './categoryObservableAction': action }, {}, noNetwork);
 function extractFunction(relative, name, dependencies = {}) {
   const file = ts.createSourceFile(relative, fs.readFileSync(path.join(stage, relative), 'utf8'), ts.ScriptTarget.ES2022, true);
   const declaration = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === name);

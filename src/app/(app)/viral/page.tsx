@@ -358,7 +358,9 @@ function ViralTrendZoneStudio() {
   const [customLyrics, setCustomLyrics] = useState("");
   const [optimizedPrompt, setOptimizedPrompt] = useState("");
   const [petEpisode, setPetEpisode] = useState<PetEpisode | null>(null);
-  const [petUserId, setPetUserId] = useState<string | null>(null);
+  const [planningAccount, setPlanningAccount] = useState<{ userId: string | null } | null>(null);
+  const [planningAccountReady, setPlanningAccountReady] = useState(false);
+  const petUserId = planningAccount?.userId || null;
   const [petDraftOwner, setPetDraftOwner] = useState<string | null>(null);
   const [petPlanError, setPetPlanError] = useState('');
   const [petPlanLocked, setPetPlanLocked] = useState(false);
@@ -373,6 +375,7 @@ function ViralTrendZoneStudio() {
   const [petOwnedTracksStatus, setPetOwnedTracksStatus] = useState<'idle' | 'loading' | 'ready' | 'error'>('idle');
   const [petIsPublic, setPetIsPublic] = useState(true);
   const petAccountRef = useRef<string | null>(null);
+  const planningAccountRef = useRef<{ userId: string | null } | null>(null);
   const petCategoryRef = useRef(genCategory);
   const explicitCategorySelection = useRef<{ petTrackId: string | null } | null>(null);
   const petPlanningRequest = useRef(0);
@@ -558,7 +561,15 @@ function ViralTrendZoneStudio() {
       if (disposed) return;
       const client = createClient();
       const { data } = client.auth.onAuthStateChange((_event: string, session: { user: { id: string } } | null) => {
-        if (!disposed) setPetUserId(session?.user.id || null);
+        if (disposed) return;
+        const userId = session?.user.id || null;
+        if (planningAccountRef.current?.userId === userId) return;
+        const account = { userId };
+        planningAccountRef.current = account;
+        petPlanningRequest.current += 1;
+        // Invalidate old-owner replies before React commits the account reset.
+        setPlanningAccountReady(false);
+        setPlanningAccount(account);
       });
       unsubscribe = () => data.subscription.unsubscribe();
     });
@@ -566,12 +577,13 @@ function ViralTrendZoneStudio() {
   }, []);
 
   useEffect(() => {
+    if (!planningAccount || planningAccountRef.current !== planningAccount) return;
     const previousOwner = petAccountRef.current;
     petAccountRef.current = petUserId;
     setPetCompletedRefreshKey(null);
-    petPlanningRequest.current += 1;
     // Every in-flight audio request uses this revision token. When the account
     // boundary changes, release the shared UI lock while stale callbacks fail closed.
+    setIsOptimizing(false);
     setIsGenerating(false); setGenProgress(0);
     petTopicDraft.current = '';
     setPetEpisode(null); setPetTrackId(null); setPetPlanLocked(false); setPetDraftOwner(null);
@@ -581,7 +593,8 @@ function ViralTrendZoneStudio() {
       setGrokVideoResult(null); setGrokVideoClips([]);
     }
     setPetDraftOwner(petUserId);
-  }, [petUserId]);
+    setPlanningAccountReady(!!petUserId);
+  }, [planningAccount, petUserId]);
 
   const handlePetCompleted = useCallback((job: PetVideoJobView) => {
     if (!job.videoUrl || !petUserId || petAccountRef.current !== petUserId) return;
@@ -1242,6 +1255,7 @@ function ViralTrendZoneStudio() {
   const isUnderBudget = sungSyllables > 0 && sungSyllables < VIRAL_SONG_SPEC.sungSyllablesMin;
 
   async function handlePlanPetEpisode() {
+    if (!planningAccountReady || !petUserId || planningAccountRef.current !== planningAccount) return;
     if (isOptimizing || isGenerating || isGeneratingGrokVideo) return;
     if (!petUserId) { setPetPlanError('로그인 상태를 확인한 뒤 기획해 주세요.'); return; }
     const planningOwner = petUserId;
@@ -1273,7 +1287,7 @@ function ViralTrendZoneStudio() {
       setGrokVideoResult(null); setGrokVideoClips([]); setGrokVideoDuration(0);
       // customTopic remains the user's brief, including when re-planning existing lyrics.
     } catch (reason) { if (requestId === petPlanningRequest.current) setPetPlanError(reason instanceof Error ? reason.message : '기획을 완료하지 못했습니다. 기존 초안은 유지됩니다.'); }
-    finally { setIsOptimizing(false); }
+    finally { if (requestId === petPlanningRequest.current) setIsOptimizing(false); }
   }
 
   const petCurrentEpisode = petEpisode ? { ...petEpisode, lyrics: customLyrics, stylePrompt: optimizedPrompt } : null;
@@ -1370,6 +1384,7 @@ function ViralTrendZoneStudio() {
     petTrackId, generatedResult?.id, isGenerating, isGeneratingGrokVideo, isOptimizing, handleLoadPetTrack]);
 
   const handleOptimizePrompt = async () => {
+    if (!planningAccountReady || !petUserId || planningAccountRef.current !== planningAccount) return;
     if (genCategory === 'pet') { await handlePlanPetEpisode(); return; }
     if (isOptimizing || isGenerating || isGeneratingGrokVideo) return;
     const planningCategory = genCategory;
@@ -1421,7 +1436,7 @@ function ViralTrendZoneStudio() {
         setPetPlanError(error instanceof Error ? error.message : '이야기를 기획하지 못했습니다. 기존 초안은 유지됩니다.');
       }
     } finally {
-      setIsOptimizing(false);
+      if (petPlanningRequest.current === requestId) setIsOptimizing(false);
     }
   };
 
@@ -2263,7 +2278,7 @@ function ViralTrendZoneStudio() {
 
               {/* AI 기획 실행 버튼 (Step 3 유일한 CTA) */}
               {(() => {
-                const isStep3Enabled = !!genCategory && (genCategory !== 'pet' || !!petUserId);
+                const isStep3Enabled = !!genCategory && planningAccountReady && !!petUserId;
                 const isStep3Done = planIsCurrent;
 
                 return (
