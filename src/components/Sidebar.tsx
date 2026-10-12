@@ -25,6 +25,7 @@ import {
   Workflow,
   ListMusic,
   Headphones,
+  CloudRain,
 } from "lucide-react";
 import clsx from "clsx";
 
@@ -40,6 +41,7 @@ const navItems = [
   { name: "Channel Builder", href: "/channel-builder", icon: Workflow },
   { name: "Viral & Trend Zone", href: "/viral", icon: Zap },
   { name: "일본 BGM 스튜디오", href: "/japan", icon: Globe },
+  { name: "Healing Rain", href: "/healing-rain", icon: CloudRain },
   { name: "Longform Studio", href: "/studio", icon: Film },
   { name: "YouTube Auto-Pilot", href: "/autopilot", icon: Radio },
   { name: "YouTube Analytics", href: "/analytics", icon: BarChart3 },

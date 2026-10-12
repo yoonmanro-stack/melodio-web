@@ -1,0 +1,30 @@
+{
+  "date": "2026-10-12",
+  "phase": "planning-preview",
+  "productionBaseCommit": "964b561ba58dc3deee8b3845904f50b09587964e",
+  "migration": "migrations/20261012_create_healing_rain_projects.sql",
+  "migrationSha256": "33a4d17ff483654042ee6981e02c7d4a8ad3fb146c2e2bc10a30b454d35ba080",
+  "database": {
+    "projectRef": "jfsfxzhunkrjyibsdswb",
+    "applied": true,
+    "verified": {
+      "rlsEnabled": true,
+      "rlsForced": true,
+      "authenticatedRead": true,
+      "authenticatedInsert": false,
+      "anonymousRead": false,
+      "authenticatedRpc": false,
+      "serviceRpc": true,
+      "initialRowCount": 0
+    }
+  },
+  "validation": {
+    "focusedLint": "passed",
+    "recipeAndBackendTests": 12,
+    "typescript": "passed",
+    "productionBuild": "passed",
+    "workerInstallAndSyntax": "passed"
+  },
+  "providerCalls": 0,
+  "knownLimit": "AI generation, audio/video previews and long render remain unconnected."
+}

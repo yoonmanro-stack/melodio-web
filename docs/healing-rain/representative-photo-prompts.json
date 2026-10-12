@@ -1,0 +1,42 @@
+{
+  "tool": "built-in image_gen",
+  "style": "photorealistic-natural; landscape 16:9; low-key rainy night; realistic material detail; no text, logos or watermark",
+  "scenes": [
+    [
+      "train",
+      "Private sleeper train compartment after bedtime. Fixed oblique bedside view, large side window dominates, rain streaks and pouring rain outside in deep black night with tiny distant rural lights. Sleeping adult under dark blanket in lower foreground, overhead lights off, barely glowing shielded warm nightlight. Cozy subtle navy shadows."
+    ],
+    [
+      "tent",
+      "View from inside dry forest tent at deep rainy night. Adult sleeping in sleeping bag in foreground, open sheltered vestibule framing dense dark forest and heavy rainfall. Very dim small lantern, wet leaves beyond, cozy safe shelter."
+    ],
+    [
+      "hanok",
+      "View from dark warm Korean hanok room through wooden posts toward empty stone courtyard at deep rainy night. Curved tiled eaves with irregular falling droplets, wet stone reflections, dim amber room light, wooded background."
+    ],
+    [
+      "cabin",
+      "Secluded wooden forest cabin bedroom at deep rainy night, sleeping adult covered in bed, large rain-streaked window looking onto dark pine trees. Very dim warm bedside light, deep shadows, restful composition."
+    ],
+    [
+      "night-nature",
+      "Secluded lush mossy canyon at deep rainy night, fern-covered tall rock walls framing a quiet narrow stream. No buildings or people. Very low-key blue-black and deep green shadows, faint ambient light revealing rain and wet moss. Peaceful not ominous."
+    ],
+    [
+      "quiet-park",
+      "Remote wooded park at deep rainy night, empty stone walking path and single empty bench, dense trees, very dim shielded warm path lights with restrained reflections on wet paving, visible rain. No people or city."
+    ],
+    [
+      "mountain-temple",
+      "Secluded Korean Buddhist mountain temple at deep rainy night. View from wooden eaves toward empty wet stone courtyard, curved tiled roofs and dark forest slopes. One tiny dim warm lantern, irregular eave drips, peaceful contemplative atmosphere. No people."
+    ],
+    [
+      "pond",
+      "Small secluded forest pond at deep rainy night, intimate low shore viewpoint, reeds and wet fern leaves framing calm water, distinct delicate concentric raindrop rings, mossy stones, deep forest canopy, no people or structures."
+    ],
+    [
+      "lake",
+      "Wide secluded lake at deep rainy night, low shore viewpoint with a few reeds and wet stones in foreground, broad dark open water with countless subtle raindrop ripples, distant forested mountains in silhouette and light mist, no boats, people or buildings."
+    ]
+  ]
+}
