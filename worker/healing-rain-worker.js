@@ -7,6 +7,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { buildGenerationSpec } = require('./healing-rain-plan');
 const provider = require('./healing-rain-provider');
 const { renderHealingRain } = require('./healing-rain-render');
+const { evaluatePreviewQuality } = require('../shared/healing-rain/quality.js');
 
 const BUCKET = 'healing-rain';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -16,13 +17,66 @@ function settings(env = process.env) {
   const required = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'KIE_API_KEY', 'ELEVENLABS_API_KEY', 'HEALING_RAIN_OUTPUT_ROOT'];
   for (const name of required) if (!env[name]) throw new Error(`Missing worker setting: ${name}`);
   if (!path.isAbsolute(env.HEALING_RAIN_OUTPUT_ROOT)) throw new Error('Output root must be absolute.');
+  if (env.HEALING_RAIN_REVIEW_REGISTRY && !path.isAbsolute(env.HEALING_RAIN_REVIEW_REGISTRY)) throw new Error('Review registry path must be absolute.');
   return { url: env.NEXT_PUBLIC_SUPABASE_URL, service: env.SUPABASE_SERVICE_ROLE_KEY,
-    kie: env.KIE_API_KEY, eleven: env.ELEVENLABS_API_KEY, root: env.HEALING_RAIN_OUTPUT_ROOT };
+    kie: env.KIE_API_KEY, eleven: env.ELEVENLABS_API_KEY, root: env.HEALING_RAIN_OUTPUT_ROOT, reviewRegistry: env.HEALING_RAIN_REVIEW_REGISTRY };
+}
+
+async function loadReviewApprovals(config) {
+  if (!config.reviewRegistry) return [];
+  try {
+    if (!path.isAbsolute(config.reviewRegistry)) throw new Error('Invalid path');
+    const filename = await fs.realpath(config.reviewRegistry);
+    const relative = path.relative(path.resolve(__dirname, '..'), filename);
+    if (!relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)) throw new Error('Registry is inside checkout');
+    const handle = await fs.open(filename, 'r');
+    let registry;
+    try {
+      const stat = await handle.stat();
+      if (!stat.isFile() || stat.size > 64 * 1024 || (stat.mode & 0o077)) throw new Error('Invalid private registry');
+      const bytes = Buffer.alloc(64 * 1024 + 1);
+      const { bytesRead } = await handle.read(bytes, 0, bytes.length, 0);
+      if (bytesRead > 64 * 1024) throw new Error('Registry too large');
+      registry = JSON.parse(bytes.subarray(0, bytesRead).toString('utf8'));
+    } finally { await handle.close(); }
+    const boundedText = (value, max) => typeof value === 'string' && value.length > 0 && value.length <= max && !/[\u0000-\u001f]/.test(value);
+    if (registry?.version !== 1 || !Array.isArray(registry.records) || registry.records.length > 500) throw new Error('Invalid registry format');
+    return registry.records.map(record => {
+      if (!record || !boundedText(record.profile, 100) || !boundedText(record.directionVersion, 100)
+        || record.verdict !== 'approved' || !boundedText(record.evidenceId, 200)
+        || !boundedText(record.reviewedAt, 40) || !Number.isFinite(Date.parse(record.reviewedAt))
+        || !['image', 'video', 'audio'].every(key => boundedText(record.models?.[key], 100))) throw new Error('Incomplete review record');
+      return { profile: record.profile, directionVersion: record.directionVersion, verdict: record.verdict,
+        evidenceId: record.evidenceId, reviewedAt: record.reviewedAt,
+        models: { image: record.models.image, video: record.models.video, audio: record.models.audio } };
+    });
+  } catch {
+    throw Object.assign(new Error('Trusted review registry cannot be verified.'), { code: 'review_registry_invalid', requiresReview: true });
+  }
 }
 
 async function atomicJson(filename, value) {
   await fs.writeFile(`${filename}.partial`, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   await fs.rename(`${filename}.partial`, filename);
+}
+
+function canonicalJson(value) {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${canonicalJson(value[key])}`).join(',')}}`;
+  return JSON.stringify(value);
+}
+
+function specHash(spec) { return crypto.createHash('sha256').update(canonicalJson(spec)).digest('hex'); }
+function provenanceError(message, code = 'generation_spec_drift') {
+  return Object.assign(new Error(message), { code, requiresReview: true });
+}
+
+// Exclusive creation protects an earlier version's receipt. fsync completes
+// before the database checkpoint and any paid submission intent are written.
+async function freezeJson(filename, value) {
+  const handle = await fs.open(filename, 'wx', 0o600);
+  try { await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`); await handle.sync(); }
+  finally { await handle.close(); }
 }
 
 async function runJob(client, initial, config) {
@@ -32,6 +86,8 @@ async function runJob(client, initial, config) {
   let heartbeatBusy = false;
   const dir = path.join(config.root, job.id);
   let spec;
+  let generationSpecSha256;
+  let reviewApprovals = [];
 
   async function patch(update) {
     if (lostLease) throw Object.assign(new Error('Worker lease was lost.'), { code: 'lease_lost' });
@@ -60,6 +116,59 @@ async function runJob(client, initial, config) {
 
   async function checkpoint(key, item, extra = {}) {
     await patch({ ...extra, checkpoints: { ...job.checkpoints, [key]: item } });
+  }
+
+  async function freezeGenerationSpec() {
+    generationSpecSha256 = specHash(spec);
+    const frozen = job.checkpoints?.generationSpec;
+    const stages = Object.entries(job.checkpoints || {}).filter(([key]) => key !== 'generationSpec');
+    const activity = stages.length > 0 || Object.keys(job.assets || {}).length > 0 || (job.actual_usage?.kieCalls || 0) > 0 || (job.actual_usage?.elevenLabsCalls || 0) > 0;
+    if (frozen && (frozen.state !== 'frozen' || frozen.sha256 !== generationSpecSha256 || frozen.version !== spec.version)) {
+      throw provenanceError('Saved generation checkpoint differs from this specification.');
+    }
+    for (const [key, stage] of stages) {
+      const expectedModel = key === 'image' ? spec.image.model : key === 'video' ? spec.video.model : /^audio[1-6]$/.test(key) ? 'eleven_text_to_sound_v2' : null;
+      if ((job.request_snapshot.direction && expectedModel && (!stage.generationSpecSha256 || !stage.ruleVersion))
+        || (stage.generationSpecSha256 && stage.generationSpecSha256 !== generationSpecSha256)
+        || (stage.ruleVersion && stage.ruleVersion !== spec.version)
+        || (stage.loopVersion && stage.loopVersion !== spec.version)
+        || (expectedModel && stage.model && stage.model !== expectedModel)) {
+        throw provenanceError('Saved stage provenance differs from this specification.');
+      }
+    }
+    const sourceSeconds = Number(spec.video.input.duration);
+    if (!Number.isInteger(sourceSeconds) || sourceSeconds <= 0 || sourceSeconds > 60
+      || (spec.render.sourceVideoSeconds !== undefined && spec.render.sourceVideoSeconds !== sourceSeconds)
+      || sourceSeconds !== spec.render.targetVideoCycleSeconds + spec.render.videoCrossfadeSeconds
+      || spec.review.sourceVideoSeconds !== sourceSeconds) throw provenanceError('Generation and render durations conflict.');
+    const savedVideo = job.assets?.video;
+    if (savedVideo && (savedVideo.path !== `${job.user_id}/${job.id}/source-${sourceSeconds}s.mp4`
+      || (savedVideo.durationSeconds !== undefined && savedVideo.durationSeconds !== sourceSeconds))) {
+      throw provenanceError('Saved video does not match the source duration.');
+    }
+    const filename = path.join(dir, 'generation-spec.json');
+    let savedSpec;
+    try {
+      const stat = await fs.stat(filename);
+      if (stat.size > 1024 * 1024) throw provenanceError('Saved specification is invalid.');
+      try { savedSpec = JSON.parse(await fs.readFile(filename, 'utf8')); }
+      catch { throw provenanceError('Saved specification cannot be verified.'); }
+      if (specHash(savedSpec) !== generationSpecSha256) throw provenanceError('Saved generation receipt differs from this specification.');
+    } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    // Historical v1 jobs predate provenance checkpoints; their exact legacy
+    // compiler remains available. V2 assets always require a durable receipt.
+    if (activity && !frozen && !savedSpec && job.request_snapshot.direction) {
+      throw provenanceError('Resumed direction job has no generation provenance.', 'generation_spec_missing');
+    }
+    if (!savedSpec) {
+      try { await freezeJson(filename, spec); }
+      catch (error) {
+        if (error.code !== 'EEXIST') throw error;
+        throw provenanceError('Generation receipt appeared concurrently.');
+      }
+    }
+    if (!frozen) await checkpoint('generationSpec', { state: 'frozen', version: spec.version, sha256: generationSpecSha256,
+      ...(activity ? { adoptedLegacy: !job.request_snapshot.direction } : {}) });
   }
 
   async function storeAsset(key, filename, mimeType, durationSeconds) {
@@ -114,11 +223,11 @@ async function runJob(client, initial, config) {
   async function kieStage(key, model, input, filename, mimeType, progress, durationSeconds) {
     let saved = job.checkpoints?.[key];
     if (saved?.state === 'ready') return restoreAsset(key, filename);
-    if (saved?.state === 'intent' || saved?.state === 'needs_attention') {
-      throw Object.assign(new Error('Previous paid submission is held. No automatic resubmission.'), { ambiguous: true, code: saved.outcome === 'failed' ? 'provider_task_failed' : 'submission_unknown' });
+    if (saved && (saved.state !== 'submitted' || typeof saved.taskId !== 'string' || !saved.taskId)) {
+      throw Object.assign(new Error('Previous paid submission is held. No automatic resubmission.'), { ambiguous: true, code: saved.outcome === 'failed' || saved.state === 'failed' ? 'provider_task_failed' : 'submission_unknown' });
     }
     if (!saved?.taskId) {
-      saved = { state: 'intent', provider: 'kie', model, intentAt: new Date().toISOString() };
+      saved = { state: 'intent', provider: 'kie', model, generationSpecSha256, ruleVersion: spec.version, intentAt: new Date().toISOString() };
       await checkpoint(key, saved, { stage: `${key}_submitting`, progress });
       const submitted = await provider.createKieTask({ model, input, apiKey: config.kie });
       saved = { ...saved, state: 'submitted', taskId: submitted.taskId };
@@ -150,8 +259,13 @@ async function runJob(client, initial, config) {
     await fs.mkdir(dir, { recursive: true, mode: 0o700 });
     const stat = await fs.statfs(dir);
     if (Number(stat.bavail) * Number(stat.bsize) < 10 * 1024 ** 3) throw new Error('Insufficient storage for preview rendering.');
-    spec = buildGenerationSpec(job.request_snapshot, job.id);
-    await atomicJson(path.join(dir, 'generation-spec.json'), spec);
+    reviewApprovals = await loadReviewApprovals(config);
+    try { spec = buildGenerationSpec(job.request_snapshot, job.id); }
+    catch (error) {
+      if (Object.keys(job.checkpoints || {}).length || Object.keys(job.assets || {}).length) throw provenanceError('Saved plan can no longer reproduce its generation specification.');
+      throw error;
+    }
+    await freezeGenerationSpec();
     const imageFile = await kieStage('image', spec.image.model, spec.image.input, path.join(dir, 'scene.png'), 'image/png', 5);
     const imageAsset = job.assets.image;
     await patch({ assets: { ...job.assets, poster: imageAsset } });
@@ -164,15 +278,16 @@ async function runJob(client, initial, config) {
       if (linkError || !imageLink) throw new Error('Image handoff failed.');
       imageUrl = imageLink.signedUrl;
     }
-    const videoFile = await kieStage('video', spec.video.model, { ...spec.video.input, image_urls: [imageUrl, imageUrl] }, path.join(dir, 'source-11s.mp4'), 'video/mp4', 20, 11);
+    const sourceSeconds = Number(spec.video.input.duration);
+    const videoFile = await kieStage('video', spec.video.model, { ...spec.video.input, image_urls: [imageUrl, imageUrl] }, path.join(dir, `source-${sourceSeconds}s.mp4`), 'video/mp4', 20, sourceSeconds);
     const audioFiles = [];
-    for (let index = 0; index < 6; index++) {
+    for (let index = 0; index < spec.audio.length; index++) {
       const key = `audio${index + 1}`;
       const filename = path.join(dir, `${key}.mp3`);
       const saved = job.checkpoints?.[key];
       if (saved?.state === 'ready') { audioFiles.push(await restoreAsset(key, filename)); continue; }
       if (saved) throw Object.assign(new Error('Previous sound request has an unknown result. No automatic resubmission.'), { ambiguous: true, code: 'audio_submission_unknown' });
-      const intent = { state: 'intent', provider: 'elevenlabs', model: 'eleven_text_to_sound_v2', intentAt: new Date().toISOString() };
+      const intent = { state: 'intent', provider: 'elevenlabs', model: 'eleven_text_to_sound_v2', generationSpecSha256, ruleVersion: spec.version, intentAt: new Date().toISOString() };
       await checkpoint(key, intent, { stage: `${key}_generating`, progress: 40 + index * 6 });
       const audio = await provider.generateRainAudio({ prompt: spec.audio[index], apiKey: config.eleven, outputPath: filename });
       await atomicJson(path.join(dir, `${key}-receipt.json`), audio);
@@ -184,19 +299,23 @@ async function runJob(client, initial, config) {
     const outputDir = path.join(dir, `render-${Date.now()}`);
     const report = await renderHealingRain({ video: videoFile, audio: audioFiles, outputDir, ...spec.render });
     // Renderer filenames are stable; never accept caller-controlled remote paths.
-    await storeAsset('preview30', path.join(outputDir, 'healing-rain-30s.mp4'), 'video/mp4', 30);
-    await storeAsset('preview180', path.join(outputDir, 'healing-rain-180s.mp4'), 'video/mp4', 180);
-    await atomicJson(path.join(dir, 'review.json'), { ...spec.review, report });
-    await checkpoint('render', { state: 'ready', completedAt: new Date().toISOString(), loopVersion: spec.version, reviewStatus: 'pending' }, { status: 'ready', stage: 'preview_ready', progress: 100 });
+    await storeAsset('preview30', path.join(outputDir, `healing-rain-${spec.render.previewSeconds}s.mp4`), 'video/mp4', spec.render.previewSeconds);
+    await storeAsset('preview180', path.join(outputDir, `healing-rain-${spec.render.seconds}s.mp4`), 'video/mp4', spec.render.seconds);
+    const quality = job.request_snapshot.direction ? evaluatePreviewQuality({ direction: job.request_snapshot.direction, report, jobId: job.id,
+      models: { image: spec.image.model, video: spec.video.model, audio: 'eleven_text_to_sound_v2' }, approvals: reviewApprovals }) : null;
+    await atomicJson(path.join(dir, 'review.json'), { ...spec.review, report, ...(quality ? { quality } : {}) });
+    await checkpoint('render', { state: 'ready', completedAt: new Date().toISOString(), loopVersion: spec.version, ruleVersion: spec.version,
+      generationSpecSha256, reviewStatus: 'pending', ...(quality ? { quality } : {}) }, { status: 'ready', stage: 'preview_ready', progress: 100 });
     console.log(JSON.stringify({ jobId: job.id, status: 'ready', review: 'pending', outputDir, actualUsage: job.actual_usage }));
     return { jobId: job.id, outputDir, imageFile };
   } catch (error) {
     if (!lostLease) {
-      const uncertain = error.ambiguous || Object.values(job.checkpoints || {}).some(item => item.state === 'intent');
-      await patch({ status: uncertain ? 'needs_attention' : 'failed', stage: uncertain ? 'operator_review_required' : 'failed',
+      const uncertain = error.ambiguous || (!error.requiresReview && Object.values(job.checkpoints || {}).some(item => item.state === 'intent'));
+      const held = uncertain || error.requiresReview;
+      await patch({ status: held ? 'needs_attention' : 'failed', stage: held ? 'operator_review_required' : 'failed',
         ...(uncertain && error.code !== 'provider_task_failed' ? { actual_usage: { ...job.actual_usage, unreportedCost: true } } : {}),
         error_code: /^[a-z0-9_]{1,60}$/.test(error.code || '') ? error.code : 'worker_failed',
-        error_message: uncertain ? '생성 요청의 완료 여부를 확인해야 합니다. 중복 과금을 피하기 위해 자동 재요청하지 않습니다.' : '미리보기 제작을 완료하지 못했습니다. 저장된 원본과 작업 상태를 확인해 주세요.' }).catch(() => {});
+        error_message: error.code === 'review_registry_invalid' ? '검수 승인 기록을 확인할 수 없습니다. 비용을 발생시키기 전에 운영자 확인이 필요합니다.' : error.requiresReview ? '저장된 생성 명세와 체크포인트가 일치하지 않습니다. 원본 기록을 보존하고 검수 전 재요청하지 않습니다.' : uncertain ? '생성 요청의 완료 여부를 확인해야 합니다. 중복 과금을 피하기 위해 자동 재요청하지 않습니다.' : '미리보기 제작을 완료하지 못했습니다. 저장된 원본과 작업 상태를 확인해 주세요.' }).catch(() => {});
     }
     console.error(JSON.stringify({ jobId: job.id, status: lostLease ? 'lease_lost' : job.status, code: error.code || 'worker_failed' }));
     throw error;
@@ -217,4 +336,4 @@ async function main() {
 }
 
 if (require.main === module) main().catch(error => { console.error(error.message?.startsWith('Missing worker setting:') ? error.message : 'Healing Rain worker stopped. Check its durable job state.'); process.exitCode = 1; });
-module.exports = { settings, runJob };
+module.exports = { settings, runJob, loadReviewApprovals };

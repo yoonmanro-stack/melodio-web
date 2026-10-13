@@ -1,34 +1,42 @@
 'use strict';
 
-const LOOP_VERSION = 'sleeper-train-forward-v1';
+// Saved v1 plans must retain the precise prompts used by the original worker.
+const legacy = require('./healing-rain-plan-v1');
+const { compileDirection, DIRECTION_VERSION } = require('../shared/healing-rain/direction.js');
+
+function invalid(message, code = 'generation_plan_invalid') {
+  return Object.assign(new Error(message), { code });
+}
 
 function buildGenerationSpec(plan, jobId) {
-  if (plan?.input?.sceneId !== 'train' || plan.input.thunder !== 'none' || plan.input.takes !== 6) {
-    throw new Error('This preview supports the sleeper train, no thunder, and six rain takes.');
+  if (!plan || !Object.hasOwn(plan, 'direction')) return legacy.buildGenerationSpec(plan, jobId);
+  if (plan.direction?.version !== DIRECTION_VERSION) throw invalid('Unsupported saved direction version.', 'direction_version_unsupported');
+  if (plan.schemaVersion !== 1 || plan.recipeVersion !== 1) throw invalid('Unsupported saved plan version.');
+  if (plan.input?.sceneId !== 'train' || plan.input.thunder !== 'none' || plan.input.takes !== 6) {
+    throw invalid('This preview supports the sleeper train, no thunder, and six rain takes.');
   }
-  const image = `${plan.prompts.image} Photograph a new original compartment. Composition for a looping film: the sheltered bed and cabin occupy the left third; the large side window fills most of the right two thirds. Keep the window frame and all furniture rigid and clearly defined. One sleeping adult is mostly hidden by the blanket, with the face small and turned away. Rain beyond the glass must remain visible in the dark. Outside: anonymous dark forest textures with sparse diffuse distant amber lights, no identifiable landmark, stations, poles, signs, tunnels, or approaching headlights. No bright sky. No hanging rigid water strands. No steam. Soft documentary realism, no illustration. Unique scene variation ${jobId.slice(0, 8)}.`;
-  const rainMotion = { gentle: 'Soft sparse rainfall', moderate: 'Moderate steady rainfall', heavy: 'Heavy sustained rain', downpour: 'Heavy downpour' }[plan.input.intensity] || 'Heavy downpour';
-  const video = 'An 11-second photorealistic sleeper-train shot after bedtime. Locked tripod camera inside the moving carriage. Preserve the source composition: bed and dim amber nightlight on the left, large rainy side window on the right. The sleeping adult, blanket, furniture and window frame remain still and unchanged. Outside, anonymous dark forest passes continuously RIGHT TO LEFT at a steady speed, including the first and last moments. Nearby foliage moves faster than the few faint distant lights. Heavy downpour is visible beyond the glass; irregular droplets merge and flow diagonally down the glass. Maintain the same rain density and very dark exposure throughout. Tiny local wet reflections may vary naturally. Keep continuous forward motion through the ending; the end image guides composition only. No reversed movement, slowing, stop, camera movement, scene cuts, new landmarks, stations, tunnels, passing headlights, lightning, rigid icicle-like water strands, changing face, body movement, exposure pumping, text, or logos. The last and first frames should match in fixed architecture and illumination for a seamless forward loop.'.replace('Heavy downpour', rainMotion);
-  const variations = [
-    'Near glass: dense irregular fine impacts, broad rain behind.',
-    'Mid-distance: full rushing rainfall, softer glass detail.',
-    'Near glass: slightly heavier scattered drops amid steady rain.',
-    'Wide ambience: smooth downpour wash, natural uneven patter.',
-    'Window edges: diffuse splashes, very soft low carriage rumble.',
-    'Balanced ambience: broad rain and tiny irregular glass taps.',
-  ];
-  const audio = variations.map(direction => {
-    const text = `${plan.prompts.audio} ${direction}`;
-    if (text.length > 450) throw new Error('Rain prompt exceeds the provider-safe limit.');
-    return text;
-  });
+  const compiled = compileDirection(plan.direction, plan.input);
+  if (plan.prompts?.image !== compiled.image || plan.prompts?.video !== compiled.video) {
+    throw invalid('Saved prompts differ from their canonical direction.', 'direction_prompt_mismatch');
+  }
+  const render = compiled.render;
+  if (plan.generation?.videoSeconds !== render.targetVideoCycleSeconds || plan.generation.sourceVideoSeconds !== render.sourceVideoSeconds || plan.generation.videoCrossfadeSeconds !== render.videoCrossfadeSeconds || plan.generation.audioSeconds !== 30 || plan.generation.audioTakes !== plan.input.takes
+    || render.sourceVideoSeconds !== render.targetVideoCycleSeconds + render.videoCrossfadeSeconds) {
+    throw invalid('Saved generation duration differs from its direction.', 'direction_duration_mismatch');
+  }
+  // Audio variation is unchanged; v2 image/video instructions come only from the
+  // shared compiler, with no job-id variation or separate worker direction.
+  const audio = legacy.buildGenerationSpec(plan, jobId).audio;
   return {
-    version: LOOP_VERSION,
-    image: { model: 'nano-banana-pro', input: { prompt: image, image_input: [], aspect_ratio: '16:9', resolution: '2K', output_format: 'png' } },
-    video: { model: 'kling-3.0/video', input: { prompt: video, sound: false, duration: '11', aspect_ratio: '16:9', mode: 'std', multi_shots: false } },
-    audio, render: { seconds: 180, previewSeconds: 30, targetVideoCycleSeconds: 10, videoCrossfadeSeconds: 1, audioCrossfadeSeconds: 2, fps: 24, maxWidth: 1920 },
-    review: { status: 'pending', effectiveVideoLoopSeconds: 10, sourceVideoSeconds: 11, audioTakes: 6, audioSecondsEach: 30, noReversePlayback: true },
+    version: DIRECTION_VERSION,
+    image: { model: 'nano-banana-pro', input: { prompt: compiled.image, image_input: [], aspect_ratio: '16:9', resolution: '2K', output_format: 'png' } },
+    video: { model: 'kling-3.0/video', input: { prompt: compiled.video, sound: false, duration: String(render.sourceVideoSeconds), aspect_ratio: '16:9', mode: 'std', multi_shots: false } },
+    audio, render,
+    checks: compiled.checks,
+    summary: compiled.summary,
+    review: { status: 'pending', ruleVersion: DIRECTION_VERSION, effectiveVideoLoopSeconds: render.targetVideoCycleSeconds,
+      sourceVideoSeconds: render.sourceVideoSeconds, audioTakes: audio.length, audioSecondsEach: 30, noReversePlayback: true },
   };
 }
 
-module.exports = { buildGenerationSpec, LOOP_VERSION };
+module.exports = { buildGenerationSpec, LOOP_VERSION: legacy.LOOP_VERSION, DIRECTION_VERSION };

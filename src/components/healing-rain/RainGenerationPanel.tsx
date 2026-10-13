@@ -21,7 +21,12 @@ function activeJob(job: RainGenerationJob) {
 
 function stageLabel(job: RainGenerationJob): string {
   if (job.status === 'queued') return '제작 대기 중';
-  if (job.status === 'ready') return '제작 완료 · 루프 검수 필요';
+  if (job.status === 'ready') {
+    if (job.quality?.reviewDecision === 'not_required') return '제작 완료 · 추가 검수 대상 아님';
+    if (job.quality?.reviewDecision === 'sample') return '제작 완료 · 표본 검수';
+    if (job.quality?.reviewDecision === 'required') return '제작 완료 · 필수 검수';
+    return '제작 완료 · 루프 검수 필요';
+  }
   if (job.status === 'needs_attention') return '처리 결과 확인 필요';
   if (job.status === 'failed') return '제작 중단';
   if (job.stage.includes('image')) return '새 장면 이미지 생성 중';
@@ -30,6 +35,12 @@ function stageLabel(job: RainGenerationJob): string {
   if (job.stage.includes('render')) return '30초 · 3분 미리보기 편집 중';
   if (job.stage.includes('upload')) return '미리보기 저장 중';
   return '미리보기 제작 중';
+}
+
+function readyReviewGuidance(job: RainGenerationJob): string {
+  if (job.quality?.reviewDecision === 'not_required') return '기술 검사와 기존 대표 검수 기록을 적용해 이번 결과는 추가 검수 대상이 아닙니다. 자연스러움이나 공개 준비가 자동 승인된 것은 아닙니다.';
+  if (job.quality?.reviewDecision === 'sample') return '표본 검수로 선택된 결과입니다. 반복 경계의 움직임·밝기와 빗소리 연결을 직접 확인해 주세요.';
+  return '반복 경계의 움직임·밝기와 빗소리 연결을 직접 확인해 주세요.';
 }
 
 function JobPreview({ job }: { job: RainGenerationJob }) {
@@ -58,7 +69,13 @@ function JobPreview({ job }: { job: RainGenerationJob }) {
         </div>;
       })}
     </div> : job.status === 'ready' ? <p className="rain-note">미리보기 재생 주소를 불러오지 못했습니다. 아래 새로고침으로 다시 확인해 주세요.</p> : null}
-    {job.status === 'ready' ? <p className="rain-note">영상이 만들어졌습니다. 반복 경계의 움직임·밝기와 빗소리 연결을 직접 확인해 주세요. 선택한 장시간 영상은 아직 합성하지 않았습니다.</p> : null}
+    {job.status === 'ready' ? <p className="rain-note">영상이 만들어졌습니다. {readyReviewGuidance(job)} 선택한 장시간 영상은 아직 합성하지 않았습니다.</p> : null}
+    {job.quality ? <section className="rain-generation-quality" aria-label="자동 검사와 검수 기준">
+      <h4>자동 기술 검사 · {job.quality.technicalStatus === 'passed' ? '통과' : job.quality.technicalStatus === 'failed' ? '확인 필요' : '검사 정보 확인 필요'}</h4>
+      <p className="rain-note">{job.quality.reasons.includes('unreviewed_profile_or_model') ? '처음 적용한 연출 규칙 또는 모델입니다. 대표 장면의 움직임과 밝기를 확인해 주세요.' : job.quality.reviewDecision === 'sample' ? '공통 규칙이 검수된 장면 중 표본으로 선택됐습니다. 움직임과 반복 경계를 확인해 주세요.' : job.quality.reviewDecision === 'required' ? '자동 검사에서 확인할 항목이 있습니다. 아래 결과를 확인해 주세요.' : '공통 규칙의 대표 검수 기록이 적용됐습니다. 이번 결과는 추가 검수 표본에 해당하지 않습니다.'}</p>
+      <details><summary>검사 항목 보기</summary><ul>{job.quality.checks.map(check => <li key={check.id}>{check.message} · {({ passed: '통과', warning: '주의', failed: '확인 필요', not_measured: '자동 측정 안 됨' } as const)[check.status]}</li>)}</ul></details>
+      <p className="rain-note">길이·프레임·빗소리 연결의 기술 검사와 연출의 자연스러움 검수는 구분해 기록합니다.</p>
+    </section> : null}
     {typeof kieUsage === 'number' || typeof audioUsage === 'number' ? <p className="rain-generation-usage">기록된 사용량 · {typeof kieUsage === 'number' ? `KIE ${kieUsage.toLocaleString('ko-KR')}크레딧` : 'KIE 확인 중'} · {typeof audioUsage === 'number' ? `ElevenLabs ${audioUsage.toLocaleString('ko-KR')}크레딧` : 'ElevenLabs 확인 중'}{job.actualUsage.unreportedCost === true ? ' · 일부 사용량 미확인' : ''}</p> : null}
   </article>;
 }
@@ -195,7 +212,7 @@ export function RainGenerationPanel({ plan, onClose }: { plan: RainPlan; onClose
       .rain-generation-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;margin-bottom:22px}.rain-generation-heading h2{font-size:23px;font-weight:600;letter-spacing:-.5px;margin:9px 0;overflow-wrap:anywhere}.rain-generation-heading>div>p:last-child{font-size:12px;color:#a0aaa8;line-height:1.7}.rain-generation-heading>button{flex-shrink:0}
       .rain-generation-quote{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}.rain-generation-quote>div{display:flex;flex-direction:column;gap:8px;border:1px solid #a9d8c929;background:#253b30;border-radius:10px;padding:17px}.rain-generation-quote span{font-size:11px;color:#c5d6ca}.rain-generation-quote strong{font-size:17px;color:#edf3ed}.rain-generation-quote small{font-size:10px;color:#bacbbf;line-height:1.7}
       .rain-generation-notice{font-size:12px;line-height:1.8;color:#c6d8cf;padding:13px 15px;margin-top:14px;background:#ffffff05;border-radius:8px;border:1px solid #ffffff12}.rain-generation-action{display:flex;flex-wrap:wrap;align-items:center;gap:15px;margin:22px 0}.rain-generation-action label{display:flex;align-items:center;gap:9px;flex:1;min-width:230px;font-size:12px;line-height:1.7;color:#d3e1d9}.rain-generation-action input{width:17px;height:17px;flex-shrink:0;accent-color:#a9d8c9}.rain-generation-action small{width:100%;font-size:10px;color:#a0aaa8;line-height:1.7}.rain-generation-empty{padding:24px 0;color:#a0aaa8;font-size:12px;line-height:1.8}.rain-generation-history{margin:22px 0}.rain-generation-history summary{cursor:pointer;font-size:12px;color:#a9d8c9;margin-bottom:14px}
-      .rain-generation-panel :global(.rain-generation-job){border-top:1px solid #ffffff14;padding-top:22px;margin:24px 0}.rain-generation-panel :global(.rain-generation-job-heading){display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:14px}.rain-generation-panel :global(.rain-generation-job h3){font-size:16px;color:#e6ece8;font-weight:600;margin-top:9px}.rain-generation-panel :global(.rain-generation-job progress){width:100%;height:7px;accent-color:#a9d8c9;margin:4px 0 12px}.rain-generation-panel :global(.rain-generation-players){display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}.rain-generation-panel :global(.rain-generation-player){min-width:0}.rain-generation-panel :global(.rain-generation-player h4){font-size:12px;margin-bottom:10px;color:#c5d6ca}.rain-generation-panel :global(.rain-generation-player video){display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#09120f;border:1px solid #ffffff18;border-radius:9px}.rain-generation-panel :global(.rain-generation-player a){display:inline-block;font-size:10px;color:#a9d8c9;text-decoration:underline;margin-top:10px}.rain-generation-panel :global(.rain-generation-usage){font-size:10px;line-height:1.8;color:#a0aaa8;margin-top:12px}
+      .rain-generation-panel :global(.rain-generation-job){border-top:1px solid #ffffff14;padding-top:22px;margin:24px 0}.rain-generation-panel :global(.rain-generation-job-heading){display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:14px}.rain-generation-panel :global(.rain-generation-job h3){font-size:16px;color:#e6ece8;font-weight:600;margin-top:9px}.rain-generation-panel :global(.rain-generation-job progress){width:100%;height:7px;accent-color:#a9d8c9;margin:4px 0 12px}.rain-generation-panel :global(.rain-generation-players){display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}.rain-generation-panel :global(.rain-generation-player){min-width:0}.rain-generation-panel :global(.rain-generation-player h4){font-size:12px;margin-bottom:10px;color:#c5d6ca}.rain-generation-panel :global(.rain-generation-player video){display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#09120f;border:1px solid #ffffff18;border-radius:9px}.rain-generation-panel :global(.rain-generation-player a){display:inline-block;font-size:10px;color:#a9d8c9;text-decoration:underline;margin-top:10px}.rain-generation-panel :global(.rain-generation-quality){border:1px solid #ffffff18;border-radius:12px;padding:16px;margin:18px 0}.rain-generation-panel :global(.rain-generation-quality h4){font-size:13px;font-weight:600;color:#dce9e2}.rain-generation-panel :global(.rain-generation-quality summary){cursor:pointer;font-size:12px;color:#bcd4c7}.rain-generation-panel :global(.rain-generation-quality ul){padding-left:18px;font-size:11px;line-height:1.8;color:#aabdb2}.rain-generation-panel :global(.rain-generation-usage){font-size:10px;line-height:1.8;color:#a0aaa8;margin-top:12px}
       .rain-generation-panel :global(.rain-generation-poster){max-width:800px;margin:18px 0}.rain-generation-panel :global(.rain-generation-poster img){display:block;width:100%;height:auto;max-height:450px;object-fit:contain;background:#09120f;border:1px solid #ffffff18;border-radius:9px}.rain-generation-panel :global(.rain-generation-poster figcaption){margin-top:10px;font-size:11px;line-height:1.7;color:#c5d6ca}
       @media(max-width:700px){.rain-generation-panel{padding:17px}.rain-generation-quote{grid-template-columns:1fr}.rain-generation-action>button{width:100%}.rain-generation-panel :global(.rain-generation-players){grid-template-columns:1fr}.rain-generation-panel :global(.rain-generation-job-heading){align-items:flex-start}.rain-generation-panel :global(.rain-generation-job-heading .rain-eyebrow){font-size:8px;letter-spacing:1px}}
     `}</style>

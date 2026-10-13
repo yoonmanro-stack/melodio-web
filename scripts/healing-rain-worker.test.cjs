@@ -6,7 +6,11 @@ const syncFs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
-const { buildGenerationSpec } = require('../worker/healing-rain-plan');
+const { buildGenerationSpec, DIRECTION_VERSION } = require('../worker/healing-rain-plan');
+const legacy = require('../worker/healing-rain-plan-v1');
+const { createRequire } = require('node:module');
+const { evaluatePreviewQuality } = require('../shared/healing-rain/quality.js');
+const ts = require('typescript');
 
 const owner = '11111111-1111-4111-8111-111111111111';
 const foreign = '22222222-2222-4222-8222-222222222222';
@@ -15,13 +19,22 @@ const claim = '44444444-4444-4444-8444-444444444444';
 const snapshot = { input: { sceneId: 'train', thunder: 'none', takes: 6 }, prompts: { image: 'Private sleeper train cabin.', video: 'A 10-second fixed camera train shot.', audio: 'Gentle steady train-window rain. No music, voices or thunder.' } };
 const plain = value => JSON.parse(JSON.stringify(value));
 
+function v2Snapshot(overrides = {}) {
+  const filename = path.resolve(__dirname, '../src/lib/healing-rain/recipes.ts');
+  const compiled = ts.transpileModule(syncFs.readFileSync(filename, 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const context = { exports: {}, require: createRequire(filename) };
+  vm.runInNewContext(compiled, context, { filename });
+  const { compileRecipe, defaults } = context.exports;
+  return plain(compileRecipe({ ...defaults, ...overrides }, jobId, '2026-10-13T00:00:00Z'));
+}
+
 async function harness(options = {}) {
   const root = await fs.mkdtemp('/private/tmp/healing-rain-worker-test-');
   let row = { id: jobId, user_id: owner, claim_token: claim, status: 'running', stage: 'claimed', progress: 0, request_snapshot: snapshot, checkpoints: {}, assets: {}, actual_usage: {}, ...plain(options.row || {}) };
   const calls = { rpc: [], uploads: [], downloads: [], signed: [], create: [], poll: [], audio: [], render: [] };
   const objects = new Map();
   let heartbeat, updatesBlocked = false;
-  const config = { root, kie: 'offline-kie', eleven: 'offline-eleven' };
+  const config = { root, kie: 'offline-kie', eleven: 'offline-eleven', reviewRegistry: options.reviewRegistry };
   const client = {
     async rpc(name, args) {
       assert.equal(name, 'update_healing_rain_generation');
@@ -54,8 +67,12 @@ async function harness(options = {}) {
   };
   const provider = {
     async createKieTask(request) {
-      const key = calls.create.length ? 'video' : 'image';
+      const key = request.model === 'nano-banana-pro' ? 'image' : 'video';
       assert.equal(row.checkpoints[key]?.state, 'intent', 'paid provider POST requires an already persisted intent');
+      assert.equal(row.checkpoints.generationSpec?.state, 'frozen');
+      assert.equal(row.checkpoints[key].generationSpecSha256, row.checkpoints.generationSpec.sha256);
+      const receipt = JSON.parse(await fs.readFile(path.join(root, jobId, 'generation-spec.json'), 'utf8'));
+      assert.equal(receipt[key].input.prompt, request.input.prompt, 'paid prompt must match the frozen receipt');
       calls.create.push(plain(request));
       if (options.loseLeaseDuringCreate) { updatesBlocked = true; await heartbeat(); }
       return { taskId: `task_${calls.create.length}` };
@@ -72,6 +89,8 @@ async function harness(options = {}) {
     },
     async generateRainAudio(request) {
       assert.equal(row.checkpoints[path.basename(request.outputPath, '.mp3')]?.state, 'intent', 'paid audio POST requires an already persisted intent');
+      assert.equal(row.checkpoints.generationSpec?.state, 'frozen');
+      assert.equal(row.checkpoints[path.basename(request.outputPath, '.mp3')].generationSpecSha256, row.checkpoints.generationSpec.sha256);
       calls.audio.push(plain(request));
       if (options.audioUnknown) throw Object.assign(new Error('AUDIO_TRANSFER_FAILED'), { code: 'AUDIO_TRANSFER_FAILED', ambiguous: true });
       await fs.writeFile(request.outputPath, `fixture ${path.basename(request.outputPath)}`, { flag: 'wx' });
@@ -80,17 +99,17 @@ async function harness(options = {}) {
   };
   const renderer = { async renderHealingRain(request) {
     calls.render.push(plain(request));
-    assert.equal(request.seconds, 180); assert.equal(request.previewSeconds, 30);
+    assert.equal(request.seconds, options.renderSeconds || 180); assert.equal(request.previewSeconds, options.previewSeconds || 30);
     assert.equal(request.videoCrossfadeSeconds, 1); assert.equal(request.audioCrossfadeSeconds, 2);
     assert.equal(request.audio.length, 6);
     await fs.mkdir(request.outputDir);
-    for (const seconds of [30, 180]) await fs.writeFile(path.join(request.outputDir, `healing-rain-${seconds}s.mp4`), `fixture preview ${seconds}`);
+    for (const seconds of [request.previewSeconds, request.seconds]) await fs.writeFile(path.join(request.outputDir, `healing-rain-${seconds}s.mp4`), `fixture preview ${seconds}`);
     return { status: 'complete', effectiveVideoCycleSeconds: 10, outputs: [] };
   } };
   const loadedModule = { exports: {} };
-  const dependencies = { 'node:fs/promises': fs, 'node:path': path, 'node:crypto': crypto, '@supabase/supabase-js': { createClient() { throw new Error('Production client creation is forbidden in tests'); } }, './healing-rain-plan': { buildGenerationSpec }, './healing-rain-provider': provider, './healing-rain-render': renderer };
+  const dependencies = { 'node:fs/promises': fs, 'node:path': path, 'node:crypto': crypto, '@supabase/supabase-js': { createClient() { throw new Error('Production client creation is forbidden in tests'); } }, './healing-rain-plan': { buildGenerationSpec: options.buildSpec || buildGenerationSpec }, './healing-rain-provider': provider, './healing-rain-render': renderer, '../shared/healing-rain/quality.js': { evaluatePreviewQuality } };
   vm.runInNewContext(syncFs.readFileSync(path.join(__dirname, '../worker/healing-rain-worker.js'), 'utf8'), {
-    module: loadedModule, exports: loadedModule.exports, Buffer, process: { env: {}, argv: [] },
+    module: loadedModule, exports: loadedModule.exports, Buffer, __dirname: path.resolve(__dirname, '../worker'), process: { env: {}, argv: [] },
     console: { log() {}, error() {} },
     require(name) { assert.ok(Object.hasOwn(dependencies, name), `Unexpected dependency: ${name}`); return dependencies[name]; },
     setInterval(callback) { heartbeat = callback; return 1; }, clearInterval() {},
@@ -102,7 +121,7 @@ async function harness(options = {}) {
     row.assets[key] = { path: objectPath, bytes: bytes.length, mimeType: filename.endsWith('.png') ? 'image/png' : 'video/mp4', ...overrides };
     row.checkpoints[key] = { state: 'ready', taskId: `saved_${key}`, sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
   }
-  return { calls, objects, root, readySource, row: () => plain(row), run: () => loadedModule.exports.runJob(client, plain(row), config), resetRunning() { row.status = 'running'; }, settings: loadedModule.exports.settings };
+  return { calls, objects, root, readySource, row: () => plain(row), run: () => loadedModule.exports.runJob(client, plain(row), config), resetRunning() { row.status = 'running'; }, replaceSnapshot(value) { row.request_snapshot = plain(value); }, settings: loadedModule.exports.settings, loadReviewApprovals: loadedModule.exports.loadReviewApprovals };
 }
 
 test('submitted KIE task is polled after restart and never submitted again', async () => {
@@ -231,4 +250,183 @@ test('unavailable provider-hosted image uses the private signed original without
   assert.equal(h.calls.create.filter(call => call.model === 'nano-banana-pro').length, 1);
   assert.equal(h.calls.create.length, 2); assert.equal(h.row().actual_usage.kieCalls, 2);
   assert.equal(h.row().status, 'ready');
+});
+
+
+test('direction v2 worker submits exactly the prompts compiled for the UI and records review provenance', async () => {
+  const plan = v2Snapshot();
+  const spec = buildGenerationSpec(plan, jobId);
+  assert.equal(spec.version, DIRECTION_VERSION);
+  assert.equal(spec.image.input.prompt, plan.prompts.image);
+  assert.equal(spec.video.input.prompt, plan.prompts.video);
+  assert.equal(buildGenerationSpec(plan, foreign).image.input.prompt, spec.image.input.prompt, 'v2 has no hidden worker-only job variation');
+  assert.equal(plan.generation.videoSeconds, 10);
+  assert.equal(plan.generation.sourceVideoSeconds, 11);
+  const h = await harness({ row: { request_snapshot: plan } });
+  await h.run();
+  assert.equal(h.calls.create[0].input.prompt, plan.prompts.image);
+  assert.equal(h.calls.create[1].input.prompt, plan.prompts.video);
+  assert.equal(h.calls.create[1].input.duration, String(plan.generation.sourceVideoSeconds));
+  assert.equal(h.calls.render[0].sourceVideoSeconds, plan.generation.sourceVideoSeconds);
+  assert.equal(h.row().assets.video.durationSeconds, plan.generation.sourceVideoSeconds);
+  assert.equal(h.row().checkpoints.render.ruleVersion, DIRECTION_VERSION);
+  assert.equal(h.row().checkpoints.render.reviewStatus, 'pending');
+  assert.equal(h.row().checkpoints.render.quality.directionVersion, DIRECTION_VERSION);
+  const saved = JSON.parse(await fs.readFile(path.join(h.root, jobId, 'review.json'), 'utf8'));
+  assert.deepEqual(saved.quality, h.row().checkpoints.render.quality);
+  assert.equal(h.row().checkpoints.render.generationSpecSha256, h.row().checkpoints.generationSpec.sha256);
+});
+
+test('direction prompt, version and duration tampering fails before provider calls', async () => {
+  for (const alter of [
+    plan => { plan.prompts.image += ' Different scene.'; },
+    plan => { plan.prompts.video += ' Keep the blanket still.'; },
+    plan => { plan.direction.version = 'unknown-future-version'; },
+    plan => { plan.generation.sourceVideoSeconds = 10; },
+    plan => { plan.generation.videoSeconds = 11; },
+    plan => { plan.generation.videoCrossfadeSeconds = 2; },
+  ]) {
+    const plan = v2Snapshot(); alter(plan);
+    const h = await harness({ row: { request_snapshot: plan } });
+    await assert.rejects(h.run());
+    assert.equal(h.calls.create.length, 0); assert.equal(h.calls.poll.length, 0); assert.equal(h.calls.audio.length, 0);
+    assert.equal(h.calls.render.length, 0);
+    await assert.rejects(fs.access(path.join(h.root, jobId, 'generation-spec.json')));
+  }
+});
+
+test('v2 compilation for other scene families does not expand the generation gate', () => {
+  for (const overrides of [{ sceneId: 'cabin' }, { sceneId: 'tent' }, { takes: 3 }, { thunder: 'distant' }]) {
+    assert.throws(() => buildGenerationSpec(v2Snapshot(overrides), jobId), /sleeper train, no thunder, and six/);
+  }
+});
+
+test('saved v1 plan retains its exact legacy prompts and job variation', () => {
+  const spec = buildGenerationSpec(snapshot, jobId);
+  assert.deepEqual(spec, legacy.buildGenerationSpec(snapshot, jobId));
+  assert.equal(spec.version, 'sleeper-train-forward-v1');
+  assert.ok(spec.image.input.prompt.endsWith('Unique scene variation 33333333.'));
+  assert.ok(spec.video.input.prompt.includes('The sleeping adult, blanket, furniture and window frame remain still and unchanged.'));
+  assert.notEqual(buildGenerationSpec(snapshot, foreign).image.input.prompt, spec.image.input.prompt);
+});
+
+test('a resumed changed v2 plan stops before any provider call and preserves the frozen receipt', async () => {
+  const h = await harness({ row: { request_snapshot: v2Snapshot() }, audioUnknown: true });
+  await assert.rejects(h.run());
+  const receiptPath = path.join(h.root, jobId, 'generation-spec.json');
+  const before = await fs.readFile(receiptPath, 'utf8');
+  const frozen = h.row().checkpoints.generationSpec;
+  h.resetRunning();
+  await assert.rejects(h.run(), error => error.code === 'audio_submission_unknown');
+  assert.equal(h.calls.create.length, 2); assert.equal(h.calls.audio.length, 1, 'unchanged v2 resume retains the paid-audio hold');
+  const callCounts = { create: h.calls.create.length, poll: h.calls.poll.length, audio: h.calls.audio.length };
+  h.replaceSnapshot(v2Snapshot({ variation: 1 })); h.resetRunning();
+  await assert.rejects(h.run(), error => error.code === 'generation_spec_drift');
+  assert.equal(h.row().status, 'needs_attention');
+  assert.deepEqual(h.row().checkpoints.generationSpec, frozen);
+  assert.equal(await fs.readFile(receiptPath, 'utf8'), before);
+  assert.deepEqual({ create: h.calls.create.length, poll: h.calls.poll.length, audio: h.calls.audio.length }, callCounts);
+});
+
+test('an existing receipt is never replaced by the new direction version', async () => {
+  const h = await harness({ row: { request_snapshot: v2Snapshot() } });
+  await fs.mkdir(path.join(h.root, jobId));
+  const receiptPath = path.join(h.root, jobId, 'generation-spec.json');
+  const oldReceipt = JSON.stringify(legacy.buildGenerationSpec(snapshot, jobId));
+  await fs.writeFile(receiptPath, oldReceipt, { flag: 'wx' });
+  await assert.rejects(h.run(), error => error.code === 'generation_spec_drift');
+  assert.equal(await fs.readFile(receiptPath, 'utf8'), oldReceipt);
+  assert.equal(h.row().status, 'needs_attention');
+  assert.equal(h.calls.create.length, 0); assert.equal(h.calls.poll.length, 0); assert.equal(h.calls.audio.length, 0);
+});
+
+test('resumed v2 assets require matching provenance and duration before polling or downloads', async () => {
+  for (const wrongDuration of [false, true]) {
+    const plan = v2Snapshot();
+    const h = await harness({ row: { request_snapshot: plan } });
+    await h.readySource('image', 'scene.png');
+    if (wrongDuration) await h.readySource('video', 'source-11s.mp4', { durationSeconds: 10 });
+    await assert.rejects(h.run(), error => ['generation_spec_drift', 'generation_spec_missing'].includes(error.code));
+    assert.equal(h.calls.create.length, 0); assert.equal(h.calls.poll.length, 0); assert.equal(h.calls.audio.length, 0);
+    assert.equal(h.calls.downloads.length, 0);
+  }
+});
+
+test('explicit failed checkpoints without task references never cause a paid retry', async () => {
+  const h = await harness({ row: { checkpoints: { image: { state: 'failed', outcome: 'failed' } } } });
+  await assert.rejects(h.run(), error => error.code === 'provider_task_failed');
+  assert.equal(h.calls.create.length, 0); assert.equal(h.calls.poll.length, 0);
+  assert.equal(h.row().status, 'needs_attention');
+});
+
+test('worker derives source filenames, metadata and render targets from the frozen spec', async () => {
+  const h = await harness({ renderSeconds: 90, previewSeconds: 20, buildSpec(plan, id) {
+    const spec = plain(buildGenerationSpec(plan, id));
+    spec.video.input.duration = '12';
+    spec.render.sourceVideoSeconds = 12;
+    spec.render.targetVideoCycleSeconds = 11;
+    spec.render.seconds = 90; spec.render.previewSeconds = 20;
+    spec.review.sourceVideoSeconds = 12;
+    spec.review.effectiveVideoLoopSeconds = 11;
+    return spec;
+  } });
+  await h.run();
+  assert.equal(h.calls.create[1].input.duration, '12');
+  assert.ok(h.calls.render[0].video.endsWith('/source-12s.mp4'));
+  assert.equal(h.row().assets.video.durationSeconds, 12);
+  assert.equal(h.row().assets.preview30.durationSeconds, 20);
+  assert.equal(h.row().assets.preview180.durationSeconds, 90);
+  assert.ok(h.row().assets.preview30.path.endsWith('healing-rain-20s.mp4'));
+  assert.ok(h.row().assets.preview180.path.endsWith('healing-rain-90s.mp4'));
+});
+
+
+test('trusted review registry accepts only bounded private evidence records and fails before spend', async () => {
+  const dir = await fs.mkdtemp('/private/tmp/healing-rain-review-registry-test-');
+  const filename = path.join(dir, 'reviews.json');
+  const record = { profile: 'sleeping-subject', directionVersion: DIRECTION_VERSION, verdict: 'approved',
+    evidenceId: 'review-record-1', reviewedAt: '2026-10-13T00:00:00Z',
+    models: { image: 'nano-banana-pro', video: 'kling-3.0/video', audio: 'eleven_text_to_sound_v2' } };
+  await fs.writeFile(filename, JSON.stringify({ version: 1, records: [record] }), { mode: 0o600, flag: 'wx' });
+  const h = await harness({ reviewRegistry: filename });
+  assert.deepEqual(plain(await h.loadReviewApprovals({ reviewRegistry: filename })), [record]);
+  assert.deepEqual(plain(await h.loadReviewApprovals({})), []);
+  for (const value of [
+    { version: 2, records: [record] },
+    { version: 1, records: [{ ...record, evidenceId: '' }] },
+    { version: 1, records: [{ ...record, models: { image: record.models.image } }] },
+    { version: 1, records: Array(501).fill(record) },
+  ]) {
+    await fs.writeFile(filename, JSON.stringify(value));
+    const invalid = await harness({ reviewRegistry: filename });
+    await assert.rejects(invalid.run(), error => error.code === 'review_registry_invalid');
+    assert.equal(invalid.calls.create.length, 0); assert.equal(invalid.calls.poll.length, 0); assert.equal(invalid.calls.audio.length, 0);
+    assert.equal(invalid.row().status, 'needs_attention');
+  }
+  await fs.writeFile(filename, 'x'.repeat(64 * 1024 + 1));
+  await assert.rejects(h.loadReviewApprovals({ reviewRegistry: filename }), error => error.code === 'review_registry_invalid');
+  await fs.writeFile(filename, JSON.stringify({ version: 1, records: [record] }));
+  await fs.chmod(filename, 0o644);
+  await assert.rejects(h.loadReviewApprovals({ reviewRegistry: filename }), error => error.code === 'review_registry_invalid');
+  await assert.rejects(h.loadReviewApprovals({ reviewRegistry: path.resolve(__dirname, '../package.json') }), error => error.code === 'review_registry_invalid');
+});
+
+
+test('only the trusted registry supplies completed profile reviews to the worker summary', async () => {
+  const plan = v2Snapshot();
+  const records = plan.direction.profiles.map(profile => ({ profile, directionVersion: DIRECTION_VERSION, verdict: 'approved',
+    evidenceId: `review-${profile}`, reviewedAt: '2026-10-13T00:00:00Z',
+    models: { image: 'nano-banana-pro', video: 'kling-3.0/video', audio: 'eleven_text_to_sound_v2' } }));
+  const dir = await fs.mkdtemp('/private/tmp/healing-rain-review-evidence-test-');
+  const filename = path.join(dir, 'reviews.json');
+  await fs.writeFile(filename, JSON.stringify({ version: 1, records }), { mode: 0o600, flag: 'wx' });
+  const trusted = await harness({ reviewRegistry: filename, row: { request_snapshot: plan } });
+  await trusted.run();
+  assert.deepEqual(trusted.row().checkpoints.render.quality.unreviewedProfiles, []);
+  assert.equal(trusted.row().checkpoints.render.reviewStatus, 'pending');
+  assert.ok(Buffer.byteLength(JSON.stringify(trusted.row().checkpoints)) < 32000, 'bounded summary fits the database checkpoint limit');
+  plan.approvals = records;
+  const untrusted = await harness({ row: { request_snapshot: plan } });
+  await untrusted.run();
+  assert.ok(untrusted.row().checkpoints.render.quality.unreviewedProfiles.length > 0, 'snapshot-provided approvals are not trusted operator evidence');
 });

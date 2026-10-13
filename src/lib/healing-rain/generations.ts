@@ -1,3 +1,5 @@
+import { DIRECTION_VERSION, compileDirection } from '../../../shared/healing-rain/direction';
+import type { RainQualitySummary } from '../../../shared/healing-rain/quality';
 import type { RainPlan } from './recipes';
 import { RainProjectError } from './projects';
 
@@ -16,7 +18,7 @@ export const RAIN_GENERATION_QUOTE = {
 
 export type RainGenerationStatus = 'queued' | 'running' | 'ready' | 'needs_attention' | 'failed';
 export type RainGenerationCheckpoint = {
-  state: 'intent' | 'submitted' | 'ready' | 'needs_attention';
+  state: 'intent' | 'submitted' | 'ready' | 'needs_attention' | 'frozen';
   intentAt?: string;
   provider?: string;
   model?: string;
@@ -41,7 +43,7 @@ export type RainGenerationRow = {
   status: RainGenerationStatus;
   stage: string;
   progress: number;
-  checkpoints: Partial<Record<RainGenerationAssetKey | 'render', RainGenerationCheckpoint>>;
+  checkpoints: Partial<Record<RainGenerationAssetKey | 'render' | 'generationSpec', RainGenerationCheckpoint>>;
   assets: Partial<Record<RainGenerationAssetKey, RainGenerationAsset>>;
   estimated_cost: Record<string, unknown>;
   actual_usage: Record<string, unknown>;
@@ -65,6 +67,7 @@ export type RainGenerationJob = {
   updatedAt: string;
   completedAt: string | null;
   reviewStatus: 'pending';
+  quality: RainQualitySummary | null;
   estimatedCost: Record<string, unknown>;
   actualUsage: Record<string, unknown>;
   errorCode: string | null;
@@ -95,6 +98,17 @@ export function parseCreateRainGeneration(value: unknown): CreateRainGenerationI
 export function rainGenerationPlanUnavailableReason(plan: RainPlan): string | null {
   if (plan.input.sceneId !== 'train' || plan.input.thunder !== 'none') return '첫 생성은 천둥 없는 침대 열차 장면을 지원합니다.';
   if (plan.input.takes !== 6 || plan.generation.audioTakes !== 6) return '빗소리 6개로 저장한 장면을 선택해 주세요.';
+  if (!plan.direction) return '이전 연출로 저장된 계획입니다. 설정 불러오기 후 새 계획으로 저장하면 공통 연출 규칙이 적용됩니다.';
+  if (plan.direction.version !== DIRECTION_VERSION) return '현재 지원하지 않는 연출 규칙입니다. 설정을 불러와 새 계획으로 저장해 주세요.';
+  try {
+    const compiled = compileDirection(plan.direction, plan.input);
+    if (plan.prompts.image !== compiled.image || plan.prompts.video !== compiled.video ||
+      plan.generation.sourceVideoSeconds !== compiled.render.sourceVideoSeconds ||
+      plan.generation.videoSeconds !== compiled.render.targetVideoCycleSeconds ||
+      plan.generation.videoCrossfadeSeconds !== compiled.render.videoCrossfadeSeconds) {
+      return '저장된 연출과 생성 설정이 일치하지 않습니다. 새 계획으로 저장해 주세요.';
+    }
+  } catch { return '연출 규칙에 충돌이 있습니다. 설정을 확인해 새 계획으로 저장해 주세요.'; }
   return null;
 }
 
@@ -120,4 +134,28 @@ export function rainGenerationPublicUsage(value: Record<string, unknown>): Recor
   }
   if (typeof value?.unreportedCost === 'boolean') result.unreportedCost = value.unreportedCost;
   return result;
+}
+
+/** Expose only compact measurements and review routing, never worker paths or raw reports. */
+export function rainGenerationPublicQuality(value: unknown): RainQualitySummary | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  const token = (x: unknown): x is string => typeof x === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(x);
+  const tokens = (x: unknown): x is string[] => Array.isArray(x) && x.length <= 30 && x.every(token);
+  if (v.version !== 'healing-rain-quality-v2' || !token(v.directionVersion) ||
+    !['passed','warning','failed'].includes(String(v.technicalStatus)) ||
+    !['required','sample','not_required'].includes(String(v.reviewDecision)) ||
+    !tokens(v.reasons) || !tokens(v.profiles) || !tokens(v.unreviewedProfiles) ||
+    !Array.isArray(v.checks) || v.checks.length > 40) return null;
+  const checks: RainQualitySummary['checks'] = [];
+  for (const item of v.checks) {
+    if (!item || typeof item !== 'object' || !token(item.id) ||
+      !['passed','warning','failed','not_measured'].includes(item.status) ||
+      typeof item.message !== 'string' || item.message.length > 180) return null;
+    checks.push({ id: item.id, status: item.status, message: item.message });
+  }
+  return { version: v.version, directionVersion: v.directionVersion,
+    technicalStatus: v.technicalStatus as RainQualitySummary['technicalStatus'],
+    reviewDecision: v.reviewDecision as RainQualitySummary['reviewDecision'],
+    reasons: v.reasons, profiles: v.profiles, unreviewedProfiles: v.unreviewedProfiles, checks };
 }

@@ -19,9 +19,10 @@ function load(file, dependencies = {}, globals = {}) {
   }, { filename: file });
   return loadedModule.exports;
 }
-const recipes = load('src/lib/healing-rain/recipes.ts');
+const direction = require('../shared/healing-rain/direction');
+const recipes = load('src/lib/healing-rain/recipes.ts', { '../../../shared/healing-rain/direction': direction });
 const projects = load('src/lib/healing-rain/projects.ts', { './recipes': recipes });
-const model = load('src/lib/healing-rain/generations.ts', { './projects': projects });
+const model = load('src/lib/healing-rain/generations.ts', { './projects': projects, '../../../shared/healing-rain/direction': direction });
 const owner = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
 const projectId = '33333333-3333-4333-8333-333333333333';
@@ -212,4 +213,24 @@ test('migration has server-only RPCs, owner RLS, atomic guards and live-lease CA
   assert.match(sql, /BEFORE UPDATE ON public\.healing_rain_generations/);
   assert.match(sql, /AS RESTRICTIVE[\s\S]+FOR ALL TO anon, authenticated/);
   assert.match(sql, /VALUES \('healing-rain', 'healing-rain', false/);
+});
+
+
+test('legacy snapshots remain readable but new generation requires a newly saved direction plan', async()=>{
+ const plan=recipes.compileRecipe({...recipes.defaults},projectId,'2026-10-12T00:00:00Z'); delete plan.direction;delete plan.generation.sourceVideoSeconds;delete plan.generation.videoCrossfadeSeconds;
+ const old=row({request_snapshot:plan,status:'ready'});const h=harness({plan,rows:[old]});
+ const list=await h.route.GET(request(null,'GET',`?projectId=${projectId}`));const data=await list.json();assert.equal(data.jobs.length,1);assert.equal(data.canGenerate,false);assert.match(data.unavailableReason,/이전 연출/);
+ const create=await h.route.POST(request(body({clientRequestId:'new-legacy-attempt'})));assert.equal(create.status,400);assert.equal(h.calls.length,0);
+ const retry=await h.route.POST(request(body()));assert.equal(retry.status,200);assert.equal((await retry.json()).created,false);
+});
+test('v2 prompt or duration drift is rejected before a paid job is enqueued',async()=>{
+ for(const mutate of [p=>p.prompts.video+=' faster',p=>p.generation.sourceVideoSeconds=10,p=>p.direction.version='unknown-version']){
+  const plan=recipes.compileRecipe({...recipes.defaults},projectId,'2026-10-12T00:00:00Z');mutate(plan);const h=harness({plan});
+  const response=await h.route.POST(request(body()));assert.equal(response.status,400);assert.equal(h.calls.length,0);
+ }
+});
+test('only bounded public quality fields leave the server',()=>{
+ const {evaluatePreviewQuality}=require('../shared/healing-rain/quality');const q=evaluatePreviewQuality({direction:recipes.compileRecipe({...recipes.defaults},projectId,'now').direction,report:{}});
+ const safe=model.rainGenerationPublicQuality({...q,secret:'private',localPath:'/private/file'});assert.ok(safe);assert.equal(Object.hasOwn(safe,'secret'),false);assert.equal(Object.hasOwn(safe,'localPath'),false);
+ assert.equal(model.rainGenerationPublicQuality({...q,checks:[{id:'bad',status:'passed',message:'x'.repeat(181)}]}),null);
 });

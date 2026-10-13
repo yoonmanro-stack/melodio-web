@@ -173,3 +173,52 @@ This status means rendering completed, with visual/audio loop review still pendi
 Ten-hour output is not part of this preview worker. Review the passing scenery,
 window-rain movement, fixed cabin geometry, every audio join and the 180-to-0-second
 boundary before promoting a sample to a long-form production workflow.
+
+
+## Versioned direction and checkpoint provenance
+
+Plans retain their outer schema/recipe version 1. New plans carry
+`direction.version = healing-rain-direction-v2`; the shared direction compiler
+supplies the same image and video prompts shown in the UI and used by the worker.
+The worker verifies both stored prompts against that compiler before any provider
+call. The plan records the 10-second output cycle, 11-second source and 1-second
+overlap separately. The source filename, upload duration and rendering parameters
+come from the compiled spec. No hidden worker prompt suffix or job-ID variation is
+added to v2. The train/six-take/no-thunder generation gate remains in place while
+other scene families await media review.
+
+`healing-rain-plan-v1.js` preserves the original worker generation spec, including
+its static blanket instruction and job-ID image variation, for plans without a
+direction field. Reading or resuming a legacy plan does not migrate its prompts.
+Unknown direction versions are rejected. Do not edit the legacy compiler to change
+new outputs; derive a new direction version instead.
+
+Before the first paid intent, the worker exclusively creates and syncs
+`generation-spec.json`, then records its canonical SHA-256 and version in the
+private database checkpoint. Every new stage receipt includes that fingerprint.
+A restart compares the proposed spec with the file and database fingerprints,
+stage model/version provenance and saved source duration before polling,
+downloading or submitting anything. Mismatches preserve the previous receipt and
+hold the job for operator review. V2 resumed assets without provenance are held;
+historical v1 jobs can adopt the exact legacy spec when an older receipt is absent.
+A failed or uncertain checkpoint never automatically produces another paid call.
+
+V2 `review.json` and the render checkpoint include the rule version and the shared
+quality summary, evaluated from the actual render report. Existing technical
+checks remain in force; unmeasured regional brightness, camera movement, train
+direction/speed and anatomy are marked for review, not asserted as passed. A
+ready job still has pending media review. No ten-hour output or new scene-family
+production approval is implied by this technical summary.
+
+
+An optional `HEALING_RAIN_REVIEW_REGISTRY` points to an absolute mode-0600 JSON
+file outside the checkout. It contains `{ "version": 1, "records": [...] }` and
+at most 500 records / 64 KiB. Each approved record must include `profile`,
+`directionVersion`, `verdict: "approved"`, `reviewedAt`, `evidenceId`, and exact
+`models.image`, `models.video`, `models.audio` identifiers. The registry is an
+operator-managed source of completed media reviews, never browser input. Invalid,
+missing configured, oversized or public-readable registries hold a job before any
+provider call. Without a configured registry, all new rule/model profiles require
+review. Matching reviews reduce routing to technical exceptions and deterministic
+10-percent samples; they do not change the worker's pending review status or
+expand the generation gate.

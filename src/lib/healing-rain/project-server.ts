@@ -80,10 +80,14 @@ export async function listRainProjects(
 
 /** Only call with requireRainProjectUser().userId and fully parsed inputs. */
 export async function saveRainProjects(userId: string, inputs: SaveRainProjectInput[]): Promise<SavedRainProject[]> {
-  const prepared = inputs.map(item => ({
-    client_request_id: item.clientRequestId,
-    plan: compileRecipe(item.input, crypto.randomUUID(), new Date().toISOString()),
-  }));
+  const prepared = inputs.map(item => {
+    try {
+      return { client_request_id: item.clientRequestId,
+        plan: compileRecipe(item.input, crypto.randomUUID(), new Date().toISOString()) };
+    } catch (error) {
+      throw new RainProjectError('invalid_direction', error instanceof Error ? error.message : '연출 규칙을 확인해 주세요.', 400);
+    }
+  });
   // One service-only RPC is one transaction, including import conflict checks.
   // Clients cannot bypass compilation by writing directly through PostgREST.
   const { data, error } = await adminClient().rpc('save_healing_rain_projects', {

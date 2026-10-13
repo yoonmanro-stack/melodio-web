@@ -7,7 +7,7 @@ import { requireRainProjectUser } from './project-server';
 import { RainProjectError } from './projects';
 import {
   RAIN_GENERATION_BUCKET, RAIN_GENERATION_QUOTE, isSafeRainGenerationAssetPath,
-  rainGenerationPlanUnavailableReason, rainGenerationPublicError, rainGenerationPublicUsage,
+  rainGenerationPlanUnavailableReason, rainGenerationPublicError, rainGenerationPublicUsage, rainGenerationPublicQuality,
   type CreateRainGenerationInput, type RainGenerationJob, type RainGenerationRow,
 } from './generations';
 
@@ -85,7 +85,7 @@ async function publicJob(row: RainGenerationRow, ownerId: string): Promise<RainG
   return {
     id: row.id, projectId: row.project_id, status: row.status, stage: row.stage, progress: row.progress,
     createdAt: row.created_at, updatedAt: row.updated_at, completedAt: row.completed_at,
-    reviewStatus: 'pending', estimatedCost: row.estimated_cost, actualUsage: rainGenerationPublicUsage(row.actual_usage),
+    reviewStatus: 'pending', quality: rainGenerationPublicQuality(row.checkpoints?.render?.quality), estimatedCost: row.estimated_cost, actualUsage: rainGenerationPublicUsage(row.actual_usage),
     errorCode: row.error_code && /^[a-z0-9_]{1,64}$/.test(row.error_code) ? row.error_code : null,
     error: rainGenerationPublicError(row.status), outputs,
   };

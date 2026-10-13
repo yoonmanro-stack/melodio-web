@@ -8,18 +8,19 @@ const ts = require('typescript');
 const crypto = require('node:crypto');
 
 function load(file, dependencies = {}, globals = {}) {
-  const module = { exports: {} };
+  const loadedModule = { exports: {} };
   const code = ts.transpileModule(fs.readFileSync(file, 'utf8'), {
     compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 },
   }).outputText;
   vm.runInNewContext(code, {
-    module, exports: module.exports, Error, Date, JSON, TextDecoder, Request, Response, URL, crypto,
+    module: loadedModule, exports: loadedModule.exports, Error, Date, JSON, TextDecoder, Request, Response, URL, crypto,
     require(name) { assert.ok(Object.hasOwn(dependencies, name), `Unexpected dependency: ${name}`); return dependencies[name]; },
     ...globals,
   }, { filename: file });
-  return module.exports;
+  return loadedModule.exports;
 }
-const recipes = load('src/lib/healing-rain/recipes.ts');
+const direction = require('../shared/healing-rain/direction');
+const recipes = load('src/lib/healing-rain/recipes.ts', { '../../../shared/healing-rain/direction': direction });
 const model = load('src/lib/healing-rain/projects.ts', { './recipes': recipes });
 const owner = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
@@ -192,4 +193,14 @@ test('migration keeps browser writes/RPC revoked and immutable owner-scoped keys
   assert.match(sql, /BEFORE UPDATE ON public\.healing_rain_projects/);
   assert.match(sql, /v_stored->'input' IS DISTINCT FROM v_plan->'input'/);
   assert.match(sql, /ON CONFLICT ON CONSTRAINT healing_rain_projects_owner_request DO NOTHING/);
+});
+
+
+test('direction conflicts are rejected as 400 before service storage, including atomic imports', async () => {
+ const h=harness();
+ const conflict=body({input:{...recipes.defaults,notes:'No breathing. Keep blanket motionless.'}});
+ const one=await h.route.POST(request(conflict));
+ assert.equal(one.status,400);assert.equal((await one.json()).code,'invalid_direction');
+ const many=await h.importer.POST(request({projects:[body(),{...conflict,clientRequestId:'new-conflicting-plan'}]}));
+ assert.equal(many.status,400);assert.equal(h.calls.length,0);assert.equal(h.adminCalls(),0);
 });

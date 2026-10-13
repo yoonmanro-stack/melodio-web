@@ -142,14 +142,14 @@ export function useRainPlans(onAccountChange: () => void) {
         await request('/api/healing-rain/projects', { clientRequestId: pendingSave.current.key, input: parsed });
         if (current !== epoch.current) return;
         pendingSave.current = null;
-        setMessage('계정에 제작 계획을 저장했습니다. 생성 비용은 발생하지 않았습니다.');
+        setMessage('계정에 연출 v2 제작 계획을 새로 저장했습니다. 기존 계획은 유지되며 생성 비용은 발생하지 않았습니다.');
       } else {
         const data = await request<{ plan: RainPlan }>('/api/healing-rain/plan', parsed);
         if (current !== epoch.current) return;
         const next = [data.plan, ...readLocalPlans()];
         localStorage.setItem(draftStorageEntry, JSON.stringify(next));
         setLocalCount(next.length);
-        setMessage('이 브라우저에 초안을 저장했습니다. 로그인 후 계정으로 가져올 수 있습니다.');
+        setMessage('이 브라우저에 연출 v2 초안을 새로 저장했습니다. 기존 초안은 유지되며 로그인 후 계정으로 가져올 수 있습니다.');
       }
       await refresh();
     } catch (err) {
@@ -175,7 +175,7 @@ export function useRainPlans(onAccountChange: () => void) {
         existing += data.existingCount;
       }
       if (current !== epoch.current) return;
-      setMessage(`계정에 ${created}개를 가져왔습니다. 이미 저장된 ${existing}개는 중복 없이 유지했습니다. 브라우저 원본도 보관됩니다.`);
+      setMessage(`계정에 ${created}개를 가져왔습니다. 이미 저장된 ${existing}개는 중복 없이 유지했습니다. 새로 가져온 계획에는 연출 v2가 적용되며 브라우저 원본도 보관됩니다.`);
       if (source === 'account') await refresh();
       else {
         listRequest.current++;
