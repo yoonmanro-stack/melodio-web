@@ -1,0 +1,44 @@
+{
+  "clientRequestId": "episode-example-20261013-001",
+  "input": {
+    "title": "구름에서 쉬어가는 폭우 속 야간 열차",
+    "brief": {
+      "intent": "sheltered-rest",
+      "premise": "포근한 구름 침대에서 비가 내리는 야간 열차의 안전한 객실로 이어지는 휴식",
+      "distinctiveExperience": "빗속을 달리는 창밖과 따뜻한 객실의 거리감, 유리와 먼 주행음의 공간을 표현"
+    },
+    "intro": {
+      "familyId": "cloud-bed",
+      "variantId": "side-canopy"
+    },
+    "main": {
+      "sceneId": "train",
+      "intensity": "downpour",
+      "thunder": "none",
+      "camera": "bedside",
+      "palette": "midnight",
+      "title": "비 내리는 침대 열차",
+      "notes": "",
+      "hours": 10,
+      "takes": 6,
+      "variation": 0
+    },
+    "visual": {
+      "focus": "shelter",
+      "depth": "layered",
+      "anchor": "창가 침대와 작은 취침등 뒤로 먼 숲의 실루엣이 이어진다"
+    },
+    "audio": {
+      "surface": "glass",
+      "perspective": "inside",
+      "depth": "layered",
+      "dynamics": "steady",
+      "detail": "가까운 유리의 빗방울과 둔하게 들리는 외부 폭우를 층으로 나눈다"
+    },
+    "connection": {
+      "motif": "shelter",
+      "rationale": "구름 침대의 따뜻한 빛이 객실 취침등으로 이어져 보호받는 느낌을 유지",
+      "transitionSeconds": 9
+    }
+  }
+}
