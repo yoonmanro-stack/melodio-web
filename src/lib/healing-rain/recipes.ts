@@ -62,8 +62,9 @@ export function compileRecipe(input: RecipeInput, id: string, createdAt: string)
  const rain={gentle:'Sparse gentle rain, distinct soft droplets.',moderate:'Moderate steady rain, clear rounded droplets and a soft continuous rain bed.',heavy:'Heavy sustained rain with frequent impacts and rich splashes.',downpour:'Dense powerful downpour with full rushing texture and energetic splashes.'}[input.intensity];
  const outdoor=['night-nature','quiet-park','mountain-temple','pond','lake','highland-village'].includes(input.sceneId);
  const nature=['night-nature','pond','lake'].includes(input.sceneId);
- // Keep the approved audio wording: the worker appends its six bounded variations.
- const audio=`${rain} ${scene.sound} Natural irregular droplets, believable depth. Continuous 30-second loop, no fade or silence. No voices, music or tonal artifacts. No thunder; thunder is a separate layer.`;
+ // New plans explicitly exclude human-like sounds; generated audio still needs listening review.
+ // Keep room for the worker's six appended variations without changing saved plans.
+ const audio=`${rain} ${scene.sound} Irregular droplets, natural depth. Continuous 30s loop; no fades or silence. No speech, voices, crowd murmur, whispers, chanting, music or tonal artifacts. No thunder; use a separate layer.`;
  return {
   id,createdAt,schemaVersion:1,recipeVersion:1,input,direction,
   ...(outdoor?{sceneDirection:{...nightNatureDirection,setting:scene.surface,lighting:nature?nightNatureDirection.lighting:'very dim shielded warm practical light, stable exposure'}}:{}),

@@ -1,6 +1,6 @@
 'use strict';
 
-const QUALITY_VERSION = 'healing-rain-quality-v2';
+const QUALITY_VERSION = 'healing-rain-quality-v3';
 const MODEL_KEYS = ['image', 'video', 'audio'];
 const finite = value => typeof value === 'number' && Number.isFinite(value);
 const close = (a, b, tolerance = 0.002) => finite(a) && Math.abs(a - b) <= tolerance;
@@ -44,11 +44,14 @@ function evaluatePreviewQuality({ direction, report, jobId, models, approvals = 
   if (warnings.length) add('renderer_warning', 'warning', `편집 검사 경고 ${warnings.length}건`);
   // These are deliberately not reported as measured by grayscale seam checks.
   add('scene_realism', 'not_measured', '속도감·실내외 밝기·인물 안정성은 대표 검수 기록과 표본으로 확인');
-  const technicalChecks = checks.filter(x => x.id !== 'scene_realism');
+  // Waveform metrics and representative profile approvals cannot establish what a new audio source contains.
+  // Until source-specific listening evidence is supported, every source needs a human review.
+  add('audio_content', 'not_measured', '각 음원을 직접 들어 사람 목소리·웅얼거림·음악 혼입이 없는지 확인해야 함 — 자동 탐지 미실시');
+  const technicalChecks = checks.filter(x => x.id !== 'scene_realism' && x.id !== 'audio_content');
   const technicalStatus = technicalChecks.some(x => x.status === 'failed') ? 'failed' : technicalChecks.some(x => x.status !== 'passed') ? 'warning' : 'passed';
   const records = Array.isArray(approvals) ? approvals.slice(0, 500) : [];
   const unreviewed = profiles.filter(profile => !records.some(a => a?.profile === profile && a.directionVersion === directionVersion && a.verdict === 'approved' && typeof a.reviewedAt === 'string' && Number.isFinite(Date.parse(a.reviewedAt)) && typeof a.evidenceId === 'string' && a.evidenceId.length > 0 && modelMatch(a.models, models)));
-  const reasons = [];
+  const reasons = ['audio_content_review_required'];
   if (technicalStatus !== 'passed') reasons.push('technical_check');
   if (!profiles.length || directionVersion === 'unknown') reasons.push('missing_direction');
   if (unreviewed.length) reasons.push('unreviewed_profile_or_model');

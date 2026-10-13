@@ -151,14 +151,14 @@ export function compileEpisodePlan(value: EpisodeInput, id: string, createdAt: s
    introVideo:[family.motionPrompt,'Locked camera; preserve the same sleeping adult identity, pose and bedding. Only tiny breathing and barely moving surroundings. No engulfing clouds, no accelerating motion, no generated scene morph. Keep the source calm to its last frame. Silent source; editorial smoothstep dissolve 6–15s, with intentional fading-subject overlap.'].join(' '),
    mainImage:[basePlan.prompts.image,focus,depth,`Original scene detail: ${input.visual.anchor}`].join(' '),
    mainVideo:[basePlan.prompts.video,focus,'Preserve the approved source geometry; do not introduce transition motion into the repeating main.'].join(' '),
-   rainAudio:[rain,SCENE_SOUND[input.main.sceneId],`${SURFACES[input.audio.surface]}; ${input.audio.perspective}, ${input.audio.depth}.`,dynamics,input.audio.detail,'Continuous 30s stereo; no silence, fades, music, voices, bells or thunder.'].join(' '),
+   rainAudio:[rain,SCENE_SOUND[input.main.sceneId],`${SURFACES[input.audio.surface]}; ${input.audio.perspective}, ${input.audio.depth}.`,dynamics,input.audio.detail,'Continuous 30s stereo; no silence or fades. No speech, voices, crowd murmur, whispers, chanting, music, bells or thunder.'].join(' '),
   },
   production:{sourceIntroSeconds:15,introOccurrences:1,newProductionRequiresFreshAssets:true,currentProductionRevisionAllowed:true,
    transition:{startSeconds:6,endSeconds:15,seconds:9,curve:'smoothstep',fullCloudOcclusionRequired:false,generatedMorph:false},
    mainLoopSeconds:10,reversePlayback:false,previewSeconds:[30,180],targetLongFormSeconds:input.main.hours*3600,
    audio:{sourcePolicy:{...RAIN_AUDIO_POLICY},requiredFreshTakes:input.main.takes,secondsPerTake:30,plannedTakes:input.main.takes,continuousThroughTransition:true,restartAtTransition:false,loopExpansionMustBeDisclosedInProductionRecord:true}},
   review:{status:'required',mediaValidation:'not_performed',comparisonScope:'structured-plans-only',compatibilityWarning,
-   questions:['이 작품의 30초 빗소리를 모두 신규 생성했으며 다른 작품의 음원을 가져오지 않았는가?','이번 편의 풍경과 소리가 기존 작품과 실제로 다르게 느껴지는가?','색·제목·인물만 바꾼 반복 기획에 머물지 않았는가?','인트로와 본편의 빛·공간·소리 연결이 편안한가?','장시간 반복에 사용할 본편과 소리의 다양성이 충분한가?','새 원본과 편집 기록을 보존했으며 실제 촬영으로 오인시키지 않는가?']},
+   questions:['이 작품의 30초 빗소리를 모두 신규 생성했으며 다른 작품의 음원을 가져오지 않았는가?','각 원본 테이크와 반복 경계·최종 믹스를 헤드폰으로 듣고 말소리·웅성거림·속삭임·염불·음악처럼 들리는 성분이 없는지 확인했는가?','이번 편의 풍경과 소리가 기존 작품과 실제로 다르게 느껴지는가?','색·제목·인물만 바꾼 반복 기획에 머물지 않았는가?','인트로와 본편의 빛·공간·소리 연결이 편안한가?','장시간 반복에 사용할 본편과 소리의 다양성이 충분한가?','새 원본과 편집 기록을 보존했으며 실제 촬영으로 오인시키지 않는가?']},
   execution:{providerCallsAllowed:false,longFormEnabled:false,policyApproval:false,generationAdapter:'not_connected'},
  };
 }

@@ -87,7 +87,7 @@ test('lighting, motion and design selections change the relevant instructions wi
   assert.ok(b.prompts.mainImage.includes(value.visual.anchor));assert.ok(b.prompts.rainAudio.includes(value.audio.detail));
   assert.ok(b.prompts.rainAudio.includes('low rail rumble'));assert.ok(b.prompts.rainAudio.includes('Slow subtle swells'));
   assert.equal(b.editorial.thunder.requested,'distant');assert.equal(b.editorial.thunder.separateLayer,true);
-  assert.match(b.prompts.rainAudio,/no silence, fades, music, voices, bells or thunder/);
+  assert.match(b.prompts.rainAudio,/no silence or fades\. No speech, voices, crowd murmur, whispers, chanting, music, bells or thunder\./);
   assert.ok(a.prompts.introImage.includes('bright, peaceful and welcoming'));assert.equal(a.production.reversePlayback,false);
   assert.equal(b.execution.generationAdapter,'not_connected');assert.equal(b.execution.policyApproval,false);
 });
@@ -110,10 +110,10 @@ test('strict envelopes reject forged flags, unknown nested fields, raw media and
 
 test('maximum supported inputs fit database and prompt budgets across all scenes', () => {
   const catalog=episodes.getEpisodeCatalog();
-  for (const scene of recipe.recipes) {
-    const v=input();v.title='한'.repeat(100);v.main.sceneId=scene.id;v.main.title='한'.repeat(100);v.main.notes='소품 질감 '.repeat(100).slice(0,600);
+  for (const scene of recipe.recipes) for(const intensity of ['gentle','moderate','heavy','downpour']) for(const surface of catalog.sceneSurfaces[scene.id]) for(const acousticDepth of ['close','layered','distant']) {
+    const v=input();v.main.intensity=intensity;v.title='한'.repeat(100);v.main.sceneId=scene.id;v.main.title='한'.repeat(100);v.main.notes='소품 질감 '.repeat(100).slice(0,600);
     v.brief.premise='한'.repeat(360);v.brief.distinctiveExperience='한'.repeat(360);v.visual.anchor='한'.repeat(200);
-    v.audio.surface=catalog.sceneSurfaces[scene.id][0];v.audio.perspective=catalog.scenePerspectives[scene.id][0];v.audio.detail='한'.repeat(200);v.audio.dynamics='slow-swells';v.connection.rationale='한'.repeat(200);
+    v.audio.surface=surface;v.audio.perspective=catalog.scenePerspectives[scene.id][0];v.audio.depth=acousticDepth;v.audio.detail='한'.repeat(200);v.audio.dynamics='slow-swells';v.connection.rationale='한'.repeat(200);
     const p=plan(v);assert.ok(Buffer.byteLength(JSON.stringify(p))<48000,scene.id);assert.ok(p.prompts.rainAudio.length<=500,scene.id);
     assert.ok(p.prompts.mainImage.length<2600,`${scene.id} image ${p.prompts.mainImage.length}`);assert.ok(p.prompts.mainVideo.length<1500,`${scene.id} video ${p.prompts.mainVideo.length}`);
   }
@@ -170,6 +170,8 @@ test('every new episode requires all planned 30-second rain takes freshly genera
   assert.equal(audio.sourcePolicy.sameProductionEditing,true);assert.equal(audio.sourcePolicy.sameProductionResume,true);
   assert.equal(audio.sourcePolicy.loopingWithinProduction,true);
   assert.ok(p.review.questions.some(q=>q.includes('30초 빗소리')));
+  assert.ok(p.review.questions.some(q=>['각 원본 테이크','반복 경계','최종 믹스','헤드폰','말소리','웅성거림','속삭임','염불','음악'].every(term=>q.includes(term))));
+  assert.equal(p.review.mediaValidation,'not_performed');
  }
  const v=input();v.audio.existingAssetId='old-file';assert.throws(()=>episodes.parseEpisodeInput(v));
  const first=episodes.getEpisodeCatalog();first.rainAudioPolicy.reuseAcrossProductions=true;

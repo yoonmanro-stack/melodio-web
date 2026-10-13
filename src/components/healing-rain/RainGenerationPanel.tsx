@@ -38,6 +38,7 @@ function stageLabel(job: RainGenerationJob): string {
 }
 
 function readyReviewGuidance(job: RainGenerationJob): string {
+  if (job.quality?.reasons.includes('audio_content_review_required')) return '새 빗소리 원본과 최종 편집본을 직접 들어 사람 목소리·웅성거림·음악이 없는지 확인해 주세요. 음량과 연결 검사 통과만으로 음향 검수가 완료되지는 않습니다.';
   if (job.quality?.reviewDecision === 'not_required') return '기술 검사와 기존 대표 검수 기록을 적용해 이번 결과는 추가 검수 대상이 아닙니다. 자연스러움이나 공개 준비가 자동 승인된 것은 아닙니다.';
   if (job.quality?.reviewDecision === 'sample') return '표본 검수로 선택된 결과입니다. 반복 경계의 움직임·밝기와 빗소리 연결을 직접 확인해 주세요.';
   return '반복 경계의 움직임·밝기와 빗소리 연결을 직접 확인해 주세요.';
@@ -72,7 +73,7 @@ function JobPreview({ job }: { job: RainGenerationJob }) {
     {job.status === 'ready' ? <p className="rain-note">영상이 만들어졌습니다. {readyReviewGuidance(job)} 선택한 장시간 영상은 아직 합성하지 않았습니다.</p> : null}
     {job.quality ? <section className="rain-generation-quality" aria-label="자동 검사와 검수 기준">
       <h4>자동 기술 검사 · {job.quality.technicalStatus === 'passed' ? '통과' : job.quality.technicalStatus === 'failed' ? '확인 필요' : '검사 정보 확인 필요'}</h4>
-      <p className="rain-note">{job.quality.reasons.includes('unreviewed_profile_or_model') ? '처음 적용한 연출 규칙 또는 모델입니다. 대표 장면의 움직임과 밝기를 확인해 주세요.' : job.quality.reviewDecision === 'sample' ? '공통 규칙이 검수된 장면 중 표본으로 선택됐습니다. 움직임과 반복 경계를 확인해 주세요.' : job.quality.reviewDecision === 'required' ? '자동 검사에서 확인할 항목이 있습니다. 아래 결과를 확인해 주세요.' : '공통 규칙의 대표 검수 기록이 적용됐습니다. 이번 결과는 추가 검수 표본에 해당하지 않습니다.'}</p>
+      <p className="rain-note">{job.quality.reasons.includes('audio_content_review_required') ? '빗소리 내용은 자동으로 판별하지 않았습니다. 각 원본과 편집본의 목소리·웅성거림·음악 혼입 여부를 확인해야 합니다.' : job.quality.reasons.includes('unreviewed_profile_or_model') ? '처음 적용한 연출 규칙 또는 모델입니다. 대표 장면의 움직임과 밝기를 확인해 주세요.' : job.quality.reviewDecision === 'sample' ? '공통 규칙이 검수된 장면 중 표본으로 선택됐습니다. 움직임과 반복 경계를 확인해 주세요.' : job.quality.reviewDecision === 'required' ? '자동 검사에서 확인할 항목이 있습니다. 아래 결과를 확인해 주세요.' : '공통 규칙의 대표 검수 기록이 적용됐습니다. 이번 결과는 추가 검수 표본에 해당하지 않습니다.'}</p>
       <details><summary>검사 항목 보기</summary><ul>{job.quality.checks.map(check => <li key={check.id}>{check.message} · {({ passed: '통과', warning: '주의', failed: '확인 필요', not_measured: '자동 측정 안 됨' } as const)[check.status]}</li>)}</ul></details>
       <p className="rain-note">길이·프레임·빗소리 연결의 기술 검사와 연출의 자연스러움 검수는 구분해 기록합니다.</p>
     </section> : null}

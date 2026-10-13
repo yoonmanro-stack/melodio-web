@@ -243,3 +243,29 @@ test('quote includes every new rain take and refuses caller-supplied reuse contr
   assert.throws(()=>model.parseCreateRainGeneration({...body(),...extra}),error=>error.status===400);
  }
 });
+
+
+test('new content review survives the public API and legacy technical passes cannot waive listening', () => {
+ const {evaluatePreviewQuality}=require('../shared/healing-rain/quality');
+ const current=evaluatePreviewQuality({direction:recipes.compileRecipe({...recipes.defaults},projectId,'now').direction,report:{}});
+ const visible=model.rainGenerationPublicQuality(current);
+ assert.equal(visible.version,'healing-rain-quality-v3');assert.equal(visible.reviewDecision,'required');
+ assert.ok(visible.reasons.includes('audio_content_review_required'));
+ assert.equal(visible.checks.find(c=>c.id==='audio_content').status,'not_measured');
+ const old={...current,version:'healing-rain-quality-v2',technicalStatus:'passed',reviewDecision:'not_required',reasons:[],checks:current.checks.filter(c=>c.id!=='audio_content')};
+ const before=JSON.stringify(old);const legacy=model.rainGenerationPublicQuality(old);
+ assert.equal(legacy.technicalStatus,'passed');assert.equal(legacy.reviewDecision,'required');
+ assert.equal(legacy.checks.find(c=>c.id==='audio_content').status,'not_measured');
+ assert.ok(legacy.reasons.includes('audio_content_review_required'));assert.equal(JSON.stringify(old),before);
+ assert.deepEqual(plain(model.rainGenerationPublicQuality(legacy)),plain(legacy));
+ for(const bad of [{version:'unknown-quality-version'},{version:['healing-rain-quality-v2']},{technicalStatus:['passed']},{reviewDecision:['not_required']}]) {
+  assert.equal(model.rainGenerationPublicQuality({...old,...bad}),null);
+ }
+ const maxChecks=Array.from({length:40},(_,i)=>({id:`check_${i}`,status:'passed',message:'measured'}));
+ const maxReasons=Array.from({length:30},(_,i)=>`reason_${i}`);
+ assert.equal(model.rainGenerationPublicQuality({...old,checks:maxChecks}),null);
+ assert.equal(model.rainGenerationPublicQuality({...old,reasons:maxReasons}),null);
+ const atLimit=model.rainGenerationPublicQuality({...old,checks:maxChecks.slice(1),reasons:maxReasons.slice(1)});
+ assert.equal(atLimit.checks.length,40);assert.equal(atLimit.reasons.length,30);
+ assert.deepEqual(plain(model.rainGenerationPublicQuality(atLimit)),plain(atLimit));
+});

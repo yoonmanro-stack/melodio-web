@@ -150,9 +150,9 @@ export function rainGenerationPublicQuality(value: unknown): RainQualitySummary 
   const v = value as Record<string, unknown>;
   const token = (x: unknown): x is string => typeof x === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(x);
   const tokens = (x: unknown): x is string[] => Array.isArray(x) && x.length <= 30 && x.every(token);
-  if (v.version !== 'healing-rain-quality-v2' || !token(v.directionVersion) ||
-    !['passed','warning','failed'].includes(String(v.technicalStatus)) ||
-    !['required','sample','not_required'].includes(String(v.reviewDecision)) ||
+  if ((v.version !== 'healing-rain-quality-v2' && v.version !== 'healing-rain-quality-v3') || !token(v.directionVersion) ||
+    (typeof v.technicalStatus !== 'string' || !['passed','warning','failed'].includes(v.technicalStatus)) ||
+    (typeof v.reviewDecision !== 'string' || !['required','sample','not_required'].includes(v.reviewDecision)) ||
     !tokens(v.reasons) || !tokens(v.profiles) || !tokens(v.unreviewedProfiles) ||
     !Array.isArray(v.checks) || v.checks.length > 40) return null;
   const checks: RainQualitySummary['checks'] = [];
@@ -162,8 +162,16 @@ export function rainGenerationPublicQuality(value: unknown): RainQualitySummary 
       typeof item.message !== 'string' || item.message.length > 180) return null;
     checks.push({ id: item.id, status: item.status, message: item.message });
   }
+  // Historical v2 reports did not assess audio content. Preserve their measurements,
+  // but require listening in this public view without rewriting the stored report.
+  const legacy = v.version === 'healing-rain-quality-v2';
+  if (legacy && !checks.some(check => check.id === 'audio_content')) {
+    checks.push({ id: 'audio_content', status: 'not_measured', message: '이전 검사에는 목소리·웅얼거림·음악 혼입 확인이 없습니다. 각 원본과 최종 편집본을 직접 들어 확인해 주세요.' });
+  }
+  const reasons = legacy ? [...new Set([...v.reasons, 'audio_content_review_required'])] : v.reasons;
+  if (checks.length > 40 || reasons.length > 30) return null;
   return { version: v.version, directionVersion: v.directionVersion,
     technicalStatus: v.technicalStatus as RainQualitySummary['technicalStatus'],
-    reviewDecision: v.reviewDecision as RainQualitySummary['reviewDecision'],
-    reasons: v.reasons, profiles: v.profiles, unreviewedProfiles: v.unreviewedProfiles, checks };
+    reviewDecision: legacy ? 'required' : v.reviewDecision as RainQualitySummary['reviewDecision'],
+    reasons, profiles: v.profiles, unreviewedProfiles: v.unreviewedProfiles, checks };
 }
