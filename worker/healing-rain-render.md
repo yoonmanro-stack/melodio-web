@@ -222,3 +222,26 @@ provider call. Without a configured registry, all new rule/model profiles requir
 review. Matching reviews reduce routing to technical exceptions and deterministic
 10-percent samples; they do not change the worker's pending review status or
 expand the generation gate.
+
+
+## Fresh rain audio per production
+
+The production worker follows `shared/healing-rain/audio-policy.js`. Every new
+job makes six new 30-second provider requests, even when another job used the
+same recipe and prompts. It never selects prior-production audio, a prompt
+cache, or a fallback library recording. Within the same job, editing, looping,
+preview export and recovery use that job's already-generated original takes.
+
+New job checkpoints bind `audioPolicyVersion`, `jobId` and `userId`. Every audio
+intent/receipt/asset carries `audioOrigin` with the policy, job, user, take index
+and 30-second source duration. Recovery rejects a foreign origin before provider
+polling or rendering and verifies the saved file hash. Legacy jobs retain their
+original frozen specification and established job-scoped recovery behavior.
+Provider IDs and billed usage are retained when reported; absent billing or
+request headers are not fabricated. Ambiguous requests still require operator
+review instead of automatic paid resubmission or old-audio substitution.
+
+The standalone editing CLI remains a local file editor. The orchestration layer
+must pass only verified same-production audio to it. A new separately published
+work requires a new job; changing an intro or title does not make old source
+audio eligible for the new work. Long-form generation remains disconnected.

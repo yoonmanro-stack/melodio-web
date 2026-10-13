@@ -160,3 +160,18 @@ test('documented example remains a valid save request', () => {
  const value=JSON.parse(fs.readFileSync('docs/healing-rain/episode-input.example.json','utf8'));
  const parsed=episodes.parseSaveEpisode(value);assert.equal(parsed.input.intro.familyId,'cloud-bed');assert.equal(plan(parsed.input).version,episodes.EPISODE_VERSION);
 });
+
+test('every new episode requires all planned 30-second rain takes freshly generated', () => {
+ for(const takes of [3,6,12]) {
+  const value=input();value.main.takes=takes;const p=plan(value),audio=p.production.audio;
+  assert.equal(audio.requiredFreshTakes,takes);assert.equal(audio.secondsPerTake,30);
+  assert.equal(audio.sourcePolicy.source,'generate-per-production');assert.equal(audio.sourcePolicy.reuseAcrossProductions,false);
+  assert.equal(audio.sourcePolicy.reuseByPrompt,false);assert.equal(audio.sourcePolicy.fallbackToExistingAudio,false);
+  assert.equal(audio.sourcePolicy.sameProductionEditing,true);assert.equal(audio.sourcePolicy.sameProductionResume,true);
+  assert.equal(audio.sourcePolicy.loopingWithinProduction,true);
+  assert.ok(p.review.questions.some(q=>q.includes('30초 빗소리')));
+ }
+ const v=input();v.audio.existingAssetId='old-file';assert.throws(()=>episodes.parseEpisodeInput(v));
+ const first=episodes.getEpisodeCatalog();first.rainAudioPolicy.reuseAcrossProductions=true;
+ assert.equal(episodes.getEpisodeCatalog().rainAudioPolicy.reuseAcrossProductions,false);
+});

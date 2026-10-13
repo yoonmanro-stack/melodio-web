@@ -10,6 +10,7 @@ const { buildGenerationSpec, DIRECTION_VERSION } = require('../worker/healing-ra
 const legacy = require('../worker/healing-rain-plan-v1');
 const { createRequire } = require('node:module');
 const { evaluatePreviewQuality } = require('../shared/healing-rain/quality.js');
+const { RAIN_AUDIO_POLICY_VERSION, RAIN_AUDIO_POLICY } = require('../shared/healing-rain/audio-policy.js');
 const ts = require('typescript');
 
 const owner = '11111111-1111-4111-8111-111111111111';
@@ -29,8 +30,9 @@ function v2Snapshot(overrides = {}) {
 }
 
 async function harness(options = {}) {
+  const currentJobId = options.row?.id || jobId;
   const root = await fs.mkdtemp('/private/tmp/healing-rain-worker-test-');
-  let row = { id: jobId, user_id: owner, claim_token: claim, status: 'running', stage: 'claimed', progress: 0, request_snapshot: snapshot, checkpoints: {}, assets: {}, actual_usage: {}, ...plain(options.row || {}) };
+  let row = { id: currentJobId, user_id: owner, claim_token: claim, status: 'running', stage: 'claimed', progress: 0, request_snapshot: snapshot, checkpoints: {}, assets: {}, actual_usage: {}, ...plain(options.row || {}) };
   const calls = { rpc: [], uploads: [], downloads: [], signed: [], create: [], poll: [], audio: [], render: [] };
   const objects = new Map();
   let heartbeat, updatesBlocked = false;
@@ -38,7 +40,7 @@ async function harness(options = {}) {
   const client = {
     async rpc(name, args) {
       assert.equal(name, 'update_healing_rain_generation');
-      assert.equal(args.p_job_id, jobId); assert.equal(args.p_claim_token, claim);
+      assert.equal(args.p_job_id, currentJobId); assert.equal(args.p_claim_token, claim);
       assert.equal(args.p_lease_seconds, 180);
       calls.rpc.push(plain(args));
       if (updatesBlocked || options.rejectPatch?.(args.p_patch)) return { data: [], error: null };
@@ -71,7 +73,7 @@ async function harness(options = {}) {
       assert.equal(row.checkpoints[key]?.state, 'intent', 'paid provider POST requires an already persisted intent');
       assert.equal(row.checkpoints.generationSpec?.state, 'frozen');
       assert.equal(row.checkpoints[key].generationSpecSha256, row.checkpoints.generationSpec.sha256);
-      const receipt = JSON.parse(await fs.readFile(path.join(root, jobId, 'generation-spec.json'), 'utf8'));
+      const receipt = JSON.parse(await fs.readFile(path.join(root, currentJobId, 'generation-spec.json'), 'utf8'));
       assert.equal(receipt[key].input.prompt, request.input.prompt, 'paid prompt must match the frozen receipt');
       calls.create.push(plain(request));
       if (options.loseLeaseDuringCreate) { updatesBlocked = true; await heartbeat(); }
@@ -107,7 +109,7 @@ async function harness(options = {}) {
     return { status: 'complete', effectiveVideoCycleSeconds: 10, outputs: [] };
   } };
   const loadedModule = { exports: {} };
-  const dependencies = { 'node:fs/promises': fs, 'node:path': path, 'node:crypto': crypto, '@supabase/supabase-js': { createClient() { throw new Error('Production client creation is forbidden in tests'); } }, './healing-rain-plan': { buildGenerationSpec: options.buildSpec || buildGenerationSpec }, './healing-rain-provider': provider, './healing-rain-render': renderer, '../shared/healing-rain/quality.js': { evaluatePreviewQuality } };
+  const dependencies = { 'node:fs/promises': fs, 'node:path': path, 'node:crypto': crypto, '@supabase/supabase-js': { createClient() { throw new Error('Production client creation is forbidden in tests'); } }, './healing-rain-plan': { buildGenerationSpec: options.buildSpec || buildGenerationSpec }, './healing-rain-provider': provider, './healing-rain-render': renderer, '../shared/healing-rain/quality.js': { evaluatePreviewQuality }, '../shared/healing-rain/audio-policy.js': { RAIN_AUDIO_POLICY_VERSION, RAIN_AUDIO_POLICY } };
   vm.runInNewContext(syncFs.readFileSync(path.join(__dirname, '../worker/healing-rain-worker.js'), 'utf8'), {
     module: loadedModule, exports: loadedModule.exports, Buffer, __dirname: path.resolve(__dirname, '../worker'), process: { env: {}, argv: [] },
     console: { log() {}, error() {} },
@@ -116,12 +118,12 @@ async function harness(options = {}) {
     setTimeout() { throw new Error('Unexpected provider polling delay in deterministic test'); },
   }, { filename: 'worker/healing-rain-worker.js' });
   async function readySource(key, filename, overrides = {}) {
-    const bytes = Buffer.from(`saved ${filename}`), objectPath = `${owner}/${jobId}/${filename}`;
+    const bytes = Buffer.from(`saved ${filename}`), objectPath = `${owner}/${currentJobId}/${filename}`;
     objects.set(objectPath, bytes);
     row.assets[key] = { path: objectPath, bytes: bytes.length, mimeType: filename.endsWith('.png') ? 'image/png' : 'video/mp4', ...overrides };
     row.checkpoints[key] = { state: 'ready', taskId: `saved_${key}`, sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
   }
-  return { calls, objects, root, readySource, row: () => plain(row), run: () => loadedModule.exports.runJob(client, plain(row), config), resetRunning() { row.status = 'running'; }, replaceSnapshot(value) { row.request_snapshot = plain(value); }, settings: loadedModule.exports.settings, loadReviewApprovals: loadedModule.exports.loadReviewApprovals };
+  return { calls, objects, root, readySource, replaceState(update) { row = { ...row, ...plain(update) }; }, row: () => plain(row), run: () => loadedModule.exports.runJob(client, plain(row), config), resetRunning() { row.status = 'running'; }, replaceSnapshot(value) { row.request_snapshot = plain(value); }, settings: loadedModule.exports.settings, loadReviewApprovals: loadedModule.exports.loadReviewApprovals };
 }
 
 test('submitted KIE task is polled after restart and never submitted again', async () => {
@@ -239,6 +241,83 @@ test('fresh job persists paid intents before calls, owner-scopes every asset and
     assert.equal(states[0], 'intent'); assert.equal(states.at(-1), 'ready');
   }
 });
+
+test('two productions with the same specification each generate six fresh audio takes; resuming uses only its own takes', async () => {
+  const plan = v2Snapshot();
+  const first = await harness({ row: { request_snapshot: plan } });
+  const second = await harness({ row: { id: foreign, request_snapshot: plan } });
+  await first.run(); await second.run();
+  assert.equal(first.row().checkpoints.generationSpec.sha256, second.row().checkpoints.generationSpec.sha256, 'identical specifications cannot act as an audio cache key');
+  assert.equal(first.calls.audio.length, 6); assert.equal(second.calls.audio.length, 6);
+  for (const h of [first, second]) {
+    const current = h.row();
+    assert.equal(current.checkpoints.generationSpec.audioPolicyVersion, RAIN_AUDIO_POLICY_VERSION);
+    assert.equal(current.checkpoints.generationSpec.jobId, current.id);
+    for (let index = 0; index < 6; index++) {
+      const key = `audio${index + 1}`;
+      const expected = { policyVersion: RAIN_AUDIO_POLICY_VERSION, jobId: current.id, userId: owner, takeIndex: index + 1, seconds: 30 };
+      assert.deepEqual(current.checkpoints[key].audioOrigin, expected);
+      assert.deepEqual(current.assets[key].audioOrigin, expected);
+      const receipt = JSON.parse(await fs.readFile(path.join(h.root, current.id, `${key}-receipt.json`), 'utf8'));
+      assert.deepEqual(receipt.audioOrigin, expected);
+      assert.equal(h.calls.render[0].audio[index], path.join(h.root, current.id, `${key}.mp3`));
+    }
+    h.resetRunning(); await h.run();
+    assert.equal(h.calls.audio.length, 6, 'same-production recovery cannot charge for replacement takes');
+    assert.equal(h.calls.create.length, 2);
+    assert.equal(h.row().actual_usage.elevenLabsCalls, 6);
+    assert.equal(h.calls.render.length, 2, 'the same production may edit and loop its own generated takes');
+  }
+});
+
+test('cross-production audio checkpoints or assets are held before any provider call or render', async () => {
+  const source = await harness({ row: { request_snapshot: v2Snapshot() } });
+  await source.run();
+  const saved = source.row();
+  for (const variant of ['production-checkpoint', 'stage', 'asset', 'missing-origin', 'wrong-take', 'wrong-duration', 'unknown-policy']) {
+    const frozen = { ...saved.checkpoints.generationSpec, jobId: foreign };
+    const stage = plain(saved.checkpoints.audio1);
+    const asset = plain(saved.assets.audio1);
+    stage.audioOrigin.jobId = foreign;
+    asset.audioOrigin.jobId = foreign;
+    asset.path = `${owner}/${foreign}/audio1.mp3`;
+    if (variant === 'production-checkpoint') frozen.jobId = jobId;
+    if (variant === 'stage') stage.audioOrigin.jobId = jobId;
+    if (variant === 'asset') asset.path = saved.assets.audio1.path;
+    if (variant === 'missing-origin') delete stage.audioOrigin;
+    if (variant === 'wrong-take') stage.audioOrigin.takeIndex = 2;
+    if (variant === 'wrong-duration') asset.durationSeconds = 60;
+    if (variant === 'unknown-policy') frozen.audioPolicyVersion = 'unknown-audio-policy';
+    const target = await harness({ row: { id: foreign, request_snapshot: saved.request_snapshot,
+      checkpoints: { generationSpec: frozen, audio1: stage }, assets: { audio1: asset } } });
+    await assert.rejects(target.run(), error => error.code === 'audio_provenance_mismatch', variant);
+    assert.equal(target.row().status, 'needs_attention');
+    assert.equal(target.calls.create.length, 0); assert.equal(target.calls.poll.length, 0);
+    assert.equal(target.calls.audio.length, 0); assert.equal(target.calls.downloads.length, 0);
+    assert.equal(target.calls.render.length, 0);
+  }
+});
+
+test('unmarked historical jobs recover their own saved audio without regeneration or receipt changes', async () => {
+  const h = await harness({ row: { request_snapshot: v2Snapshot() } });
+  await h.run();
+  const saved = h.row();
+  const receiptPath = path.join(h.root, jobId, 'generation-spec.json');
+  const receipt = await fs.readFile(receiptPath, 'utf8');
+  delete saved.checkpoints.generationSpec.jobId;
+  delete saved.checkpoints.generationSpec.userId;
+  delete saved.checkpoints.generationSpec.audioPolicyVersion;
+  for (let index = 1; index <= 6; index++) {
+    delete saved.checkpoints[`audio${index}`].audioOrigin;
+    delete saved.assets[`audio${index}`].audioOrigin;
+  }
+  h.replaceState(saved); h.resetRunning(); await h.run();
+  assert.equal(h.calls.audio.length, 6);
+  assert.equal(h.calls.create.length, 2);
+  assert.equal(await fs.readFile(receiptPath, 'utf8'), receipt);
+  assert.equal(h.row().checkpoints.generationSpec.audioPolicyVersion, undefined);
+});
+
 
 test('unavailable provider-hosted image uses the private signed original without regenerating the image', async () => {
   const h = await harness({ hostedImageUnavailable: true });

@@ -8,6 +8,7 @@ const { buildGenerationSpec } = require('./healing-rain-plan');
 const provider = require('./healing-rain-provider');
 const { renderHealingRain } = require('./healing-rain-render');
 const { evaluatePreviewQuality } = require('../shared/healing-rain/quality.js');
+const { RAIN_AUDIO_POLICY_VERSION, RAIN_AUDIO_POLICY } = require('../shared/healing-rain/audio-policy.js');
 
 const BUCKET = 'healing-rain';
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
@@ -118,11 +119,47 @@ async function runJob(client, initial, config) {
     await patch({ ...extra, checkpoints: { ...job.checkpoints, [key]: item } });
   }
 
+  function audioOrigin(index) {
+    return { policyVersion: RAIN_AUDIO_POLICY_VERSION, jobId: job.id, userId: job.user_id,
+      takeIndex: index + 1, seconds: RAIN_AUDIO_POLICY.secondsPerTake };
+  }
+
+  function verifyAudioProvenance(requireOrigin) {
+    const keys = new Set([...Object.keys(job.checkpoints || {}), ...Object.keys(job.assets || {})].filter(key => /^audio\d+$/.test(key)));
+    for (const key of keys) {
+      const index = Number(key.slice(5)) - 1;
+      const stage = job.checkpoints?.[key];
+      const asset = job.assets?.[key];
+      const expectedOrigin = audioOrigin(index);
+      const marked = requireOrigin || stage?.audioOrigin !== undefined || asset?.audioOrigin !== undefined;
+      if (!Number.isInteger(index) || index < 0 || index >= spec.audio.length || key !== `audio${index + 1}` || !stage
+        || (marked && (canonicalJson(stage.audioOrigin) !== canonicalJson(expectedOrigin)
+          || stage.provider !== 'elevenlabs' || stage.model !== 'eleven_text_to_sound_v2'))
+        || (stage.state === 'ready' && (!asset || (marked && !/^[a-f0-9]{64}$/.test(stage.sha256 || ''))))
+        || (asset && (asset.path !== `${job.user_id}/${job.id}/${key}.mp3`
+          || (asset.durationSeconds !== undefined && asset.durationSeconds !== RAIN_AUDIO_POLICY.secondsPerTake)
+          || (marked && (asset.durationSeconds !== RAIN_AUDIO_POLICY.secondsPerTake
+            || canonicalJson(asset.audioOrigin) !== canonicalJson(expectedOrigin)))))) {
+        throw provenanceError('Saved rain audio does not belong to this production and take.', 'audio_provenance_mismatch');
+      }
+    }
+  }
+
   async function freezeGenerationSpec() {
     generationSpecSha256 = specHash(spec);
     const frozen = job.checkpoints?.generationSpec;
     const stages = Object.entries(job.checkpoints || {}).filter(([key]) => key !== 'generationSpec');
     const activity = stages.length > 0 || Object.keys(job.assets || {}).length > 0 || (job.actual_usage?.kieCalls || 0) > 0 || (job.actual_usage?.elevenLabsCalls || 0) > 0;
+    if (frozen && ((frozen.jobId !== undefined && frozen.jobId !== job.id)
+      || (frozen.userId !== undefined && frozen.userId !== job.user_id)
+      || (frozen.audioPolicyVersion !== undefined && (frozen.audioPolicyVersion !== RAIN_AUDIO_POLICY_VERSION
+        || frozen.jobId !== job.id || frozen.userId !== job.user_id)))) {
+      throw provenanceError('Saved production identity or audio policy differs from this job.', 'audio_provenance_mismatch');
+    }
+    // Older jobs retain their exact specification and can recover their own
+    // original takes. Every newly started job requires production-bound audio.
+    const requireAudioOrigin = Boolean(frozen?.audioPolicyVersion) || (!frozen && !activity);
+    verifyAudioProvenance(requireAudioOrigin);
     if (frozen && (frozen.state !== 'frozen' || frozen.sha256 !== generationSpecSha256 || frozen.version !== spec.version)) {
       throw provenanceError('Saved generation checkpoint differs from this specification.');
     }
@@ -168,10 +205,10 @@ async function runJob(client, initial, config) {
       }
     }
     if (!frozen) await checkpoint('generationSpec', { state: 'frozen', version: spec.version, sha256: generationSpecSha256,
-      ...(activity ? { adoptedLegacy: !job.request_snapshot.direction } : {}) });
+      ...(activity ? { adoptedLegacy: !job.request_snapshot.direction } : { jobId: job.id, userId: job.user_id, audioPolicyVersion: RAIN_AUDIO_POLICY_VERSION }) });
   }
 
-  async function storeAsset(key, filename, mimeType, durationSeconds) {
+  async function storeAsset(key, filename, mimeType, durationSeconds, sourceOrigin) {
     const bytes = await fs.readFile(filename);
     if (!bytes.length || bytes.length > 200 * 1024 ** 2) throw new Error('Invalid generated asset size.');
     const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
@@ -186,7 +223,7 @@ async function runJob(client, initial, config) {
       const old = Buffer.from(await existing.arrayBuffer());
       if (crypto.createHash('sha256').update(old).digest('hex') !== sha256) throw new Error('Private asset content conflict.');
     }
-    const asset = { path: objectPath, mimeType, bytes: bytes.length, ...(durationSeconds ? { durationSeconds } : {}) };
+    const asset = { path: objectPath, mimeType, bytes: bytes.length, ...(durationSeconds ? { durationSeconds } : {}), ...(sourceOrigin ? { audioOrigin: sourceOrigin } : {}) };
     await patch({ assets: { ...job.assets, [key]: asset } });
     return { asset, sha256 };
   }
@@ -287,11 +324,12 @@ async function runJob(client, initial, config) {
       const saved = job.checkpoints?.[key];
       if (saved?.state === 'ready') { audioFiles.push(await restoreAsset(key, filename)); continue; }
       if (saved) throw Object.assign(new Error('Previous sound request has an unknown result. No automatic resubmission.'), { ambiguous: true, code: 'audio_submission_unknown' });
-      const intent = { state: 'intent', provider: 'elevenlabs', model: 'eleven_text_to_sound_v2', generationSpecSha256, ruleVersion: spec.version, intentAt: new Date().toISOString() };
+      const origin = audioOrigin(index);
+      const intent = { state: 'intent', provider: 'elevenlabs', model: 'eleven_text_to_sound_v2', generationSpecSha256, ruleVersion: spec.version, audioOrigin: origin, intentAt: new Date().toISOString() };
       await checkpoint(key, intent, { stage: `${key}_generating`, progress: 40 + index * 6 });
       const audio = await provider.generateRainAudio({ prompt: spec.audio[index], apiKey: config.eleven, outputPath: filename });
-      await atomicJson(path.join(dir, `${key}-receipt.json`), audio);
-      const stored = await storeAsset(key, filename, 'audio/mpeg', 30);
+      await atomicJson(path.join(dir, `${key}-receipt.json`), { ...audio, audioOrigin: origin });
+      const stored = await storeAsset(key, filename, 'audio/mpeg', RAIN_AUDIO_POLICY.secondsPerTake, origin);
       await checkpoint(key, { ...intent, state: 'ready', taskId: audio.requestId, completedAt: new Date().toISOString(), sha256: stored.sha256, creditsConsumed: audio.creditsConsumed }, { actual_usage: usage('eleven', audio.creditsConsumed) });
       audioFiles.push(filename);
     }

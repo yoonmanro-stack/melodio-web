@@ -22,7 +22,7 @@ function load(file, dependencies = {}, globals = {}) {
 const direction = require('../shared/healing-rain/direction');
 const recipes = load('src/lib/healing-rain/recipes.ts', { '../../../shared/healing-rain/direction': direction });
 const projects = load('src/lib/healing-rain/projects.ts', { './recipes': recipes });
-const model = load('src/lib/healing-rain/generations.ts', { './projects': projects, '../../../shared/healing-rain/direction': direction });
+const model = load('src/lib/healing-rain/generations.ts', { './projects': projects, '../../../shared/healing-rain/direction': direction, '../../../shared/healing-rain/audio-policy': require('../shared/healing-rain/audio-policy') });
 const owner = '11111111-1111-4111-8111-111111111111';
 const other = '22222222-2222-4222-8222-222222222222';
 const projectId = '33333333-3333-4333-8333-333333333333';
@@ -233,4 +233,13 @@ test('only bounded public quality fields leave the server',()=>{
  const {evaluatePreviewQuality}=require('../shared/healing-rain/quality');const q=evaluatePreviewQuality({direction:recipes.compileRecipe({...recipes.defaults},projectId,'now').direction,report:{}});
  const safe=model.rainGenerationPublicQuality({...q,secret:'private',localPath:'/private/file'});assert.ok(safe);assert.equal(Object.hasOwn(safe,'secret'),false);assert.equal(Object.hasOwn(safe,'localPath'),false);
  assert.equal(model.rainGenerationPublicQuality({...q,checks:[{id:'bad',status:'passed',message:'x'.repeat(181)}]}),null);
+});
+
+test('quote includes every new rain take and refuses caller-supplied reuse controls', () => {
+ const audio=model.RAIN_GENERATION_QUOTE.audio;
+ assert.equal(audio.takes,6);assert.equal(audio.secondsPerTake,30);assert.equal(audio.credits,1800);
+ assert.equal(audio.sourcePolicy.reuseAcrossProductions,false);assert.equal(audio.sourcePolicy.fallbackToExistingAudio,false);
+ for(const extra of [{audioIds:['old-audio']},{sourceJobId:other},{reuseAudio:true},{freshAudio:false}]) {
+  assert.throws(()=>model.parseCreateRainGeneration({...body(),...extra}),error=>error.status===400);
+ }
 });

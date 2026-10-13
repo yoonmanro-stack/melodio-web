@@ -1,3 +1,4 @@
+import { RAIN_AUDIO_POLICY, type RainAudioPolicy } from '../../../shared/healing-rain/audio-policy';
 import { INTRO_FAMILIES, INTRO_FAMILY_VERSION, getIntroFamily, type IntroFamilyId } from '../../../shared/healing-rain/intro-families';
 import { compileRecipe, defaults, parseRecipe, type RecipeInput, type RainPlan, type SceneId } from './recipes';
 import { RainProjectError } from './projects';
@@ -62,7 +63,7 @@ export type EpisodePlan = {
   sourceIntroSeconds: 15; introOccurrences: 1; newProductionRequiresFreshAssets: true; currentProductionRevisionAllowed: true;
   transition: { startSeconds: 6; endSeconds: 15; seconds: 9; curve: 'smoothstep'; fullCloudOcclusionRequired: false; generatedMorph: false };
   mainLoopSeconds: 10; reversePlayback: false; previewSeconds: [30,180]; targetLongFormSeconds: number;
-  audio: { secondsPerTake: 30; plannedTakes: number; continuousThroughTransition: true; restartAtTransition: false; loopExpansionMustBeDisclosedInProductionRecord: true };
+  audio: { sourcePolicy: RainAudioPolicy; requiredFreshTakes: number; secondsPerTake: 30; plannedTakes: number; continuousThroughTransition: true; restartAtTransition: false; loopExpansionMustBeDisclosedInProductionRecord: true };
  };
  review: { status: 'required'; mediaValidation: 'not_performed'; comparisonScope: 'structured-plans-only'; questions: string[]; compatibilityWarning: string|null };
  execution: { providerCallsAllowed: false; longFormEnabled: false; policyApproval: false; generationAdapter: 'not_connected' };
@@ -144,7 +145,7 @@ export function compileEpisodePlan(value: EpisodeInput, id: string, createdAt: s
   editorial:{premise:input.brief.premise,distinctiveExperience:input.brief.distinctiveExperience,intentInstruction:INTENT[input.brief.intent],
    transitionInstruction:MOTIF[input.connection.motif],transitionRationale:input.connection.rationale,
    thunder:{requested:input.main.thunder,separateLayer:true,generationStatus:'not_connected'},
-   provenanceRequired:['source prompts and model versions','provider job IDs and original asset hashes','edit decisions and source-to-output mapping','audio take arrangement and repeated segments','human media review and final render hash']},
+   provenanceRequired:['source prompts and model versions','provider job IDs and original asset hashes','each rain take bound to its new production, generation request, time, hash and billed usage','edit decisions and source-to-output mapping','audio take arrangement and repeated segments','human media review and final render hash']},
   prompts:{
    introImage:['Original photorealistic 16:9 fantasy resting scene.',family.worldPrompt,family.comfortPrompt,variant.compositionPrompt,variant.atmospherePrompt,INTENT[input.brief.intent],'One adult woman already asleep, eyes closed, fully covered and comfortable. Soft luminous warmth, no harsh light. No text or logos.',`Exclude: ${family.exclusions.join(', ')}.`].join(' '),
    introVideo:[family.motionPrompt,'Locked camera; preserve the same sleeping adult identity, pose and bedding. Only tiny breathing and barely moving surroundings. No engulfing clouds, no accelerating motion, no generated scene morph. Keep the source calm to its last frame. Silent source; editorial smoothstep dissolve 6–15s, with intentional fading-subject overlap.'].join(' '),
@@ -155,9 +156,9 @@ export function compileEpisodePlan(value: EpisodeInput, id: string, createdAt: s
   production:{sourceIntroSeconds:15,introOccurrences:1,newProductionRequiresFreshAssets:true,currentProductionRevisionAllowed:true,
    transition:{startSeconds:6,endSeconds:15,seconds:9,curve:'smoothstep',fullCloudOcclusionRequired:false,generatedMorph:false},
    mainLoopSeconds:10,reversePlayback:false,previewSeconds:[30,180],targetLongFormSeconds:input.main.hours*3600,
-   audio:{secondsPerTake:30,plannedTakes:input.main.takes,continuousThroughTransition:true,restartAtTransition:false,loopExpansionMustBeDisclosedInProductionRecord:true}},
+   audio:{sourcePolicy:{...RAIN_AUDIO_POLICY},requiredFreshTakes:input.main.takes,secondsPerTake:30,plannedTakes:input.main.takes,continuousThroughTransition:true,restartAtTransition:false,loopExpansionMustBeDisclosedInProductionRecord:true}},
   review:{status:'required',mediaValidation:'not_performed',comparisonScope:'structured-plans-only',compatibilityWarning,
-   questions:['이번 편의 풍경과 소리가 기존 작품과 실제로 다르게 느껴지는가?','색·제목·인물만 바꾼 반복 기획에 머물지 않았는가?','인트로와 본편의 빛·공간·소리 연결이 편안한가?','장시간 반복에 사용할 본편과 소리의 다양성이 충분한가?','새 원본과 편집 기록을 보존했으며 실제 촬영으로 오인시키지 않는가?']},
+   questions:['이 작품의 30초 빗소리를 모두 신규 생성했으며 다른 작품의 음원을 가져오지 않았는가?','이번 편의 풍경과 소리가 기존 작품과 실제로 다르게 느껴지는가?','색·제목·인물만 바꾼 반복 기획에 머물지 않았는가?','인트로와 본편의 빛·공간·소리 연결이 편안한가?','장시간 반복에 사용할 본편과 소리의 다양성이 충분한가?','새 원본과 편집 기록을 보존했으며 실제 촬영으로 오인시키지 않는가?']},
   execution:{providerCallsAllowed:false,longFormEnabled:false,policyApproval:false,generationAdapter:'not_connected'},
  };
 }
@@ -198,7 +199,7 @@ export function compareEpisodePlans(candidate:EpisodePlan, history:EpisodePlan[]
 export function getEpisodeCatalog() {
  return {version:EPISODE_VERSION,introFamilyVersion:INTRO_FAMILY_VERSION,families:INTRO_FAMILIES.map(f=>getIntroFamily(f.id)),
   surfaces:{...SURFACES},sceneSurfaces:Object.fromEntries(Object.entries(SCENE_SURFACES).map(([key,values])=>[key,[...values]])),scenePerspectives:Object.fromEntries(Object.entries(SCENE_PERSPECTIVES).map(([key,values])=>[key,[...values]])),
-  generationEnabled:false,reviewMeaning:'기획 검토용이며 유튜브 정책 통과나 실제 미디어 품질을 보증하지 않습니다.'};
+  rainAudioPolicy:{...RAIN_AUDIO_POLICY},generationEnabled:false,reviewMeaning:'기획 검토용이며 유튜브 정책 통과나 실제 미디어 품질을 보증하지 않습니다.'};
 }
 export function exampleEpisodeInput():EpisodeInput {
  return parseEpisodeInput({title:'구름에서 쉬어가는 폭우 속 야간 열차',

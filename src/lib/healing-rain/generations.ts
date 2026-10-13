@@ -1,3 +1,4 @@
+import { RAIN_AUDIO_POLICY } from '../../../shared/healing-rain/audio-policy';
 import { DIRECTION_VERSION, compileDirection } from '../../../shared/healing-rain/direction';
 import type { RainQualitySummary } from '../../../shared/healing-rain/quality';
 import type { RainPlan } from './recipes';
@@ -9,11 +10,11 @@ export const RAIN_GENERATION_QUOTE = {
   provisional: false,
   image: { provider: 'kie', model: 'nano-banana-pro', count: 1, resolution: '2K', aspectRatio: '16:9', format: 'png', credits: 18 },
   video: { provider: 'kie', model: 'kling-3.0', mode: 'std', sourceVideoSeconds: 11, finalLoopSeconds: 10, sound: false, credits: 154 },
-  audio: { provider: 'elevenlabs', model: 'eleven_text_to_sound_v2', takes: 6, secondsPerTake: 30, credits: 1800 },
+  audio: { provider: 'elevenlabs', model: 'eleven_text_to_sound_v2', takes: 6, secondsPerTake: 30, credits: 1800, sourcePolicy: RAIN_AUDIO_POLICY },
   kieCredits: 172,
   kieListedUsd: 0.86,
   outputs: { previewSeconds: [30, 180], longFormIncluded: false },
-  note: 'KIE 172크레딧(공시 가격 약 $0.86), ElevenLabs 과거 사용량 기준 약 1,800크레딧입니다. 오디오는 응답의 실제 사용량을 기록하며 두 크레딧을 합산하지 않습니다.',
+  note: '새 작품마다 30초 빗소리 6개를 신규 생성하며 이전 작품의 음원을 가져오지 않습니다. KIE 172크레딧(공시 가격 약 $0.86), ElevenLabs 과거 사용량 기준 약 1,800크레딧입니다. 오디오는 응답의 실제 사용량을 기록하며 두 크레딧을 합산하지 않습니다.',
 } as const;
 
 export type RainGenerationStatus = 'queued' | 'running' | 'ready' | 'needs_attention' | 'failed';
@@ -26,7 +27,14 @@ export type RainGenerationCheckpoint = {
   completedAt?: string;
   [key: string]: unknown;
 };
-export type RainGenerationAsset = { path: string; mimeType: string; bytes?: number; durationSeconds?: number };
+export type RainAudioOrigin = {
+  policyVersion: typeof RAIN_AUDIO_POLICY.version;
+  jobId: string;
+  userId: string;
+  takeIndex: number;
+  seconds: 30;
+};
+export type RainGenerationAsset = { path: string; mimeType: string; bytes?: number; durationSeconds?: number; audioOrigin?: RainAudioOrigin };
 export type RainGenerationAssetKey = 'image' | 'video' | 'audio1' | 'audio2' | 'audio3' | 'audio4' | 'audio5' | 'audio6' | 'preview30' | 'preview180' | 'poster';
 
 /** Worker wire contract. Store compact identifiers and measurements only, never provider response bodies.
