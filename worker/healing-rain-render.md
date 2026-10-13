@@ -245,3 +245,33 @@ The standalone editing CLI remains a local file editor. The orchestration layer
 must pass only verified same-production audio to it. A new separately published
 work requires a new job; changing an intro or title does not make old source
 audio eligible for the new work. Long-form generation remains disconnected.
+
+
+## Optional channel branding and staged review (2026-10-13)
+
+The production queue now generates six fresh 30-second audio originals, then releases
+its lease in `needs_attention/audio_review_required`. The owner listens to all six
+originals and approves their exact hashes before KIE image/video calls are allowed.
+Approval requeues the same job; rejection ends it without automatic paid retries.
+Completed 30s/180s previews require another recorded approval. Long-form generation
+remains disabled. Old visual jobs without audio approval are held for reconciliation.
+
+Channel profiles are independently stored per account. No selection, disabled
+profiles, and mode `none` produce no overlay. A database INSERT trigger freezes the
+selected saved profile into `branding_snapshot`; later edits affect only future jobs.
+Logo objects are private, owner-scoped and immutable. Four user-chosen presets share
+explicit font, color, position, size and fade controls; no random brand changes.
+The worker uses bundled OFL Noto Korean fonts via Sharp/Pango. On macOS it selects
+Fontconfig within the worker process; font cache/config stay in the render directory.
+
+`healing-rain-branding.js` creates a transparent overlay only when enabled. Both
+preview compositors apply it once to the final timeline, never to the body-loop cache.
+The intro compositor accepts the same frozen snapshot for separately assembled intros.
+The live paid adapter still supports the no-thunder sleeper-train preview; the wider
+intro-family catalog remains a planning contract, not a general live adapter.
+
+Deploy database migrations `20261013_healing_rain_staged_reviews.sql` and
+`20261014_create_healing_rain_branding.sql` after projects/generations, then the website
+and worker from the same release. Existing completed outputs remain unchanged.
+Verification includes 122 offline tests plus combined PGlite migrations/RLS/lease/hash
+review regressions and actual short FFmpeg renders for overlay disappearance.

@@ -37,7 +37,7 @@ function row(overrides = {}) {
   return { id: jobId, user_id: owner, project_id: projectId, client_request_id: 'generation-request-1',
     request_snapshot: recipes.compileRecipe({ ...recipes.defaults }, projectId, '2026-10-12T00:00:00Z'),
     quote_version: model.RAIN_GENERATION_QUOTE.version, status: 'queued', stage: 'queued', progress: 0,
-    checkpoints: {}, assets: {}, estimated_cost: plain(model.RAIN_GENERATION_QUOTE), actual_usage: {},
+    checkpoints: {}, assets: {}, review_records: {}, estimated_cost: plain(model.RAIN_GENERATION_QUOTE), actual_usage: {},
     error_code: null, error_message: null, claim_token: 'private-claim-token', lease_expires_at: null,
     created_at: '2026-10-12T00:00:00Z', updated_at: '2026-10-12T00:00:00Z', started_at: null, completed_at: null,
     ...overrides };
@@ -70,6 +70,21 @@ function harness(options = {}) {
   const admin = {
     storage: { from(bucket) { assert.equal(bucket, 'healing-rain'); return { async createSignedUrl(path, seconds) { signed.push([path, seconds]); return { data: { signedUrl: `https://storage.test/signed/${path}` }, error: null }; } }; } },
     async rpc(name, args) {
+      if (name === 'review_healing_rain_generation') {
+        calls.push(plain(args));
+        if (options.writeError) return { data: null, error: options.writeError };
+        const saved = rows.find(item => item.id === args.p_job_id && item.user_id === args.p_user_id);
+        if (!saved) return { data: null, error: { code: 'P0002' } };
+        const prior = saved.review_records?.[args.p_kind];
+        if (prior) return prior.decision === args.p_decision ? { data: [saved], error: null } : { data: null, error: { code: '40001' } };
+        if ((args.p_kind === 'audio' && (saved.stage !== 'audio_review_required' || saved.status !== 'needs_attention'))
+          || (args.p_kind === 'preview' && (saved.stage !== 'preview_ready' || saved.status !== 'ready'))) return { data: null, error: { code: '40001' } };
+        saved.review_records = { ...saved.review_records, [args.p_kind]: { userId: args.p_user_id, jobId: args.p_job_id, decision: args.p_decision,
+          generationSpecSha256: args.p_spec_sha256, assetHashes: args.p_asset_hashes, reviewedAt: '2026-10-13T00:00:00Z' } };
+        saved.status = args.p_decision === 'reject' ? 'failed' : args.p_kind === 'audio' ? 'queued' : 'ready';
+        saved.stage = `${args.p_kind}_${args.p_decision === 'reject' ? 'rejected' : 'approved'}`;
+        return { data: [saved], error: null };
+      }
       assert.equal(name, 'enqueue_healing_rain_generation'); calls.push(plain(args));
       if (options.writeError) return { data: null, error: options.writeError };
       const previous = rows.find(item => item.user_id === args.p_user_id && item.client_request_id === args.p_client_request_id);
@@ -90,7 +105,7 @@ function harness(options = {}) {
     HEALING_RAIN_GENERATION_ENABLED: 'true', HEALING_RAIN_ALLOWED_USER_IDS: owner, ...options.env } } });
   const dependencies = { '@/lib/healing-rain/generation-server': server, '@/lib/healing-rain/generations': model, '@/lib/healing-rain/projects': projects };
   return { route: load('src/app/api/healing-rain/generations/route.ts', dependencies),
-    detail: load('src/app/api/healing-rain/generations/[id]/route.ts', dependencies), calls, queries, signed, rows, adminCalls: () => adminCalls };
+    detail: load('src/app/api/healing-rain/generations/[id]/route.ts', dependencies), review: load('src/app/api/healing-rain/generations/[id]/review/route.ts', dependencies), calls, queries, signed, rows, adminCalls: () => adminCalls };
 }
 
 test('all routes authenticate before reads, parsing, signing or service client creation', async () => {
@@ -268,4 +283,102 @@ test('new content review survives the public API and legacy technical passes can
  const atLimit=model.rainGenerationPublicQuality({...old,checks:maxChecks.slice(1),reasons:maxReasons.slice(1)});
  assert.equal(atLimit.checks.length,40);assert.equal(atLimit.reasons.length,30);
  assert.deepEqual(plain(model.rainGenerationPublicQuality(atLimit)),plain(atLimit));
+});
+
+
+function reviewRow(kind = 'audio', overrides = {}) {
+  const saved = row({ status: kind === 'audio' ? 'needs_attention' : 'ready', stage: kind === 'audio' ? 'audio_review_required' : 'preview_ready', claim_token: null, ...overrides });
+  saved.checkpoints.generationSpec = { state: 'frozen', sha256: 'a'.repeat(64) };
+  for (let i = 1; i <= 6; i++) {
+    const key = `audio${i}`, sha256 = String(i).repeat(64);
+    const audioOrigin = { policyVersion: 'healing-rain-fresh-audio-v1', jobId, userId: owner, takeIndex: i, seconds: 30 };
+    saved.checkpoints[key] = { state: 'ready', sha256, generationSpecSha256: 'a'.repeat(64), provider: 'elevenlabs', model: 'eleven_text_to_sound_v2', audioOrigin };
+    saved.assets[key] = { path: `${owner}/${jobId}/${key}.mp3`, mimeType: 'audio/mpeg', sha256, durationSeconds: 30, audioOrigin };
+  }
+  if (kind === 'preview') {
+    saved.checkpoints.render = { state: 'ready', generationSpecSha256: 'a'.repeat(64) };
+    saved.review_records.audio = { userId: owner, jobId, decision: 'approve', generationSpecSha256: 'a'.repeat(64),
+      assetHashes: Object.fromEntries(model.RAIN_AUDIO_KEYS.map(key => [key, saved.assets[key].sha256])), reviewedAt: '2026-10-13T00:00:00Z' };
+    for (const [key, seconds] of [['preview30', 30], ['preview180', 180]]) saved.assets[key] = { path: `${owner}/${jobId}/${key}.mp4`, mimeType: 'video/mp4', sha256: (seconds === 30 ? 'b' : 'c').repeat(64), durationSeconds: seconds };
+  }
+  return saved;
+}
+function reviewInput(saved, kind = 'audio', decision = 'approve') {
+  const evidence = model.rainGenerationReviewEvidence(saved, kind);
+  return { kind, decision, generationSpecSha256: evidence.generationSpecSha256, assetHashes: evidence.assetHashes };
+}
+const reviewContext = { params: Promise.resolve({ id: jobId }) };
+
+test('review authentication precedes parsing and service access; foreign owner cannot review', async () => {
+  const unauthenticated = harness({ user: null });
+  assert.equal((await unauthenticated.review.POST(request('{'), { params: Promise.resolve({ id: 'bad' }) })).status, 401);
+  assert.equal(unauthenticated.queries.length, 0); assert.equal(unauthenticated.adminCalls(), 0);
+  const saved = reviewRow(); const h = harness({ user: other, rows: [saved] });
+  assert.equal((await h.review.POST(request(reviewInput(saved)), reviewContext)).status, 404);
+  assert.equal(h.calls.length, 0); assert.equal(h.signed.length, 0);
+});
+
+test('every original signed audio URL is scoped to owner, job, basename, MIME, origin and SHA-256', async () => {
+  const saved = reviewRow(); const h = harness({ rows: [saved] });
+  const result = await (await h.detail.GET(request(null, 'GET'), reviewContext)).json();
+  assert.equal(h.signed.length, 6); assert.equal(result.job.canApproveAudio, true);
+  assert.equal(result.job.reviews.audio.status, 'pending'); assert.equal(result.job.error, null);
+  for (const key of model.RAIN_AUDIO_KEYS) { assert.equal(result.job.outputs[key].mimeType, 'audio/mpeg'); assert.equal(result.job.outputs[key].sha256, saved.assets[key].sha256); }
+  for (const mutate of [r => { r.assets.audio1.path = `${other}/${jobId}/audio1.mp3`; }, r => { r.assets.audio1.path = `${owner}/${jobId}/nested/audio1.mp3`; }, r => { r.assets.audio1.mimeType = 'video/mp4'; }, r => { r.assets.audio1.audioOrigin.jobId = other; }, r => { r.assets.audio1.sha256 = '0'.repeat(64); }]) {
+    const bad = reviewRow(); mutate(bad); const invalid = harness({ rows: [bad] });
+    const output = await (await invalid.detail.GET(request(null, 'GET'), reviewContext)).json();
+    assert.equal(invalid.signed.length, 0); assert.equal(output.job.canApproveAudio, false); assert.deepEqual(output.job.reviews, {});
+  }
+});
+
+test('review validates exact hash sets and rejects privilege, missing, stale and forged inputs before RPC', async () => {
+  const saved = reviewRow(); const h = harness({ rows: [saved] }); const input = reviewInput(saved);
+  for (const value of [{ ...input, userId: other }, { ...input, assetHashes: { ...input.assetHashes, extra: '0'.repeat(64) } }, { ...input, assetHashes: { audio1: '1'.repeat(64) } }, { ...input, decision: 'approved' }, { ...input, decision: ['approve'] }, { ...input, kind: ['audio'] }, { ...input, kind: 'longForm' }]) {
+    assert.equal((await h.review.POST(request(value), reviewContext)).status, 400);
+  }
+  for (const value of [{ ...input, generationSpecSha256: '0'.repeat(64) }, { ...input, assetHashes: { ...input.assetHashes, audio1: '0'.repeat(64) } }]) {
+    assert.equal((await h.review.POST(request(value), reviewContext)).status, 409);
+  }
+  assert.equal(h.calls.length, 0);
+});
+
+test('audio approval requires current paid-generation gate and same hashed originals, rejection remains possible while disabled', async () => {
+  const saved = reviewRow(); const disabled = harness({ rows: [saved], env: { HEALING_RAIN_GENERATION_ENABLED: 'false' } });
+  assert.equal((await disabled.review.POST(request(reviewInput(saved)), reviewContext)).status, 403); assert.equal(disabled.calls.length, 0);
+  const rejected = await disabled.review.POST(request(reviewInput(saved, 'audio', 'reject')), reviewContext);
+  assert.equal(rejected.status, 200); const result = await rejected.json();
+  assert.equal(result.job.status, 'failed'); assert.equal(result.job.stage, 'audio_rejected'); assert.equal(result.job.reviews.audio.status, 'rejected');
+  assert.equal((await disabled.review.POST(request(reviewInput(saved)), reviewContext)).status, 409);
+  const fresh = reviewRow(); const allowed = harness({ rows: [fresh] }); const input = reviewInput(fresh);
+  const approved = await (await allowed.review.POST(request(input), reviewContext)).json();
+  assert.equal(approved.job.status, 'queued'); assert.equal(approved.job.stage, 'audio_approved'); assert.equal(approved.job.longFormEnabled, false);
+  assert.equal(allowed.calls[0].p_user_id, owner); assert.equal(allowed.calls[0].p_global_queue_limit, 10); assert.deepEqual(allowed.calls[0].p_asset_hashes, plain(input.assetHashes));
+  const replay = harness({ rows: allowed.rows, env: { HEALING_RAIN_GENERATION_ENABLED: 'false' } });
+  assert.equal((await replay.review.POST(request(input), reviewContext)).status, 200, 'same immutable decision survives network uncertainty and later gate changes');
+});
+
+test('preview approval only records a human decision and keeps long form disabled', async () => {
+  const saved = reviewRow('preview'); const h = harness({ rows: [saved] });
+  const approved = await (await h.review.POST(request(reviewInput(saved, 'preview')), reviewContext)).json();
+  assert.equal(approved.job.status, 'ready'); assert.equal(approved.job.stage, 'preview_approved');
+  assert.equal(approved.job.reviewStatus, 'approved'); assert.equal(approved.job.longFormEnabled, false);
+  assert.equal(h.calls.length, 1); assert.equal(Object.hasOwn(h.calls[0], 'p_quote_version'), false);
+  for (const code of ['40001', '42501', 'P0001']) {
+    const conflict = reviewRow(); const mocked = harness({ rows: [conflict], writeError: { code, message: 'private review state' } });
+    const response = await mocked.review.POST(request(reviewInput(conflict)), reviewContext);
+    assert.equal(response.status, code === '42501' ? 403 : 409); assert.equal((await response.text()).includes('private review state'), false);
+  }
+});
+
+test('staged review SQL locks and validates the owner, originals, expected state and immutable decisions', () => {
+  const sql = fs.readFileSync('migrations/20261013_healing_rain_staged_reviews.sql', 'utf8');
+  assert.match(sql, /g\.id = p_job_id AND g\.user_id = p_user_id FOR UPDATE/);
+  assert.match(sql, /COALESCE\(auth\.role\(\), ''\) <> 'service_role'/);
+  assert.match(sql, /REVOKE ALL ON FUNCTION public\.review_healing_rain_generation\([^;]+FROM PUBLIC, anon, authenticated/);
+  assert.match(sql, /v_hashes IS DISTINCT FROM p_asset_hashes/);
+  assert.match(sql, /v_job\.stage <> 'audio_review_required'/); assert.match(sql, /v_job\.stage <> 'preview_ready'/);
+  assert.match(sql, /pg_advisory_xact_lock\(hashtextextended\('healing-rain-generation-queue'/);
+  assert.match(sql, /g\.status = 'queued'\) >= p_global_queue_limit/);
+  assert.match(sql, /Review evidence is immutable/); assert.match(sql, /Reviewed originals are immutable/);
+  assert.doesNotMatch(sql, /GRANT (?:ALL|INSERT|UPDATE|DELETE).*TO authenticated/);
 });

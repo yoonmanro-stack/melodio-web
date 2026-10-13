@@ -1,0 +1,10 @@
+export const BRANDING_VERSION: 'healing-rain-branding-v1';
+export type BrandingConfig = { enabled: boolean; mode: 'none' | 'title' | 'channel-title' | 'logo-title'; channelName: string; tagline: string; logoPath: string | null; preset: 'minimal' | 'classic' | 'natural' | 'modern'; font: 'sans' | 'serif'; size: 'small' | 'medium' | 'large'; color: 'ivory' | 'white' | 'warm'; position: 'center' | 'lower-third' | 'upper-third'; fadeInSeconds: number; holdSeconds: number; fadeOutSeconds: number };
+export type BrandingProfile = { id: string; name: string; version: number; config: BrandingConfig; logoPreviewUrl: string | null; createdAt: string; updatedAt: string };
+export type BrandingSnapshot = { schemaVersion: 1; profileId: string; profileVersion: number; profileName: string; config: BrandingConfig };
+export type BrandingOverlay = BrandingConfig & { title: string; durationSeconds: number };
+export const DEFAULT_BRANDING_CONFIG: Readonly<BrandingConfig>;
+export function cleanBrandingText(value: unknown, maxLength?: number): string;
+export function normalizeBrandingConfig(value: unknown, options?: { strict?: boolean }): BrandingConfig;
+export function resolveBrandingOverlay(value: unknown, suppliedTitle?: unknown): BrandingOverlay | null;
+export function createBrandingSnapshot(profile: Pick<BrandingProfile, 'id' | 'name' | 'version' | 'config'> | null): BrandingSnapshot | null;

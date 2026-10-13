@@ -7,6 +7,7 @@ const { createClient } = require('@supabase/supabase-js');
 const { buildGenerationSpec } = require('./healing-rain-plan');
 const provider = require('./healing-rain-provider');
 const { renderHealingRain } = require('./healing-rain-render');
+const { overlayForSnapshot } = require('./healing-rain-branding');
 const { evaluatePreviewQuality } = require('../shared/healing-rain/quality.js');
 const { RAIN_AUDIO_POLICY_VERSION, RAIN_AUDIO_POLICY } = require('../shared/healing-rain/audio-policy.js');
 
@@ -223,7 +224,7 @@ async function runJob(client, initial, config) {
       const old = Buffer.from(await existing.arrayBuffer());
       if (crypto.createHash('sha256').update(old).digest('hex') !== sha256) throw new Error('Private asset content conflict.');
     }
-    const asset = { path: objectPath, mimeType, bytes: bytes.length, ...(durationSeconds ? { durationSeconds } : {}), ...(sourceOrigin ? { audioOrigin: sourceOrigin } : {}) };
+    const asset = { path: objectPath, mimeType, sha256, bytes: bytes.length, ...(durationSeconds ? { durationSeconds } : {}), ...(sourceOrigin ? { audioOrigin: sourceOrigin } : {}) };
     await patch({ assets: { ...job.assets, [key]: asset } });
     return { asset, sha256 };
   }
@@ -257,7 +258,29 @@ async function runJob(client, initial, config) {
       [calls]: (previous[calls] || 0) + 1, unreportedCost: Boolean(previous.unreportedCost || !Number.isFinite(cost)) };
   }
 
+  function verifiedAudioApproval() {
+    const record = job.review_records?.audio;
+    if (!record) return false;
+    if (record.decision !== 'approve' || record.userId !== job.user_id || record.jobId !== job.id
+      || record.generationSpecSha256 !== generationSpecSha256 || !Number.isFinite(Date.parse(record.reviewedAt))
+      || Object.keys(record.assetHashes || {}).length !== spec.audio.length) {
+      throw provenanceError('Audio review is not bound to this production.', 'audio_review_mismatch');
+    }
+    verifyAudioProvenance(true);
+    for (let index = 0; index < spec.audio.length; index++) {
+      const key = `audio${index + 1}`;
+      const stage = job.checkpoints?.[key], asset = job.assets?.[key];
+      if (stage?.state !== 'ready' || !/^[a-f0-9]{64}$/.test(asset?.sha256 || '')
+        || stage.sha256 !== asset.sha256 || stage.generationSpecSha256 !== generationSpecSha256
+        || record.assetHashes[key] !== asset.sha256 || asset.mimeType !== 'audio/mpeg') {
+        throw provenanceError('Approved audio original changed or is missing.', 'audio_review_mismatch');
+      }
+    }
+    return true;
+  }
+
   async function kieStage(key, model, input, filename, mimeType, progress, durationSeconds) {
+    if (!verifiedAudioApproval()) throw provenanceError('Audio review is required before image or video work.', 'audio_review_required');
     let saved = job.checkpoints?.[key];
     if (saved?.state === 'ready') return restoreAsset(key, filename);
     if (saved && (saved.state !== 'submitted' || typeof saved.taskId !== 'string' || !saved.taskId)) {
@@ -303,7 +326,44 @@ async function runJob(client, initial, config) {
       throw error;
     }
     await freezeGenerationSpec();
-    const imageFile = await kieStage('image', spec.image.model, spec.image.input, path.join(dir, 'scene.png'), 'image/png', 5);
+    if ((job.checkpoints?.image || job.checkpoints?.video) && !job.review_records?.audio) {
+      throw provenanceError('Legacy visual work requires an operator to reconcile original audio before any new paid request.', 'legacy_audio_review_required');
+    }
+    if (job.review_records?.audio) verifiedAudioApproval();
+    const audioFiles = [];
+    for (let index = 0; index < spec.audio.length; index++) {
+      const key = `audio${index + 1}`;
+      const filename = path.join(dir, `${key}.mp3`);
+      const saved = job.checkpoints?.[key];
+      if (saved?.state === 'ready') { audioFiles.push(await restoreAsset(key, filename)); continue; }
+      if (saved) throw Object.assign(new Error('Previous sound request has an unknown result. No automatic resubmission.'), { ambiguous: true, code: 'audio_submission_unknown' });
+      const origin = audioOrigin(index);
+      const intent = { state: 'intent', provider: 'elevenlabs', model: 'eleven_text_to_sound_v2', generationSpecSha256, ruleVersion: spec.version, audioOrigin: origin, intentAt: new Date().toISOString() };
+      await checkpoint(key, intent, { stage: `${key}_generating`, progress: 5 + index * 5 });
+      const audio = await provider.generateRainAudio({ prompt: spec.audio[index], apiKey: config.eleven, outputPath: filename });
+      await atomicJson(path.join(dir, `${key}-receipt.json`), { ...audio, audioOrigin: origin });
+      const stored = await storeAsset(key, filename, 'audio/mpeg', RAIN_AUDIO_POLICY.secondsPerTake, origin);
+      await checkpoint(key, { ...intent, state: 'ready', taskId: audio.requestId, completedAt: new Date().toISOString(), sha256: stored.sha256, creditsConsumed: audio.creditsConsumed }, { actual_usage: usage('eleven', audio.creditsConsumed) });
+      audioFiles.push(filename);
+    }
+    // Persist a lease-free hold. Only the authenticated, hash-bound review RPC can queue the next paid stage.
+    if (!verifiedAudioApproval()) {
+      await patch({ status: 'needs_attention', stage: 'audio_review_required', progress: 40, error_code: null, error_message: null });
+      return { jobId: job.id, status: 'needs_attention', stage: 'audio_review_required' };
+    }
+    let brandingLogoFile;
+    const brandingOverlay = overlayForSnapshot(job.branding_snapshot, job.request_snapshot.input?.title);
+    if (brandingOverlay?.logoPath) {
+      if (!brandingOverlay.logoPath.startsWith(`${job.user_id}/branding/`)) throw new Error('Frozen branding logo owner mismatch');
+      const { data, error } = await client.storage.from(BUCKET).download(brandingOverlay.logoPath);
+      if (error || !data || data.size > 2 * 1024 ** 2) throw new Error('Frozen branding logo unavailable');
+      const bytes = Buffer.from(await data.arrayBuffer());
+      const sha256 = crypto.createHash('sha256').update(bytes).digest('hex');
+      brandingLogoFile = path.join(dir, `branding-${sha256}.webp`);
+      try { await fs.writeFile(brandingLogoFile, bytes, { flag: 'wx', mode: 0o600 }); }
+      catch (error) { if (error.code !== 'EEXIST' || crypto.createHash('sha256').update(await fs.readFile(brandingLogoFile)).digest('hex') !== sha256) throw error; }
+    }
+    const imageFile = await kieStage('image', spec.image.model, spec.image.input, path.join(dir, 'scene.png'), 'image/png', 45);
     const imageAsset = job.assets.image;
     await patch({ assets: { ...job.assets, poster: imageAsset } });
     // Reuse the provider-hosted original for its own video service. Private
@@ -316,26 +376,10 @@ async function runJob(client, initial, config) {
       imageUrl = imageLink.signedUrl;
     }
     const sourceSeconds = Number(spec.video.input.duration);
-    const videoFile = await kieStage('video', spec.video.model, { ...spec.video.input, image_urls: [imageUrl, imageUrl] }, path.join(dir, `source-${sourceSeconds}s.mp4`), 'video/mp4', 20, sourceSeconds);
-    const audioFiles = [];
-    for (let index = 0; index < spec.audio.length; index++) {
-      const key = `audio${index + 1}`;
-      const filename = path.join(dir, `${key}.mp3`);
-      const saved = job.checkpoints?.[key];
-      if (saved?.state === 'ready') { audioFiles.push(await restoreAsset(key, filename)); continue; }
-      if (saved) throw Object.assign(new Error('Previous sound request has an unknown result. No automatic resubmission.'), { ambiguous: true, code: 'audio_submission_unknown' });
-      const origin = audioOrigin(index);
-      const intent = { state: 'intent', provider: 'elevenlabs', model: 'eleven_text_to_sound_v2', generationSpecSha256, ruleVersion: spec.version, audioOrigin: origin, intentAt: new Date().toISOString() };
-      await checkpoint(key, intent, { stage: `${key}_generating`, progress: 40 + index * 6 });
-      const audio = await provider.generateRainAudio({ prompt: spec.audio[index], apiKey: config.eleven, outputPath: filename });
-      await atomicJson(path.join(dir, `${key}-receipt.json`), { ...audio, audioOrigin: origin });
-      const stored = await storeAsset(key, filename, 'audio/mpeg', RAIN_AUDIO_POLICY.secondsPerTake, origin);
-      await checkpoint(key, { ...intent, state: 'ready', taskId: audio.requestId, completedAt: new Date().toISOString(), sha256: stored.sha256, creditsConsumed: audio.creditsConsumed }, { actual_usage: usage('eleven', audio.creditsConsumed) });
-      audioFiles.push(filename);
-    }
+    const videoFile = await kieStage('video', spec.video.model, { ...spec.video.input, image_urls: [imageUrl, imageUrl] }, path.join(dir, `source-${sourceSeconds}s.mp4`), 'video/mp4', 60, sourceSeconds);
     await patch({ stage: 'rendering_previews', progress: 82 });
     const outputDir = path.join(dir, `render-${Date.now()}`);
-    const report = await renderHealingRain({ video: videoFile, audio: audioFiles, outputDir, ...spec.render });
+    const report = await renderHealingRain({ video: videoFile, audio: audioFiles, outputDir, ...spec.render, brandingSnapshot: job.branding_snapshot, brandingTitle: job.request_snapshot.input?.title, brandingLogoFile });
     // Renderer filenames are stable; never accept caller-controlled remote paths.
     await storeAsset('preview30', path.join(outputDir, `healing-rain-${spec.render.previewSeconds}s.mp4`), 'video/mp4', spec.render.previewSeconds);
     await storeAsset('preview180', path.join(outputDir, `healing-rain-${spec.render.seconds}s.mp4`), 'video/mp4', spec.render.seconds);

@@ -32,7 +32,7 @@ function v2Snapshot(overrides = {}) {
 async function harness(options = {}) {
   const currentJobId = options.row?.id || jobId;
   const root = await fs.mkdtemp('/private/tmp/healing-rain-worker-test-');
-  let row = { id: currentJobId, user_id: owner, claim_token: claim, status: 'running', stage: 'claimed', progress: 0, request_snapshot: snapshot, checkpoints: {}, assets: {}, actual_usage: {}, ...plain(options.row || {}) };
+  let row = { id: currentJobId, user_id: owner, claim_token: claim, status: 'running', stage: 'claimed', progress: 0, request_snapshot: snapshot, checkpoints: {}, assets: {}, actual_usage: {}, review_records: {}, ...plain(options.row || {}) };
   const calls = { rpc: [], uploads: [], downloads: [], signed: [], create: [], poll: [], audio: [], render: [] };
   const objects = new Map();
   let heartbeat, updatesBlocked = false;
@@ -75,6 +75,8 @@ async function harness(options = {}) {
       assert.equal(row.checkpoints[key].generationSpecSha256, row.checkpoints.generationSpec.sha256);
       const receipt = JSON.parse(await fs.readFile(path.join(root, currentJobId, 'generation-spec.json'), 'utf8'));
       assert.equal(receipt[key].input.prompt, request.input.prompt, 'paid prompt must match the frozen receipt');
+      assert.equal(row.review_records.audio?.decision, 'approve', 'every paid visual call needs immutable audio approval');
+      assert.equal(row.review_records.audio.generationSpecSha256, row.checkpoints.generationSpec.sha256);
       calls.create.push(plain(request));
       if (options.loseLeaseDuringCreate) { updatesBlocked = true; await heartbeat(); }
       return { taskId: `task_${calls.create.length}` };
@@ -109,7 +111,7 @@ async function harness(options = {}) {
     return { status: 'complete', effectiveVideoCycleSeconds: 10, outputs: [] };
   } };
   const loadedModule = { exports: {} };
-  const dependencies = { 'node:fs/promises': fs, 'node:path': path, 'node:crypto': crypto, '@supabase/supabase-js': { createClient() { throw new Error('Production client creation is forbidden in tests'); } }, './healing-rain-plan': { buildGenerationSpec: options.buildSpec || buildGenerationSpec }, './healing-rain-provider': provider, './healing-rain-render': renderer, '../shared/healing-rain/quality.js': { evaluatePreviewQuality }, '../shared/healing-rain/audio-policy.js': { RAIN_AUDIO_POLICY_VERSION, RAIN_AUDIO_POLICY } };
+  const dependencies = { 'node:fs/promises': fs, 'node:path': path, 'node:crypto': crypto, '@supabase/supabase-js': { createClient() { throw new Error('Production client creation is forbidden in tests'); } }, './healing-rain-plan': { buildGenerationSpec: options.buildSpec || buildGenerationSpec }, './healing-rain-provider': provider, './healing-rain-render': renderer, './healing-rain-branding': require('../worker/healing-rain-branding'), '../shared/healing-rain/quality.js': { evaluatePreviewQuality }, '../shared/healing-rain/audio-policy.js': { RAIN_AUDIO_POLICY_VERSION, RAIN_AUDIO_POLICY } };
   vm.runInNewContext(syncFs.readFileSync(path.join(__dirname, '../worker/healing-rain-worker.js'), 'utf8'), {
     module: loadedModule, exports: loadedModule.exports, Buffer, __dirname: path.resolve(__dirname, '../worker'), process: { env: {}, argv: [] },
     console: { log() {}, error() {} },
@@ -120,17 +122,29 @@ async function harness(options = {}) {
   async function readySource(key, filename, overrides = {}) {
     const bytes = Buffer.from(`saved ${filename}`), objectPath = `${owner}/${currentJobId}/${filename}`;
     objects.set(objectPath, bytes);
-    row.assets[key] = { path: objectPath, bytes: bytes.length, mimeType: filename.endsWith('.png') ? 'image/png' : 'video/mp4', ...overrides };
+    row.assets[key] = { path: objectPath, sha256: crypto.createHash('sha256').update(bytes).digest('hex'), bytes: bytes.length, mimeType: filename.endsWith('.png') ? 'image/png' : 'video/mp4', ...overrides };
     row.checkpoints[key] = { state: 'ready', taskId: `saved_${key}`, sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
   }
-  return { calls, objects, root, readySource, replaceState(update) { row = { ...row, ...plain(update) }; }, row: () => plain(row), run: () => loadedModule.exports.runJob(client, plain(row), config), resetRunning() { row.status = 'running'; }, replaceSnapshot(value) { row.request_snapshot = plain(value); }, settings: loadedModule.exports.settings, loadReviewApprovals: loadedModule.exports.loadReviewApprovals };
+  const run = () => loadedModule.exports.runJob(client, plain(row), config);
+  function approveAudio() {
+    assert.equal(row.stage, 'audio_review_required');
+    row.review_records = { audio: { decision: 'approve', userId: owner, jobId: row.id,
+      generationSpecSha256: row.checkpoints.generationSpec.sha256,
+      assetHashes: Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`audio${i + 1}`, row.assets[`audio${i + 1}`].sha256])),
+      reviewedAt: '2026-10-13T00:00:00Z' } };
+    row.status = 'running'; row.stage = 'audio_approved';
+  }
+  async function prepareApprovedAudio() { await run(); approveAudio(); }
+  async function completePreview() { await prepareApprovedAudio(); return run(); }
+  return { calls, objects, root, readySource, approveAudio, prepareApprovedAudio, completePreview, setStage(key, value) { row.checkpoints[key] = plain(value); }, replaceState(update) { row = { ...row, ...plain(update) }; }, row: () => plain(row), run, resetRunning() { row.status = 'running'; }, replaceSnapshot(value) { row.request_snapshot = plain(value); }, settings: loadedModule.exports.settings, loadReviewApprovals: loadedModule.exports.loadReviewApprovals };
 }
 
 test('submitted KIE task is polled after restart and never submitted again', async () => {
-  const h = await harness({ row: { checkpoints: { image: { state: 'submitted', taskId: 'saved-image-task' }, video: { state: 'intent' } } } });
+  const h = await harness(); await h.prepareApprovedAudio();
+  h.setStage('image', { state: 'submitted', taskId: 'saved-image-task' }); h.setStage('video', { state: 'intent' });
   await assert.rejects(h.run(), error => error.code === 'submission_unknown');
   assert.deepEqual(h.calls.poll.map(call => call.taskId), ['saved-image-task', 'saved-image-task']);
-  assert.equal(h.calls.create.length, 0); assert.equal(h.calls.audio.length, 0);
+  assert.equal(h.calls.create.length, 0); assert.equal(h.calls.audio.length, 6);
   assert.equal(h.row().checkpoints.image.state, 'ready');
   assert.equal(h.row().status, 'needs_attention');
   assert.equal(h.row().actual_usage.kieCredits, 10);
@@ -142,12 +156,13 @@ test('submitted KIE task is polled after restart and never submitted again', asy
 });
 
 test('durable submission intent blocks automatic duplicate paid POST', async () => {
-  const h = await harness({ row: { checkpoints: { image: { state: 'intent', provider: 'kie' } } } });
+  const h = await harness(); await h.prepareApprovedAudio();
+  h.setStage('image', { state: 'intent', provider: 'kie' });
   for (let attempt = 0; attempt < 2; attempt++) {
     h.resetRunning();
     await assert.rejects(h.run(), error => error.code === 'submission_unknown');
   }
-  assert.equal(h.calls.create.length, 0); assert.equal(h.calls.poll.length, 0); assert.equal(h.calls.audio.length, 0);
+  assert.equal(h.calls.create.length, 0); assert.equal(h.calls.poll.length, 0); assert.equal(h.calls.audio.length, 6);
   assert.equal(h.row().status, 'needs_attention');
 });
 
@@ -160,9 +175,9 @@ test('failed live-lease compare-and-set prevents any paid submission', async () 
 });
 
 test('lease loss while one POST is in flight prevents polling and later paid calls', async () => {
-  const h = await harness({ loseLeaseDuringCreate: true });
+  const h = await harness({ loseLeaseDuringCreate: true }); await h.prepareApprovedAudio();
   await assert.rejects(h.run(), error => error.code === 'lease_lost');
-  assert.equal(h.calls.create.length, 1); assert.equal(h.calls.poll.length, 0); assert.equal(h.calls.audio.length, 0);
+  assert.equal(h.calls.create.length, 1); assert.equal(h.calls.poll.length, 0); assert.equal(h.calls.audio.length, 6);
   assert.equal(h.row().checkpoints.image.state, 'intent');
   const receipt = JSON.parse(await fs.readFile(path.join(h.root, jobId, 'image-submission-task_1.json'), 'utf8'));
   assert.equal(receipt.taskId, 'task_1', 'operator has the known provider reference even if lease CAS cannot persist it');
@@ -173,9 +188,10 @@ test('known zero-credit provider failure is held with its task outcome and never
     task_1: { state: 'ready', urls: ['https://tempfile.aiquickdraw.com/offline.png'], creditsConsumed: 18 },
     task_2: { state: 'failed', urls: [], errorCode: '500', creditsConsumed: 0 },
   } });
+  await h.prepareApprovedAudio();
   const earlierReceipt = { state: 'submitted', taskId: 'earlier-reviewed-task' };
   const priorPath = path.join(h.root, jobId, 'video-submission-earlier-reviewed-task.json');
-  await fs.mkdir(path.dirname(priorPath));
+  await fs.mkdir(path.dirname(priorPath), { recursive: true });
   await fs.writeFile(priorPath, JSON.stringify(earlierReceipt), { flag: 'wx' });
   await assert.rejects(h.run(), error => error.code === 'provider_task_failed' && error.ambiguous === true);
   const held = h.row();
@@ -189,7 +205,7 @@ test('known zero-credit provider failure is held with its task outcome and never
   assert.equal(h.calls.create.length, 2); assert.equal(h.calls.poll.length, 3);
   assert.deepEqual(h.calls.create[1].input.image_urls, ['https://tempfile.aiquickdraw.com/offline.png', 'https://tempfile.aiquickdraw.com/offline.png']);
   assert.equal(h.calls.signed.length, 0, 'KIE-hosted original avoids a signed-storage handoff when available');
-  assert.equal(h.calls.audio.length, 0); assert.equal(h.calls.render.length, 0);
+  assert.equal(h.calls.audio.length, 6); assert.equal(h.calls.render.length, 0);
   assert.deepEqual(JSON.parse(await fs.readFile(priorPath, 'utf8')), earlierReceipt, 'new submissions retain older retry receipts');
   const currentReceipt = JSON.parse(await fs.readFile(path.join(h.root, jobId, 'video-submission-task_2.json'), 'utf8'));
   assert.equal(currentReceipt.taskId, 'task_2');
@@ -204,7 +220,6 @@ test('known zero-credit provider failure is held with its task outcome and never
 
 test('unknown first audio response stops all later audio calls and persists restart guard', async () => {
   const h = await harness({ audioUnknown: true });
-  await h.readySource('image', 'scene.png'); await h.readySource('video', 'source-11s.mp4');
   await assert.rejects(h.run(), error => error.code === 'AUDIO_TRANSFER_FAILED');
   assert.equal(h.calls.audio.length, 1); assert.equal(h.calls.create.length, 0); assert.equal(h.calls.render.length, 0);
   assert.equal(h.row().checkpoints.audio1.state, 'intent');
@@ -216,16 +231,16 @@ test('unknown first audio response stops all later audio calls and persists rest
 
 test('restored assets reject foreign-owner and traversal object paths before privileged reads', async () => {
   for (const badPath of [`${foreign}/${jobId}/scene.png`, `${owner}/${jobId}/../scene.png`]) {
-    const h = await harness(); await h.readySource('image', 'scene.png', { path: badPath });
+    const h = await harness(); await h.prepareApprovedAudio(); await h.readySource('image', 'scene.png', { path: badPath });
     await assert.rejects(h.run());
     assert.equal(h.calls.downloads.length, 0, 'unsafe object keys never reach service-role storage');
     assert.equal(h.calls.create.length, 0); assert.equal(h.calls.signed.length, 0);
   }
 });
 
-test('fresh job persists paid intents before calls, owner-scopes every asset and completes exact render contract', async () => {
+test('audio approval resumes originals, persists paid intents before calls, owner-scopes every asset and completes exact render contract', async () => {
   const h = await harness();
-  await h.run();
+  await h.completePreview();
   assert.equal(h.row().status, 'ready'); assert.equal(h.row().progress, 100);
   assert.equal(h.row().checkpoints.render.reviewStatus, 'pending');
   assert.equal(h.calls.create.length, 2); assert.equal(h.calls.audio.length, 6); assert.equal(h.calls.render.length, 1);
@@ -246,7 +261,7 @@ test('two productions with the same specification each generate six fresh audio 
   const plan = v2Snapshot();
   const first = await harness({ row: { request_snapshot: plan } });
   const second = await harness({ row: { id: foreign, request_snapshot: plan } });
-  await first.run(); await second.run();
+  await first.completePreview(); await second.completePreview();
   assert.equal(first.row().checkpoints.generationSpec.sha256, second.row().checkpoints.generationSpec.sha256, 'identical specifications cannot act as an audio cache key');
   assert.equal(first.calls.audio.length, 6); assert.equal(second.calls.audio.length, 6);
   for (const h of [first, second]) {
@@ -298,9 +313,9 @@ test('cross-production audio checkpoints or assets are held before any provider 
   }
 });
 
-test('unmarked historical jobs recover their own saved audio without regeneration or receipt changes', async () => {
+test('unmarked historical visual jobs fail closed without regeneration or receipt changes', async () => {
   const h = await harness({ row: { request_snapshot: v2Snapshot() } });
-  await h.run();
+  await h.completePreview();
   const saved = h.row();
   const receiptPath = path.join(h.root, jobId, 'generation-spec.json');
   const receipt = await fs.readFile(receiptPath, 'utf8');
@@ -311,7 +326,8 @@ test('unmarked historical jobs recover their own saved audio without regeneratio
     delete saved.checkpoints[`audio${index}`].audioOrigin;
     delete saved.assets[`audio${index}`].audioOrigin;
   }
-  h.replaceState(saved); h.resetRunning(); await h.run();
+  saved.review_records = {};
+  h.replaceState(saved); h.resetRunning(); await assert.rejects(h.run(), error => error.code === 'legacy_audio_review_required');
   assert.equal(h.calls.audio.length, 6);
   assert.equal(h.calls.create.length, 2);
   assert.equal(await fs.readFile(receiptPath, 'utf8'), receipt);
@@ -321,7 +337,7 @@ test('unmarked historical jobs recover their own saved audio without regeneratio
 
 test('unavailable provider-hosted image uses the private signed original without regenerating the image', async () => {
   const h = await harness({ hostedImageUnavailable: true });
-  await h.run();
+  await h.completePreview();
   const expectedUrl = `https://offline.test/signed/${owner}/${jobId}/scene.png`;
   assert.deepEqual(h.calls.create[1].input.image_urls, [expectedUrl, expectedUrl]);
   assert.equal(h.calls.signed.length, 1);
@@ -342,7 +358,7 @@ test('direction v2 worker submits exactly the prompts compiled for the UI and re
   assert.equal(plan.generation.videoSeconds, 10);
   assert.equal(plan.generation.sourceVideoSeconds, 11);
   const h = await harness({ row: { request_snapshot: plan } });
-  await h.run();
+  await h.completePreview();
   assert.equal(h.calls.create[0].input.prompt, plan.prompts.image);
   assert.equal(h.calls.create[1].input.prompt, plan.prompts.video);
   assert.equal(h.calls.create[1].input.duration, String(plan.generation.sourceVideoSeconds));
@@ -397,7 +413,7 @@ test('a resumed changed v2 plan stops before any provider call and preserves the
   const frozen = h.row().checkpoints.generationSpec;
   h.resetRunning();
   await assert.rejects(h.run(), error => error.code === 'audio_submission_unknown');
-  assert.equal(h.calls.create.length, 2); assert.equal(h.calls.audio.length, 1, 'unchanged v2 resume retains the paid-audio hold');
+  assert.equal(h.calls.create.length, 0); assert.equal(h.calls.audio.length, 1, 'unchanged v2 resume retains the paid-audio hold');
   const callCounts = { create: h.calls.create.length, poll: h.calls.poll.length, audio: h.calls.audio.length };
   h.replaceSnapshot(v2Snapshot({ variation: 1 })); h.resetRunning();
   await assert.rejects(h.run(), error => error.code === 'generation_spec_drift');
@@ -432,7 +448,7 @@ test('resumed v2 assets require matching provenance and duration before polling 
 });
 
 test('explicit failed checkpoints without task references never cause a paid retry', async () => {
-  const h = await harness({ row: { checkpoints: { image: { state: 'failed', outcome: 'failed' } } } });
+  const h = await harness(); await h.prepareApprovedAudio(); h.setStage('image', { state: 'failed', outcome: 'failed' });
   await assert.rejects(h.run(), error => error.code === 'provider_task_failed');
   assert.equal(h.calls.create.length, 0); assert.equal(h.calls.poll.length, 0);
   assert.equal(h.row().status, 'needs_attention');
@@ -449,7 +465,7 @@ test('worker derives source filenames, metadata and render targets from the froz
     spec.review.effectiveVideoLoopSeconds = 11;
     return spec;
   } });
-  await h.run();
+  await h.completePreview();
   assert.equal(h.calls.create[1].input.duration, '12');
   assert.ok(h.calls.render[0].video.endsWith('/source-12s.mp4'));
   assert.equal(h.row().assets.video.durationSeconds, 12);
@@ -500,12 +516,37 @@ test('only the trusted registry supplies completed profile reviews to the worker
   const filename = path.join(dir, 'reviews.json');
   await fs.writeFile(filename, JSON.stringify({ version: 1, records }), { mode: 0o600, flag: 'wx' });
   const trusted = await harness({ reviewRegistry: filename, row: { request_snapshot: plan } });
-  await trusted.run();
+  await trusted.completePreview();
   assert.deepEqual(trusted.row().checkpoints.render.quality.unreviewedProfiles, []);
   assert.equal(trusted.row().checkpoints.render.reviewStatus, 'pending');
   assert.ok(Buffer.byteLength(JSON.stringify(trusted.row().checkpoints)) < 32000, 'bounded summary fits the database checkpoint limit');
   plan.approvals = records;
   const untrusted = await harness({ row: { request_snapshot: plan } });
-  await untrusted.run();
+  await untrusted.completePreview();
   assert.ok(untrusted.row().checkpoints.render.quality.unreviewedProfiles.length > 0, 'snapshot-provided approvals are not trusted operator evidence');
+});
+
+
+test('fresh jobs make all six original audio takes then persist a lease-free review hold before any KIE call', async () => {
+  const h = await harness({ row: { request_snapshot: v2Snapshot() } });
+  await h.run();
+  assert.equal(h.row().status, 'needs_attention'); assert.equal(h.row().stage, 'audio_review_required');
+  assert.equal(h.calls.audio.length, 6); assert.equal(h.calls.create.length, 0); assert.equal(h.calls.poll.length, 0); assert.equal(h.calls.render.length, 0);
+  for (let i = 1; i <= 6; i++) assert.equal(h.row().assets[`audio${i}`].sha256, h.row().checkpoints[`audio${i}`].sha256);
+  h.resetRunning(); await h.run();
+  assert.equal(h.calls.audio.length, 6); assert.equal(h.calls.create.length, 0, 'a mistaken worker resume cannot bypass the hold');
+  h.approveAudio(); await h.run();
+  assert.equal(h.calls.audio.length, 6); assert.equal(h.calls.create.length, 2); assert.equal(h.row().stage, 'preview_ready');
+  assert.match(h.row().assets.preview30.sha256, /^[a-f0-9]{64}$/); assert.match(h.row().assets.preview180.sha256, /^[a-f0-9]{64}$/);
+});
+
+test('missing legacy approval or changed approval hashes prevents every new provider request', async () => {
+  const legacyJob = await harness({ row: { checkpoints: { image: { state: 'intent' } } } });
+  await assert.rejects(legacyJob.run(), error => error.code === 'legacy_audio_review_required');
+  assert.equal(legacyJob.calls.audio.length, 0); assert.equal(legacyJob.calls.create.length, 0);
+  for (const mutate of [r => { r.review_records.audio.assetHashes.audio1 = '0'.repeat(64); }, r => { r.review_records.audio.userId = foreign; }, r => { r.review_records.audio.generationSpecSha256 = '0'.repeat(64); }, r => { delete r.assets.audio1; }]) {
+    const h = await harness(); await h.prepareApprovedAudio(); const row = h.row(); mutate(row); h.replaceState(row);
+    await assert.rejects(h.run(), error => ['audio_review_mismatch', 'audio_provenance_mismatch'].includes(error.code));
+    assert.equal(h.calls.audio.length, 6); assert.equal(h.calls.create.length, 0); assert.equal(h.calls.poll.length, 0); assert.equal(h.calls.render.length, 0);
+  }
 });

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import type { RainPlan } from '@/lib/healing-rain/recipes';
-import type { RAIN_GENERATION_QUOTE, RainGenerationJob } from '@/lib/healing-rain/generations';
+import { RAIN_AUDIO_KEYS, type RAIN_GENERATION_QUOTE, type RainGenerationJob, type RainReviewKind } from '@/lib/healing-rain/generations';
 
 type GenerationList = {
   jobs: RainGenerationJob[];
@@ -20,8 +20,12 @@ function activeJob(job: RainGenerationJob) {
 }
 
 function stageLabel(job: RainGenerationJob): string {
+  if (job.stage === 'audio_review_required') return '1단계 · 빗소리 직접 듣고 승인';
+  if (job.stage === 'preview_approved') return '2단계 · 미리보기 검수 승인 완료';
+  if (job.stage === 'audio_rejected' || job.stage === 'preview_rejected') return '검수 거절 · 작업 종료';
   if (job.status === 'queued') return '제작 대기 중';
   if (job.status === 'ready') {
+    if (job.reviews.preview?.status === 'pending') return '2단계 · 30초·3분 미리보기 직접 검수';
     if (job.quality?.reviewDecision === 'not_required') return '제작 완료 · 추가 검수 대상 아님';
     if (job.quality?.reviewDecision === 'sample') return '제작 완료 · 표본 검수';
     if (job.quality?.reviewDecision === 'required') return '제작 완료 · 필수 검수';
@@ -38,13 +42,50 @@ function stageLabel(job: RainGenerationJob): string {
 }
 
 function readyReviewGuidance(job: RainGenerationJob): string {
+  if (job.reviewStatus === 'approved') return '직접 보기·듣기 검수 결과가 저장되었습니다. 자동 검사의 측정 범위는 별도로 표시됩니다.';
   if (job.quality?.reasons.includes('audio_content_review_required')) return '새 빗소리 원본과 최종 편집본을 직접 들어 사람 목소리·웅성거림·음악이 없는지 확인해 주세요. 음량과 연결 검사 통과만으로 음향 검수가 완료되지는 않습니다.';
   if (job.quality?.reviewDecision === 'not_required') return '기술 검사와 기존 대표 검수 기록을 적용해 이번 결과는 추가 검수 대상이 아닙니다. 자연스러움이나 공개 준비가 자동 승인된 것은 아닙니다.';
   if (job.quality?.reviewDecision === 'sample') return '표본 검수로 선택된 결과입니다. 반복 경계의 움직임·밝기와 빗소리 연결을 직접 확인해 주세요.';
   return '반복 경계의 움직임·밝기와 빗소리 연결을 직접 확인해 주세요.';
 }
 
-function JobPreview({ job }: { job: RainGenerationJob }) {
+function ReviewActions({ job, kind, onReviewed }: { job: RainGenerationJob; kind: RainReviewKind; onReviewed: (job: RainGenerationJob) => void }) {
+  const [confirmed, setConfirmed] = useState(false);
+  const [posting, setPosting] = useState(false);
+  const [error, setError] = useState('');
+  const inFlight = useRef(false);
+  const evidence = job.reviews[kind];
+  const audio = kind === 'audio';
+  const keys = audio ? RAIN_AUDIO_KEYS : ['preview30', 'preview180'] as const;
+  const canApprove = keys.every(key => Boolean(job.outputs[key])) && (!audio || job.canApproveAudio);
+  if (!evidence || evidence.status !== 'pending') return null;
+  async function review(decision: 'approve' | 'reject') {
+    if (!evidence || inFlight.current || (decision === 'approve' && (!confirmed || !canApprove))) return;
+    inFlight.current = true; setPosting(true); setError('');
+    try {
+      const response = await fetch(`/api/healing-rain/generations/${encodeURIComponent(job.id)}/review`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kind, decision, generationSpecSha256: evidence.generationSpecSha256, assetHashes: evidence.assetHashes }),
+      });
+      const result = await response.json().catch(() => null) as ({ job: RainGenerationJob } & ApiError) | null;
+      if (!response.ok || !result?.job) throw new Error(result?.error || '검수 저장 결과를 확인하지 못했습니다. 같은 결정으로 다시 확인해 주세요.');
+      onReviewed(result.job);
+    } catch (err) { setError(err instanceof Error ? err.message : '검수 저장 결과를 확인해 주세요.'); }
+    finally { inFlight.current = false; setPosting(false); }
+  }
+  return <section className="rain-generation-quality" aria-label={audio ? '빗소리 검수 결정' : '미리보기 검수 결정'}>
+    <h4>{audio ? '빗소리 승인 뒤 이미지·영상 제작' : '30초·3분 미리보기 검수'}</h4>
+    <p className="rain-note">{audio ? '원본 30초 빗소리 6개를 모두 들어 목소리·웅성거림·음악이 없는지 확인해 주세요. 승인하면 보관된 원본을 그대로 사용하고, 최초 견적에 포함된 KIE 172크레딧의 이미지·영상 제작을 시작합니다.' : '두 영상을 재생해 빗소리 내용, 연결부, 움직임과 밝기를 확인해 주세요. 승인은 검수 기록만 남기며 10시간 합성을 시작하지 않습니다.'}</p>
+    <label className="rain-review-confirm"><input type="checkbox" disabled={posting} checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />{audio ? '원본 6개를 모두 듣고 다음 유료 제작 단계 진행을 확인했습니다.' : '30초·3분 영상과 빗소리를 확인했습니다.'}</label>
+    {audio && job.audioApprovalUnavailableReason ? <p className="rain-note">{job.audioApprovalUnavailableReason} 검수 거절은 계속 기록할 수 있습니다.</p> : null}
+    {!keys.every(key => Boolean(job.outputs[key])) ? <p className="rain-note">재생 주소를 모두 불러온 뒤 승인할 수 있습니다. 작업 · 재생 주소 새로고침을 눌러 주세요.</p> : null}
+    {error ? <p className="rain-alert error" role="alert">{error}</p> : null}
+    <div className="rain-review-buttons"><button type="button" className="rain-primary" disabled={posting || !confirmed || !canApprove} onClick={() => void review('approve')}>{posting ? '저장 확인 중…' : audio ? '빗소리 승인 · 이미지·영상 유료 제작' : '미리보기 검수 승인'}</button><button type="button" className="rain-secondary" disabled={posting} onClick={() => void review('reject')}>검수 거절 · 작업 종료</button></div>
+    <p className="rain-note">검수 결정은 원본 해시와 함께 보관됩니다. 거절한 작업의 원본은 유지되며 자동 재생성하지 않습니다.</p>
+  </section>;
+}
+
+function JobPreview({ job, onReviewed }: { job: RainGenerationJob; onReviewed: (job: RainGenerationJob) => void }) {
   const progress = Number.isFinite(job.progress) ? Math.min(100, Math.max(0, job.progress)) : 0;
   const hasOutput = Boolean(job.outputs.preview30 || job.outputs.preview180);
   const kieUsage = job.actualUsage.kieCredits;
@@ -60,6 +101,13 @@ function JobPreview({ job }: { job: RainGenerationJob }) {
       <Image src={job.outputs.poster.url} alt="영상 제작에 사용할 생성 이미지" width={1600} height={900} unoptimized />
       <figcaption>생성된 시작 이미지 · 영상 제작 전</figcaption>
     </figure> : null}
+    {job.reviews.audio ? <section className="rain-generation-quality" aria-label="새로 생성한 원본 빗소리">
+      <h4>1단계 · 원본 빗소리 30초 × 6개</h4>
+      <p className="rain-note">목소리·웅성거림·음악 혼입은 자동 판별하지 않습니다. 직접 들어 확인한 기록은 기술 검사와 별도로 보관합니다.</p>
+      <div className="rain-generation-players">{RAIN_AUDIO_KEYS.map((key, index) => <div className="rain-generation-player" key={key}><h4>원본 {index + 1} · 30초</h4>{job.outputs[key] ? <audio controls preload="none" src={job.outputs[key]?.url} aria-label={`원본 빗소리 ${index + 1}`} /> : <p className="rain-note">재생 주소를 새로고침해 주세요.</p>}<details><summary>원본 SHA-256</summary><code className="rain-review-hash">{job.reviews.audio?.assetHashes[key]}</code></details></div>)}</div>
+      {job.reviews.audio.status !== 'pending' ? <p className="rain-note">직접 듣기 검수 · {job.reviews.audio.status === 'approved' ? '승인' : '거절'} · {job.reviews.audio.reviewedAt ? new Date(job.reviews.audio.reviewedAt).toLocaleString('ko-KR') : ''}</p> : null}
+    </section> : null}
+    {job.stage === 'audio_review_required' ? <ReviewActions job={job} kind="audio" onReviewed={onReviewed} /> : null}
     {hasOutput ? <div className="rain-generation-players">
       {(['preview30', 'preview180'] as const).map(key => {
         const output = job.outputs[key];
@@ -70,6 +118,8 @@ function JobPreview({ job }: { job: RainGenerationJob }) {
         </div>;
       })}
     </div> : job.status === 'ready' ? <p className="rain-note">미리보기 재생 주소를 불러오지 못했습니다. 아래 새로고침으로 다시 확인해 주세요.</p> : null}
+    {job.stage === 'preview_ready' ? <ReviewActions job={job} kind="preview" onReviewed={onReviewed} /> : null}
+    {job.reviewStatus === 'approved' ? <p className="rain-note">직접 보기·듣기 검수 승인이 원본 해시와 함께 저장되었습니다. 10시간 합성은 비활성 상태입니다.</p> : null}
     {job.status === 'ready' ? <p className="rain-note">영상이 만들어졌습니다. {readyReviewGuidance(job)} 선택한 장시간 영상은 아직 합성하지 않았습니다.</p> : null}
     {job.quality ? <section className="rain-generation-quality" aria-label="자동 검사와 검수 기준">
       <h4>자동 기술 검사 · {job.quality.technicalStatus === 'passed' ? '통과' : job.quality.technicalStatus === 'failed' ? '확인 필요' : '검사 정보 확인 필요'}</h4>
@@ -127,7 +177,7 @@ export function RainGenerationPanel({ plan, onClose }: { plan: RainPlan; onClose
           if (!old) return job;
           const outputs = { ...job.outputs };
           // Status polling must not restart an already playing video by replacing its signed URL.
-          for (const key of ['preview30', 'preview180', 'poster'] as const) {
+          for (const key of ['preview30', 'preview180', 'poster', ...RAIN_AUDIO_KEYS] as const) {
             const output = old.outputs[key];
             if (outputs[key] && output && Date.parse(output.expiresAt) > Date.now() + 60_000) outputs[key] = output;
           }
@@ -136,7 +186,7 @@ export function RainGenerationPanel({ plan, onClose }: { plan: RainPlan; onClose
         setError('');
         // Active jobs poll often; ready jobs refresh signed URLs before their ten-minute expiry.
         if (result.jobs.some(job => job.status === 'queued' || job.status === 'running')) timer = setTimeout(() => void refresh(), 5000);
-        else if (result.jobs.some(job => job.status === 'ready' || job.outputs.poster)) timer = setTimeout(() => void refresh(), 5 * 60 * 1000);
+        else if (result.jobs.some(job => job.status === 'ready' || Object.keys(job.outputs).length)) timer = setTimeout(() => void refresh(), 5 * 60 * 1000);
       } catch (err) {
         if (!disposed && !controller.signal.aborted) setError(err instanceof Error ? err.message : '생성 상태를 확인하지 못했습니다.');
       } finally {
@@ -193,19 +243,24 @@ export function RainGenerationPanel({ plan, onClose }: { plan: RainPlan; onClose
     }
   }
 
+  const onReviewed = (job: RainGenerationJob) => {
+    setData(previous => previous ? { ...previous, jobs: previous.jobs.map(item => item.id === job.id ? job : item) } : previous);
+    setRefreshVersion(version => version + 1);
+  };
+
   return <section ref={panel} id="rain-generation-panel" className="rain-generation-panel" aria-labelledby="rain-generation-heading">
-    <div className="rain-generation-heading"><div><p className="rain-eyebrow">CREATE & PREVIEW</p><h2 id="rain-generation-heading">{plan.input.title}</h2><p>저장한 장면으로 새로운 이미지·영상·빗소리를 제작합니다.</p></div><button type="button" className="rain-secondary" onClick={onClose}>닫기</button></div>
+    <div className="rain-generation-heading"><div><p className="rain-eyebrow">CREATE & PREVIEW</p><h2 id="rain-generation-heading">{plan.input.title}</h2><p>빗소리 듣기 승인 → 이미지·영상 제작 → 30초·3분 검수 순서로 진행합니다.</p></div><button type="button" className="rain-secondary" onClick={onClose}>닫기</button></div>
     {loading ? <p role="status" className="rain-note">계정의 작업과 생성 견적을 확인하는 중…</p> : null}
     {error ? <div className="rain-alert error" role="alert">{error}</div> : null}
     {data ? <>
       <div className="rain-generation-quote"><div><span>이미지 1장 + 10초 영상 루프</span><strong>KIE {data.quote.kieCredits}크레딧</strong><small>공시 가격 약 ${data.quote.kieListedUsd.toFixed(2)}</small></div><div><span>새 빗소리 30초 × 6개</span><strong>ElevenLabs 약 {data.quote.audio.credits.toLocaleString('ko-KR')}크레딧</strong><small>과거 사용량 기준 예상 · 실제 사용량 별도 기록</small></div></div>
-      <p className="rain-note">결과물은 30초와 3분 미리보기입니다. 무음 영상 원본 11초를 10초 루프로 편집하고 신규 빗소리를 연결합니다. 두 제공사의 크레딧은 서로 다른 단위이며, 계획한 {plan.input.hours}시간 영상 합성은 포함하지 않습니다.</p>
+      <p className="rain-note">먼저 원본 빗소리 30초 6개만 생성하고 직접 듣기 승인을 기다립니다. 승인 후 결과물은 30초와 3분 미리보기입니다. 무음 영상 원본 11초를 10초 루프로 편집하고 신규 빗소리를 연결합니다. 두 제공사의 크레딧은 서로 다른 단위이며, 계획한 {plan.input.hours}시간 영상 합성은 포함하지 않습니다.</p>
       {data.unavailableReason ? <p className="rain-generation-notice">{data.unavailableReason} 기존 작업은 계속 확인할 수 있습니다.</p> : null}
-      {busyJob ? <p className="rain-generation-notice">{busyJob.status === 'needs_attention' ? '처리 결과를 확인할 때까지 새 유료 요청을 멈췄습니다. 이 작업은 자동으로 다시 제출하지 않습니다.' : '이미 접수된 작업이 있습니다. 제작이 끝날 때까지 새 요청을 보내지 않습니다.'}</p> : null}
+      {busyJob ? <p className="rain-generation-notice">{busyJob.stage === 'audio_review_required' ? '원본 빗소리 검수를 기다립니다. 승인하면 다음 유료 단계로 진행하고, 거절하면 작업이 종료됩니다.' : busyJob.status === 'needs_attention' ? '처리 결과를 확인할 때까지 새 유료 요청을 멈췄습니다. 이 작업은 자동으로 다시 제출하지 않습니다.' : '이미 접수된 작업이 있습니다. 제작이 끝날 때까지 새 요청을 보내지 않습니다.'}</p> : null}
       {pendingRetry ? <p className="rain-generation-notice">이 탭에 확인되지 않은 요청 ID가 남아 있습니다. 같은 요청으로 다시 확인하며, 이미 접수된 작업은 중복 생성하지 않습니다.</p> : null}
-      {(data.canGenerate && !busyJob) || pendingRetry ? <div className="rain-generation-action"><label><input type="checkbox" checked={confirmed} disabled={posting} onChange={event => setConfirmed(event.target.checked)} />위 예상 사용량과 30초·3분 미리보기 제작 범위를 확인했습니다.</label><button type="button" className="rain-primary" disabled={!canSubmit} onClick={() => void generate()}>{posting ? '접수 확인 중…' : pendingRetry ? '같은 요청 확인 · 재시도' : data.jobs.length ? '새 미리보기 유료 생성' : '미리보기 유료 생성'}</button><small>응답이 끊겨도 같은 요청 ID로 확인합니다. 새 요청을 자동으로 반복하지 않습니다.</small></div> : null}
-      {data.jobs[0] ? <JobPreview job={data.jobs[0]} /> : <div className="rain-generation-empty">이 계획의 생성 작업이 아직 없습니다. 예상 사용량을 확인한 뒤 미리보기를 제작할 수 있습니다.</div>}
-      {data.jobs.length > 1 ? <details className="rain-generation-history"><summary>이전 작업 {data.jobs.length - 1}개 보기</summary>{data.jobs.slice(1).map(job => <JobPreview key={job.id} job={job} />)}</details> : null}
+      {(data.canGenerate && !busyJob) || pendingRetry ? <div className="rain-generation-action"><label><input type="checkbox" checked={confirmed} disabled={posting} onChange={event => setConfirmed(event.target.checked)} />위 전체 견적과 단계별 승인을 확인했습니다. 먼저 30초 빗소리 6개를 유료 생성합니다.</label><button type="button" className="rain-primary" disabled={!canSubmit} onClick={() => void generate()}>{posting ? '접수 확인 중…' : pendingRetry ? '같은 요청 확인 · 재시도' : data.jobs.length ? '새 빗소리 먼저 유료 생성' : '빗소리 먼저 유료 생성'}</button><small>응답이 끊겨도 같은 요청 ID로 확인합니다. 새 요청을 자동으로 반복하지 않습니다.</small></div> : null}
+      {data.jobs[0] ? <JobPreview job={data.jobs[0]} onReviewed={onReviewed} /> : <div className="rain-generation-empty">이 계획의 생성 작업이 아직 없습니다. 예상 사용량을 확인한 뒤 미리보기를 제작할 수 있습니다.</div>}
+      {data.jobs.length > 1 ? <details className="rain-generation-history"><summary>이전 작업 {data.jobs.length - 1}개 보기</summary>{data.jobs.slice(1).map(job => <JobPreview key={job.id} job={job} onReviewed={onReviewed} />)}</details> : null}
     </> : null}
     <button type="button" className="rain-secondary" disabled={posting || loading} onClick={() => { setLoading(true); setRefreshVersion(version => version + 1); }}>작업 · 재생 주소 새로고침</button>
     <style jsx>{`
@@ -215,6 +270,7 @@ export function RainGenerationPanel({ plan, onClose }: { plan: RainPlan; onClose
       .rain-generation-notice{font-size:12px;line-height:1.8;color:#c6d8cf;padding:13px 15px;margin-top:14px;background:#ffffff05;border-radius:8px;border:1px solid #ffffff12}.rain-generation-action{display:flex;flex-wrap:wrap;align-items:center;gap:15px;margin:22px 0}.rain-generation-action label{display:flex;align-items:center;gap:9px;flex:1;min-width:230px;font-size:12px;line-height:1.7;color:#d3e1d9}.rain-generation-action input{width:17px;height:17px;flex-shrink:0;accent-color:#a9d8c9}.rain-generation-action small{width:100%;font-size:10px;color:#a0aaa8;line-height:1.7}.rain-generation-empty{padding:24px 0;color:#a0aaa8;font-size:12px;line-height:1.8}.rain-generation-history{margin:22px 0}.rain-generation-history summary{cursor:pointer;font-size:12px;color:#a9d8c9;margin-bottom:14px}
       .rain-generation-panel :global(.rain-generation-job){border-top:1px solid #ffffff14;padding-top:22px;margin:24px 0}.rain-generation-panel :global(.rain-generation-job-heading){display:flex;align-items:center;justify-content:space-between;gap:15px;margin-bottom:14px}.rain-generation-panel :global(.rain-generation-job h3){font-size:16px;color:#e6ece8;font-weight:600;margin-top:9px}.rain-generation-panel :global(.rain-generation-job progress){width:100%;height:7px;accent-color:#a9d8c9;margin:4px 0 12px}.rain-generation-panel :global(.rain-generation-players){display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:16px 0}.rain-generation-panel :global(.rain-generation-player){min-width:0}.rain-generation-panel :global(.rain-generation-player h4){font-size:12px;margin-bottom:10px;color:#c5d6ca}.rain-generation-panel :global(.rain-generation-player video){display:block;width:100%;aspect-ratio:16/9;object-fit:contain;background:#09120f;border:1px solid #ffffff18;border-radius:9px}.rain-generation-panel :global(.rain-generation-player a){display:inline-block;font-size:10px;color:#a9d8c9;text-decoration:underline;margin-top:10px}.rain-generation-panel :global(.rain-generation-quality){border:1px solid #ffffff18;border-radius:12px;padding:16px;margin:18px 0}.rain-generation-panel :global(.rain-generation-quality h4){font-size:13px;font-weight:600;color:#dce9e2}.rain-generation-panel :global(.rain-generation-quality summary){cursor:pointer;font-size:12px;color:#bcd4c7}.rain-generation-panel :global(.rain-generation-quality ul){padding-left:18px;font-size:11px;line-height:1.8;color:#aabdb2}.rain-generation-panel :global(.rain-generation-usage){font-size:10px;line-height:1.8;color:#a0aaa8;margin-top:12px}
       .rain-generation-panel :global(.rain-generation-poster){max-width:800px;margin:18px 0}.rain-generation-panel :global(.rain-generation-poster img){display:block;width:100%;height:auto;max-height:450px;object-fit:contain;background:#09120f;border:1px solid #ffffff18;border-radius:9px}.rain-generation-panel :global(.rain-generation-poster figcaption){margin-top:10px;font-size:11px;line-height:1.7;color:#c5d6ca}
+      .rain-generation-panel :global(.rain-generation-player audio){display:block;width:100%;margin-bottom:10px}.rain-generation-panel :global(.rain-review-hash){display:block;overflow-wrap:anywhere;font-size:10px;color:#aabdb2;margin-top:8px}.rain-generation-panel :global(.rain-review-confirm){display:flex;gap:9px;align-items:center;color:#d3e1d9;font-size:12px;line-height:1.7;margin:16px 0}.rain-generation-panel :global(.rain-review-buttons){display:flex;flex-wrap:wrap;gap:12px}.rain-generation-panel :global(.rain-review-confirm input){width:17px;height:17px;accent-color:#a9d8c9}
       @media(max-width:700px){.rain-generation-panel{padding:17px}.rain-generation-quote{grid-template-columns:1fr}.rain-generation-action>button{width:100%}.rain-generation-panel :global(.rain-generation-players){grid-template-columns:1fr}.rain-generation-panel :global(.rain-generation-job-heading){align-items:flex-start}.rain-generation-panel :global(.rain-generation-job-heading .rain-eyebrow){font-size:8px;letter-spacing:1px}}
     `}</style>
   </section>;

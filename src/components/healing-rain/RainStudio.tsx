@@ -3,12 +3,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRainPlans } from './useRainPlans';
 import { RainGenerationPanel } from './RainGenerationPanel';
-import { ArrowRight, CloudRain, SlidersHorizontal, Layers3, Bookmark, Download, RefreshCw, Film, Volume2, ChevronRight } from 'lucide-react';
+import { RainBrandingPanel } from './RainBrandingPanel';
+import { ArrowRight, CloudRain, SlidersHorizontal, Layers3, Bookmark, Download, RefreshCw, Film, Volume2, ChevronRight, Palette } from 'lucide-react';
 import { recipes, defaults, intensities, thunders, cameras, palettes, type RecipeInput, type RainPlan } from '@/lib/healing-rain/recipes';
 import { SceneArt } from './SceneArt';
 import { buildDirection, DIRECTION_VERSION, type HealingRainDirection } from '../../../shared/healing-rain/direction';
 import './rain-studio.css';
-type Tab='library'|'design'|'history';
+type Tab='library'|'design'|'history'|'branding';
 function SceneDirectionCard({ direction }: { direction: HealingRainDirection }) {
  const details=direction.summaryDetails;
  return <section className="rain-direction" aria-label="장면 연출">
@@ -42,7 +43,7 @@ export function RainStudio() {
  const filtered=recipes.filter(r=>`${r.name} ${r.surface} ${r.layers.join(' ')}`.includes(query.trim()));
  return <div className="rain-studio">
   <header className="rain-header"><div><div className="rain-eyebrow"><CloudRain size={16}/> MELODIO AMBIENCE LAB</div><h1>Healing Rain<span>장면에서 시작되는 휴식</span></h1></div><span className="rain-badge">장면 설계 · 미리보기</span></header>
-  <nav className="rain-tabs" aria-label="Healing Rain 메뉴">{([['library','레시피 라이브러리',Layers3],['design','장면 설계',SlidersHorizontal],['history','제작 계획',Bookmark]] as const).map(([key,label,Icon])=><button key={key} onClick={()=>switchTab(key)} aria-current={tab===key?'page':undefined} className={tab===key?'active':''}><Icon size={16}/>{label}</button>)}</nav>
+  <nav className="rain-tabs" aria-label="Healing Rain 메뉴">{([['library','레시피 라이브러리',Layers3],['design','장면 설계',SlidersHorizontal],['history','제작 계획',Bookmark],['branding','채널 브랜딩',Palette]] as const).map(([key,label,Icon])=><button key={key} onClick={()=>switchTab(key)} aria-current={tab===key?'page':undefined} className={tab===key?'active':''}><Icon size={16}/>{label}</button>)}</nav>
   {error&&<div className="rain-alert error" role="alert">{error}</div>}{message&&<div className="rain-alert" role="status">{message}</div>}
   {tab==='library'&&<>
    <section className="rain-hero"><div className="rain-hero-copy"><span className="rain-eyebrow">ONE SCENE. A NEW ATMOSPHERE.</span><h2>같은 컨셉에서,<br/>매번 새로운 밤으로.</h2><p>공간과 비의 질감을 고르세요.<br/>이미지, 움직임, 빗소리를 하나의 레시피로 설계합니다.</p><button className="rain-primary" onClick={()=>switchTab('design')}>장면 설계 시작 <ArrowRight size={16}/></button></div><div className="rain-hero-art"><SceneArt scene="train"/><span>AI SCENE / SLEEPER TRAIN</span></div></section>
@@ -70,6 +71,7 @@ export function RainStudio() {
    {source==='account'&&account==='signed-in'&&generationPlan&&<RainGenerationPanel key={generationPlan.id} plan={generationPlan} onClose={()=>setGenerationPlan(null)}/>}
    {nextCursor&&<button className="rain-secondary" disabled={loading||busy} onClick={()=>refresh(nextCursor)}>{loading?'불러오는 중…':'이전 계획 더 보기'}</button>}
   </section>}
+  <div hidden={tab!=='branding'}><RainBrandingPanel title={input.title} scene={input.sceneId}/></div>
   <footer className="rain-footer"><CloudRain size={16}/><p>매 작품의 공간과 소리를 새롭게 설계합니다. 신규 생성이나 반복 편집만으로 유튜브 수익화가 보장되지는 않습니다.</p></footer>
  </div>;
 }

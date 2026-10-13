@@ -6,7 +6,7 @@ import { RainProjectError } from './projects';
 
 export const RAIN_GENERATION_BUCKET = 'healing-rain';
 export const RAIN_GENERATION_QUOTE = {
-  version: 'healing-rain-preview-v1',
+  version: 'healing-rain-audio-first-v2',
   provisional: false,
   image: { provider: 'kie', model: 'nano-banana-pro', count: 1, resolution: '2K', aspectRatio: '16:9', format: 'png', credits: 18 },
   video: { provider: 'kie', model: 'kling-3.0', mode: 'std', sourceVideoSeconds: 11, finalLoopSeconds: 10, sound: false, credits: 154 },
@@ -14,7 +14,7 @@ export const RAIN_GENERATION_QUOTE = {
   kieCredits: 172,
   kieListedUsd: 0.86,
   outputs: { previewSeconds: [30, 180], longFormIncluded: false },
-  note: '새 작품마다 30초 빗소리 6개를 신규 생성하며 이전 작품의 음원을 가져오지 않습니다. KIE 172크레딧(공시 가격 약 $0.86), ElevenLabs 과거 사용량 기준 약 1,800크레딧입니다. 오디오는 응답의 실제 사용량을 기록하며 두 크레딧을 합산하지 않습니다.',
+  note: '먼저 30초 빗소리 6개를 신규 생성합니다. 직접 듣고 승인하면 이미지·영상 제작을 시작합니다. KIE 172크레딧(공시 가격 약 $0.86), ElevenLabs 과거 사용량 기준 약 1,800크레딧입니다. 오디오는 응답의 실제 사용량을 기록하며 두 크레딧을 합산하지 않습니다.',
 } as const;
 
 export type RainGenerationStatus = 'queued' | 'running' | 'ready' | 'needs_attention' | 'failed';
@@ -34,7 +34,7 @@ export type RainAudioOrigin = {
   takeIndex: number;
   seconds: 30;
 };
-export type RainGenerationAsset = { path: string; mimeType: string; bytes?: number; durationSeconds?: number; audioOrigin?: RainAudioOrigin };
+export type RainGenerationAsset = { path: string; mimeType: string; sha256?: string; bytes?: number; durationSeconds?: number; audioOrigin?: RainAudioOrigin };
 export type RainGenerationAssetKey = 'image' | 'video' | 'audio1' | 'audio2' | 'audio3' | 'audio4' | 'audio5' | 'audio6' | 'preview30' | 'preview180' | 'poster';
 
 /** Worker wire contract. Store compact identifiers and measurements only, never provider response bodies.
@@ -55,6 +55,8 @@ export type RainGenerationRow = {
   assets: Partial<Record<RainGenerationAssetKey, RainGenerationAsset>>;
   estimated_cost: Record<string, unknown>;
   actual_usage: Record<string, unknown>;
+  branding_snapshot?: unknown;
+  review_records: Partial<Record<RainReviewKind, RainReviewRecord>>;
   error_code: string | null;
   error_message: string | null;
   claim_token: string | null;
@@ -64,7 +66,12 @@ export type RainGenerationRow = {
   started_at: string | null;
   completed_at: string | null;
 };
-export type RainGenerationOutput = { url: string; mimeType: string; durationSeconds?: number; expiresAt: string };
+export type RainReviewKind = 'audio' | 'preview';
+export type RainReviewRecord = { decision: 'approve' | 'reject'; userId: string; jobId: string; generationSpecSha256: string; assetHashes: Record<string, string>; reviewedAt: string };
+export type RainReviewInput = { kind: RainReviewKind; decision: 'approve' | 'reject'; generationSpecSha256: string; assetHashes: Record<string, string> };
+export type RainReviewEvidence = { status: 'pending' | 'approved' | 'rejected'; generationSpecSha256: string; assetHashes: Record<string, string>; reviewedAt?: string };
+export const RAIN_AUDIO_KEYS = ['audio1', 'audio2', 'audio3', 'audio4', 'audio5', 'audio6'] as const;
+export type RainGenerationOutput = { url: string; mimeType: string; sha256?: string; durationSeconds?: number; expiresAt: string };
 export type RainGenerationJob = {
   id: string;
   projectId: string;
@@ -74,13 +81,17 @@ export type RainGenerationJob = {
   createdAt: string;
   updatedAt: string;
   completedAt: string | null;
-  reviewStatus: 'pending';
+  reviewStatus: 'pending' | 'approved' | 'rejected';
+  reviews: Partial<Record<RainReviewKind, RainReviewEvidence>>;
+  canApproveAudio: boolean;
+  audioApprovalUnavailableReason: string | null;
+  longFormEnabled: false;
   quality: RainQualitySummary | null;
   estimatedCost: Record<string, unknown>;
   actualUsage: Record<string, unknown>;
   errorCode: string | null;
   error: string | null;
-  outputs: Partial<Record<'preview30' | 'preview180' | 'poster', RainGenerationOutput>>;
+  outputs: Partial<Record<'preview30' | 'preview180' | 'poster' | typeof RAIN_AUDIO_KEYS[number], RainGenerationOutput>>;
 };
 export type CreateRainGenerationInput = { projectId: string; clientRequestId: string; quoteVersion: string };
 
@@ -118,6 +129,52 @@ export function rainGenerationPlanUnavailableReason(plan: RainPlan): string | nu
     }
   } catch { return '연출 규칙에 충돌이 있습니다. 설정을 확인해 새 계획으로 저장해 주세요.'; }
   return null;
+}
+
+
+export function parseRainReviewInput(value: unknown): RainReviewInput {
+  const invalid = () => new RainProjectError('invalid_review', '검수 대상과 원본 해시를 다시 확인해 주세요.', 400);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw invalid();
+  const body = value as Record<string, unknown>;
+  if (Object.keys(body).some(key => !['kind', 'decision', 'generationSpecSha256', 'assetHashes'].includes(key))
+    || typeof body.kind !== 'string' || !['audio', 'preview'].includes(body.kind)
+    || typeof body.decision !== 'string' || !['approve', 'reject'].includes(body.decision)
+    || typeof body.generationSpecSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(body.generationSpecSha256)
+    || !body.assetHashes || typeof body.assetHashes !== 'object' || Array.isArray(body.assetHashes)) throw invalid();
+  const hashes = body.assetHashes as Record<string, unknown>;
+  const keys = body.kind === 'audio' ? RAIN_AUDIO_KEYS : ['preview30', 'preview180'];
+  if (Object.keys(hashes).length !== keys.length || keys.some(key => typeof hashes[key] !== 'string' || !/^[a-f0-9]{64}$/.test(hashes[key] as string))) throw invalid();
+  return { kind: body.kind as RainReviewKind, decision: body.decision as RainReviewInput['decision'], generationSpecSha256: body.generationSpecSha256, assetHashes: hashes as Record<string, string> };
+}
+
+/** Public review evidence is available only when every expected asset is scoped and hash-bound. */
+export function rainGenerationReviewEvidence(row: RainGenerationRow, kind: RainReviewKind): RainReviewEvidence | null {
+  const generationSpecSha256 = row.checkpoints?.generationSpec?.sha256;
+  if (row.checkpoints?.generationSpec?.state !== 'frozen' || typeof generationSpecSha256 !== 'string' || !/^[a-f0-9]{64}$/.test(generationSpecSha256)) return null;
+  const keys = kind === 'audio' ? RAIN_AUDIO_KEYS : ['preview30', 'preview180'] as const;
+  const assetHashes: Record<string, string> = {};
+  for (const key of keys) {
+    const asset = row.assets?.[key];
+    if (!asset || !isSafeRainGenerationAssetPath(asset.path, row.user_id, row.id)
+      || typeof asset.sha256 !== 'string' || !/^[a-f0-9]{64}$/.test(asset.sha256)) return null;
+    if (kind === 'audio' && (asset.mimeType !== 'audio/mpeg' || asset.path !== `${row.user_id}/${row.id}/${key}.mp3`
+      || row.checkpoints?.[key]?.state !== 'ready' || row.checkpoints?.[key]?.sha256 !== asset.sha256
+      || row.checkpoints?.[key]?.generationSpecSha256 !== generationSpecSha256
+      || row.checkpoints?.[key]?.provider !== 'elevenlabs' || row.checkpoints?.[key]?.model !== 'eleven_text_to_sound_v2'
+      || !['policyVersion', 'jobId', 'userId', 'takeIndex', 'seconds'].every(field => (row.checkpoints?.[key]?.audioOrigin as Record<string, unknown> | undefined)?.[field] === (asset.audioOrigin as Record<string, unknown> | undefined)?.[field])
+      || asset.audioOrigin?.jobId !== row.id || asset.audioOrigin?.userId !== row.user_id
+      || asset.audioOrigin?.takeIndex !== Number(key.slice(5)) || asset.audioOrigin?.seconds !== 30
+      || asset.audioOrigin?.policyVersion !== RAIN_AUDIO_POLICY.version || asset.durationSeconds !== 30)) return null;
+    if (kind === 'preview' && (asset.mimeType !== 'video/mp4' || asset.durationSeconds !== (key === 'preview30' ? 30 : 180)
+      || row.checkpoints?.render?.state !== 'ready' || row.checkpoints?.render?.generationSpecSha256 !== generationSpecSha256)) return null;
+    assetHashes[key] = asset.sha256;
+  }
+  const record = row.review_records?.[kind];
+  if (record && (record.jobId !== row.id || record.userId !== row.user_id || record.generationSpecSha256 !== generationSpecSha256
+    || !['approve', 'reject'].includes(record.decision) || !Number.isFinite(Date.parse(record.reviewedAt))
+    || Object.keys(record.assetHashes || {}).length !== keys.length || keys.some(key => record.assetHashes[key] !== assetHashes[key]))) return null;
+  return { status: record ? record.decision === 'approve' ? 'approved' : 'rejected' : 'pending', generationSpecSha256, assetHashes,
+    ...(record ? { reviewedAt: record.reviewedAt } : {}) };
 }
 
 /** Strictly scoped object keys only; never sign a caller/provider URL or a different owner's object. */

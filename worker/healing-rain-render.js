@@ -8,6 +8,8 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn } = require('node:child_process');
 
+const { prepareBranding, brandingFilter } = require('./healing-rain-branding');
+
 const SAMPLE_RATE = 48000;
 const MIN_FREE_BYTES = 10 * 1024 ** 3;
 const BASE = ['-hide_banner', '-loglevel', 'error', '-nostdin', '-n'];
@@ -296,10 +298,14 @@ async function renderHealingRain(rawOptions) {
     report.videoSeamMetrics = await videoSeamMetrics(loop, options.fps);
     if (report.videoSeamMetrics.decodedFrames !== cycleFrames) throw new Error('Video loop frame count is not exact');
     if (report.videoSeamMetrics.wrapToInteriorP95Ratio > 2) report.warnings.push('Video wrap difference is over twice its interior p95; visual review is required');
+    const loopInfo = await probe(loop);
+    const loopStream = loopInfo.streams.find(stream => stream.codec_type === 'video');
+    const branding = await prepareBranding({ snapshot: options.brandingSnapshot, title: options.brandingTitle, logoFile: options.brandingLogoFile, width: loopStream.width, height: loopStream.height, outputDir });
+    report.branding = branding?.receipt ?? { enabled: false };
     for (const output of report.outputs) {
       onProgress(`Muxing and checking ${output.seconds}s preview`);
       await requireSpace(outputDir);
-      await run('ffmpeg', [...BASE, '-stream_loop', '-1', '-i', loop, '-i', output.wav, '-map', '0:v:0', '-map', '1:a:0', '-c:v', 'copy', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-t', String(output.seconds), '-shortest', '-movflags', '+faststart', output.video]);
+      await run('ffmpeg', [...BASE, '-stream_loop', '-1', '-i', loop, '-i', output.wav, ...(branding ? ['-loop', '1', '-framerate', String(options.fps), '-i', branding.imagePath, '-filter_complex_threads', '1', '-filter_complex', brandingFilter(branding, '0:v', 2), '-map', '[branded]', '-c:v', 'libx264', '-preset', 'medium', '-crf', String(VIDEO_CRF), '-maxrate', String(VIDEO_MAXRATE), '-bufsize', String(VIDEO_BUFFER_BITS), '-bf', '0'] : ['-map', '0:v:0', '-c:v', 'copy']), '-map', '1:a:0', '-c:a', 'aac', '-b:a', '192k', '-ar', '48000', '-t', String(output.seconds), '-shortest', '-movflags', '+faststart', output.video]);
       output.bytes = (await fs.stat(output.video)).size;
       output.withinUploadBudget = output.bytes < MAX_PREVIEW_BYTES;
       if (!output.withinUploadBudget) throw new Error(`Preview exceeds the 45 MiB upload budget (${output.bytes} bytes); existing artifacts are preserved`);

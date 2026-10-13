@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /* eslint-disable @typescript-eslint/no-require-imports -- Standalone CommonJS worker, matching the existing local render pipeline. */
 'use strict';
+const { prepareBranding, brandingFilter } = require('./healing-rain-branding');
 
 // Local, additive compositor: one intro, one forward body loop, one continuous
 // audio bed. No provider calls, source edits, nested network inputs or overwrites.
@@ -198,8 +199,10 @@ async function renderHealingRainIntro(input) {
     if (report.audio.pcmMetrics.samples !== Math.round(maxSeconds * SAMPLE_RATE)) throw new Error('Audio source decoded shorter than required duration');
     requireAudioIntegrity(report.audio.pcmMetrics);
     const master = path.join(options.outputDir, `healing-rain-intro-${maxSeconds}s.mp4`);
+    const branding = await prepareBranding({ snapshot: options.brandingSnapshot, title: options.brandingTitle, logoFile: options.brandingLogoFile, width: options.width, height: options.height, outputDir: options.outputDir });
+    report.branding = branding?.receipt ?? { enabled: false };
     progress(`Rendering ${maxSeconds}s with the intro once and a forward body loop`);
-    await run('ffmpeg', [...BASE, '-i', options.introPath, '-stream_loop', '-1', '-i', options.bodyPath, '-i', wav, '-filter_complex_threads', '1', '-filter_complex', videoFilter(options, timeline, maxSeconds), '-map', '[out]', '-map', '2:a:0', '-c:v', 'libx264', '-preset', 'medium', '-crf', '23', '-maxrate', '1600000', '-bufsize', '3200000', '-x264-params', 'vbv-init=0.5', '-pix_fmt', 'yuv420p', '-r', String(options.fps), '-fps_mode', 'cfr', '-g', String(options.fps), '-keyint_min', String(options.fps), '-sc_threshold', '0', '-bf', '0', '-video_track_timescale', String(options.fps * 1000), '-c:a', 'aac', '-b:a', '192k', '-ar', String(SAMPLE_RATE), '-t', String(maxSeconds), '-movflags', '+faststart', master]);
+    await run('ffmpeg', [...BASE, '-i', options.introPath, '-stream_loop', '-1', '-i', options.bodyPath, '-i', wav, ...(branding ? ['-loop', '1', '-framerate', String(options.fps), '-i', branding.imagePath] : []), '-filter_complex_threads', '1', '-filter_complex', videoFilter(options, timeline, maxSeconds) + (branding ? ';' + brandingFilter(branding, 'out', 3) : ''), '-map', branding ? '[branded]' : '[out]', '-map', '2:a:0', '-c:v', 'libx264', '-preset', 'medium', '-crf', '23', '-maxrate', '1600000', '-bufsize', '3200000', '-x264-params', 'vbv-init=0.5', '-pix_fmt', 'yuv420p', '-r', String(options.fps), '-fps_mode', 'cfr', '-g', String(options.fps), '-keyint_min', String(options.fps), '-sc_threshold', '0', '-bf', '0', '-video_track_timescale', String(options.fps * 1000), '-c:a', 'aac', '-b:a', '192k', '-ar', String(SAMPLE_RATE), '-t', String(maxSeconds), '-movflags', '+faststart', master]);
     for (const seconds of options.durations) {
       const video = path.join(options.outputDir, `healing-rain-intro-${seconds}s.mp4`);
       if (seconds !== maxSeconds) {
