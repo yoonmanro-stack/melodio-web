@@ -5,6 +5,7 @@
 const { compileDirection } = require('./direction');
 const INTRO_VERSION = 'healing-rain-intro-v1-candidate';
 const INTRO_RECIPE_ID = 'cloud-bed-to-train';
+const TEMPLE_INTRO_RECIPE_ID = 'cloud-temple-to-rain';
 const INTRO_SOURCE_SECONDS = 15;
 const TRANSITION_SECONDS = 2.5;
 const OUTPUT_SECONDS = Object.freeze([30, 180]);
@@ -15,7 +16,7 @@ const INTRO_CATALOG = Object.freeze([
   { sceneId: 'cabin', recipeId: null, status: 'idea-only', concept: 'A warm resting nook resolves into the rainy forest cabin.' },
   { sceneId: 'night-nature', recipeId: null, status: 'idea-only', concept: 'Night mist reveals mossy canyon walls and a quiet stream.' },
   { sceneId: 'quiet-park', recipeId: null, status: 'idea-only', concept: 'A dim glow reveals the sheltered view of a quiet park.' },
-  { sceneId: 'mountain-temple', recipeId: null, status: 'idea-only', concept: 'Soft mist reveals the fixed temple eaves and courtyard.' },
+  { sceneId: 'mountain-temple', recipeId: TEMPLE_INTRO_RECIPE_ID, status: 'candidate', concept: 'A temple among dark clouds dissolves into the matching rainy mountain temple.' },
   { sceneId: 'pond', recipeId: null, status: 'idea-only', concept: 'Dark reflections resolve into small rings on a forest pond.' },
   { sceneId: 'lake', recipeId: null, status: 'idea-only', concept: 'Faint night mist reveals the matching still lake horizon.' },
   { sceneId: 'highland-village', recipeId: null, status: 'idea-only', concept: 'A distant warm glow resolves into a rainy highland village.' },
@@ -47,13 +48,14 @@ function outputPlan(totalSeconds, fps) {
 
 /**
  * input is the original main recipe input, optionally extended with:
- * introRecipeId, referenceEyeState ('asleep' or 'awake'), outputSeconds ([30, 180]).
+ * introRecipeId, referenceEyeState (train only: 'asleep' or 'awake'), outputSeconds ([30, 180]).
  * Reference-image attachment and media review remain required downstream steps.
  */
 function buildIntroSpec(mainDirection, input) {
   // This checks both the stored main specification and exact original-input provenance.
   const compiled = compileDirection(mainDirection, input);
-  if (mainDirection.sceneId !== 'train') fail('Only the train intro has a candidate implementation; other catalog entries are ideas.');
+  if (mainDirection.sceneId === 'mountain-temple') return buildTempleIntroSpec(mainDirection, input, compiled);
+  if (mainDirection.sceneId !== 'train') fail('Only the train and mountain-temple intros have candidate implementations; other catalog entries are ideas.');
   const recipeId = input.introRecipeId === undefined ? INTRO_RECIPE_ID : input.introRecipeId;
   if (recipeId !== INTRO_RECIPE_ID) fail('Unsupported intro recipe.');
   const referenceEyeState = input.referenceEyeState === undefined ? 'asleep' : input.referenceEyeState;
@@ -142,4 +144,81 @@ function buildIntroSpec(mainDirection, input) {
   };
 }
 
-module.exports = { INTRO_VERSION, INTRO_RECIPE_ID, INTRO_CATALOG, OUTPUT_SECONDS, buildIntroSpec };
+function buildTempleIntroSpec(mainDirection, input, compiled) {
+  const recipeId = input.introRecipeId === undefined ? TEMPLE_INTRO_RECIPE_ID : input.introRecipeId;
+  if (recipeId !== TEMPLE_INTRO_RECIPE_ID) fail('Unsupported intro recipe for mountain-temple.');
+  if (input.referenceEyeState !== undefined) fail('The people-free mountain-temple intro has no reference eye state.');
+  const outputSeconds = input.outputSeconds === undefined ? [...OUTPUT_SECONDS] : input.outputSeconds;
+  if (!Array.isArray(outputSeconds) || !outputSeconds.length || outputSeconds.length > OUTPUT_SECONDS.length || new Set(outputSeconds).size !== outputSeconds.length || outputSeconds.some(seconds => !OUTPUT_SECONDS.includes(seconds))) {
+    fail('Outputs must be distinct supported total durations: 30 and/or 180 seconds, including the intro.');
+  }
+  const anchors = [
+    'same camera angle, crop, perspective and apparent lens',
+    'same curved tiled eaves and roof silhouette',
+    'same wooden pillars, spacing and temple hall geometry',
+    'same stone stairway, step edges and courtyard boundaries',
+    'same single lantern position and soft amber light direction',
+    'same deep-night exposure and restrained wet-stone highlights',
+  ];
+  const imagePrompt = [
+    'Photorealistic cinematic 16:9 fantasy mountain-temple source image, using the supplied rainy main-body source image as the mandatory visual reference.',
+    'Preserve its exact camera angle, crop, perspective, curved tiled eaves, wooden pillars, temple hall, stone stairway, courtyard and single lantern. Keep every roof, pillar and step edge in the same screen position and scale.',
+    'Transform only the distant forested slopes and sky into soft layered clouds around the same secluded Korean Buddhist temple. The solid temple, courtyard and stairs stay securely grounded and motionless among clouds.',
+    'Deep dark night, muted clouds, one steady dim lantern with soft amber light, fixed low exposure and restrained wet-stone highlights. No daylight, twilight, bright moon or luminous cloud glow.',
+    'No people, animals, new buildings, extra lanterns, changed architecture, camera flythrough, dramatic magical beams, text or logos. Do not invent a missing reference anchor; the actual source image is the geometry authority.',
+  ].join(' ');
+  const videoPrompt = [
+    'One continuous 15-second shot animated from the cloud-temple reference image. Locked camera. Keep the eaves, roof silhouette, wooden pillars, stone stairway, courtyard and single lantern fixed in position, shape and scale.',
+    'Only extremely slow local cloud drift beyond the architecture. Keep all anchors unobscured; no moving mist over pillars or stair edges. The temple never floats, sways or changes shape. Deep dark night with steady soft amber lantern light, fixed exposure and restrained highlights.',
+    'Seconds 0-2: establish the matched cloud-temple composition. Seconds 2-12.5: quiet local cloud drift only. Seconds 12.5-15: maintain the same fixed anchors for a later 2.5-second dissolve into the matching rainy night temple.',
+    'The dissolve is added in editing: do not generate a location change, morph, cut or transition in this source. No people, animals, zoom, pan, flythrough, flashes, text or logos. Silent video; continuous rain audio is added separately from time zero.',
+  ].join(' ');
+  if (imagePrompt.length >= 1500 || videoPrompt.length >= 1500) fail('Intro prompts must be shorter than 1500 characters.');
+  return {
+    version: INTRO_VERSION, recipeId, status: 'candidate', productionEligible: false,
+    provenance: { mainDirectionVersion: mainDirection.version, mainSceneId: mainDirection.sceneId, mainInput: clone(mainDirection.sourceInput) },
+    introRecipe: {
+      id: recipeId, version: INTRO_VERSION, sourceSeconds: INTRO_SOURCE_SECONDS, occurrences: 1,
+      loop: false, reversePlayback: false, people: 'none', imagePrompt, videoPrompt,
+      referenceContract: {
+        role: 'main-body-source-image', required: true, generationBlockedWithoutReference: true,
+        sameReferenceAsMain: true, preserve: [...anchors], sourceImageIsGeometryAuthority: true,
+        requiredVisibleAnchors: ['eaves', 'wooden pillars', 'stone stairway', 'single lantern'],
+        generationBlockedWithoutVisibleAnchors: true, addingMissingAnchorsAllowed: false,
+      },
+      shots: [
+        { startSeconds: 0, endSeconds: 2, action: 'Establish the matched empty cloud-temple composition with fixed architecture.' },
+        { startSeconds: 2, endSeconds: 12.5, action: 'Only slow local cloud drift beyond unobscured eaves, pillars and stairs.' },
+        { startSeconds: 12.5, endSeconds: 15, action: 'Keep fixed anchors; editor dissolves to the rainy temple over these final 2.5 seconds.' },
+      ],
+    },
+    transitionContract: {
+      version: 'healing-rain-intro-transition-v1', method: 'postproduction-dissolve',
+      startSeconds: 12.5, endSeconds: 15, durationSeconds: TRANSITION_SECONDS,
+      mainSourceStartSeconds: 0, generatedMorph: false, fixedAnchors: [...anchors],
+      mainMotion: 'Main rain, irregular downward eave runoff and small courtyard splashes continue forward throughout the dissolve and all later cycles. Architecture and lantern remain fixed.',
+      acceptance: 'Review aligned eaves, pillar edges, stone steps and lantern at the transition. Reject doubled or drifting architecture, missing anchors, occluding clouds or exposure jumps; prompt compliance is not proof of a visual match.',
+    },
+    mainRecipe: {
+      sceneId: mainDirection.sceneId, sourceDirectionVersion: mainDirection.version,
+      direction: clone(mainDirection), imagePrompt: compiled.image, videoPrompt: compiled.video,
+      loop: clone(mainDirection.loop), render: clone(compiled.render), introIncludedInLoop: false,
+    },
+    audio: {
+      source: 'same-continuous-rain-bed-as-main', startSeconds: 0, continuousThroughTransition: true,
+      restartAtTransition: false, introGeneratedAudio: false, silentGapSeconds: 0,
+      fadeIn: { startSeconds: 0, endSeconds: 1.5, curve: 'gentle' },
+      levelRamp: { startSeconds: 0, endSeconds: 15, startGainDb: -6, endGainDb: 0, curve: 'smooth' },
+      silenceAfterOnsetAllowed: false, abruptLevelStepAllowed: false,
+      checks: ['Rain starts at timeline zero with a gentle onset; no delayed track or silent gap.', 'No restart, level jump, clipping or loud effect at the visual transition.'],
+    },
+    outputs: outputSeconds.map(seconds => outputPlan(seconds, mainDirection.loop.fps)),
+    qa: {
+      status: 'unreviewed', mediaReviewRequired: true, productionReady: false,
+      automaticChecksGuaranteeNaturalness: false, representativePassCoversOtherScenes: false,
+      checks: ['The actual rainy main source visibly contains all required architecture anchors.', 'Camera, eaves, pillars, stone steps and lantern match the actual reference.', 'No people or animals appear; clouds stay beyond unobscured architecture.', 'Dark night and soft amber light remain steady; no exposure jump.', 'No doubled or drifting architecture across the dissolve.', 'Intro appears exactly once; final durations include it.', 'Main rain and eave runoff continue forward across every loop seam.', 'Rain audio starts at zero and remains continuous through the transition.'].map(criteria => ({ status: 'unreviewed', criteria })),
+    },
+  };
+}
+
+module.exports = { INTRO_VERSION, INTRO_RECIPE_ID, TEMPLE_INTRO_RECIPE_ID, INTRO_CATALOG, OUTPUT_SECONDS, buildIntroSpec };

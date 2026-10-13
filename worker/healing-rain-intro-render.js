@@ -47,7 +47,7 @@ function normalizeOptions(input) {
   }
   options.fps = number(input.fps, 24, 'fps', 12, 24);
   options.width = number(input.width, 1284, 'width', 16, 1284);
-  options.height = number(input.height, 716, 'height', 16, 716);
+  options.height = number(input.height, 716, 'height', 16, 720);
   if (!Number.isInteger(options.fps) || !Number.isInteger(options.width) || !Number.isInteger(options.height) || options.width % 2 || options.height % 2) throw new Error('fps must be integer and dimensions must be even integers');
   options.introSeconds = number(input.introSeconds, 15, 'introSeconds', 0.1, 60);
   options.bodySeconds = number(input.bodySeconds, 10, 'bodySeconds', 0.1, 60);

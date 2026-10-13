@@ -6,7 +6,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 const directionModule = require('../shared/healing-rain/direction');
 const { buildDirection, compileDirection, SCENE_IDS } = directionModule;
-const { INTRO_VERSION, INTRO_RECIPE_ID, INTRO_CATALOG, buildIntroSpec } = require('../shared/healing-rain/intro');
+const { INTRO_VERSION, INTRO_RECIPE_ID, TEMPLE_INTRO_RECIPE_ID, INTRO_CATALOG, buildIntroSpec } = require('../shared/healing-rain/intro');
 const defaults = { sceneId: 'train', intensity: 'downpour', thunder: 'none', camera: 'bedside', palette: 'midnight', variation: 0, title: '비 내리는 침대 열차', hours: 10, takes: 6, notes: '' };
 const copy = value => JSON.parse(JSON.stringify(value));
 function freeze(value) {
@@ -54,6 +54,7 @@ assert.equal(spec.mainRecipe.loop.reversePlayback, false);
 assert.equal(spec.mainRecipe.introIncludedInLoop, false);
 
 // Check actual frame coverage, overlap and source repetition independently of the duration metadata.
+function verifyTimelineAndAudio(spec, main) {
 for (const output of spec.outputs) {
   const fps = main.loop.fps;
   let introFrames = 0;
@@ -111,6 +112,74 @@ assert.equal(spec.audio.levelRamp.startSeconds, 0);
 assert.equal(spec.audio.levelRamp.endSeconds, spec.transitionContract.endSeconds);
 assert.ok(spec.audio.levelRamp.startGainDb < spec.audio.levelRamp.endGainDb);
 assert.equal(spec.audio.abruptLevelStepAllowed, false);
+}
+verifyTimelineAndAudio(spec, main);
+
+const templeInput = freeze({ ...defaults, sceneId: 'mountain-temple', variation: 2, title: '고요한 산사' });
+const templeMain = freeze(buildDirection(templeInput));
+const templeOriginal = JSON.stringify(templeMain);
+const temple = buildIntroSpec(templeMain, templeInput);
+const templeCanonical = compileDirection(templeMain, templeInput);
+assert.equal(temple.recipeId, TEMPLE_INTRO_RECIPE_ID);
+assert.equal(temple.recipeId, 'cloud-temple-to-rain');
+assert.equal(temple.status, 'candidate');
+assert.equal(temple.productionEligible, false);
+assert.equal(temple.qa.productionReady, false);
+assert.equal(temple.qa.automaticChecksGuaranteeNaturalness, false);
+assert.equal(temple.qa.representativePassCoversOtherScenes, false);
+assert.ok(temple.qa.checks.every(check => check.status === 'unreviewed'));
+assert.deepEqual(temple, buildIntroSpec(templeMain, templeInput));
+assert.deepEqual(copy(temple), temple);
+assert.equal(temple.introRecipe.people, 'none');
+assert.equal(templeMain.fixed.people, 'none');
+assert.equal(templeMain.fixed.subject, null);
+assert.equal('referenceEyeState' in temple.introRecipe, false);
+assert.equal('eyeStateRule' in temple.introRecipe.referenceContract, false);
+assert.doesNotMatch(JSON.stringify([temple.introRecipe, temple.transitionContract, temple.qa]), /\b(woman|face|eyes|eyelids|asleep|awake|breathing|blanket|pillow|train)\b|RIGHT TO LEFT/i, 'temple contracts do not inherit human or train constraints');
+assert.equal(temple.introRecipe.referenceContract.required, true);
+assert.equal(temple.introRecipe.referenceContract.generationBlockedWithoutReference, true);
+assert.equal(temple.introRecipe.referenceContract.sameReferenceAsMain, true);
+assert.equal(temple.introRecipe.referenceContract.role, 'main-body-source-image');
+assert.equal(temple.introRecipe.referenceContract.sourceImageIsGeometryAuthority, true);
+assert.equal(temple.introRecipe.referenceContract.generationBlockedWithoutVisibleAnchors, true);
+assert.equal(temple.introRecipe.referenceContract.addingMissingAnchorsAllowed, false);
+assert.deepEqual(temple.introRecipe.referenceContract.requiredVisibleAnchors, ['eaves', 'wooden pillars', 'stone stairway', 'single lantern']);
+for (const anchor of ['eaves', 'pillars', 'stone stairway', 'lantern']) {
+  assert.ok(temple.introRecipe.imagePrompt.includes(anchor));
+  assert.ok(temple.introRecipe.videoPrompt.includes(anchor));
+  assert.ok(temple.transitionContract.fixedAnchors.some(value => value.includes(anchor)));
+}
+assert.match(temple.introRecipe.imagePrompt, /supplied rainy main-body source image as the mandatory visual reference/);
+assert.match(temple.introRecipe.imagePrompt, /Deep dark night/);
+assert.match(temple.introRecipe.imagePrompt, /soft amber light/);
+assert.match(temple.introRecipe.imagePrompt, /No people/);
+assert.match(temple.introRecipe.videoPrompt, /Locked camera/);
+assert.match(temple.introRecipe.videoPrompt, /do not generate a location change, morph, cut or transition/);
+assert.equal(temple.introRecipe.reversePlayback, false);
+assert.equal(temple.transitionContract.generatedMorph, false);
+assert.equal(temple.transitionContract.method, 'postproduction-dissolve');
+assert.deepEqual(temple.transitionContract.fixedAnchors, temple.introRecipe.referenceContract.preserve);
+assert.match(temple.transitionContract.acceptance, /Reject doubled or drifting architecture/);
+assert.match(temple.transitionContract.mainMotion, /continue forward/);
+assert.equal(temple.mainRecipe.imagePrompt, templeCanonical.image);
+assert.equal(temple.mainRecipe.videoPrompt, templeCanonical.video);
+assert.deepEqual(temple.mainRecipe.direction, templeMain);
+assert.deepEqual(temple.mainRecipe.loop, templeMain.loop);
+assert.equal(temple.mainRecipe.loop.sourceSeconds, 11);
+assert.equal(temple.mainRecipe.loop.cycleSeconds, 10);
+assert.equal(temple.mainRecipe.loop.reversePlayback, false);
+assert.equal(temple.mainRecipe.introIncludedInLoop, false);
+verifyTimelineAndAudio(temple, templeMain);
+const templeSample = buildIntroSpec(templeMain, { ...templeInput, introRecipeId: TEMPLE_INTRO_RECIPE_ID, outputSeconds: [30] });
+assert.deepEqual(templeSample.outputs.map(output => output.totalSeconds), [30]);
+assert.deepEqual(buildIntroSpec(templeMain, { ...templeInput, outputSeconds: [180, 30] }).outputs.map(output => output.totalSeconds), [180, 30]);
+for (const patch of [{ introRecipeId: INTRO_RECIPE_ID }, { introRecipeId: 'unknown' }, ...['asleep', 'awake', null, 'unknown'].map(referenceEyeState => ({ referenceEyeState })), ...[null, 30, [], [10], [30, 30], [30, 180, 180], ['30'], [Infinity], [30.5]].map(outputSeconds => ({ outputSeconds }))]) {
+  assert.throws(() => buildIntroSpec(templeMain, { ...templeInput, ...patch }), error => error.code === 'HEALING_RAIN_INTRO_INVALID');
+}
+assert.throws(() => buildIntroSpec(templeMain, { ...templeInput, palette: 'amber' }), error => error.issues.some(issue => issue.code === 'input-provenance'));
+const alteredTemple = copy(templeMain);
+alteredTemple.fixed.people = 'one-sleeping-adult-woman';
+assert.throws(() => buildIntroSpec(alteredTemple, templeInput), error => error.code === 'HEALING_RAIN_DIRECTION_INVALID');
 
 const awake = buildIntroSpec(main, { ...input, referenceEyeState: 'awake', outputSeconds: [30] });
 assert.match(awake.introRecipe.videoPrompt, /eyelids gently close once during seconds 2-5/);
@@ -131,9 +200,11 @@ for (const mutate of [value => { value.fixed.subject.face = 'moving'; }, value =
 for (const bad of [null, {}, [], 'main']) assert.throws(() => buildIntroSpec(bad, input), error => error.code === 'HEALING_RAIN_DIRECTION_INVALID');
 for (const bad of [null, {}, [], 'input']) assert.throws(() => buildIntroSpec(main, bad), error => error.code === 'HEALING_RAIN_DIRECTION_INVALID');
 assert.deepEqual(INTRO_CATALOG.map(item => item.sceneId), SCENE_IDS);
-assert.equal(INTRO_CATALOG.filter(item => item.status === 'candidate').length, 1);
-assert.equal(INTRO_CATALOG.filter(item => item.status === 'idea-only').length, 9);
-for (const sceneId of SCENE_IDS.filter(id => id !== 'train')) {
+assert.equal(INTRO_CATALOG.filter(item => item.status === 'candidate').length, 2);
+assert.equal(INTRO_CATALOG.filter(item => item.status === 'idea-only').length, 8);
+assert.equal(INTRO_CATALOG.find(item => item.sceneId === 'train').recipeId, INTRO_RECIPE_ID);
+assert.equal(INTRO_CATALOG.find(item => item.sceneId === 'mountain-temple').recipeId, TEMPLE_INTRO_RECIPE_ID);
+for (const sceneId of SCENE_IDS.filter(id => !['train', 'mountain-temple'].includes(id))) {
   const otherInput = { ...input, sceneId };
   assert.throws(() => buildIntroSpec(buildDirection(otherInput), otherInput), error => error.code === 'HEALING_RAIN_INTRO_INVALID');
   assert.equal(INTRO_CATALOG.find(item => item.sceneId === sceneId).recipeId, null);
@@ -145,6 +216,15 @@ spec.provenance.mainInput.palette = 'changed';
 spec.qa.status = 'passed';
 assert.equal(JSON.stringify(main), original);
 assert.equal(buildIntroSpec(main, input).qa.status, 'unreviewed');
+temple.mainRecipe.direction.fixed.camera.mode = 'changed';
+temple.mainRecipe.loop.cycleSeconds = 1;
+temple.provenance.mainInput.palette = 'changed';
+temple.introRecipe.referenceContract.preserve[0] = 'changed';
+temple.qa.status = 'passed';
+assert.equal(JSON.stringify(templeMain), templeOriginal);
+const freshTemple = buildIntroSpec(templeMain, templeInput);
+assert.equal(freshTemple.qa.status, 'unreviewed');
+assert.notEqual(freshTemple.introRecipe.referenceContract.preserve[0], 'changed');
 
 let maxImage = 0;
 let maxVideo = 0;
@@ -161,9 +241,27 @@ for (const intensity of ['gentle', 'moderate', 'heavy', 'downpour']) for (const 
   maxVideo = Math.max(maxVideo, varied.introRecipe.videoPrompt.length);
   combinations += 1;
 }
+let templeCombinations = 0;
+for (const intensity of ['gentle', 'moderate', 'heavy', 'downpour']) for (const camera of ['wide', 'window', 'bedside']) for (const palette of ['amber', 'linen', 'midnight']) for (const variation of [0, 1, 2, 3]) {
+  const variedInput = { ...templeInput, intensity, camera, palette, variation };
+  const variedMain = buildDirection(variedInput);
+  const varied = buildIntroSpec(variedMain, variedInput);
+  assert.ok(varied.introRecipe.imagePrompt.length < 1500);
+  assert.ok(varied.introRecipe.videoPrompt.length < 1500);
+  assert.equal(varied.qa.status, 'unreviewed');
+  assert.equal(varied.introRecipe.people, 'none');
+  assert.equal('referenceEyeState' in varied.introRecipe, false);
+  assert.deepEqual(varied.mainRecipe.direction, variedMain);
+  assert.equal(varied.mainRecipe.introIncludedInLoop, false);
+  maxImage = Math.max(maxImage, varied.introRecipe.imagePrompt.length);
+  maxVideo = Math.max(maxVideo, varied.introRecipe.videoPrompt.length);
+  templeCombinations += 1;
+}
+assert.equal(templeCombinations, 144);
 const source = fs.readFileSync(path.join(__dirname, '../shared/healing-rain/intro.js'), 'utf8');
 assert.ok(!/\bprocess\.|\bBuffer\b|Date\.|Math\.random|fetch\(/.test(source), 'candidate is deterministic and has no network or environment access');
 const context = { module: { exports: {} }, require(name) { assert.equal(name, './direction'); return directionModule; } };
 vm.runInNewContext(source, context);
 assert.equal(context.module.exports.buildIntroSpec(main, input).introRecipe.videoPrompt, buildIntroSpec(main, input).introRecipe.videoPrompt);
-console.log(`PASS: ${combinations} train candidates; exact frame coverage for 30s/180s; source provenance, single intro, forward main loop, continuous audio, reference eye states, idea-only restrictions, immutable main and unreviewed QA; prompts ${maxImage}/${maxVideo} characters.`);
+assert.equal(context.module.exports.buildIntroSpec(templeMain, templeInput).introRecipe.videoPrompt, freshTemple.introRecipe.videoPrompt);
+console.log(`PASS: ${combinations} train and ${templeCombinations} temple candidates; exact frame coverage for 30s/180s; source provenance, single intro, forward main loop, continuous audio, scene-specific reference contracts, 8 idea-only scenes, immutable main and unreviewed QA; prompts at most ${maxImage}/${maxVideo} characters.`);

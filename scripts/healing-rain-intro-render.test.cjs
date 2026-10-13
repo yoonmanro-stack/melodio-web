@@ -31,6 +31,16 @@ test('bounded CLI rejects network paths, fractional frames and exposed alignment
   assert.throws(() => parseCli(['--unexpected', 'value']), /Unknown option/);
 });
 
+test('output dimensions preserve existing defaults and allow exact 720p', () => {
+  const defaults = normalizeOptions(basic);
+  assert.equal(defaults.width, 1284);
+  assert.equal(defaults.height, 716);
+  const hd = normalizeOptions({ ...basic, width: 1280, height: 720 });
+  assert.equal(hd.width, 1280);
+  assert.equal(hd.height, 720);
+  assert.throws(() => normalizeOptions({ ...basic, height: 722 }), /height must be between 16 and 720/);
+});
+
 test('tiny actual compositor verifies single intro, exact phase, durations, gain and shared audio prefix', { timeout: 120000 }, async t => {
   try { execFileSync('ffmpeg', ['-version'], { stdio: 'ignore' }); } catch { t.skip('FFmpeg not installed'); return; }
   const directory = await fs.mkdtemp('/private/tmp/healing-rain-intro-test-');
