@@ -56,7 +56,7 @@ assert.equal(spec.mainRecipe.loop.reversePlayback, false);
 assert.equal(spec.mainRecipe.introIncludedInLoop, false);
 
 // Check actual frame coverage, overlap and source repetition independently of the duration metadata.
-function verifyTimelineAndAudio(spec, main) {
+function verifyTimelineAndAudio(spec, main, expectedMainPlayback = [17.5, 167.5], expectedRepeatCount = [2, 17]) {
 for (const output of spec.outputs) {
   const fps = main.loop.fps;
   let introFrames = 0;
@@ -83,7 +83,11 @@ for (const output of spec.outputs) {
   assert.equal(output.totalFrames / fps, output.totalSeconds);
   assert.equal(output.main.endSeconds, output.totalSeconds);
   assert.equal(output.main.startSeconds, spec.transitionContract.startSeconds);
+  assert.equal(output.transition.startSeconds, spec.transitionContract.startSeconds);
   assert.equal(output.transition.endSeconds, spec.introRecipe.sourceSeconds);
+  assert.equal(output.transition.seconds, spec.transitionContract.durationSeconds);
+  assert.equal(output.transition.startFrame, output.transition.startSeconds * fps);
+  assert.equal(output.transition.frames, overlapFrames);
   assert.equal(output.intro.occurrences, 1);
   assert.equal(output.intro.loop, false);
   assert.equal(output.main.sourceStartSeconds, 0);
@@ -94,8 +98,8 @@ for (const output of spec.outputs) {
   assert.equal(equation.introSeconds + equation.mainSeconds - equation.overlapSeconds, output.totalSeconds);
 }
 assert.deepEqual(spec.outputs.map(output => output.totalSeconds), [30, 180]);
-assert.deepEqual(spec.outputs.map(output => output.main.playbackSeconds), [17.5, 167.5]);
-assert.deepEqual(spec.outputs.map(output => output.main.repeatCount), [2, 17]);
+assert.deepEqual(spec.outputs.map(output => output.main.playbackSeconds), expectedMainPlayback);
+assert.deepEqual(spec.outputs.map(output => output.main.repeatCount), expectedRepeatCount);
 let previousEnd = 0;
 for (const shot of spec.introRecipe.shots) {
   assert.equal(shot.startSeconds, previousEnd, 'shot timeline has no gap or accidental overlap');
@@ -184,7 +188,7 @@ const alteredTemple = copy(templeMain);
 alteredTemple.fixed.people = 'one-sleeping-adult-woman';
 assert.throws(() => buildIntroSpec(alteredTemple, templeInput), error => error.code === 'HEALING_RAIN_DIRECTION_INVALID');
 
-// The new, explicit variant hides its independent adult subject before revealing the people-free main.
+// The explicit variant fades its independent resting subject while the people-free main emerges.
 const restInput = freeze({ ...templeInput, introRecipeId: CLOUD_REST_TEMPLE_INTRO_RECIPE_ID });
 const rest = buildIntroSpec(templeMain, restInput);
 assert.equal(CLOUD_REST_TEMPLE_INTRO_RECIPE_ID, 'cloud-rest-to-temple');
@@ -205,16 +209,20 @@ assert.equal(rest.introRecipe.subjectContract.additionalPeopleAllowed, false);
 assert.equal(rest.introRecipe.subjectContract.mainSubjectContractInherited, false);
 assert.equal(rest.assetFreshnessContract.scope, 'current-production-only');
 assert.equal(rest.assetFreshnessContract.freshOriginalCreationRequired, true);
+assert.equal(rest.assetFreshnessContract.freshOriginalCreationScope, 'new-production');
 assert.equal(rest.assetFreshnessContract.priorAssetsAllowed, false);
 assert.deepEqual(rest.assetFreshnessContract.requiredFreshAssets, ['intro-start-image', 'temple-main-image', 'rain-audio']);
-assert.equal(rest.assetFreshnessContract.optionalEndImageIfUsedMustBeFresh, true);
 assert.equal(rest.assetFreshnessContract.previousOrExcludedGenerationsAllowed, false);
+assert.equal(rest.assetFreshnessContract.currentProductionRevisionAllowed, true);
+assert.equal(rest.assetFreshnessContract.currentProductionSourceRetimingAllowed, true);
+assert.equal(rest.assetFreshnessContract.paidRegenerationRequiredForRevision, false);
 assert.equal(rest.introRecipe.referenceContract.role, 'fresh-cloud-rest-source-image');
 assert.equal(rest.introRecipe.referenceContract.required, true);
 assert.equal(rest.introRecipe.referenceContract.generationBlockedWithoutReference, true);
-assert.equal(rest.introRecipe.referenceContract.reuseApprovedReference, false);
-assert.equal(rest.introRecipe.referenceContract.reuseApprovedSource, false);
+assert.equal(rest.introRecipe.referenceContract.reuseCurrentProductionReferenceAllowed, true);
+assert.equal(rest.introRecipe.referenceContract.reuseCurrentProductionSourceAllowed, true);
 assert.equal(rest.introRecipe.referenceContract.freshOriginalCreationRequired, true);
+assert.equal(rest.introRecipe.referenceContract.freshOriginalCreationScope, 'new-production');
 assert.equal(rest.introRecipe.referenceContract.currentProductionOnly, true);
 assert.equal(rest.introRecipe.referenceContract.priorAssetReferencesAllowed, false);
 assert.equal(rest.introRecipe.referenceContract.imageCreationRequiresPriorReference, false);
@@ -228,39 +236,34 @@ assert.equal(rest.introRecipe.mainReferenceContract.sourceImageIsGeometryAuthori
 assert.equal(rest.introRecipe.mainReferenceContract.matchingArchitectureRequired, false);
 assert.equal(rest.introRecipe.mainReferenceContract.matchingCameraGeometryRequired, false);
 assert.equal(rest.introRecipe.mainReferenceContract.freshOriginalCreationRequired, true);
+assert.equal(rest.introRecipe.mainReferenceContract.freshOriginalCreationScope, 'new-production');
 assert.equal(rest.introRecipe.mainReferenceContract.currentProductionOnly, true);
 assert.equal(rest.introRecipe.mainReferenceContract.priorAssetsAllowed, false);
-assert.equal(rest.introRecipe.mainReferenceContract.exposureMatchScope, 'cloud-cover-endpoint-only');
+assert.equal(rest.introRecipe.mainReferenceContract.exposureMatchScope, 'editorial-dissolve-only');
 assert.equal(rest.introRecipe.mainReferenceContract.introExposureMustMatchMain, false);
 assert.deepEqual(rest.transitionContract.fixedAnchors, rest.introRecipe.mainReferenceContract.preserve);
 assert.equal(rest.transitionContract.geometryMatchRequired, false);
 assert.equal(rest.transitionContract.subjectMatchRequired, false);
 assert.equal(rest.transitionContract.generatedMorph, false);
 assert.equal(rest.transitionContract.method, 'postproduction-dissolve');
-assert.equal(rest.transitionContract.startSeconds, 12.5);
+assert.equal(rest.transitionContract.startSeconds, 6);
 assert.equal(rest.transitionContract.endSeconds, 15);
-assert.equal(rest.introRecipe.endReferenceContract.required, false);
-assert.equal(rest.introRecipe.endReferenceContract.generationRequired, false);
-assert.equal(rest.introRecipe.endReferenceContract.ifProvidedMustFullyOccludeSubject, true);
-assert.equal(rest.introRecipe.endReferenceContract.templeOrArchitectureAllowed, false);
-assert.equal(rest.introRecipe.endReferenceContract.currentProductionOnly, true);
-assert.equal(rest.introRecipe.endReferenceContract.priorAssetsAllowed, false);
-assert.equal(rest.introRecipe.endReferenceContract.ifProvidedMustBeFresh, true);
-assert.match(rest.introRecipe.endImagePrompt, /cloud cover only/);
+assert.equal(rest.transitionContract.durationSeconds, 9);
+assert.equal(rest.transitionContract.opacityCurve, 'smoothstep');
+assert.equal(rest.transitionContract.intentionalSubjectOverlapAllowed, true);
+assert.equal(rest.transitionContract.subjectOverlapEndSeconds, rest.transitionContract.endSeconds);
+assert.equal(rest.transitionContract.opacityBlend.scope, 'entire-intro-frame');
+assert.equal(rest.introRecipe.endFrameConditioning, 'none');
+assert.equal(rest.introRecipe.endFrameConditioningScope, 'new-generation');
+assert.equal('endReferenceContract' in rest.introRecipe, false);
+assert.equal('endImagePrompt' in rest.introRecipe, false, 'do not request an endpoint image that would force cloud motion');
+assert.ok(rest.qa.checks.some(check => /Local revisions retain their original generation provenance/.test(check.criteria)));
 const occlusion = rest.transitionContract.cloudOcclusionGate;
-assert.equal(occlusion.required, true);
-assert.equal(occlusion.status, 'unreviewed');
-assert.equal(occlusion.reviewRequiredBeforeComposite, true);
-assert.equal(occlusion.allPeopleFullyHidden, true);
-assert.equal(occlusion.bedAndBeddingFullyHidden, true);
-assert.equal(occlusion.noReappearance, true);
-assert.equal(occlusion.promptComplianceIsProof, false);
-assert.equal(occlusion.startSeconds, 11);
-assert.equal(occlusion.endSeconds, rest.introRecipe.sourceSeconds);
-assert.ok(occlusion.startSeconds < rest.transitionContract.startSeconds, 'cloud cover must be established before the dissolve');
-assert.match(occlusion.acceptance, /Every frame/);
-assert.match(occlusion.acceptance, /do not composite an unreviewed or failed source/);
-assert.deepEqual(rest.introRecipe.shots.map(shot => [shot.startSeconds, shot.endSeconds]), [[0, 7], [7, 11], [11, 12.5], [12.5, 15]]);
+assert.equal(occlusion.required, false);
+assert.equal(occlusion.reviewRequiredBeforeComposite, false);
+assert.equal(occlusion.allPeopleFullyHidden, false);
+assert.equal(occlusion.bedAndBeddingFullyHidden, false);
+assert.deepEqual(rest.introRecipe.shots.map(shot => [shot.startSeconds, shot.endSeconds]), [[0, 6], [6, 15]]);
 assert.match(rest.introRecipe.imagePrompt, /Create a fresh original/);
 assert.match(rest.introRecipe.imagePrompt, /Do not reuse or reference previous production assets/);
 assert.match(rest.introRecipe.imagePrompt, /new image becomes the identity and composition authority/);
@@ -269,25 +272,32 @@ assert.match(rest.introRecipe.imagePrompt, /slightly brighter than a typical nig
 assert.match(rest.introRecipe.imagePrompt, /avoid gloomy shadows, overbright white or daylight pastels/);
 assert.match(rest.introRecipe.imagePrompt, /Do not copy its camera geometry, architecture or framing/);
 assert.match(rest.introRecipe.videoPrompt, /Locked camera/);
-assert.match(rest.introRecipe.videoPrompt, /newly created starter image; no prior assets/);
-assert.match(rest.introRecipe.videoPrompt, /actual opaque pearl clouds pass between the lens and woman/);
-assert.match(rest.introRecipe.videoPrompt, /face never fades, dissolves or morphs/);
-assert.match(rest.introRecipe.videoPrompt, /By second 11/);
-assert.match(rest.introRecipe.videoPrompt, /matching the supplied cloud-only end frame/);
-assert.match(rest.introRecipe.videoPrompt, /No person, silhouette, skin, bed or bedding returns/);
-assert.match(rest.introRecipe.videoPrompt, /warm pearl to muted slate-grey at the new rainy temple night level/);
-assert.match(rest.introRecipe.videoPrompt, /no abrupt darkness, smoke, scary storm/);
-assert.match(rest.introRecipe.videoPrompt, /Do not generate a temple, person-to-building morph/);
-assert.match(rest.introRecipe.videoPrompt, /No waking, extra people, fast motion, pan, zoom, flythrough, lightning/);
-assert.equal(rest.transitionContract.luminanceRamp.startSeconds, occlusion.startSeconds);
+assert.match(rest.introRecipe.videoPrompt, /newly created starter image; no prior production assets/);
+assert.match(rest.introRecipe.videoPrompt, /Seconds 0-15/);
+assert.match(rest.introRecipe.videoPrompt, /barely drift locally at an even, extremely slow pace/);
+assert.match(rest.introRecipe.videoPrompt, /No accelerating, surging, billowing, engulfing, lensward cloud push, smoke, flames or storm/);
+assert.match(rest.introRecipe.videoPrompt, /stable through the last frame/);
+assert.match(rest.introRecipe.videoPrompt, /no cloud-only endpoint or forced covering/);
+assert.match(rest.introRecipe.videoPrompt, /Full occlusion is not required/);
+assert.match(rest.introRecipe.videoPrompt, /smoothstep opacity dissolve during seconds 6-15/);
+assert.match(rest.introRecipe.videoPrompt, /woman, bedding and clouds fade together/);
+assert.match(rest.introRecipe.videoPrompt, /person need not disappear before the temple appears/);
+assert.match(rest.introRecipe.videoPrompt, /Do not generate a temple, face-to-building morph/);
+assert.match(rest.introRecipe.videoPrompt, /No waking, extra people, pan, zoom, flythrough, lightning/);
+assert.equal(rest.transitionContract.luminanceRamp.startSeconds, rest.transitionContract.startSeconds);
 assert.equal(rest.transitionContract.luminanceRamp.endSeconds, rest.transitionContract.endSeconds);
 assert.equal(rest.transitionContract.luminanceRamp.from, 'softly-luminous-warm-pearl');
 assert.equal(rest.transitionContract.luminanceRamp.to, 'muted-slate-grey-temple-night-level');
+assert.equal(rest.transitionContract.luminanceRamp.method, 'editorial-opacity-blend');
+assert.equal(rest.transitionContract.luminanceRamp.curve, 'smoothstep');
 assert.equal(rest.transitionContract.luminanceRamp.abruptDarkeningAllowed, false);
 assert.equal(rest.transitionContract.luminanceRamp.stormOrSmokeAllowed, false);
 assert.equal(rest.mainRecipe.subjectContract.people, 'none');
 assert.equal(rest.mainRecipe.subjectContract.introSubjectAllowedInMain, false);
 assert.equal(rest.mainRecipe.subjectContract.generationFromIntroReferenceAllowed, false);
+assert.equal(rest.mainRecipe.subjectContract.introOverlapAllowedDuringTransition, true);
+assert.equal(rest.mainRecipe.subjectContract.peopleFreeAfterSeconds, 15);
+assert.match(rest.transitionContract.acceptance, /residual people at or after second 15/);
 assert.equal(rest.mainRecipe.direction.fixed.people, 'none');
 assert.equal(rest.mainRecipe.direction.fixed.subject, null);
 assert.equal(rest.mainRecipe.imagePrompt, templeCanonical.image);
@@ -295,8 +305,20 @@ assert.equal(rest.mainRecipe.videoPrompt, templeCanonical.video);
 assert.deepEqual(rest.mainRecipe.direction, templeMain);
 assert.deepEqual(rest.mainRecipe.loop, templeMain.loop);
 assert.deepEqual(rest.audio, temple.audio);
-assert.deepEqual(rest.outputs, temple.outputs);
-verifyTimelineAndAudio(rest, templeMain);
+assert.deepEqual(rest.outputs.map(output => output.transition.opacityCurve), ['smoothstep', 'smoothstep']);
+verifyTimelineAndAudio(rest, templeMain, [24, 174], [3, 18]);
+// Evaluate the declared editorial weights: slow start/end, continuous overlap, no residual intro.
+const blend = rest.transitionContract.opacityBlend;
+const weightsAt = t => {
+  const p = vm.runInNewContext(blend.progress, { t, clamp: (value, min, max) => Math.min(max, Math.max(min, value)) });
+  const mainWeight = vm.runInNewContext(blend.mainWeight, { p });
+  return { mainWeight, introWeight: vm.runInNewContext(blend.introWeight, { mainWeight }) };
+};
+for (const [time, mainWeight] of [[0, 0], [6, 0], [8.25, 0.15625], [10.5, 0.5], [12.75, 0.84375], [15, 1], [30, 1]]) {
+  assert.deepEqual(weightsAt(time), { mainWeight, introWeight: 1 - mainWeight });
+}
+assert.ok(weightsAt(6.01).mainWeight < 0.00001, 'the dissolve begins gently');
+assert.ok(weightsAt(14.99).introWeight < 0.00001, 'the dissolve settles gently');
 assert.deepEqual(buildIntroSpec(templeMain, { ...restInput, referenceEyeState: 'asleep' }), rest);
 assert.deepEqual(buildIntroSpec(templeMain, { ...restInput, outputSeconds: [30] }).outputs.map(output => output.totalSeconds), [30]);
 for (const referenceEyeState of ['awake', null, 'unknown', 0]) {
@@ -311,7 +333,7 @@ assert.throws(() => buildIntroSpec(alteredTemple, restInput), error => error.cod
 const restBeforeMutation = JSON.stringify(rest);
 rest.introRecipe.referenceContract.preserve[0] = 'changed';
 rest.mainRecipe.subjectContract.people = 'changed';
-rest.transitionContract.cloudOcclusionGate.status = 'passed';
+rest.transitionContract.cloudOcclusionGate.required = true;
 assert.equal(JSON.stringify(buildIntroSpec(templeMain, restInput)), restBeforeMutation, 'no candidate can approve or modify future candidates');
 assert.equal(JSON.stringify(templeMain), templeOriginal);
 
@@ -392,15 +414,18 @@ for (const intensity of ['gentle', 'moderate', 'heavy', 'downpour']) for (const 
   maxVideo = Math.max(maxVideo, varied.introRecipe.videoPrompt.length);
   templeCombinations += 1;
   const variedRest = buildIntroSpec(variedMain, { ...variedInput, introRecipeId: CLOUD_REST_TEMPLE_INTRO_RECIPE_ID });
-  for (const prompt of [variedRest.introRecipe.imagePrompt, variedRest.introRecipe.videoPrompt, variedRest.introRecipe.endImagePrompt]) assert.ok(prompt.length < 1500);
+  for (const prompt of [variedRest.introRecipe.imagePrompt, variedRest.introRecipe.videoPrompt]) assert.ok(prompt.length < 1500);
   assert.equal(variedRest.qa.status, 'unreviewed');
-  assert.equal(variedRest.transitionContract.cloudOcclusionGate.status, 'unreviewed');
+  assert.equal(variedRest.transitionContract.cloudOcclusionGate.required, false);
+  assert.equal(variedRest.introRecipe.endFrameConditioning, 'none');
+  assert.equal('endImagePrompt' in variedRest.introRecipe, false);
   assert.equal(variedRest.introRecipe.people, 'one-sleeping-adult-woman');
   assert.equal(variedRest.mainRecipe.direction.fixed.people, 'none');
   assert.deepEqual(variedRest.mainRecipe.direction, variedMain);
-  assert.deepEqual(variedRest.outputs, varied.outputs);
+  assert.deepEqual(variedRest.outputs.map(output => output.main.playbackSeconds), [24, 174]);
+  assert.deepEqual(variedRest.outputs.map(output => output.transition.seconds), [9, 9]);
   assert.deepEqual(variedRest.audio, varied.audio);
-  maxImage = Math.max(maxImage, variedRest.introRecipe.imagePrompt.length, variedRest.introRecipe.endImagePrompt.length);
+  maxImage = Math.max(maxImage, variedRest.introRecipe.imagePrompt.length);
   maxVideo = Math.max(maxVideo, variedRest.introRecipe.videoPrompt.length);
   restCombinations += 1;
 }
@@ -413,4 +438,4 @@ vm.runInNewContext(source, context);
 assert.equal(context.module.exports.buildIntroSpec(main, input).introRecipe.videoPrompt, buildIntroSpec(main, input).introRecipe.videoPrompt);
 assert.equal(context.module.exports.buildIntroSpec(templeMain, templeInput).introRecipe.videoPrompt, freshTemple.introRecipe.videoPrompt);
 assert.equal(context.module.exports.buildIntroSpec(templeMain, restInput).introRecipe.videoPrompt, buildIntroSpec(templeMain, restInput).introRecipe.videoPrompt);
-console.log(`PASS: ${combinations} train, ${templeCombinations} temple and ${restCombinations} cloud-rest candidates; exact frame coverage for 30s/180s; unchanged default outputs, separate subject contracts, cloud-occlusion gate, source provenance, single intro, forward main loop, continuous audio, 8 idea-only scenes, immutable main and unreviewed QA; prompts at most ${maxImage}/${maxVideo} characters.`);
+console.log(`PASS: ${combinations} train, ${templeCombinations} temple and ${restCombinations} cloud-rest candidates; exact frame coverage for 30s/180s; unchanged default outputs, 9s smoothstep with intentional overlap, no occlusion gate or endpoint conditioning, current-production revision permission, single intro, forward main loop, continuous audio, immutable main and unreviewed QA; prompts at most ${maxImage}/${maxVideo} characters.`);

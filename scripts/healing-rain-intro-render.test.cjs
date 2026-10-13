@@ -13,6 +13,7 @@ const basic = { introPath: '/tmp/intro.mp4', bodyPath: '/tmp/body.mp4', audioPat
 test('default timeline contains exactly one 15s intro and resumes body at 2.5s', () => {
   const options = normalizeOptions(basic), timeline = planTimeline(options);
   assert.deepEqual(options.durations, [30, 180]);
+  assert.equal(options.transitionCurve, 'linear'); assert.equal(timeline.transitionCurve, 'linear');
   assert.equal(options.initialGain, 10 ** (-6 / 20)); assert.equal(options.onsetSeconds, 1.5);
   assert.deepEqual(framePlan(timeline, 299), { introFrame: 299, bodyFrame: null, bodyAlpha: 0 });
   assert.deepEqual(framePlan(timeline, 300), { introFrame: 300, bodyFrame: 0, bodyAlpha: 0 });
@@ -25,9 +26,25 @@ test('default timeline contains exactly one 15s intro and resumes body at 2.5s',
   }
 });
 
+test('smoothstep dissolve eases both ends without changing the forward body timeline', () => {
+  const options = normalizeOptions({ ...basic, fadeSeconds: 9, transitionCurve: 'smoothstep' });
+  const timeline = planTimeline(options);
+  assert.equal(timeline.transitionCurve, 'smoothstep');
+  assert.equal(timeline.bodyStartsAtSeconds, 6);
+  for (const [position, alpha] of [[0, 0], [0.25, 0.15625], [0.5, 0.5], [0.75, 0.84375], [1, 1]]) {
+    const frame = timeline.bodyStartsAtFrame + timeline.fadeFrames * position;
+    assert.equal(framePlan(timeline, frame).bodyAlpha, alpha);
+    assert.equal(framePlan(timeline, frame).bodyFrame, timeline.fadeFrames * position);
+  }
+  assert.equal(framePlan(timeline, 0).bodyAlpha, 0);
+  assert.deepEqual(framePlan(timeline, 384), { introFrame: null, bodyFrame: 0, bodyAlpha: 1 });
+});
+
 test('bounded CLI rejects network paths, fractional frames and exposed alignment edges', () => {
   assert.deepEqual(parseCli(['--intro', '/tmp/a.mp4', '--durations', '30,180', '--anchor-alignment', '{"scale":1.12,"translateY":0.04}']), { introPath: '/tmp/a.mp4', durations: ['30', '180'], anchorAlignment: { scale: 1.12, translateY: 0.04 } });
   for (const invalid of [{ introPath: 'https://example.com/intro.mp4' }, { fps: 30 }, { width: 1283 }, { fadeSeconds: 0.111 }, { durations: [181] }, { anchorAlignment: { translateY: 0.1 } }]) assert.throws(() => normalizeOptions({ ...basic, ...invalid }));
+  assert.deepEqual(parseCli(['--transition-curve', 'smoothstep']), { transitionCurve: 'smoothstep' });
+  assert.throws(() => normalizeOptions({ ...basic, ...parseCli(['--transition-curve', 'ease-in']) }), /transitionCurve must be linear or smoothstep/);
   assert.throws(() => parseCli(['--unexpected', 'value']), /Unknown option/);
 });
 
@@ -63,20 +80,44 @@ test('tiny actual compositor verifies single intro, exact phase, durations, gain
   const initialHashes = await Promise.all([intro, body, audio].map(hash));
   const outputDir = path.join(directory, 'render');
   const report = await renderHealingRainIntro({ introPath: intro, bodyPath: body, audioPath: audio, outputDir, introSeconds: 3, bodySeconds: 2, fadeSeconds: 0.5, onsetSeconds: 0.25, width: 64, height: 48, durations: [5, 8] });
+  const smoothReport = await renderHealingRainIntro({ introPath: intro, bodyPath: body, audioPath: audio, outputDir: path.join(directory, 'smoothstep-render'), introSeconds: 3, bodySeconds: 2, fadeSeconds: 0.5, transitionCurve: 'smoothstep', onsetSeconds: 0.25, width: 64, height: 48, durations: [5, 8] });
   assert.equal(report.status, 'complete'); assert.equal(report.timeline.introOccurrences, 1);
+  assert.equal(smoothReport.status, 'complete'); assert.equal(smoothReport.timeline.transitionCurve, 'smoothstep');
   assert.equal(report.audio.pcmMetrics.samples, 8 * 48000);
   assert.equal(report.audio.pcmMetrics.silent100msWindows, 0);
   const frames = file => ffmpeg(['-i', file, '-map', '0:v:0', '-an', '-vf', 'scale=1:1,format=rgb24', '-f', 'rawvideo', '-']);
-  const masterFrames = frames(report.outputs[1].video), bodyFrames = frames(body);
+  const masterFrames = frames(report.outputs[1].video), smoothFrames = frames(smoothReport.outputs[1].video), bodyFrames = frames(body);
   assert.equal(masterFrames.length / 3, 8 * 24);
+  assert.equal(smoothFrames.length / 3, 8 * 24);
   assert.ok(masterFrames[0] > 200 && masterFrames[1] < 5, 'intro begins once in red');
+  assert.ok(smoothFrames[0] > 200 && smoothFrames[1] < 5, 'eased render begins with the same intro');
+  const planes = file => ffmpeg(['-i', file, '-map', '0:v:0', '-an', '-vf', 'scale=2:2,format=yuv444p', '-f', 'rawvideo', '-']);
+  const introPlanes = planes(intro), bodyPlanes = planes(body);
+  for (const rendered of [report, smoothReport]) {
+    const outputPlanes = planes(rendered.outputs[1].video);
+    for (const position of [0.25, 0.5, 0.75]) {
+      const outputFrame = rendered.timeline.bodyStartsAtFrame + rendered.timeline.fadeFrames * position;
+      const plan = framePlan(rendered.timeline, outputFrame);
+      for (let plane = 0; plane < 3; plane++) {
+        const expected = introPlanes[plan.introFrame * 12 + plane * 4] * (1 - plan.bodyAlpha) + bodyPlanes[plan.bodyFrame * 12 + plane * 4] * plan.bodyAlpha;
+        const actual = outputPlanes[outputFrame * 12 + plane * 4];
+        assert.ok(Math.abs(actual - expected) <= 3, `${rendered.timeline.transitionCurve} blend at ${position} on plane ${plane}: actual ${actual}, expected ${expected}`);
+      }
+    }
+  }
   for (let index = 3 * 24; index < 8 * 24; index++) {
     const bodyIndex = (index - 60) % 48;
-    for (let color = 0; color < 3; color++) assert.ok(Math.abs(masterFrames[index * 3 + color] - bodyFrames[bodyIndex * 3 + color]) <= 4, `output frame ${index} must continue forward from body frame ${bodyIndex}`);
+    for (const renderedFrames of [masterFrames, smoothFrames]) {
+      for (let color = 0; color < 3; color++) assert.ok(Math.abs(renderedFrames[index * 3 + color] - bodyFrames[bodyIndex * 3 + color]) <= 4, `output frame ${index} must continue forward from body frame ${bodyIndex}`);
+    }
   }
   assert.deepEqual(frames(report.outputs[0].video), masterFrames.subarray(0, 5 * 24 * 3));
+  assert.deepEqual(frames(smoothReport.outputs[0].video), smoothFrames.subarray(0, 5 * 24 * 3));
   const stereo = file => ffmpeg(['-i', file, '-map', '0:a:0', '-ar', '48000', '-ac', '2', '-f', 'f32le', '-']);
   const masterAudio = stereo(report.outputs[1].video), previewAudio = stereo(report.outputs[0].video);
+  assert.equal(await hash(report.audio.wav), await hash(smoothReport.audio.wav), 'transition curve leaves the continuous PCM bed unchanged');
+  assert.deepEqual(stereo(smoothReport.outputs[1].video), masterAudio, 'transition curve leaves encoded master audio unchanged');
+  assert.deepEqual(stereo(smoothReport.outputs[0].video), previewAudio, 'transition curve leaves encoded preview audio unchanged');
   let prefixError = 0, prefixEnergy = 0;
   for (let offset = 0; offset < (5 * 48000 - 2048) * 8; offset += 4) {
     const sample = masterAudio.readFloatLE(offset), difference = previewAudio.readFloatLE(offset) - sample;
@@ -93,7 +134,7 @@ test('tiny actual compositor verifies single intro, exact phase, durations, gain
       assert.ok(Math.abs(actual - source * expectedGain) < 0.00002, 'audio gain changes smoothly then remains exactly unity');
     }
   }
-  for (const output of report.outputs) {
+  for (const output of [...report.outputs, ...smoothReport.outputs]) {
     assert.equal(output.media.duration, output.seconds);
     assert.equal(Number(output.media.streams.find(stream => stream.codec_type === 'video').nb_read_frames), output.seconds * 24);
     assert.equal(output.audioMetrics.silent100msWindows, 0);

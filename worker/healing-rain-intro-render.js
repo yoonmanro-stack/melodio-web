@@ -53,6 +53,8 @@ function normalizeOptions(input) {
   options.bodySeconds = number(input.bodySeconds, 10, 'bodySeconds', 0.1, 60);
   options.fadeSeconds = number(input.fadeSeconds, 2.5, 'fadeSeconds', 1 / options.fps, options.introSeconds);
   if (options.fadeSeconds >= Math.min(options.introSeconds, options.bodySeconds)) throw new Error('fadeSeconds must be shorter than both intro and body');
+  options.transitionCurve = input.transitionCurve ?? 'linear';
+  if (!['linear', 'smoothstep'].includes(options.transitionCurve)) throw new Error('transitionCurve must be linear or smoothstep');
   options.initialGain = number(input.initialGain, 10 ** (-6 / 20), 'initialGain', 0.01, 1);
   options.onsetSeconds = number(input.onsetSeconds, Math.min(1.5, options.introSeconds), 'onsetSeconds', 0, options.introSeconds);
   const alignment = input.anchorAlignment ?? {};
@@ -75,7 +77,7 @@ function planTimeline(options) {
   const introFrames = Math.round(options.introSeconds * options.fps);
   const bodyFrames = Math.round(options.bodySeconds * options.fps);
   const fadeFrames = Math.round(options.fadeSeconds * options.fps);
-  return { introFrames, bodyFrames, fadeFrames, bodyStartsAtFrame: introFrames - fadeFrames,
+  return { introFrames, bodyFrames, fadeFrames, transitionCurve: options.transitionCurve ?? 'linear', bodyStartsAtFrame: introFrames - fadeFrames,
     bodyStartsAtSeconds: options.introSeconds - options.fadeSeconds, introOccurrences: 1,
     firstBodyOnlyFrame: introFrames, bodyPhaseAtFirstBodyOnlyFrame: fadeFrames % bodyFrames };
 }
@@ -84,7 +86,8 @@ function framePlan(timeline, outputFrame) {
   if (!Number.isInteger(outputFrame) || outputFrame < 0) throw new Error('outputFrame must be a nonnegative integer');
   const { introFrames, bodyFrames, fadeFrames, bodyStartsAtFrame } = timeline;
   const inIntro = outputFrame < introFrames;
-  const bodyAlpha = Math.min(1, Math.max(0, (outputFrame - bodyStartsAtFrame) / fadeFrames));
+  const position = Math.min(1, Math.max(0, (outputFrame - bodyStartsAtFrame) / fadeFrames));
+  const bodyAlpha = timeline.transitionCurve === 'smoothstep' ? position * position * (3 - 2 * position) : position;
   return { introFrame: inIntro ? outputFrame : null,
     bodyFrame: outputFrame >= bodyStartsAtFrame ? (outputFrame - bodyStartsAtFrame) % bodyFrames : null,
     bodyAlpha };
@@ -96,9 +99,14 @@ function videoFilter(options, timeline, seconds) {
   const alignedWidth = Math.ceil(options.width * alignment.scale / 2) * 2;
   const alignedHeight = Math.ceil(options.height * alignment.scale / 2) * 2;
   const align = `scale=${alignedWidth}:${alignedHeight},crop=${options.width}:${options.height}:${Math.round((alignedWidth - options.width) / 2 - alignment.translateX * options.width)}:${Math.round((alignedHeight - options.height) / 2 - alignment.translateY * options.height)}`;
+  // xfade's P is the intro weight (1 -> 0). Ease that weight uniformly on
+  // every plane, preserving forward body playback throughout the dissolve.
+  const transition = options.transitionCurve === 'smoothstep'
+    ? "transition=custom:expr='A*(P*P*(3-2*P))+B*(1-P*P*(3-2*P))'"
+    : 'transition=fade';
   return `[0:v:0]${fit},${align},trim=end_frame=${timeline.introFrames},setpts=PTS-STARTPTS,settb=AVTB[intro];` +
     `[1:v:0]${fit},setpts=PTS-STARTPTS,settb=AVTB[body];` +
-    `[intro][body]xfade=transition=fade:duration=${options.fadeSeconds}:offset=${timeline.bodyStartsAtSeconds},trim=end_frame=${Math.round(seconds * options.fps)},setpts=PTS-STARTPTS,format=yuv420p[out]`;
+    `[intro][body]xfade=${transition}:duration=${options.fadeSeconds}:offset=${timeline.bodyStartsAtSeconds},trim=end_frame=${Math.round(seconds * options.fps)},setpts=PTS-STARTPTS,format=yuv420p[out]`;
 }
 
 async function probe(file, countFrames = false) {
@@ -223,7 +231,7 @@ async function renderHealingRainIntro(input) {
 }
 
 function parseCli(argv) {
-  const names = { '--intro': 'introPath', '--body': 'bodyPath', '--audio': 'audioPath', '--output-dir': 'outputDir', '--intro-seconds': 'introSeconds', '--body-seconds': 'bodySeconds', '--fade-seconds': 'fadeSeconds', '--initial-gain': 'initialGain', '--onset-seconds': 'onsetSeconds', '--fps': 'fps', '--width': 'width', '--height': 'height' };
+  const names = { '--intro': 'introPath', '--body': 'bodyPath', '--audio': 'audioPath', '--output-dir': 'outputDir', '--intro-seconds': 'introSeconds', '--body-seconds': 'bodySeconds', '--fade-seconds': 'fadeSeconds', '--transition-curve': 'transitionCurve', '--initial-gain': 'initialGain', '--onset-seconds': 'onsetSeconds', '--fps': 'fps', '--width': 'width', '--height': 'height' };
   const options = {};
   for (let index = 0; index < argv.length; index++) {
     const flag = argv[index], value = argv[++index];
@@ -238,7 +246,7 @@ function parseCli(argv) {
 
 module.exports = { normalizeOptions, planTimeline, framePlan, videoFilter, parseCli, audioMetrics, requireAudioIntegrity, renderHealingRainIntro };
 if (require.main === module) {
-  if (process.argv.includes('--help')) process.stdout.write('Usage: node worker/healing-rain-intro-render.js --intro /absolute/intro.mp4 --body /absolute/body-loop.mp4 --audio /absolute/continuous-bed.wav --output-dir /absolute/NEW-directory [--durations 30,180] [--intro-seconds 15] [--body-seconds 10] [--fade-seconds 2.5] [--initial-gain 0.501187] [--onset-seconds 1.5] [--anchor-alignment JSON]\n');
+  if (process.argv.includes('--help')) process.stdout.write('Usage: node worker/healing-rain-intro-render.js --intro /absolute/intro.mp4 --body /absolute/body-loop.mp4 --audio /absolute/continuous-bed.wav --output-dir /absolute/NEW-directory [--durations 30,180] [--intro-seconds 15] [--body-seconds 10] [--fade-seconds 2.5] [--transition-curve linear|smoothstep] [--initial-gain 0.501187] [--onset-seconds 1.5] [--anchor-alignment JSON]\n');
   else Promise.resolve().then(() => renderHealingRainIntro({ ...parseCli(process.argv.slice(2)), onProgress: stage => process.stderr.write(`${stage}\n`) }))
     .then(report => process.stdout.write(JSON.stringify({ status: report.status, reportPath: report.reportPath, outputs: report.outputs.map(({ seconds, video, bytes }) => ({ seconds, video, bytes })), warnings: report.warnings }, null, 2) + '\n'))
     .catch(error => { process.stderr.write(`Intro render failed: ${String(error.message).slice(0, 4096)}\n`); process.exitCode = 1; });
