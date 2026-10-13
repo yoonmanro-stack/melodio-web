@@ -6,6 +6,7 @@ const { compileDirection } = require('./direction');
 const INTRO_VERSION = 'healing-rain-intro-v1-candidate';
 const INTRO_RECIPE_ID = 'cloud-bed-to-train';
 const TEMPLE_INTRO_RECIPE_ID = 'cloud-temple-to-rain';
+const CLOUD_REST_TEMPLE_INTRO_RECIPE_ID = 'cloud-rest-to-temple';
 const INTRO_SOURCE_SECONDS = 15;
 const TRANSITION_SECONDS = 2.5;
 const OUTPUT_SECONDS = Object.freeze([30, 180]);
@@ -48,12 +49,13 @@ function outputPlan(totalSeconds, fps) {
 
 /**
  * input is the original main recipe input, optionally extended with:
- * introRecipeId, referenceEyeState (train only: 'asleep' or 'awake'), outputSeconds ([30, 180]).
+ * introRecipeId, referenceEyeState (train: 'asleep' or 'awake'; cloud rest: 'asleep'), outputSeconds ([30, 180]).
  * Reference-image attachment and media review remain required downstream steps.
  */
 function buildIntroSpec(mainDirection, input) {
   // This checks both the stored main specification and exact original-input provenance.
   const compiled = compileDirection(mainDirection, input);
+  if (mainDirection.sceneId === 'mountain-temple' && input.introRecipeId === CLOUD_REST_TEMPLE_INTRO_RECIPE_ID) return buildCloudRestTempleIntroSpec(mainDirection, input, compiled);
   if (mainDirection.sceneId === 'mountain-temple') return buildTempleIntroSpec(mainDirection, input, compiled);
   if (mainDirection.sceneId !== 'train') fail('Only the train and mountain-temple intros have candidate implementations; other catalog entries are ideas.');
   const recipeId = input.introRecipeId === undefined ? INTRO_RECIPE_ID : input.introRecipeId;
@@ -221,4 +223,108 @@ function buildTempleIntroSpec(mainDirection, input, compiled) {
   };
 }
 
-module.exports = { INTRO_VERSION, INTRO_RECIPE_ID, TEMPLE_INTRO_RECIPE_ID, INTRO_CATALOG, OUTPUT_SECONDS, buildIntroSpec };
+function buildCloudRestTempleIntroSpec(mainDirection, input, compiled) {
+  if (input.referenceEyeState !== undefined && input.referenceEyeState !== 'asleep') fail('The cloud-rest-to-temple intro requires an already sleeping adult reference.');
+  // Reuse only the unchanged main, audio and timeline planning. This variant has its own subject and reference contracts.
+  const templeInput = { ...input, introRecipeId: TEMPLE_INTRO_RECIPE_ID };
+  delete templeInput.referenceEyeState;
+  const spec = buildTempleIntroSpec(mainDirection, templeInput, compiled);
+  const restAnchors = [
+    'same adult woman identity, closed eyes and relaxed expression from the newly generated current-production starter image',
+    'same reclining head, hands, blanket, pillow and bed placement until cloud cover hides them',
+    'same locked camera and soft warm light direction within the cloud-rest shot',
+  ];
+  const paletteAnchors = ['soft warm light direction', 'muted slate-grey palette and restrained exposure at the cloud-cover endpoint only'];
+  const imagePrompt = [
+    'Create a fresh original photorealistic cinematic 16:9 cloud-rest starter image for this production. Do not reuse or reference previous production assets. This new image becomes the identity and composition authority for its animation.',
+    'One beautiful adult woman already sleeps with closed eyes under cream linen on a secure softly rounded bed among warm pearl and blue-grey clouds. Softly luminous late evening, gentle diffused warm light, slightly brighter than a typical night-bed scene, low contrast and a peaceful comfortable feeling. Keep her face gently readable; avoid gloomy shadows, overbright white or daylight pastels.',
+    'The newly created rainy temple image informs only the eventual cloud-cover endpoint palette and warm light direction. Do not copy its camera geometry, architecture or framing, or force the resting intro to match its dark exposure.',
+    'No waking, sitting up, other people, exposed body, storm, smoke, lightning, harsh glow, text or logos.',
+  ].join(' ');
+  const videoPrompt = [
+    'One continuous 15-second shot from this production\'s newly created starter image; no prior assets. Locked camera. Preserve the adult woman, closed eyes, face, reclining pose, hands, rounded bed, cream linen and pillow. She sleeps throughout; only tiny blanket breathing.',
+    'Seconds 0-7: peaceful warm pearl and blue-grey clouds, gently luminous late evening, soft warm light and low contrast. Comfortable, slightly brighter than a night bed, never gloomy or glaring daylight.',
+    'Seconds 7-11: actual opaque pearl clouds pass between the lens and woman, slowly covering the frame. Her face never fades, dissolves or morphs. No camera push or zoom. By second 11, clouds fully hide her face, hands, body, bed and bedding.',
+    'Seconds 11-15: full opaque cloud cover settles gradually from warm pearl to muted slate-grey at the new rainy temple night level, matching the supplied cloud-only end frame if provided. No person, silhouette, skin, bed or bedding returns; no gaps. Gentle dimming only, no abrupt darkness, smoke, scary storm or architecture.',
+    'The editor adds the temple through a 12.5-15 second dissolve only after full occlusion is verified. Do not generate a temple, person-to-building morph, reveal, cut or dissolve. No waking, extra people, fast motion, pan, zoom, flythrough, lightning, flashes, text or logos. Silent video; fresh continuous rain audio is added from time zero.',
+  ].join(' ');
+  const endImagePrompt = [
+    'Create a fresh original 16:9 terminal frame for this production; no previous assets. Opaque soft clouds fill the entire frame with muted slate-grey, a trace of warm pearl light, low contrast and gentle night exposure suited to the newly created rainy temple.',
+    'This is the peaceful endpoint of a gradual dimming from warm luminous pearl clouds, never threatening darkness or storm clouds. All face, skin, hands, human silhouettes, bed, pillow and bedding are fully hidden. No openings, translucent outlines, architecture, temple, smoke, lightning, text or logos. This frame is cloud cover only; the temple is added later in editing.',
+  ].join(' ');
+  if ([imagePrompt, videoPrompt, endImagePrompt].some(prompt => prompt.length >= 1500)) fail('Intro prompts must be shorter than 1500 characters.');
+  spec.recipeId = CLOUD_REST_TEMPLE_INTRO_RECIPE_ID;
+  spec.assetFreshnessContract = {
+    scope: 'current-production-only', freshOriginalCreationRequired: true, priorAssetsAllowed: false,
+    requiredFreshAssets: ['intro-start-image', 'temple-main-image', 'rain-audio'],
+    optionalEndImageIfUsedMustBeFresh: true, previousOrExcludedGenerationsAllowed: false,
+  };
+  spec.introRecipe = {
+    id: CLOUD_REST_TEMPLE_INTRO_RECIPE_ID, version: INTRO_VERSION, sourceSeconds: INTRO_SOURCE_SECONDS, occurrences: 1,
+    loop: false, reversePlayback: false, people: 'one-sleeping-adult-woman', referenceEyeState: 'asleep',
+    imagePrompt, videoPrompt, endImagePrompt,
+    subjectContract: { people: 'one-sleeping-adult-woman', minimumAgeYears: 18, closedEyesThroughout: true, fullyClothedOrCovered: true, additionalPeopleAllowed: false, mainSubjectContractInherited: false },
+    referenceContract: {
+      role: 'fresh-cloud-rest-source-image', required: true, generationBlockedWithoutReference: true,
+      sameReferenceAsMain: false, reuseApprovedReference: false, reuseApprovedSource: false,
+      freshOriginalCreationRequired: true, currentProductionOnly: true, priorAssetReferencesAllowed: false,
+      imageCreationRequiresPriorReference: false,
+      sourceImageIsGeometryAuthority: true, preserve: [...restAnchors],
+      eyeStateRule: 'Use an already sleeping adult reference; never wake the subject or introduce an eye-closing action.',
+    },
+    mainReferenceContract: {
+      role: 'main-body-source-image', required: true, generationBlockedWithoutReference: true,
+      sourceImageIsGeometryAuthority: false, preserve: [...paletteAnchors],
+      freshOriginalCreationRequired: true, currentProductionOnly: true, priorAssetsAllowed: false,
+      matchingArchitectureRequired: false, matchingCameraGeometryRequired: false,
+      exposureMatchScope: 'cloud-cover-endpoint-only', introExposureMustMatchMain: false,
+      purpose: 'Use the new main only for endpoint palette and warm light direction; let the fully hidden cloud cover dim gradually to its night level.',
+    },
+    endReferenceContract: {
+      role: 'opaque-cloud-cover-terminal-image', required: false, generationRequired: false,
+      currentProductionOnly: true, priorAssetsAllowed: false, ifProvidedMustBeFresh: true,
+      ifProvidedMustFullyOccludeSubject: true, templeOrArchitectureAllowed: false,
+      purpose: 'Optional cloud-cover endpoint guidance; a temple endpoint cannot establish full cloud occlusion.',
+    },
+    shots: [
+      { startSeconds: 0, endSeconds: 7, action: 'Hold the adult woman asleep among softly luminous warm pearl clouds, with closed eyes and tiny blanket breathing.' },
+      { startSeconds: 7, endSeconds: 11, action: 'Opaque pearl foreground clouds slowly approach the locked lens; fully hide the woman and all bedding by second 11.' },
+      { startSeconds: 11, endSeconds: 12.5, action: 'Verify full cloud occlusion, then gently dim warm pearl clouds toward muted slate-grey; no storm or smoke.' },
+      { startSeconds: 12.5, endSeconds: 15, action: 'Maintain verified cloud cover and gradual settling to the night level while the editor dissolves to the quiet new rainy temple.' },
+    ],
+  };
+  spec.transitionContract = {
+    version: 'healing-rain-intro-transition-v1', method: 'postproduction-dissolve',
+    startSeconds: 12.5, endSeconds: 15, durationSeconds: TRANSITION_SECONDS,
+    mainSourceStartSeconds: 0, generatedMorph: false, fixedAnchors: [...paletteAnchors],
+    geometryMatchRequired: false, subjectMatchRequired: false,
+    luminanceRamp: { startSeconds: 11, endSeconds: 15, from: 'softly-luminous-warm-pearl', to: 'muted-slate-grey-temple-night-level', curve: 'gentle-continuous', abruptDarkeningAllowed: false, stormOrSmokeAllowed: false },
+    cloudOcclusionGate: {
+      required: true, status: 'unreviewed', startSeconds: 11, endSeconds: 15,
+      reviewRequiredBeforeComposite: true, allPeopleFullyHidden: true, bedAndBeddingFullyHidden: true,
+      noReappearance: true, promptComplianceIsProof: false,
+      acceptance: 'Review the entire source interval 11-15 seconds. Every frame must hide all people, faces, skin, silhouettes, bed and bedding behind opaque cloud cover. Reject openings, translucent outlines or reappearance; do not composite an unreviewed or failed source.',
+    },
+    mainMotion: 'Main rain, irregular downward eave runoff and small courtyard splashes continue forward throughout the dissolve and all later cycles. Architecture and lantern remain fixed; the main stays people-free.',
+    acceptance: 'Start the dissolve only after verified full cloud occlusion. Reject a visible or ghosted person over the temple, a person-to-building morph, abrupt exposure change or lightning. Shared architecture and camera geometry are not required.',
+  };
+  spec.mainRecipe.subjectContract = { people: 'none', introSubjectAllowedInMain: false, generationFromIntroReferenceAllowed: false };
+  spec.qa.checks = [
+    'The starter image, temple main image and rain audio are fresh originals for this production; no prior or excluded asset is reused.',
+    'The new starter is the identity authority and contains one already sleeping adult woman among softly luminous warm pearl clouds.',
+    'Eyes remain closed; face, pose and bedding stay stable before clouds cover them.',
+    'Warm low-contrast light feels peaceful and slightly brighter than a night bed, without gloomy shadows or glaring daylight.',
+    'Opaque pearl clouds approach the locked lens slowly during seconds 7-11 without a zoom, storm, smoke or lightning.',
+    'The complete source interval 11-15 seconds has verified opaque cloud cover with no visible person, silhouette, bed or bedding in any frame.',
+    'The cloud-occlusion gate passes before compositing; the dissolve begins at 12.5 seconds only after the person is hidden.',
+    'After full occlusion, clouds dim gently during seconds 11-15 toward the new temple night level; no abrupt darkness or face-to-building morph.',
+    'The main reference guides endpoint palette and light direction only; the resting intro does not inherit the dark main exposure.',
+    'The rainy temple main remains people-free and its canonical direction is unchanged.',
+    'Intro appears exactly once; final durations include it.',
+    'Main rain and eave runoff continue forward across every loop seam.',
+    'Rain audio starts at zero and remains continuous through the transition.',
+  ].map(criteria => ({ status: 'unreviewed', criteria }));
+  return spec;
+}
+
+module.exports = { INTRO_VERSION, INTRO_RECIPE_ID, TEMPLE_INTRO_RECIPE_ID, CLOUD_REST_TEMPLE_INTRO_RECIPE_ID, INTRO_CATALOG, OUTPUT_SECONDS, buildIntroSpec };
