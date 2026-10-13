@@ -12,14 +12,14 @@ export const recipes: { id: SceneId; name: string; subtitle: string; surface: st
  { id:'tent',name:'숲속 텐트의 밤',subtitle:'천막 위의 빗방울, 포근한 침낭',surface:'텐트 천막 · 낙엽',layers:['천막 타격음','나뭇잎 위의 비','입구의 낙수'],sound:'Rain pattering on tent fabric from inside, leaf splashes outside, occasional vestibule drips. Soft dry sheltered acoustics.' },
  { id:'hanok',name:'한옥 처마 아래',subtitle:'따뜻한 방에서 바라보는 젖은 마당',surface:'기와 · 처마 · 흙마당',layers:['기와 위의 비','처마 낙수','마당 물웅덩이'],sound:'Rain on clay roof tiles, irregular eave drips, soft puddle splashes in a courtyard heard from a sheltered wooden room.' },
  { id:'cabin',name:'숲속 오두막',subtitle:'빗물 흐르는 창과 작은 수면등',surface:'유리창 · 나무 지붕',layers:['유리창 빗소리','지붕 위의 비','멀리서 들리는 숲'],sound:'Rain on cabin glass and muted roof impacts, soft forest rain beyond a closed bedroom window, warm indoor acoustics.' },
- { id:'night-nature',name:'깊은 밤의 외딴 자연',subtitle:'이끼 낀 협곡, 어둠 속에 은은한 빗결',surface:'이끼 바위 · 나뭇잎 · 계곡 수면',layers:['나뭇잎과 바위 위의 비','수면의 작은 빗방울','낮게 깔리는 먼 계곡 물소리'],sound:'Rain on leaves, wet stone and stream surface in a secluded canyon. Low distant flowing water beneath the rain, gentle natural depth. No traffic, footsteps or crowds.' },
- { id:'quiet-park',name:'깊은 밤의 한적한 공원',subtitle:'빈 산책로에 조용히 번지는 빗물',surface:'나뭇잎 · 젖은 돌길 · 물웅덩이',layers:['나뭇잎 위의 비','돌길의 작은 물튀김','물웅덩이 잔물결'],sound:'Rain on broad leaves and stone paving in an empty wooded park, gentle puddle splashes. Open-air acoustics. No traffic, voices, footsteps or birds.' },
- { id:'mountain-temple',name:'비 내리는 고요한 산사',subtitle:'깊은 산, 처마 끝에서 떨어지는 밤비',surface:'기와 · 목재 처마 · 돌마당',layers:['기와 위의 비','처마의 불규칙한 낙수','돌마당의 빗방울'],sound:'Rain on clay roof tiles heard under wooden temple eaves, irregular falling drips and soft stone courtyard splashes, distant forest rain. No bells, chanting, voices or footsteps.' },
+ { id:'night-nature',name:'깊은 밤의 외딴 자연',subtitle:'이끼 낀 협곡, 어둠 속에 은은한 빗결',surface:'이끼 바위 · 나뭇잎 · 계곡 수면',layers:['나뭇잎과 바위 위의 비','수면의 작은 빗방울','낮게 깔리는 먼 계곡 물소리'],sound:'Rain on leaves, wet stone and stream surface in a secluded canyon. Low distant flowing water beneath the rain, gentle natural depth.' },
+ { id:'quiet-park',name:'깊은 밤의 한적한 공원',subtitle:'빈 산책로에 조용히 번지는 빗물',surface:'나뭇잎 · 젖은 돌길 · 물웅덩이',layers:['나뭇잎 위의 비','돌길의 작은 물튀김','물웅덩이 잔물결'],sound:'Rain on broad leaves and stone paving in an empty wooded park, gentle puddle splashes. Open-air acoustics.' },
+ { id:'mountain-temple',name:'비 내리는 고요한 산사',subtitle:'깊은 산, 처마 끝에서 떨어지는 밤비',surface:'기와 · 목재 처마 · 돌마당',layers:['기와 위의 비','처마의 불규칙한 낙수','돌마당의 빗방울'],sound:'Rain on clay roof tiles heard beneath wooden eaves, irregular falling drips and soft stone courtyard splashes, distant forest rain.' },
 
- { id:'pond',name:'숲속 작은 연못',subtitle:'가까운 빗방울이 그리는 작은 동심원',surface:'연못 수면 · 갈대 · 이끼 돌',layers:['수면에 떨어지는 빗방울','갈대와 잎 위의 비','물가의 작은 물튀김'],sound:'Close delicate rain impacts on a small still pond, soft reed and leaf patter, tiny shore splashes. No stream, waterfall, frogs, birds, traffic or voices.' },
- { id:'lake',name:'고요한 호숫가의 밤',subtitle:'넓은 밤의 수면, 먼 숲의 실루엣',surface:'호수 수면 · 물가 돌 · 갈대',layers:['넓은 수면에 내리는 비','아주 작은 물가 잔물결','가까운 갈대 빗소리'],sound:'Broad soft rainfall across a quiet lake, faint gentle shore lapping and nearby reed patter. Spacious open-air depth. No ocean surf, large waves, boats, birds or voices.' },
+ { id:'pond',name:'숲속 작은 연못',subtitle:'가까운 빗방울이 그리는 작은 동심원',surface:'연못 수면 · 갈대 · 이끼 돌',layers:['수면에 떨어지는 빗방울','갈대와 잎 위의 비','물가의 작은 물튀김'],sound:'Close delicate rain impacts on a small still pond, soft reed and leaf patter, tiny shore splashes. Still-water acoustics.' },
+ { id:'lake',name:'고요한 호숫가의 밤',subtitle:'넓은 밤의 수면, 먼 숲의 실루엣',surface:'호수 수면 · 물가 돌 · 갈대',layers:['넓은 수면에 내리는 비','아주 작은 물가 잔물결','가까운 갈대 빗소리'],sound:'Broad soft rainfall across a quiet lake, faint gentle shore lapping and nearby reed patter. Spacious open-air depth.' },
 
- { id:'highland-village',name:'사파 고산 마을의 폭우',subtitle:'산비탈 작은 집의 불빛, 안개 속 밤비',surface:'경사 지붕 · 목조 처마 · 돌길',layers:['지붕을 두드리는 폭우','처마의 거센 낙수','돌길과 물웅덩이의 물튀김'],sound:'Heavy rain on pitched metal roofs in a quiet highland village, dense irregular eave runoff and wet stone path splashes heard from a sheltered porch. Muted roof resonance. No voices, traffic or music.' },
+ { id:'highland-village',name:'사파 고산 마을의 폭우',subtitle:'산비탈 작은 집의 불빛, 안개 속 밤비',surface:'경사 지붕 · 목조 처마 · 돌길',layers:['지붕을 두드리는 폭우','처마의 거센 낙수','돌길과 물웅덩이의 물튀김'],sound:'Heavy rain on pitched metal roofs in a quiet highland village, dense irregular eave runoff and wet stone path splashes heard from a sheltered porch. Muted roof resonance.' },
 
 ];
 export const defaults: RecipeInput = { sceneId:'train',intensity:'downpour',thunder:'none',camera:'bedside',palette:'midnight',variation:0,title:'비 내리는 침대 열차',hours:10,takes:6,notes:'' };
@@ -59,12 +59,13 @@ export function compileRecipe(input: RecipeInput, id: string, createdAt: string)
  const scene=recipes.find(r=>r.id===input.sceneId)!;
  const direction=buildDirection(input);
  const compiled=compileDirection(direction,input);
- const rain={gentle:'Sparse gentle rain, distinct soft droplets.',moderate:'Moderate steady rain, clear rounded droplets and a soft continuous rain bed.',heavy:'Heavy sustained rain with frequent impacts and rich splashes.',downpour:'Dense powerful downpour with full rushing texture and energetic splashes.'}[input.intensity];
+ const rain={gentle:'Sparse gentle rain, distinct soft droplets.',moderate:'Moderate steady rain, clear rounded droplets and a soft continuous rain bed.',heavy:'Heavy sustained rain with frequent impacts and rich splashes.',downpour:'Dense powerful downpour with tightly packed impacts and energetic splashes.'}[input.intensity];
  const outdoor=['night-nature','quiet-park','mountain-temple','pond','lake','highland-village'].includes(input.sceneId);
  const nature=['night-nature','pond','lake'].includes(input.sceneId);
- // New plans explicitly exclude human-like sounds; generated audio still needs listening review.
+ // New plans name only the intended sound sources; generated audio still needs listening review.
  // Keep room for the worker's six appended variations without changing saved plans.
- const audio=`${rain} ${scene.sound} Irregular droplets, natural depth. Continuous 30s loop; no fades or silence. No speech, voices, crowd murmur, whispers, chanting, music or tonal artifacts. No thunder; use a separate layer.`;
+ const sources=input.sceneId==='train'?'Only the described rain, water and low rail sounds.':'Only rain and water on the described surfaces.';
+ const audio=`${rain} ${scene.sound} ${sources} Irregular droplets, natural depth. Continuous 30s loop; no fades or silence. No music or tonal artifacts. No thunder; use a separate layer.`;
  return {
   id,createdAt,schemaVersion:1,recipeVersion:1,input,direction,
   ...(outdoor?{sceneDirection:{...nightNatureDirection,setting:scene.surface,lighting:nature?nightNatureDirection.lighting:'very dim shielded warm practical light, stable exposure'}}:{}),

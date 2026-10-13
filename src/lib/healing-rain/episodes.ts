@@ -61,6 +61,7 @@ export type EpisodePlan = {
  };
  production: {
   sourceIntroSeconds: 15; introOccurrences: 1; newProductionRequiresFreshAssets: true; currentProductionRevisionAllowed: true;
+  workflow: { version: 'healing-rain-audio-first-v1'; status: 'planned'; stageOrder: ['audio_generate_30s','audio_review','visual_generate','preview_review','long_form_render','final_review']; beforeVisualGeneration: 'all_audio_sources_approved'; beforeLongForm: ['all_audio_sources_approved','preview_30s_approved','preview_180s_approved']; approvalBoundTo: 'source_and_output_hashes'; automaticPaidRetry: false };
   transition: { startSeconds: 6; endSeconds: 15; seconds: 9; curve: 'smoothstep'; fullCloudOcclusionRequired: false; generatedMorph: false };
   mainLoopSeconds: 10; reversePlayback: false; previewSeconds: [30,180]; targetLongFormSeconds: number;
   audio: { sourcePolicy: RainAudioPolicy; requiredFreshTakes: number; secondsPerTake: 30; plannedTakes: number; continuousThroughTransition: true; restartAtTransition: false; loopExpansionMustBeDisclosedInProductionRecord: true };
@@ -151,9 +152,10 @@ export function compileEpisodePlan(value: EpisodeInput, id: string, createdAt: s
    introVideo:[family.motionPrompt,'Locked camera; preserve the same sleeping adult identity, pose and bedding. Only tiny breathing and barely moving surroundings. No engulfing clouds, no accelerating motion, no generated scene morph. Keep the source calm to its last frame. Silent source; editorial smoothstep dissolve 6–15s, with intentional fading-subject overlap.'].join(' '),
    mainImage:[basePlan.prompts.image,focus,depth,`Original scene detail: ${input.visual.anchor}`].join(' '),
    mainVideo:[basePlan.prompts.video,focus,'Preserve the approved source geometry; do not introduce transition motion into the repeating main.'].join(' '),
-   rainAudio:[rain,SCENE_SOUND[input.main.sceneId],`${SURFACES[input.audio.surface]}; ${input.audio.perspective}, ${input.audio.depth}.`,dynamics,input.audio.detail,'Continuous 30s stereo; no silence or fades. No speech, voices, crowd murmur, whispers, chanting, music, bells or thunder.'].join(' '),
+   rainAudio:[rain,SCENE_SOUND[input.main.sceneId],`${SURFACES[input.audio.surface]}; ${input.audio.perspective}, ${input.audio.depth}.`,dynamics,input.audio.detail,'Only the specified rain, water and surface sounds'+(input.main.sceneId==='train'?' with subdued rail vibration.':'.')+' Continuous 30s stereo; no silence, fades, music or thunder.'].join(' '),
   },
   production:{sourceIntroSeconds:15,introOccurrences:1,newProductionRequiresFreshAssets:true,currentProductionRevisionAllowed:true,
+   workflow:{version:'healing-rain-audio-first-v1',status:'planned',stageOrder:['audio_generate_30s','audio_review','visual_generate','preview_review','long_form_render','final_review'],beforeVisualGeneration:'all_audio_sources_approved',beforeLongForm:['all_audio_sources_approved','preview_30s_approved','preview_180s_approved'],approvalBoundTo:'source_and_output_hashes',automaticPaidRetry:false},
    transition:{startSeconds:6,endSeconds:15,seconds:9,curve:'smoothstep',fullCloudOcclusionRequired:false,generatedMorph:false},
    mainLoopSeconds:10,reversePlayback:false,previewSeconds:[30,180],targetLongFormSeconds:input.main.hours*3600,
    audio:{sourcePolicy:{...RAIN_AUDIO_POLICY},requiredFreshTakes:input.main.takes,secondsPerTake:30,plannedTakes:input.main.takes,continuousThroughTransition:true,restartAtTransition:false,loopExpansionMustBeDisclosedInProductionRecord:true}},

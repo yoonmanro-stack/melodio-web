@@ -87,7 +87,8 @@ test('lighting, motion and design selections change the relevant instructions wi
   assert.ok(b.prompts.mainImage.includes(value.visual.anchor));assert.ok(b.prompts.rainAudio.includes(value.audio.detail));
   assert.ok(b.prompts.rainAudio.includes('low rail rumble'));assert.ok(b.prompts.rainAudio.includes('Slow subtle swells'));
   assert.equal(b.editorial.thunder.requested,'distant');assert.equal(b.editorial.thunder.separateLayer,true);
-  assert.match(b.prompts.rainAudio,/no silence or fades\. No speech, voices, crowd murmur, whispers, chanting, music, bells or thunder\./);
+  assert.doesNotMatch(b.prompts.rainAudio,/\b(?:roars?|roaring|howl\w*|growl\w*|voices?|speech|crowd|murmur\w*|whisper\w*|chant\w*|birds?|frogs?)\b/i);
+  assert.match(b.prompts.rainAudio,/Only the specified rain, water and surface sounds/);
   assert.ok(a.prompts.introImage.includes('bright, peaceful and welcoming'));assert.equal(a.production.reversePlayback,false);
   assert.equal(b.execution.generationAdapter,'not_connected');assert.equal(b.execution.policyApproval,false);
 });
@@ -176,4 +177,15 @@ test('every new episode requires all planned 30-second rain takes freshly genera
  const v=input();v.audio.existingAssetId='old-file';assert.throws(()=>episodes.parseEpisodeInput(v));
  const first=episodes.getEpisodeCatalog();first.rainAudioPolicy.reuseAcrossProductions=true;
  assert.equal(episodes.getEpisodeCatalog().rainAudioPolicy.reuseAcrossProductions,false);
+});
+
+
+test('episode planning requires audio approval before visuals and preview approval before long-form, without executing them', () => {
+ const p=plan();const w=p.production.workflow;
+ assert.deepEqual(Array.from(w.stageOrder),['audio_generate_30s','audio_review','visual_generate','preview_review','long_form_render','final_review']);
+ assert.equal(w.beforeVisualGeneration,'all_audio_sources_approved');
+ assert.deepEqual(Array.from(w.beforeLongForm),['all_audio_sources_approved','preview_30s_approved','preview_180s_approved']);
+ assert.equal(w.approvalBoundTo,'source_and_output_hashes');assert.equal(w.automaticPaidRetry,false);
+ assert.equal(w.status,'planned');assert.equal(p.execution.providerCallsAllowed,false);assert.equal(p.execution.longFormEnabled,false);
+ const v=input();v.production={workflow:{beforeVisualGeneration:null}};assert.throws(()=>episodes.parseEpisodeInput(v));
 });
